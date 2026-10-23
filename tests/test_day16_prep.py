@@ -17,6 +17,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import os
+os.environ.setdefault("HCTF_SKIP_UNCHANGED_RERUN", "0")   # stub generalizes edit nothing: D23 #1e is covered by test_d23_postmortem
 from hctf import duel, orchestrate, prebuild, remote, workers  # noqa: E402  (prebuild before any ROOT patch)
 from hctf import hb_timed as ht  # noqa: E402
 
@@ -225,7 +227,8 @@ def stage(results, last):
 
 FakeLive.mode = "pass"
 runs.clear(), gens.clear(), lives.clear()
-assert stage(["blocked"], untimed_last) is True and len(runs) == 1 and gens == [True] and lives == [["set1.a-field"]], (runs, gens, lives)
+# D23 #1b live-first: the live worker starts at the block and its pass ends the mode before any generalize
+assert stage(["blocked"], untimed_last) is True and len(runs) == 1 and gens == [] and lives == [["set1.a-field"]], (runs, gens, lives)
 FakeLive.mode = "accepted"
 runs.clear(), gens.clear(), lives.clear()
 assert stage(["blocked", "correct"], untimed_last) is True and runs == ["resume", "resume"], runs   # live banked attempt: reconnect, never re-roll

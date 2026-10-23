@@ -966,14 +966,17 @@ def live_overlay(cid, attempt=None):
 LIVE_OVERLAY_MAX = int(os.environ.get("HCTF_LIVE_OVERLAY_MAX", "200"))
 
 
-def run_timed(solver_dir, cid, op="start", timeout=60, budget=None):
+def run_timed(solver_dir, cid, op="start", timeout=60, budget=None, on_event=None):
     """Run the clock-critical timed attempt LOCALLY against the public GM (pairing token).
     No VM, no SSH — the whole start->download->solve->submit path runs here. Returns hb_timed's JSON dict.
-    budget: solver seconds on a no-clock attempt (HCTF_UNTIMED_BUDGET for this run only)."""
+    budget: solver seconds on a no-clock attempt (HCTF_UNTIMED_BUDGET for this run only).
+    on_event: the runner's mid-attempt "solved" event (D23 #2: the generalize starts while the attempt still banks /
+    localizes) -- hb_timed writes it to a file, a poller here hands it over with "local" = the bytes' dir."""
     rel = solver_dir.relative_to(ROOT)
     env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}", **timed_env(cid))
     if budget:
         env["HCTF_UNTIMED_BUDGET"] = f"{budget:g}"
+    poll_stop = _local_event_poller(cid, env, on_event) if on_event is not None else None
     if os.environ.get("HCTF_TIMED_GM_URL"):
         # Clock-critical calls straight to this GM (e.g. the real one while a replay proxy fronts everything else: the
         # proxy opens a fresh TLS connection per call, ~0.5-1 s each inside a 6-7 s window).
@@ -991,10 +994,46 @@ def run_timed(solver_dir, cid, op="start", timeout=60, budget=None):
         return {"result": "exec_error", "detail": "local hb_timed timed out", **runner_progress(cid, since=t_call)}
     except OSError as e:   # e.g. E2BIG: never crash the chain on a runner that could not start
         return {"result": "exec_error", "detail": f"local hb_timed did not start: {e}"[:300]}
+    finally:
+        if poll_stop is not None:
+            poll_stop.set()
     try:
         return json.loads(r.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
         return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
+
+
+def _local_event_poller(cid, env, on_event):
+    """Arm hb_timed's mid-attempt event for a LOCAL run: it writes the "solved" event to a file, this thread calls
+    on_event(data + "local") once. -> the Event that stops the poller (set when the run returns)."""
+    import re as _re
+    local = ROOT / ".run" / "tmp-timed" / _re.sub(r"[^A-Za-z0-9]+", "_", cid)
+    evf = ROOT / ".run" / "tmp-timed" / (_re.sub(r"[^A-Za-z0-9]+", "_", cid) + ".event.json")
+    try:
+        evf.parent.mkdir(parents=True, exist_ok=True)
+        evf.unlink()
+    except OSError:
+        pass
+    env["HCTF_EARLY_GENERALIZE"] = "1"
+    env["HCTF_EARLY_EVENT_FILE"] = str(evf)
+    stop = threading.Event()
+
+    def watch():
+        while not stop.wait(0.3):
+            if not evf.exists():
+                continue
+            try:
+                data = json.loads(evf.read_text())
+            except (OSError, ValueError):
+                continue
+            data["local"] = str(local)
+            try:
+                on_event(data)
+            except Exception as e:  # noqa: BLE001 - an event must never cost the attempt
+                print(f"[{cid}] early event note: {e}", flush=True)
+            return
+    threading.Thread(target=watch, daemon=True, name=f"early-evt-{cid}").start()
+    return stop
 
 
 # Clocks this short go to Homebase. Default: EVERY clock (inf) -- Homebase bills VM uptime, not calls, and local over the
@@ -1276,6 +1315,11 @@ def power_off_homebase_if_ours(log=print):
 UNTIMED_LOCAL_BUDGET = float(os.environ.get("HCTF_UNTIMED_LOCAL_BUDGET", "150"))   # solver s, forced local no-clock rerun
 
 
+def _ev(on_event):
+    """kwargs carrying the mid-attempt event callback only when there is one (keeps the plain call shape otherwise)."""
+    return {"on_event": on_event} if on_event is not None else {}
+
+
 def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=None, force_local=False, budget=None):
     """Dispatch a timed attempt. HOMEBASE-FIRST (user policy): every window <= HCTF_TIGHT_WINDOW seconds (default: all),
     or one not yet known, runs next to the GM on Homebase (prewarmed at run start). Local over the pairing token is the
@@ -1306,12 +1350,12 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
         ut = max(timeout, untimed_plan(cid)[0])     # scaled to the contract (D16: a flat 120 s, killed 6x)
         if (UNTIMED_ON_HOMEBASE and AUTO_HOMEBASE and remote.gm_transport() == "local" and not no_clock_local(cid, log)
                 and (not slow_vm() or homebase_cheaper(cid, log)) and _homebase_ready(log)):
-            res = run_hb_timed(solver_dir, cid, op=op, timeout=ut)
+            res = run_hb_timed(solver_dir, cid, op=op, timeout=ut, **_ev(on_event))
             if str(res.get("result", "")).lower() != "exec_error" or res.get("gm_rate_limited"):
                 res.setdefault("routed", "homebase (untimed)")
                 return res
             log(f"[{cid}] Homebase untimed run failed ({str(res.get('detail'))[:120]}); falling back to local")
-        res = run_timed(solver_dir, cid, op=op, timeout=ut)
+        res = run_timed(solver_dir, cid, op=op, timeout=ut, **_ev(on_event))
         res.setdefault("routed", "local (untimed)")
         return res
     if remote.gm_transport() != "local":
@@ -1363,7 +1407,7 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
             res["routed"] = f"homebase ({'window unknown' if win is None else f'window {win:g}s'})"
             return res
         log(f"[{cid}] Homebase run failed ({str(res.get('detail'))[:120]}); falling back to local")
-    res = run_timed(solver_dir, cid, op=op, timeout=timeout)
+    res = run_timed(solver_dir, cid, op=op, timeout=timeout, **_ev(on_event))
     res.setdefault("routed", "local" if not tight else "local (Homebase unavailable)")
     w = res.get("window") or win
     if w is not None and w <= TIGHT_WINDOW and str(res.get("result", "")).lower() == "expired":
@@ -1693,7 +1737,7 @@ def run_hb_timed(solver_dir, cid, op="start", timeout=60, on_event=None):
             opts["HCTF_RUN_FOR_TIME"] = os.environ["HCTF_RUN_FOR_TIME"]
         try:
             extra = {"inline_max": INLINE_PULL_MAX, "inline_z": True} if INLINE_PULL_MAX > 0 else {}
-            if EARLY_GENERALIZE and on_event is not None:
+            if on_event is not None:   # EARLY_GENERALIZE, or the orchestrator's AUTO_EARLY (D23 #2)
                 extra["on_event"] = _early_handler(cid, on_event)
                 opts["HCTF_EARLY_GENERALIZE"] = "1"
             res = d.call("attempt", timeout=timeout, cid=cid, solver=str(rel), op_mode=op, opts=opts, **extra)["result"]

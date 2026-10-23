@@ -97,6 +97,16 @@ def sub_contract(contract, answer_ids):
     return c
 
 
+def answer_str(v):
+    """A solver's JSON value as the answer string: lists/dicts as COMPACT JSON, never Python's repr (D23 metadata
+    Mastery: a returned list became `['box-06/part-6.log', ...]` via str() and was rejected on every set)."""
+    if isinstance(v, str):
+        return v
+    if isinstance(v, (list, dict)):
+        return json.dumps(v, separators=(",", ":"), ensure_ascii=False)
+    return str(v)
+
+
 def run_solver(sdir, contract, artifacts, timeout=120, background=None):
     """Run one solver. Returns (answers dict, error string or None, seconds).
     Own process group, killed as a group on timeout (its fork pool too); background=True (or the calling thread's
@@ -122,7 +132,7 @@ def run_solver(sdir, contract, artifacts, timeout=120, background=None):
         return {}, f"exit {r.returncode}: {r.stderr.strip()[-1500:]}", dt
     try:
         out = json.loads(r.stdout.strip().splitlines()[-1])
-        return {k: str(v) for k, v in out.items()}, None, dt
+        return {k: answer_str(v) for k, v in out.items()}, None, dt
     except (IndexError, ValueError):
         return {}, f"stdout is not JSON: {r.stdout[-500:]!r} stderr: {r.stderr[-800:]}", dt
 

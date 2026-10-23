@@ -69,13 +69,24 @@ def _event(kind, out, **extra):
     """Mid-attempt event to the daemon client (HCTF_EARLY_GENERALIZE=1 only): {"event": kind, attempt facts}. The
     orchestrator can start the offline generalize on the variant while this attempt still localizes in-window."""
     cb = _CTX.on_event
-    if cb is None or _opt("HCTF_EARLY_GENERALIZE", "0") != "1":
+    path = os.environ.get("HCTF_EARLY_EVENT_FILE")   # local runs (a subprocess): the parent polls this file
+    if (cb is None and not path) or _opt("HCTF_EARLY_GENERALIZE", "0") != "1":
         return
-    try:
-        cb(dict({k: out.get(k) for k in ("cid", "attempt_id", "window", "deadline", "phases", "missing", "submitted")},
-                event=kind, **extra))
-    except Exception:  # noqa: BLE001 - an event must never cost the attempt
-        pass
+    data = dict({k: out.get(k) for k in ("cid", "attempt_id", "window", "deadline", "phases", "missing", "submitted")},
+                event=kind, **extra)
+    if cb is not None:
+        try:
+            cb(data)
+        except Exception:  # noqa: BLE001 - an event must never cost the attempt
+            pass
+    if path:
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump({k: v for k, v in data.items() if k != "submitted"}, f)
+            os.replace(tmp, path)
+        except (OSError, TypeError, ValueError):
+            pass
 _TOKEN = None    # set in-process by hb_daemon: the bearer lives in its memory only (never env / argv / disk)
 SOLVER = None    # hb_daemon: callable(solve_path, args, env, timeout) -> obj with stdout/stderr/returncode (zygote fork)
 
@@ -557,10 +568,49 @@ def _plan(body):
 
 def _normalize(v, q):
     norm = (q or {}).get("normalization")
+    v = _json_coerce(v, q)
     if norm == "exact":
         return v
     v = v.strip()
     return v.lower() if norm == "case_insensitive" else v
+
+
+def _answer_str(v):
+    """Same rule as solvers.answer_str: a list/dict the solver returned goes out as compact JSON, never str()'s repr."""
+    if isinstance(v, str):
+        return v
+    if isinstance(v, (list, dict)):
+        return json.dumps(v, separators=(",", ":"), ensure_ascii=False)
+    return str(v)
+
+
+def _json_coerce(value, q):
+    """Same rule as cli._json_coerce (this file runs standalone on Homebase): answer_format.kind "json" + a Python
+    literal (`['a', 'b']`) -> the same data as compact JSON (D23 metadata Mastery, every set). Valid JSON untouched."""
+    af = (q or {}).get("answer_format") if isinstance((q or {}).get("answer_format"), dict) else {}
+    if str(af.get("kind")) != "json" or not isinstance(value, str):
+        return value
+    s = value.strip()
+    if not s or s[0] not in "[{(":
+        return value
+    try:
+        json.loads(s)
+        return value
+    except ValueError:
+        pass
+    import ast
+    try:
+        obj = ast.literal_eval(s)
+    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+        return value
+    if isinstance(obj, tuple):
+        obj = list(obj)
+    if not isinstance(obj, (list, dict)):
+        return value
+    try:
+        return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+    except (TypeError, ValueError):
+        return value
 
 
 def _vocab():
@@ -1468,7 +1518,8 @@ def _attempt(a):
             out["detail"] = f"solver budget only {budget:.1f}s of a {win}s window (clock spent before the solve)"
         return _emit(out, adir)
     try:
-        answers = {k: _normalize(str(v), qmap.get(k, {})) for k, v in json.loads(r.stdout.strip().splitlines()[-1]).items()}
+        answers = {k: _normalize(_answer_str(v), qmap.get(k, {}))
+                   for k, v in json.loads(r.stdout.strip().splitlines()[-1]).items()}
     except Exception:
         out["result"] = "solver_error"
         out["detail"] = r.stderr[-800:]
@@ -1491,6 +1542,17 @@ def _attempt(a):
         out["result"] = "solver_incomplete"
         out["missing"] = missing
         part = {k: answers[k] for k in ids if k in answers and answers[k] != ""}
+        # a reconnect to the same open attempt: values the GM already REJECTED here are not judged again (D23 script TT:
+        # the unchanged solver's 171 known-wrong answers made the retry re-bisect 593 fields for 99 s)
+        known_bad = _bank_rejected(a.cid, out.get("attempt_id"))
+        if known_bad:
+            drop = [k for k, v in part.items() if v in known_bad.get(k, ())]
+            for k in drop:
+                part.pop(k)
+            if drop:
+                out["partial_skipped_rejected"] = len(drop)
+        else:
+            drop = []
         _event("solved", out, result="solver_incomplete")   # before the partial submit + localization
         if part and _opt("HCTF_PARTIAL_SUBMIT", "1") == "1":
             # Submit what the solver DID answer: the GM saves correct partial progress (banks whole Mastery sets) and
@@ -1503,6 +1565,11 @@ def _attempt(a):
             out["phases"]["submit"] = round(time.time() - t_solved, 2)
             out["elapsed"] = round(time.time() - t0, 2)
             out["in_window"] = round(time.time() - t_started, 2)
+        if drop:
+            # still WRONG for the orchestrator (generalize / live answer): judged on an earlier run of this attempt
+            have = {x[0] for x in out.get("partial_wrong") or [] if isinstance(x, (list, tuple))}
+            out["partial_wrong"] = list(out.get("partial_wrong") or []) + [
+                [k, answers[k]] for k in drop if k not in have]
         return _emit(out, adir)
 
     # FAST PATH: submit EVERY answer in one request. A public-GM submit round-trip is ~0.2-several s, so N
@@ -1781,15 +1848,37 @@ def _bank_save(out):
             p.unlink(missing_ok=True)
             return
         ver = {**(out.get("partial_fixed") or {}), **(out.get("verified") or {})}
-        if not ver:
+        rej = {}
+        for pair in (out.get("partial_wrong") or []) + (out.get("wrong") or []):
+            if isinstance(pair, (list, tuple)) and len(pair) == 2 and pair[1] not in (None, "") and pair[0] not in ver:
+                rej.setdefault(pair[0], [])
+                if str(pair[1]) not in rej[pair[0]]:
+                    rej[pair[0]].append(str(pair[1]))
+        if not ver and not rej:
             return
         p.parent.mkdir(parents=True, exist_ok=True)
         old = _bank_load(cid, aid)
+        old_rej = _bank_rejected(cid, aid)
+        for k, vs in rej.items():
+            old_rej[k] = list(dict.fromkeys(old_rej.get(k, []) + vs))
+        merged = {**old, **ver}
         tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"attempt_id": aid, "verified": {**old, **ver}}))
+        tmp.write_text(json.dumps({"attempt_id": aid, "verified": merged,
+                                   "rejected": {k: v for k, v in old_rej.items() if k not in merged}}))
         tmp.replace(p)
     except OSError:
         pass
+
+
+def _bank_rejected(cid, attempt_id):
+    """{answer_id: [values the GM rejected on THIS attempt]} from earlier runs that reconnected to it, else {}."""
+    if not attempt_id or _opt("HCTF_BANK_OVERLAY", "1") != "1":
+        return {}
+    try:
+        b = json.loads(_bank_path(cid).read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: list(v) for k, v in (b.get("rejected") or {}).items()} if b.get("attempt_id") == attempt_id else {}
 
 
 if __name__ == "__main__":
