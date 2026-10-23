@@ -1,5 +1,10 @@
 # Web critical path → sub-2-min (whole board)
 
+> **Status 10-23: superseded in part by `reference/D22_POSTMORTEM.md`** (implementation table there). Pole #1 kept (a
+> per-phase win). Pole #2's blunt first-attempt cap stays OFF — replaced by #7 (cap only never-seen classes). Pole B's
+> "verify before submit" replaced by #5/#8 (submit first; a codify worker turns the class into a clue-keyed plugin).
+> Pole #3 root cause found (#10: `lane_known_shapes` under a global lock at the drop) and fixed.
+
 **Goal** ([[sub2min-whole-board-goal]]): the ENTIRE board, web included, GM-CORRECT within 2 min of the drop. Day 22
 standard board was T+1:35 but **web finished T+7:50** — the whole-board miss. This doc is the diagnosis + the fix work.
 

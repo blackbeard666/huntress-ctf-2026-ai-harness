@@ -148,7 +148,36 @@ Web budget if P1 lands: single ~1:05 + TT ~0:20 + Mastery ~0:25 ≈ **1:50** (vs
 3. Score **per phase** (single → TT CORRECT → Mastery CORRECT per chain), not only end-to-end T+, and record
    `hctf kpi --label`. A run on a contended host is not a speed result.
 
+### Implementation status (10-23, branch `d22-web-critical-path`)
+Tests: `tests/test_d22_postmortem.py` (74 checks) + `tests/test_hostguard.py` (68); pinned `test_day7_fixes` #26 and
+`test_web_lane` #13 to the clocked regime they test. Every change has a flag.
+
+| # | shipped | flag (default) | note |
+|---|---|---|---|
+| 1 | `hctf/hostguard.py`; preflight FAIL on another copy's run/prebuild + 5-min load WARN; `day.sh` stops other copies' prebuilds, only WARNs on their runs (its own preflight runs with `HCTF_SHARED_HOST=1`); `fair_run.sh` refuses (exit 2); `prebuild.py` `_worker_pids` scoped to this copy, chain-shell match covers `bash -lc 'cd ROOT && …; python -m hctf.cli prebuild'` | `HCTF_SHARED_HOST` (0) | |
+| 2 | no clock ⇒ pre-TT single speed gate only above 20 s; Mastery estimate gate off; untimed non-web pre-Mastery harden only when the TT-derived Mastery estimate exceeds 0.8 × the solver budget | `HCTF_NO_CLOCK_SPEED` (1), `HCTF_NO_CLOCK_SINGLE_SPEED` (20) | `_expect_untimed()` |
+| 3 | `workers.no_clock_local`: untimed + slow VM + multi-set + unmeasured ⇒ local first attempt | `HCTF_NO_CLOCK_MULTISET_LOCAL` (1) | single-set TTs keep Homebase |
+| 4 | `vm_budget_exhausted`: `solver_incomplete` with ≥90 % fields empty after ≥90 % of the untimed budget on the VM ⇒ local re-run | — | broadens `_slow_vm_no_clock` |
+| 5 | web skill: submit first, the class becomes a plugin | — | replaces "verify before submit" |
+| 6 | `single_method_text` → `_live_methods` at the single's CORRECT; proof-* shapes interchangeable on live lanes | — | |
+| 7 | `class_known` (handler or earlier solver names a concept clue key); unknown ⇒ race capped; every target race logged to `.run/web_race.jsonl` (winner, elapsed, known, budget) | `HCTF_WEB_UNKNOWN_KEY_BUDGET` (12) | prior solvers now loaded once per process |
+| 8 | `WebCodify` background worker at a web single's CORRECT → `lib/web/handlers/<dayNN>_<chal>.py` (KEY_MAP + HANDLERS), auto-loaded by `lib.web.handlers` (one file per challenge: no lost update between two web chains); prompt `hctf/prompts/codify.md` | `HCTF_WEB_CODIFY` (1), `HCTF_WEB_CODIFY_TIMEOUT` (300), `HCTF_WEB_CODIFY_HOLD` (0) | the TT is not held by default |
+| 9 | web generalize + seed notes point at the same per-challenge plugin | — | "adopt a green bg-gen before Mastery" superseded: plugins need no adoption (web cases aren't replayable) |
+| 10 | **real root cause found**: `lane_known_shapes` under the global `_SHAPE_LOCK`, built AT the drop — web's `mastery_delta` is the one that asks for it. Now memoized per (lane, day) and warmed before the release wait; the MASTERY COMPOUNDS log moved after the go text; prompt-build sub-marks | `HCTF_SHAPE_WARM` (1) | the planned "defer notes via inbox" was the wrong fix |
+| 11 | reuse-race handoff: each carry-over shape checked on the newest earlier GM-verified case asking it (`carry_cases`), started in the background at the race snapshot; gaps ⇒ worker told + hold (as the new-id hold) | `HCTF_CARRY_CHECK` (1) | conclusive, unlike substituting the single's bytes |
+| 12 | **measurement only**: `generalize prep Xs: case-check, baseline replay, evidence/prompt, snapshot` | — | overlap NOT shipped: the baseline must reflect the PRE-worker code (accept gate); a safe overlap needs the replay on the snapshot copy + watcher/duel/accept re-plumbing. #1/#2 removed the triggers seen on a rehearsal copy — decide from the next run's numbers |
+| 13 | `hb_timed._prestarted_body`: a fresh, untimed, complete pre-start is used once instead of a second `start` | `HCTF_PRESTART_REUSE` (1), `HCTF_PRESTART_TRUST_S` (300) | |
+| 14 | pre-start lines split `[start, download, MB, MB/s]`; reuse-race WON line `[rank, solver runs, submits, seed verify]` | — | attack after data |
+| P3 | `hctf timeline --t0 HH:MM:SS` (default: the release line) + `->TT` / `->M` phase columns | — | |
+
+Superseded: pole #2's blunt first-attempt budget cap (`HCTF_WEB_TIMED_LIVE_FIRST`) stays OFF — #7 caps only never-seen
+classes and #8 makes the class dispatchable. Pre-existing red test found (not from this work): `tests/test_day14_s3.py`
+§9 (lane seed staging vs `upgrade_solver_main`), already failing at f90a60b6.
+
 ### Main for Day 23
-Keep branch `d22-web-critical-path` on main: pole #1 is a validated win, pole #2 stays off, pole #3 is diagnostics.
-Land P0 #1–#5 (+ tests) before the warm-up; P1 items only with a passing test each. Edit `hctf/` only with main's
-prebuild stopped or in a worktree ([[prebuild-reverts-code-edits]]).
+Run D23 from branch `d22-web-critical-path` (everything above is on it, behind flags). Warm-up: `bash bin/preflight.sh`
+(new: the host-exclusivity section must be OK) then `bash bin/day.sh 23 --wait`. What to read in `.run/day23.log`:
+`[shapes] … warmed` before the drop; web go-text `prompt-build` ≤ ~1 s; `web codify:` lines and a `lib/web/handlers/
+day23_*.py` plugin; web Mastery first-try; `generalize prep` breakdowns; `pre-started … [start, download, MB/s]`; then
+`hctf timeline --day 23 --t0 21:00:00`. Then validate on rehearsal D23 (fresh) with `bin/fair_run.sh` (main's prebuild stopped
+— the guard enforces it). Edit `hctf/` only with main's prebuild stopped or in a worktree ([[prebuild-reverts-code-edits]]).
