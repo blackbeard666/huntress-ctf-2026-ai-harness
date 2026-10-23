@@ -110,17 +110,22 @@ def clues(base):
     return j, dispatch_key(j)
 
 
+COMMON_KEYS = frozenset({"framework", "feature_route", "secondary_route", "current_role", "routes", "role",
+                         "username", "user", "message"})   # kit furniture in every /api/clues, never a vuln class
+
+
 def dispatch_key(j):
     """The first clue key NOT in the common kit set (the concept-specific one), or None."""
-    common = {"framework", "feature_route", "secondary_route", "current_role", "routes", "role",
-              "username", "user", "message"}
-    return next((k for k in (j if isinstance(j, dict) else {}) if k not in common), None)
+    return next((k for k in (j if isinstance(j, dict) else {}) if k not in COMMON_KEYS), None)
 
 
-def race(probes, budget=40):
+def race(probes, budget=40, report=None):
     """Run each (name, fn) in a daemon thread; the first proof-shaped result wins. A non-proof value is kept
     as a last resort. Losers keep running detached -- the caller exits via emit_and_exit without joining
-    them. Honors HCTF_SOLVE_DEADLINE."""
+    them. Honors HCTF_SOLVE_DEADLINE. `report` (a dict) gets {winner, elapsed, probes, timed_out}: the winners went
+    to stderr only, so the default ladder's real hit rate was unmeasured (D22 post-mortem #7)."""
+    t0 = time.time()
+    rep = report if isinstance(report, dict) else {}
     import queue
     import sys
     import threading
@@ -143,14 +148,18 @@ def race(probes, budget=40):
     except (KeyError, ValueError):
         pass
     best, left = None, len(probes)
+    rep.update(probes=[n for n, _fn in probes], winner=None, timed_out=False)
     while left:
         try:
             name, v = q.get(timeout=max(0.05, end - time.time()))
         except queue.Empty:
+            rep["timed_out"] = True
             break
         left -= 1
         if v is not None and PROOF_RE.fullmatch(str(v).strip()):
             print(f"probe {name} won", file=sys.stderr)
+            rep.update(winner=name, elapsed=round(time.time() - t0, 2))
             return str(v).strip()
         best = best or v
+    rep["elapsed"] = round(time.time() - t0, 2)
     return best

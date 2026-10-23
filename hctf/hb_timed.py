@@ -1221,6 +1221,45 @@ def _read_progress(cid):
         return {}
 
 
+def _body_attempt_id(body):
+    """cli.attempt_id's rule (this module also runs on Homebase without hctf.cli)."""
+    for k in ("attempt_id", "attempt", "attemptId"):
+        v = (body or {}).get(k)
+        if isinstance(v, dict):
+            v = v.get("id")
+        if v:
+            return str(v)
+    return None
+
+
+def _prestarted_body(cid):
+    """The orchestrator's pre-start of THIS mode (start body + downloaded bytes + .prefetch.json in the runner's dir),
+    used ONCE instead of a second `start` call when it is fresh, untimed and complete. D22: after a 4-25 s pre-start the
+    runner still re-called `start` to reconnect -- another 2-7 s per mode at the drop, on the critical path. A clocked or
+    stale one (HCTF_PRESTART_TRUST_S, 300) falls back to the normal start; HCTF_PRESTART_REUSE=0 disables."""
+    if _opt("HCTF_PRESTART_REUSE", "1") != "1":
+        return None
+    adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", cid)
+    try:
+        if (adir / ".prefetch.reused").exists():
+            return None
+        pj = json.loads((adir / ".prefetch.json").read_text())
+        body = json.loads((adir / "contract.json").read_text())
+    except (OSError, ValueError):
+        return None
+    att = _body_attempt_id(body)
+    if (not isinstance(body, dict) or body.get("deadline") or body.get("error") or not body.get("answer_ids")
+            or not att or str(pj.get("attempt_id")) != att or not pj.get("files")
+            or time.time() - float(pj.get("t") or 0) > float(_opt("HCTF_PRESTART_TRUST_S", "300"))
+            or not all((adir / n).exists() for n in pj["files"])):
+        return None
+    try:
+        (adir / ".prefetch.reused").write_text(att)
+    except OSError:
+        return None
+    return body
+
+
 def _attempt(a):
     tw = time.time()
     pool = _pool()              # open + TLS-handshake the keep-alive connections BEFORE the clock starts
@@ -1236,8 +1275,12 @@ def _attempt(a):
     resume = a.op == "resume"
     if resume:
         out["resumed_banked"] = True
-    body = (_post_untimed(a.cid) if untimed else
-            _post_start({"op": "start" if resume else a.op, "challenge": a.cid}))
+    body = _prestarted_body(a.cid) if a.op == "start" and not untimed and not resume else None
+    if body is not None:
+        out["prestart_reused"] = True    # D22 post-mortem #13: no second `start` after the orchestrator's pre-start
+    else:
+        body = (_post_untimed(a.cid) if untimed else
+                _post_start({"op": "start" if resume else a.op, "challenge": a.cid}))
     if (a.op == "retry" and body.get("error")
             and not any(x in str(body.get("error")) for x in ("rate_limited", "exhausted", *EXHAUSTED))):
         body = _post_start({"op": "start", "challenge": a.cid})  # retry refused (no finished attempt to re-roll): plain start

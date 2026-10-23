@@ -652,12 +652,17 @@ assert seen26 == ["start", "start"]
 _said26 = []
 _osay26, orchestrate.say = orchestrate.say, lambda m, *a, **k: _said26.append(m)
 try:
+    ch._expect_untimed = lambda: False   # the clock-era gate (a clocked HoF pool); untimed below
     ch._note_single_speed("c", 1.2)
     assert ch._single_slow is None
     ch._note_single_speed("c", 5.9)
     assert ch._single_slow == 5.9 and "speed generalize" in _said26[-1]
+    ch._expect_untimed = lambda: True    # D22 post-mortem #2: untimed pool -> no pre-TT speed generalize for 5.9 s
+    ch._note_single_speed("c", 5.9)
+    assert ch._single_slow is None and "untimed" in _said26[-1], _said26[-1]
 finally:
     orchestrate.say = _osay26
+    del ch._expect_untimed
 print("ok  speed: speed-only generalize watched for speed; slow single -> one speed generalize before the first attempt")
 
 # 27) lib.binary jar helpers (blind D7 replay: a binary solver scanned all ~18k classes of a Kotlin fat jar, 5.9 s):

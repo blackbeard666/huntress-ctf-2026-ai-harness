@@ -323,6 +323,7 @@ print("ok  C1 background pass captures tracked + joined before speed-harden and 
 said.clear()
 g = object.__new__(orch.Chain)
 g.sdir = ROOT / ".run"
+g._expect_untimed = lambda: False   # the clock-era gate; untimed pools skip it (tests/test_d22_postmortem.py #2)
 with mock.patch.object(orch, "say", said.append), \
         mock.patch.object(orch.solvers, "run_solver", lambda *a, **k: ({}, None, 0.4)):
     g._note_single_speed("x", 6.7, rerun=("d", {}, "a"))

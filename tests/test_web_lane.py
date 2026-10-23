@@ -647,6 +647,7 @@ def _speed_gate_gens(lane, force_harden):
     ch.lane = lane
     ch.entries = {"time_trial": {"id": "x/time_trial"}}
     ch._web_gate_done = False
+    ch._expect_untimed = lambda: False   # a clocked pool; the untimed non-web case: tests/test_d22_postmortem.py (#2)
     gens = []
     saved = {
         (orchestrate, "say"): orchestrate.say,
@@ -670,7 +671,7 @@ check("13 web speed gate: live web + slow TT solver -> NO blocking pre-Mastery h
       _speed_gate_gens("web-exploitation", False) == [])
 check("13 web speed gate: HCTF_WEB_PRE_MASTERY_HARDEN=1 restores the old blocking harden",
       len(_speed_gate_gens("web-exploitation", True)) == 1)
-check("13 web speed gate: non-live (untimed) lane still hardens before Mastery",
+check("13 web speed gate: non-live lane on a clocked pool still hardens before Mastery",
       len(_speed_gate_gens("binary-reverse-engineering", False)) == 1)
 
 # 14) D22 pole #2 (live-first): run_timed_auto's web branch forwards a `budget` to run_timed (the capped first-attempt

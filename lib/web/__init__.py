@@ -27,9 +27,24 @@ from lib import solverrt, websolve  # noqa: E402
 from lib.web import handlers  # noqa: E402
 
 
+_PRIOR = None
+# A target whose class no built-in handler and no earlier web solver knows only gets the `default` ladder, which failed
+# every never-seen class on D22 at the full 40 s (4/4 TT attempts, Masteries 53-59 s) before the attempt blocked and a
+# live answer took over: cap that race. 0 = off. (D22 post-mortem #7)
+UNKNOWN_KEY_BUDGET = float(os.environ.get("HCTF_WEB_UNKNOWN_KEY_BUDGET", "12"))
+
+
 def _prior_web_solvers():
-    """(day-id, module) for every earlier web day's solver that exposes answer(), newest first. Loaded once; a
-    compounded Mastery target may be any earlier class, so racing their answer() covers the whole history for free."""
+    """(day-id, module) for every earlier web day's solver that exposes answer(), newest first. Loaded once per
+    process (it was re-imported for every target); a compounded Mastery target may be any earlier class, so racing
+    their answer() covers the whole history for free."""
+    global _PRIOR
+    if _PRIOR is None:
+        _PRIOR = _load_prior_web_solvers()
+    return _PRIOR
+
+
+def _load_prior_web_solvers():
     mods = []
     base = ROOT / "challenges"
     dirs = sorted((p for p in base.glob("day*/web-*/solver") if (p / "solve.py").exists()),
@@ -83,7 +98,51 @@ def solve_target(question, contract, budget=40, clues=None):
     if not any(isinstance(v, str) and v.startswith("/") for v in clues_json.values()) \
             and not 200 <= websolve.fetch(base)[0] < 400:
         return None
-    return websolve.race(candidates(base, clues_json, key, question, contract), budget=budget)
+    known = class_known(clues_json, key)
+    if not known and UNKNOWN_KEY_BUDGET > 0:
+        budget = min(budget, UNKNOWN_KEY_BUDGET)
+    rep = {}
+    v = websolve.race(candidates(base, clues_json, key, question, contract), budget=budget, report=rep)
+    _log_race({"qid": (question or {}).get("id"), "key": key, "known": known, "budget": budget,
+               "winner": rep.get("winner"), "elapsed": rep.get("elapsed"), "timed_out": rep.get("timed_out"),
+               "keys": sorted(clues_json)[:12]})
+    return v
+
+
+def _prior_sources():
+    """Lower-cased source text of every earlier web day's solver (for class_known)."""
+    out = []
+    for _day, mod in _prior_web_solvers():
+        try:
+            out.append(Path(mod.__file__).read_text(errors="replace").lower())
+        except (OSError, TypeError, AttributeError):
+            pass
+    return out
+
+
+def class_known(clues_json, key):
+    """Has this harness met the target's vuln class? A built-in handler maps one of its clue keys, or an earlier web
+    day's solver names one of its concept keys (route-valued keys and the kit's common keys are furniture)."""
+    if handlers.for_key(key, clues_json):
+        return True
+    concept = {str(k).lower() for k, v in (clues_json if isinstance(clues_json, dict) else {}).items()
+               if k not in websolve.COMMON_KEYS and not (isinstance(v, str) and v.startswith("/"))}
+    if key:
+        concept.add(str(key).lower())
+    concept = {k for k in concept if len(k) >= 4}
+    return bool(concept) and any(k in src for src in _prior_sources() for k in concept)
+
+
+def _log_race(rec):
+    """One JSON line per target race -> $HCTF_WEB_RACE_LOG (default .run/web_race.jsonl). Never raises."""
+    try:
+        import time
+        p = Path(os.environ.get("HCTF_WEB_RACE_LOG") or (ROOT / ".run" / "web_race.jsonl"))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a") as f:
+            f.write(json.dumps({"t": round(time.time(), 1), **rec}) + "\n")
+    except Exception:  # noqa: BLE001 - telemetry only
+        pass
 
 
 def _iter_pairs(contract):

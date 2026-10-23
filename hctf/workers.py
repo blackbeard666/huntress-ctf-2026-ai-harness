@@ -1164,6 +1164,30 @@ def slow_vm():
     return float(_hb.get("cpu_ratio") or 0) >= SLOW_VM_RATIO
 
 
+NO_CLOCK_MULTISET_LOCAL = os.environ.get("HCTF_NO_CLOCK_MULTISET_LOCAL", "1") != "0"
+
+
+def no_clock_local(cid, log=None):
+    """D22 post-mortem: untimed pool + a slow VM + a multi-set mode not yet measured -> run it locally. Before a
+    measurement route_costs() scales the single's per-set solve by the CPU ratio over the VM's 2 cores, which misses the
+    per-set fan-out a 2-vCPU VM pays: rehearsal D22 warmups Mastery (108 sets) estimated Homebase 3.6 s vs local 8.9 s, then
+    solved 63.9 s on the VM vs 2.75 s locally (main D22: 15.9 s solve + 11.8 s submit on the VM). Once the mode has a
+    measurement route_costs() gets it right (the retry said local 17.3 s vs Homebase 65.8 s), so only the first attempt
+    is overridden. Single-set TTs keep Homebase (its GM round trips are ~3 s cheaper per attempt)."""
+    if not (NO_CLOCK_MULTISET_LOCAL and slow_vm()) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
+        return False
+    _n, _nb, nsets = _contract_shape(cid)
+    if nsets <= 1:
+        return False
+    from . import timed
+    if ((timed.last_result(cid) or {}).get("phases") or {}).get("solve") is not None:
+        return False   # measured: route_costs decides
+    if log:
+        log(f"[{cid}] no clock + Homebase VM x{_hb.get('cpu_ratio')} slower: this {nsets}-set attempt runs locally "
+            "(no measurement yet; the Homebase estimate misses the VM's per-set fan-out)")
+    return True
+
+
 VM_METER_S = float(os.environ.get("HCTF_HB_METER_S", "60"))   # how often a reachable VM's uptime is booked
 
 
@@ -1269,7 +1293,7 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
         # ~3.3 s over the public GM) vs ~0.5 s/submit next to the GM. Homebase when it is up (the failure path pulls
         # the variant bytes back for the generalize worker either way); local is the fallback.
         ut = max(timeout, untimed_plan(cid)[0])     # scaled to the contract (D16: a flat 120 s, killed 6x)
-        if (UNTIMED_ON_HOMEBASE and AUTO_HOMEBASE and remote.gm_transport() == "local"
+        if (UNTIMED_ON_HOMEBASE and AUTO_HOMEBASE and remote.gm_transport() == "local" and not no_clock_local(cid, log)
                 and (not slow_vm() or homebase_cheaper(cid, log)) and _homebase_ready(log)):
             res = run_hb_timed(solver_dir, cid, op=op, timeout=ut)
             if str(res.get("result", "")).lower() != "exec_error" or res.get("gm_rate_limited"):
@@ -1290,7 +1314,9 @@ def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=
         return res
     win = known_window(cid)
     tight = win is None or win <= TIGHT_WINDOW
-    if tight and slow_vm() and (win is None or win > SLOW_VM_WINDOW) and not homebase_cheaper(cid, log):
+    if tight and win is None and no_clock_local(cid, log):
+        tight = False
+    elif tight and slow_vm() and (win is None or win > SLOW_VM_WINDOW) and not homebase_cheaper(cid, log):
         tight = False
         log(f"[{cid}] Homebase VM is x{_hb.get('cpu_ratio')} slower than this host and the window is "
             f"{'unknown/untimed' if win is None else f'{win:g}s'}: running locally")

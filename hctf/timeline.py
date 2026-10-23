@@ -76,14 +76,36 @@ def parse(lines):
     return t0, chains
 
 
-def report(day=None, log=None):
+RELEASE = re.compile(r"^(\d\d):(\d\d):(\d\d) \d+ chains \(\d+ challenge modes\)")
+
+
+def _anchor(lines, first, t0_hms=None):
+    """(T0 seconds, label): an explicit HH:MM:SS (e.g. the 21:00:00 drop), else the run's release line (the chains
+    launch), else the first event. D22 post-mortem P3: with `--wait` the first event is the arm ~49 min before the drop,
+    so every T+ read +2927 s -- score runs per phase from the drop."""
+    def secs(h, m, s):
+        t = int(h) * 3600 + int(m) * 60 + int(s)
+        return t + 86400 if t < first - 43200 else t   # a T0 after midnight relative to a pre-midnight first event
+    if t0_hms:
+        h, m, s = (t0_hms.split(":") + ["0", "0"])[:3]
+        return secs(h, m, s), f"T0 = {t0_hms}"
+    for raw in lines:
+        r = RELEASE.match(raw)
+        if r:
+            return secs(*r.groups()), "T0 = release (chains launched)"
+    return first, "T0 = first event"
+
+
+def report(day=None, log=None, t0=None):
     path = Path(log) if log else ROOT / ".run" / f"day{int(day):02d}.log"
-    t0, chains = parse(path.read_text(errors="replace").splitlines())
-    if t0 is None:
+    lines = path.read_text(errors="replace").splitlines()
+    first, chains = parse(lines)
+    if first is None:
         return f"no timestamped lines in {path}"
-    rows = [f"timeline {path.name} (T0 = first event)",
-            f"{'chain':44} {'single':>7} {'TT':>6} {'Mastery':>8} {'att TT/M':>9} {'gen n/s':>8} {'LLM s':>6} "
-            f"{'other s':>7} {'harvest':>8}"]
+    t0, label = _anchor(lines, first, t0)
+    rows = [f"timeline {path.name} ({label})",
+            f"{'chain':44} {'single':>7} {'TT':>6} {'Mastery':>8} {'->TT':>5} {'->M':>5} {'att TT/M':>9} {'gen n/s':>8} "
+            f"{'LLM s':>6} {'other s':>7} {'harvest':>8}"]
     ends = []
     for base in sorted(chains, key=lambda b: max(chains[b]["done"].values(), default=10 ** 9)):
         c = chains[base]
@@ -94,9 +116,11 @@ def report(day=None, log=None):
         llm = sum(b - a for _, _, a, b in c["workers"])
         gens = [(b - a) for _, stage, a, b in c["workers"] if stage == "generalize"]
         fmt = lambda m: f"{done[m]}" if m in done else "-"  # noqa: E731
+        dlt = lambda a, b: f"{done[b] - done[a]}" if a in done and b in done else "-"  # noqa: E731
         other = (end - llm) if end is not None else None
         harv = f"{c['harvested']}" + (f" ({c['harvest_refused']} ref)" if c["harvest_refused"] else "")
         rows.append(f"{base[:44]:44} {fmt('single_solve'):>7} {fmt('time_trial'):>6} {fmt('mastery'):>8} "
+                    f"{dlt('single_solve', 'time_trial'):>5} {dlt('time_trial', 'mastery'):>5} "
                     f"{c['attempts']['time_trial']:>4}/{c['attempts']['mastery']:<4} {len(gens):>3}/{sum(gens):<4} "
                     f"{llm:>6} {other if other is not None else '-':>7} {harv:>8}")
     complete = sum(1 for b in chains if len(chains[b]["done"]) == len(MODES))

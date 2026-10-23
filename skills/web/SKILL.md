@@ -52,19 +52,17 @@ variants rename hosts, ids, paths and reorder entries. When an answer must be FE
 request-building in `solve.py` with a short timeout and the base URL read from the contract, so each variant's answer
 is fetched, not stored.
 
-# proof-* fields: solve.py MUST re-exploit (this is the whole lane's speed)
-A `proof-*` (or any field you can only get by exploiting the target: an uploaded-file result, a forged/signed request,
-a dumped secret) is NOT solved by doing the exploit by hand in the shell and typing the answer. The timed modes run
-your `solve.py` against a BRAND-NEW target (this single's target dies with HTTP 410 the instant the single is CORRECT),
-so a `proof` you got by hand, hardcoded, or fetched once is EMPTY on that fresh target -> the harness falls back to a
-slow per-attempt live-answer worker (~40 s/mode) and the lane misses sub-2-min. Instead:
-- Put the FULL exploit in `solve.py` as a function `exploit(base_url) -> answer` that re-runs end to end against
-  `contract["targets"]` (recon the fresh target if the path/id/token is per-target, then upload / forge / trigger /
-  read), with short timeouts and a browser UA. No step may depend on state from your manual session.
-- **Before you submit the single, RUN your `solve.py` against THIS live target and confirm it reproduces EVERY field,
-  proof included** (`hctf submit --from-solver` or just run it). This is the one lane where reaching the live service to
-  self-verify is REQUIRED (it overrides the generic "don't reach a backend to confirm" rule) -- because the target is
-  about to disappear and TT/Mastery get a fresh one. A single that passed only because you typed the proof by hand, but
-  whose `solve.py` leaves it empty, is a FAIL you just can't see yet.
-- If the exploit is genuinely one-shot/non-replayable on a fresh target, say so in a comment -- the live-answer fallback
-  will handle it -- but assume it IS replayable until the live run proves otherwise; almost every web proof is.
+# Speed first: submit the proof, then the CLASS becomes code (a clue-keyed plugin)
+- Submit the single's proof the moment you (or the answer-first worker) have it -- never delay the single to polish
+  `solve.py`. The Time Trial and Mastery get BRAND-NEW targets (this one dies with HTTP 410 at CORRECT; Mastery has 3 and
+  puts today's class on ANY slot -- proof-1/2/3 only name slots), so a proof you got by hand never carries over.
+- What carries over is a HANDLER for the class. At the single's CORRECT the harness starts a codify worker that writes
+  `lib/web/handlers/<dayNN>_<challenge>.py`: `KEY_MAP = [(r"<regex on a /api/clues KEY>", name)]` and
+  `HANDLERS = {name: fn}`, `fn(base, clues) -> "proof_..." or None` re-running the exploit end to end (recon what is
+  per-target, then upload / forge / trigger / read; short timeouts; browser UA; nothing from a manual session).
+  `lib.web.handlers` auto-loads it, so the generic solver dispatches to it on every fresh target -- and on later days'
+  compounded Mastery targets.
+- Any worker that fixes a web class later (a generalize, a speed fix) puts the class logic in that SAME per-challenge
+  plugin file (create it if missing) -- never in `solve.py` (keep it the generic dispatcher) and never in
+  `handlers/__init__.py` (two web chains may run at once). Key on a concept clue KEY, never on proof-N, a target slot,
+  a host or a value. If the exploit is genuinely one-shot on a fresh target, say so in the plugin's docstring.

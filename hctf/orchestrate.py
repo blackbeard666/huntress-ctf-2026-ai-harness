@@ -167,6 +167,13 @@ LIVE_ANSWER = os.environ.get("HCTF_LIVE_ANSWER", "1") == "1"
 # worker on the open untimed attempt would have answered them (reference/PLAN_SUB2MIN.md P0)
 LIVE_MAX_FIELDS = int(os.environ.get("HCTF_LIVE_MAX_FIELDS", "80"))
 LIVE_TIMEOUT = float(os.environ.get("HCTF_LIVE_TIMEOUT", "900"))
+# D22 post-mortem #8/#9: at a web single's CORRECT a background worker codifies the winning exploit as a clue-keyed
+# plugin (lib/web/handlers/<slug>.py) so the Time Trial / Mastery solver dispatches to it instead of each fresh target
+# being cracked by hand again. It runs beside the Time Trial; HOLD > 0 makes the first web TT attempt wait up to that
+# many seconds for the plugin (measure first: the TT's own path is a 12 s capped race + a hot live answer).
+WEB_CODIFY = os.environ.get("HCTF_WEB_CODIFY", "1") != "0"
+WEB_CODIFY_TIMEOUT = float(os.environ.get("HCTF_WEB_CODIFY_TIMEOUT", "300"))
+WEB_CODIFY_HOLD = float(os.environ.get("HCTF_WEB_CODIFY_HOLD", "0"))
 RESUME_CONTINUES = int(os.environ.get("HCTF_RESUME_CONTINUES", "2"))
 TT_FIX_GATE = os.environ.get("HCTF_TT_FIX_GATE", "1") == "1"
 SINGLE_DUEL_CASES = os.environ.get("HCTF_SINGLE_DUEL_CASES", "1") == "1"
@@ -183,6 +190,13 @@ BG_GEN_NOTE = """
   GM-verified answers are in `cases/{target}/expected.json`. Pass that case + every case that passes now, then stop.
 """
 NEWID_HOLD = float(os.environ.get("HCTF_NEWID_HOLD", "45"))     # 0 = off
+# D22 post-mortem #11: a REUSE-RACE handoff is verified on the single's fields only, and the new-id hold above skips it
+# (and only looks at shapes new to the lane). Rehearsal D22 metadata: the race won at +16.8 s with a seed lacking the D21
+# carry-over `d21-apk-001-apk-package-name` -> TT and Mastery each blocked on it (T+1:31 / T+3:08 vs main 1:00 / 1:35).
+# Check each carry-over shape on the newest earlier GM-verified case that asks it (conclusive, unlike substituting the
+# single's bytes); hold like the new-id hold when the seed misses one.
+CARRY_CHECK = os.environ.get("HCTF_CARRY_CHECK", "1") != "0"
+CARRY_CHECK_MAX = float(os.environ.get("HCTF_CARRY_CHECK_MAX", "12"))   # s per prior-case dry run
 NEWID_STABLE = float(os.environ.get("HCTF_NEWID_STABLE", "1.0"))
 NEWID_MAX = int(os.environ.get("HCTF_NEWID_MAX", "6"))           # background dry runs per single
 NEWID_WAIT = float(os.environ.get("HCTF_NEWID_WAIT", "2.0"))     # at CORRECT: wait this long for a running dry run
@@ -208,6 +222,28 @@ def _cut_short(last):
         return True
     wrong = [w[0] for w in last.get("wrong") or []]
     return bool(wrong) and all(a in (last.get("fixed") or {}) for a in wrong)
+
+
+def method_matches(shapes_a, shapes_b, live=False):
+    """Does a recorded method (fields of shapes_a) apply to fields of shapes_b? Same field shape -- or, on a live web lane,
+    any two proof fields: proof-N only names a target SLOT and Mastery shuffles today's class onto any slot (D22 alt: the
+    TT's proof-1 class came back as Mastery's proof-3, whose live answer could not reuse the TT's method: 133 s)."""
+    if shapes_a & shapes_b:
+        return True
+    return bool(live and any(s.startswith("proof") for s in shapes_a) and any(s.startswith("proof") for s in shapes_b))
+
+
+def single_method_text(cdir, limit=1500):
+    """How the single was won, for the timed modes' live answers: the answer-first worker's and the single worker's own
+    derivation (live_method_text of their logs, newest first) -- '' when neither left one. D22: the TT's first live answer
+    started cold although answer-first had exploited the same class a minute earlier (TT live answers 32-71 s)."""
+    parts = []
+    for pat in ("worker-live-answer-first-*.log", "worker-single-*.log"):
+        logs = sorted(Path(cdir).glob(pat), key=lambda p: p.stat().st_mtime)
+        text = live_method_text(logs[-1], limit) if logs else ""
+        if text and text not in parts:
+            parts.append(text)
+    return "\n---\n".join(parts)[:limit]
 
 
 def live_method_text(log, limit=1500):
@@ -292,10 +328,13 @@ class LiveAnswer:
         # D19 metadata: Mastery's live answer re-derived `synthesis-sha256-order` (5 sets, 21 s) that the TT's live answer
         # had worked out 30 s earlier -> hand it the earlier worker's own account of how
         self._shapes = {field_shape(a) for a in fields}
-        prior = [t for sh, t in getattr(chain, "_live_methods", []) if sh & self._shapes]
-        prior_method = ("\nA live-answer worker ALREADY derived field(s) of the same shape on this chain's earlier mode "
-                        "(GM-accepted); reuse its method on these bytes:\n> " + "\n> ".join(prior[-1].splitlines())
-                        + "\n") if prior else ""
+        from . import webtarget
+        live = webtarget.is_live_lane(getattr(chain, "lane", None))
+        prior = [t for sh, t in getattr(chain, "_live_methods", []) if method_matches(sh, self._shapes, live)]
+        prior_method = ("\nThis chain ALREADY derived field(s) of this kind on an earlier mode (GM-accepted)"
+                        + (" -- on a live lane the target slot number is shuffled, so check `/api/clues` on each "
+                           "target and reuse the method on whichever target carries the same class" if live else "")
+                        + "; reuse its method:\n> " + "\n> ".join(prior[-1].splitlines()) + "\n") if prior else ""
         self._render = dict(
             persona=workers.lane_persona(chain.lane), cid=cid, attempt=str(self.attempt)[:8], prior_method=prior_method,
             accepted=len(last.get("verified") or {}), n=len(fields), fields="\n".join(lines),
@@ -434,6 +473,62 @@ def answer_first_eligible(lane, n_fields):
         if len(_af_live) >= ANSWER_FIRST_MAX:
             return False, f"{len(_af_live)} answer-first workers already running"
     return True, ""
+
+
+class WebCodify:
+    """Background web codify worker (see WEB_CODIFY): the single's exploit -> `lib/web/handlers/<slug>.py` (KEY_MAP +
+    HANDLERS, auto-loaded by lib.web.handlers). One file per challenge, so two web chains never edit the same file."""
+
+    def __init__(self, chain, cid):
+        self.chain, self.cid = chain, cid
+        self.stop_evt, self.done = threading.Event(), threading.Event()
+        self.plugin = web_plugin_path(chain.sdir)
+        self.name = self.plugin.stem
+        self.t0 = time.time()
+        self.thread = threading.Thread(target=self._run, daemon=True, name=f"codify-{cid}")
+
+    def start(self):
+        say(f"[{self.cid}] web codify worker: the single's exploit -> {_rel(self.plugin)} (runs beside the Time Trial)")
+        self.thread.start()
+        return self
+
+    def landed(self, timeout=15):
+        """The plugin was written by this worker and maps its handler on import (checked in a fresh interpreter, so this
+        process never caches a half-written module)."""
+        import subprocess
+        try:
+            if not self.plugin.exists() or self.plugin.stat().st_mtime < self.t0:
+                return False
+            code = (f"from lib.web import handlers as h; import sys; "
+                    f"sys.exit(0 if {self.name!r} in h._HANDLERS and any(n == {self.name!r} for _p, n in h._KEY_MAP) "
+                    f"else 1)")
+            r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, timeout=timeout)
+            return r.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def _run(self):
+        try:
+            tt, ms = self.chain.entries.get("time_trial"), self.chain.entries.get("mastery")
+            prompt = workers.render(
+                "codify", persona=workers.lane_persona(self.chain.lane), cid=self.cid, name=self.name,
+                method=single_method_text(cli.cdir(self.cid)) or "(no transcript: re-derive it from /api/clues)",
+                plugin=_rel(self.plugin), budget=int(WEB_CODIFY_TIMEOUT),
+                tt_cid=tt["id"] if tt else "(no Time Trial)",
+                tt_contract=_rel(cli.cdir(tt["id"]) / "start.json") if tt else "(no Time Trial)",
+                m_contract=_rel(cli.cdir(ms["id"]) / "start.json") if ms else "(no Mastery)")
+            self.chain.run_worker(self.cid, "codify", prompt, WEB_CODIFY_TIMEOUT, urgent=True, stop=self.stop_evt)
+        except Exception as e:  # noqa: BLE001 - the timed modes stand on their own
+            say(f"[{self.cid}] web codify worker failed: {str(e)[:200]}")
+        finally:
+            self.done.set()
+            ok = self.landed()
+            say(f"[{self.cid}] web codify: {('plugin ' + self.plugin.name + ' maps its handler') if ok else 'no plugin'} "
+                f"({time.time() - self.t0:.0f}s)")
+
+    def stop(self, join=5.0):
+        self.stop_evt.set()
+        self.thread.join(timeout=join)
 
 
 class AnswerFirst:
@@ -610,6 +705,14 @@ SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "0.25"))  # D9: single CORREC
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
 SINGLE_SPEED_BUDGET = float(os.environ.get("HCTF_SINGLE_SPEED_BUDGET", "2.5"))
+# D22 post-mortem: the timed modes run the UNTIMED regular pool (HCTF_RUN_FOR_TIME=auto, every D15-D22 contract
+# deadline=None) -- the clock-era speed gates above only cost wall time there. Rehearsal D22: script's 3.1 s and binary's
+# 6.4 s single solvers (the latter timed on a contended host) set off pre-TT speed generalizes -> TT at T+4:00 / T+10:32
+# vs main's T+1:03 / T+1:23. With no clock a speed fix is worth it only for a solver that could threaten the untimed
+# solver budget (60 s + 0.05 s/field) across a Mastery's sets. HCTF_NO_CLOCK_SPEED=0 restores the clock-era gates.
+NO_CLOCK_SPEED = os.environ.get("HCTF_NO_CLOCK_SPEED", "1") != "0"
+NO_CLOCK_SINGLE_SPEED = float(os.environ.get("HCTF_NO_CLOCK_SINGLE_SPEED", "20"))
+NO_CLOCK_FIT_RATIO = float(os.environ.get("HCTF_NO_CLOCK_FIT_RATIO", "0.8"))   # est. Mastery solve / solver budget
 # A7: a web / untimed Mastery has no window to estimate from, so gate on the Time Trial's MEASURED solve seconds. A
 # solver that took longer than this will trip the Mastery (web's 60 s untimed budget / live-target exit latency), so
 # harden it for speed BEFORE Mastery, overlapping the live target's provisioning (off the mastery clock).
@@ -871,11 +974,74 @@ def _contract_shape(contract):
 _SHAPE_LOCK = threading.Lock()
 
 
+def carry_cases(lane, day, shapes):
+    """{shape: (case dir, answer id, expected value)}: for each field shape, the newest EARLIER-day regression case of
+    this lane whose GM-verified expected.json answers a field of that shape -- proof a solver can answer it, on bytes
+    that really carry it."""
+    out, shapes = {}, set(shapes or ())
+    if not shapes:
+        return out
+    for m in sorted(ROOT.glob("challenges/day*/*/meta.json"), reverse=True):   # zero-padded dayNN: newest first
+        dm = re.match(r"day(\d+)$", m.parent.parent.name)
+        if not dm or int(dm.group(1)) >= int(day):
+            continue
+        try:
+            if json.loads(m.read_text()).get("lane") != lane:
+                continue
+        except (OSError, ValueError):
+            continue
+        for exp in sorted((m.parent / "solver" / "cases").glob("*/expected.json")):
+            try:
+                e = json.loads(exp.read_text())
+            except (OSError, ValueError):
+                continue
+            for a, v in (e.items() if isinstance(e, dict) else ()):
+                s = field_shape(a)
+                if s in shapes and s not in out and v not in (None, "") and (exp.parent / "contract.json").exists():
+                    out[s] = (exp.parent, a, v)
+        if len(out) == len(shapes):
+            break
+    return out
+
+
+_SHAPE_MEMO = {}
+
+
 def lane_known_shapes(lane, day):
     """Field shapes this lane asked on any EARLIER day (single / time_trial / mastery contracts as saved). Cached per
-    file (size + mtime) in .run/shape-cache.json: script's Mastery contracts are ~3 MB each."""
+    file (size + mtime) in .run/shape-cache.json: script's Mastery contracts are ~3 MB each. Memoized per (lane, day)
+    for the process -- earlier days' contracts never change mid-run -- and warmed before the drop
+    (warm_lane_shapes_async): D22 post-mortem #10, built AT the drop under this lock it held web's single prompt 9-14 s
+    (web's mastery_delta is the one that asks for it) while the other lanes' scans ran on a saturated host."""
+    key = (lane, int(day))
     with _SHAPE_LOCK:   # five lanes build their single prompts at once at the drop
-        return _lane_known_shapes(lane, day)
+        if key not in _SHAPE_MEMO:
+            _SHAPE_MEMO[key] = frozenset(_lane_known_shapes(lane, day))
+        return set(_SHAPE_MEMO[key])
+
+
+def warm_lane_shapes_async(day, log=None):
+    """Build every lane's earlier-day shape set in the background before the drop (see lane_known_shapes)."""
+    if day is None or os.environ.get("HCTF_SHAPE_WARM", "1") == "0":
+        return
+
+    def run():
+        try:
+            t0, lanes = time.time(), set()
+            for m in ROOT.glob("challenges/day*/*/meta.json"):
+                try:
+                    lanes.add(json.loads(m.read_text()).get("lane"))
+                except (OSError, ValueError):
+                    pass
+            lanes.discard(None)
+            for lane in sorted(lanes):
+                lane_known_shapes(lane, int(day))
+            if log:
+                log(f"[shapes] earlier-day field shapes warmed for {len(lanes)} lane(s) in {time.time() - t0:.1f}s")
+        except Exception as e:  # noqa: BLE001 - the drop-time path still builds them on demand
+            if log:
+                log(f"[shapes] warm note: {e}")
+    threading.Thread(target=run, daemon=True, name="shape-warm").start()
 
 
 def _lane_known_shapes(lane, day):
@@ -1093,15 +1259,31 @@ def lane_seed_note(seed, sdir):
             "folds it into lib/meta.")
 
 
+def web_plugin_path(sdir):
+    """`lib/web/handlers/<dayNN>_<challenge>.py`: the per-challenge plugin a web class is codified into (WebCodify,
+    web generalizes); its stem is also the handler name."""
+    sdir = Path(sdir)
+    name = re.sub(r"[^a-z0-9]+", "_", f"{sdir.parent.parent.name}_{sdir.parent.name}".lower()).strip("_")
+    return ROOT / "lib" / "web" / "handlers" / f"{name}.py"
+
+
+def web_plugin_note(sdir):
+    p = web_plugin_path(sdir)
+    return (f"WEB CLASS LOGIC GOES IN A PLUGIN: `{_rel(p)}` (create it if missing) with `KEY_MAP = [(r\"<regex on a "
+            f"/api/clues KEY>\", \"{p.stem}\")]` and `HANDLERS = {{\"{p.stem}\": fn}}`, `fn(base, clues) -> \"proof_...\" "
+            "or None` re-running the exploit end to end; lib.web.handlers auto-loads it. Never edit solve.py's dispatch "
+            "or lib/web/handlers/__init__.py (two web chains may run at once). Key on a concept clue KEY -- never on "
+            "proof-N or a target slot: Mastery puts today's class on ANY of its 3 targets.")
+
+
 def web_seed_note(sdir):
     return (f"The harness SEEDED `{Path(sdir).relative_to(ROOT)}/solve.py` from the GENERIC web solver (`lib.web`): "
             "it reads GET /api/clues, dispatches on the single concept-specific KEY (never the value -- the documented "
             "pitfall), races the matching class handler + every earlier web day's answer() + a general `default` ladder, "
             "and returns the proof_<hex>. It already solves every KNOWN vuln class, so run it FIRST "
             "(`.venv/bin/python solve.py --contract <contract.json> --artifacts <dir>`) and confirm. Do NOT rewrite it. "
-            "ONLY if /api/clues shows a brand-new clue key the dispatch does not recognise, add a handler in "
-            "`lib/web/handlers/` and map its key in `_KEY_MAP` (the `default` ladder makes a real attempt meanwhile); "
-            "note it under `## Proposed lib additions` in solver/NOTES.md and the post-run ratchet folds it in.")
+            "ONLY if /api/clues shows a brand-new clue key the dispatch does not recognise: submit the proof first, then "
+            + web_plugin_note(sdir) + " (A codify worker also does this right after your CORRECT.)")
 
 
 def stage_prior_cases(prior, sdir):
@@ -1578,6 +1760,26 @@ def tt_solve_cap(tt_last, mastery_contract):
     return round(max(solve, 0.05) * len(sets) * 1.5, 2)
 
 
+def untimed_solver_budget(n_ids):
+    """hb_timed._solve_budget's cap for an UNTIMED attempt of n_ids answer ids (same env knobs)."""
+    base = float(os.environ.get("HCTF_UNTIMED_BUDGET", "60"))
+    per = float(os.environ.get("HCTF_UNTIMED_BUDGET_PER_FIELD", "0.05"))
+    cap = float(os.environ.get("HCTF_UNTIMED_BUDGET_MAX", "300"))
+    return max(base, min(cap, base + max(0, int(n_ids or 0)) * per))
+
+
+def vm_budget_exhausted(last, n_ids):
+    """An untimed attempt the solver did not finish: it ran (nearly) its whole solver budget and left (nearly) every field
+    empty. D22 alt warmups Mastery on the x7.5 VM: 63.9 s of a 65.4 s budget, 108/108 fields empty -> `solver_incomplete`,
+    while the same solver took 2.75 s locally. That is a cut-off, not a missing family."""
+    last = last or {}
+    if str(last.get("result", "")).lower() != "solver_incomplete" or not n_ids:
+        return False
+    solve = float((last.get("phases") or {}).get("solve") or 0)
+    missing = len(last.get("missing") or [])
+    return solve >= 0.9 * untimed_solver_budget(n_ids) and missing >= 0.9 * n_ids
+
+
 def mastery_estimate(mut_summary, mastery_contract):
     """Estimated Mastery solve seconds = (2-set mastery-shape run / 2) x Mastery set count x 1.5, or None."""
     shape = next((r for r in (mut_summary or {}).get("results") or [] if r.get("mutation") == "mastery-shape"
@@ -1831,7 +2033,11 @@ class Chain:
                 f"triage {pt['tri1'] - pt['tri0']:.1f}s, post-triage {time.time() - pt['tri1']:.1f}s")
         if {"retr", "tfetch"} <= set(pt):   # D22 pole #3: where the post-triage seconds actually go (web was ~11.5s)
             base += (f" [retrieval {pt['retr'] - pt['tri1']:.1f}s, timed-prefetch {pt['tfetch'] - pt['retr']:.1f}s, "
-                     f"prompt-build {time.time() - pt['tfetch']:.1f}s]")
+                     f"prompt-build {time.time() - pt['tfetch']:.1f}s")
+            if {"pb_prior", "pb_delta", "pb_inbox", "pb_go"} <= set(pt):   # D22 post-mortem #10 sub-marks
+                base += (f" (prior-note {pt['pb_prior'] - pt['tfetch']:.1f}s, delta {pt['pb_delta'] - pt['pb_prior']:.1f}s"
+                         f", inbox {pt['pb_inbox'] - pt['pb_delta']:.1f}s, go-lock {pt['pb_go'] - pt['pb_inbox']:.1f}s)")
+            base += "]"
         return base
 
     def _prior_dry_run_text(self, cid=None):
@@ -1922,6 +2128,7 @@ class Chain:
         right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
         worker is told the truth — "timing" only when every field was actually judged correct."""
         self._bg_gen_take(cid, "a new generalize starts")
+        tg = {"t0": time.time()}   # D22 post-mortem #12: prep phases before the worker spawns (alt: 1:23-2:24 under load)
         mode = solvers.mode_of(cid)
         probs = []
         fam = None
@@ -1939,7 +2146,9 @@ class Chain:
         # ONE fast parallel replay (8s/case) serves both the problem list and the transactional baseline (was a full
         # 120s/case run here plus a second baseline run: 141s before the worker spawned, replay run 2).
         ensure_case_and_test(paths.base_id(cid), self.sdir, full=False)
+        tg["case"] = time.time()
         res = self._baseline_results()
+        tg["baseline"] = time.time()
         self._pre_res = res
         for r in (res or []):
             if not r.get("ok"):
@@ -2115,9 +2324,13 @@ class Chain:
         except Exception as e:  # noqa: BLE001 - advisory
             evidence = ""
             say(f"[{cid}] evidence block note: {e}")
+        from . import webtarget as _wt
+        playbook = workers.lane_playbook(self.lane)
+        if _wt.is_live_lane(self.lane):
+            playbook = f"{playbook}\n\n{web_plugin_note(self.sdir)}"   # D22 post-mortem #9
         prompt = workers.render("generalize", cid=cid, base=self.base, mode=mode,
                                 chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
-                                persona=workers.lane_persona(self.lane), playbook=workers.lane_playbook(self.lane),
+                                persona=workers.lane_persona(self.lane), playbook=playbook,
                                 variant_axes=variant_axes(self.lane) or "(none recorded yet for this lane)",
                                 problems="\n".join(f"  - {p}" for p in probs) or (
                                     "  - every case passes -- the problem is SPEED" if d.get("solver_too_slow")
@@ -2138,7 +2351,12 @@ class Chain:
             slow_t, slow_f = speed_watch_sets(res, self.sdir, mode)
             targets |= slow_t
             fill |= slow_f
+        tg["prompt"] = time.time()
         self._snapshot_solver()
+        tg["snapshot"] = time.time()
+        say(f"[{cid}] generalize prep {tg['snapshot'] - tg['t0']:.1f}s before the worker: case-check "
+            f"{tg['case'] - tg['t0']:.1f}s, baseline replay {tg['baseline'] - tg['case']:.1f}s ({len(res or [])} cases), "
+            f"evidence/prompt {tg['prompt'] - tg['baseline']:.1f}s, snapshot {tg['snapshot'] - tg['prompt']:.1f}s")
         green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
         if live is not None:
             live.link(green)   # a live-answer pass ends this worker (its edits are still judged by _accept_or_restore)
@@ -2602,8 +2820,10 @@ class Chain:
             if RETRIEVAL:
                 from . import retrieval
                 rank = retrieval.solver_rank(cli.cdir(cid), self.lane, contract) or None
+            tr = {"rank": time.time()}   # D22 post-mortem #14: where the race's seconds go (script won at +27.6 s)
             plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir], timeout=REUSE_RACE_TIMEOUT,
                                       limit=REUSE_RACE_SOLVERS, by_question=False, rank=rank)
+            tr["plan"] = time.time()
             high, spec = dict(plan["high"]), dict(plan["spec"])
             dropped = self._race_gate(contract, high, spec) if RACE_FORMAT_GATE else []
             merged = {a: high.get(a, spec.get(a)) for a in ids if a in high or a in spec}
@@ -2616,10 +2836,13 @@ class Chain:
                 used = self._race_narrow(cid, merged, REUSE_RACE_PROBES)
             else:
                 used = self._race_bank(cid, ids, high, spec, merged, plan)
+            tr["submit"] = time.time()
             if cli.is_complete(cid):
                 set_state(self.base, stage="single:reuse-won")
                 snap = self._race_snapshot(cid, plan["best"], contract, art)
                 say(f"[{cid}] reuse race WON: single CORRECT at +{time.time() - t0:.1f}s from prior solver output "
+                    f"[rank {tr['rank'] - t0:.1f}s, {len(plan['runs'])} solver run(s) {tr['plan'] - tr['rank']:.1f}s, "
+                    f"{used} submit(s) {tr['submit'] - tr['plan']:.1f}s, seed verify {time.time() - tr['submit']:.1f}s] "
                     f"(seed {plan['best'] and Path(plan['best']).parent.name}; "
                     + ("seed verified -> the ready-watcher hands it to the timed modes)" if snap else
                        "seed does not reproduce every answer -> waiting for the worker's solver)"))
@@ -2813,6 +3036,8 @@ class Chain:
         if err or not conf or any(got.get(k) != v for k, v in conf.items()):
             return None
         self._race_snap = snap
+        if CARRY_CHECK:   # the handoff's carry-over check starts now, beside the rest of the race (D22 post-mortem #11)
+            self._carry_fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
         return snap
 
     def try_existing_solvers(self, cid):
@@ -3281,25 +3506,35 @@ class Chain:
                 carry = carry_over_note(self.lane, self.sdir, [a for a in tids if field_shape(a) not in own])
                 if carry:
                     prior_note += " EXCEPT: the timed contracts already carry earlier days' questions. " + carry
+            # D22 post-mortem #10: web's prompt-build took 9-14 s at the drop (others 0.7-3.7 s) although every step
+            # here is ~0.03 s offline: web's mastery_delta is the one that calls lane_known_shapes, which then queued on
+            # _SHAPE_LOCK behind the other lanes' cold scans on a saturated host -- now warmed before the drop. The
+            # MASTERY COMPOUNDS line logs after the go text; the sub-marks name any stall that is left.
+            pre = getattr(self, "_pre_t", {})
+            pre["pb_prior"] = time.time()
             _dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
             delta = mastery_delta(cli.load(cid, "start.json") or cli.load(cid, "contract.json"),
                                   [cli.load(f"{self.base}/{m}", "contract.json") or {} for m in ("time_trial", "mastery")],
                                   known=(lambda: lane_known_shapes(self.lane, int(_dm.group(1)))) if _dm else None)
             if delta:
                 prior_note += " " + delta
-                say(f"[{cid}] {delta[:200]}")
+            pre["pb_delta"] = time.time()
             if INBOX:
                 from . import inbox
                 carried = inbox.texts(cli.cdir(cid))   # a relaunch inherits what the previous worker was told late
                 inbox.reset(cli.cdir(cid))
                 if n and carried:
                     extra += "\n" + "\n".join(carried)
+            pre["pb_inbox"] = time.time()
             with self._go_lock:
                 if self._go_pending:
                     extra += "\n" + "\n".join(self._go_pending)
                 self._go_pending, self._go_sent = [], True
+            pre["pb_go"] = time.time()
             say(f"[{cid}] go text ready at +{time.time() - self._chain_t0:.1f}s (launch {n + 1}){self._prelude_split()}"
                 if getattr(self, "_chain_t0", None) else f"[{cid}] go text ready (launch {n + 1})")
+            if delta:
+                say(f"[{cid}] {delta[:200]}")
             prompt = workers.render("single", skill=workers.lane_skill(self.lane), triage=triage_summary(cid),
                                     lane_helpers=workers.lane_helpers(self.lane), prior_solver=prior_note,
                                     name=self.name, cid=cid, lane=self.lane, techniques=technique_log(self.lane),
@@ -3811,6 +4046,7 @@ class Chain:
                     return                      # the runner is already on it
                 with cli.quiet():
                     env = cli.call(mcid, "start", mcid, timeout=60)
+                t_start = time.time()   # D22 post-mortem #14: GM start vs download at the drop (Mastery 20-25 s)
                 body = env.get("body") or {}
                 att = cli.attempt_id(body)
                 if env.get("http") != 200 or body.get("error") or not body.get("answer_ids") or body.get("deadline"):
@@ -3832,8 +4068,11 @@ class Chain:
                     return
                 (adir / ".prefetch.json").write_text(json.dumps({"attempt_id": att, "files": [n for n, _c in plan],
                                                                  "t": time.time()}))
+                t_dl = time.time() - t_start
+                mb = sum((adir / n).stat().st_size for n, _c in plan if (adir / n).exists()) / 1e6
                 say(f"[{mcid}] {label} pre-started at {when}: attempt {str(att)[:8]}, {len(plan)} file(s) "
-                    f"in {time.time() - t0:.1f}s")
+                    f"in {time.time() - t0:.1f}s [start {t_start - t0:.1f}s, download {t_dl:.1f}s, {mb:.1f} MB"
+                    f"{f', {mb / t_dl:.1f} MB/s' if t_dl > 0.05 else ''}]")
         threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True,
                          name=f"{mode}-prefetch-{self.base}").start()
         return True
@@ -4028,9 +4267,31 @@ class Chain:
                     "on a speed harden (live target, no clock) -- first attempt runs now, blocked-path live-answer "
                     "recovers a slow attempt; post-run speed-harden banks the fast solver")
                 return
+            if NO_CLOCK_SPEED and not live_lane and self._expect_untimed():
+                est, budget = self._mastery_untimed_estimate(cid, solve_s, last)
+                if est is not None and est < NO_CLOCK_FIT_RATIO * budget:
+                    say(f"[{cid}] Time Trial solver took {solve_s:.1f}s but the Mastery is untimed (est. {est:.0f}s vs "
+                        f"a {budget:.0f}s solver budget): no blocking speed harden -- first attempt runs now")
+                    return
             say(f"[{cid}] Time Trial solver took {solve_s:.1f}s (> {WEB_SPEED_GATE:g}s gate): hardening for speed "
                 "BEFORE Mastery (overlaps the live target's provisioning)")
             self.generalize(cid, wrong=None, fixed=None, diag={"solver_too_slow": True, "single_seconds": solve_s})
+
+    @staticmethod
+    def _mastery_untimed_estimate(cid, tt_solve_s, tt_last):
+        """(est. local Mastery solve s, untimed solver budget s) from the Time Trial's measured solve: one set's cost
+        (de-rated by the VM's CPU ratio when the TT ran on Homebase -- the Mastery runs locally, see
+        workers.no_clock_local) x the waves of the Mastery's sets over this host's cores. (None, budget) if unknown."""
+        n, _nb, nsets = workers._contract_shape(cid)
+        budget = untimed_solver_budget(n)
+        try:
+            per_set = float(tt_solve_s)
+        except (TypeError, ValueError):
+            return None, budget
+        if str((tt_last or {}).get("routed", "")).startswith("homebase"):
+            per_set /= max(1.0, float(workers._hb.get("cpu_ratio") or 1.0))
+        waves = -(-max(1, nsets) // max(1, os.cpu_count() or 1))
+        return per_set * waves, budget
 
     def _note_single_speed(self, cid, seconds, rerun=None):
         """Flag a single solver over SINGLE_SPEED_BUDGET for a speed generalize before the first timed attempt -- after
@@ -4038,7 +4299,10 @@ class Chain:
         binary 6.7 s and script 3.2 s vs 0.18 s / 1.4 s idle -> two 3-4 min speed generalizes for nothing).
         rerun = (solver dir, contract, artifacts dir); default the solver dir on its single_solve case."""
         self._single_slow = None
-        if SINGLE_SPEED_BUDGET and seconds and seconds > SINGLE_SPEED_BUDGET and SINGLE_SPEED_RETIME:
+        budget = SINGLE_SPEED_BUDGET
+        if NO_CLOCK_SPEED and budget and self._expect_untimed():
+            budget = max(budget, NO_CLOCK_SINGLE_SPEED)   # no clock: only a budget-threatening solver (see NO_CLOCK_SPEED)
+        if budget and seconds and seconds > budget and SINGLE_SPEED_RETIME:
             try:
                 if rerun is None:
                     case = self.sdir / "cases" / "single_solve"
@@ -4049,10 +4313,63 @@ class Chain:
                     seconds = dt2
             except Exception as e:  # noqa: BLE001 - keep the first timing
                 say(f"[{cid}] single solver re-time note: {e}")
-        if SINGLE_SPEED_BUDGET and seconds and seconds > SINGLE_SPEED_BUDGET:
+        if budget and seconds and seconds > budget:
             self._single_slow = round(seconds, 2)
-            say(f"[{cid}] single solver takes {seconds:.1f}s on its own case (budget {SINGLE_SPEED_BUDGET:g}s): "
+            say(f"[{cid}] single solver takes {seconds:.1f}s on its own case (budget {budget:g}s): "
                 "speed generalize before the first timed attempt")
+        elif budget != SINGLE_SPEED_BUDGET and seconds and seconds > SINGLE_SPEED_BUDGET:
+            say(f"[{cid}] single solver takes {seconds:.1f}s (> {SINGLE_SPEED_BUDGET:g}s clock-era budget) but the timed "
+                f"modes are untimed: no pre-TT speed generalize (threshold {budget:g}s)")
+
+    def _start_codify(self, cid):
+        """Once, at a web single's CORRECT: start the background codify worker (WebCodify)."""
+        from . import webtarget
+        if (getattr(self, "_codify", None) is not None or not WEB_CODIFY
+                or not webtarget.is_live_lane(getattr(self, "lane", None))):
+            return
+        if all(cli.is_complete(e["id"]) for m, e in self.entries.items() if m in ("time_trial", "mastery")):
+            return
+        try:
+            self._codify = WebCodify(self, cid).start()
+        except Exception as e:  # noqa: BLE001 - an optimization only
+            self._codify = False
+            say(f"[{cid}] web codify not started: {e}")
+
+    def _codify_hold(self, cid, poll=2.0):
+        """HCTF_WEB_CODIFY_HOLD > 0: the first web Time Trial attempt waits up to that long for the codify worker's plugin
+        (then the solver dispatches to it first-try) -- returns at once when it lands or the worker ends."""
+        c = getattr(self, "_codify", None)
+        if not c or WEB_CODIFY_HOLD <= 0:
+            return
+        t0, end = time.time(), time.time() + WEB_CODIFY_HOLD
+        while time.time() < end:
+            if c.landed():
+                say(f"[{cid}] web codify plugin landed after {time.time() - t0:.0f}s of hold: first attempt uses it")
+                return
+            if c.done.is_set():
+                break
+            time.sleep(poll)
+        say(f"[{cid}] web codify hold: no plugin after {time.time() - t0:.0f}s -> first attempt without it")
+
+    def _stop_codify(self):
+        c = getattr(self, "_codify", None)
+        if c:
+            c.stop()
+
+    def _record_single_method(self, cid):
+        """Once, at the single's CORRECT: how it was won -> _live_methods, so the timed modes' first live answer starts
+        hot instead of re-deriving the exploit (D22 post-mortem #6)."""
+        if getattr(self, "_single_method_done", False):
+            return
+        self._single_method_done = True
+        try:
+            text = single_method_text(cli.cdir(cid))
+            ids = _contract_ids(cli.load(cid, "start.json") or cli.load(cid, "contract.json") or {})
+            if text and ids:
+                self._live_methods = getattr(self, "_live_methods", []) + [({field_shape(a) for a in ids}, text)]
+                say(f"[{cid}] single's method kept for the timed modes' live answers ({len(text)} chars)")
+        except Exception as e:  # noqa: BLE001 - a hint only
+            say(f"[{cid}] single method note: {e}")
 
     def _watch_ready(self, cid, ready, done):
         """Runs beside the Single Solve worker. The moment the single is CORRECT and the worker's solver (stable 2s)
@@ -4079,6 +4396,8 @@ class Chain:
                             self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):
                     self._web_tt_kick()
+                    self._record_single_method(cid)
+                    self._start_codify(cid)
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
                     snap = self._spec_snapshot(cid) or getattr(self, "_race_snap", None)
@@ -4087,6 +4406,11 @@ class Chain:
                         snap = self._newid_hold(cid, snap, ready, done)
                         if snap is None:
                             return   # the worker ended by itself during the hold: the normal post-worker path runs
+                    elif snap and not held and CARRY_CHECK:   # the reuse race's seed (D22 post-mortem #11)
+                        held = True
+                        snap = self._carry_hold(cid, snap, ready, done)
+                        if snap is None:
+                            return
                     if snap:
                         with getattr(self, "_ready_lock", None) or threading.Lock():
                             if ready.is_set():
@@ -4252,6 +4576,80 @@ class Chain:
         say(f"[{cid}] new-id hold: {NEWID_HOLD:g}s passed without a fix -> handing over the verified solver")
         return hold
 
+    def _carry_gaps(self, snap):
+        """Carry-over field shapes the timed contracts ask (today's single does not) that `snap` fails to reproduce on
+        the newest earlier GM-verified case asking that shape -> sorted list; [] when covered or inconclusive."""
+        dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
+        if not dm:
+            return []
+        single = cli.load(self.base, "start.json") or cli.load(self.base, "contract.json") or {}
+        own = {field_shape(a) for a in _contract_ids(single)}
+        shapes = set()
+        for m in ("time_trial", "mastery"):
+            shapes |= {field_shape(a) for a in _contract_ids(cli.load(f"{self.base}/{m}", "contract.json") or {})}
+        cases = carry_cases(self.lane, int(dm.group(1)), shapes - own)
+        if not cases:
+            return []
+
+        def one(item):
+            shape, (case, aid, want) = item
+            try:
+                c = json.loads((case / "contract.json").read_text())
+                got, err, _ = solvers.run_solver(Path(snap), c, case / "artifacts", timeout=CARRY_CHECK_MAX)
+            except Exception:  # noqa: BLE001 - inconclusive
+                return None
+            if err:
+                return None    # the solver can't run on that case at all: no signal
+            return shape if str(got.get(aid) if got.get(aid) is not None else "").strip() != str(want).strip() else None
+
+        with ThreadPoolExecutor(max_workers=min(8, len(cases))) as ex:
+            return sorted(s for s in ex.map(one, cases.items()) if s)
+
+    def _carry_hold(self, cid, snap, ready, done):
+        """Reuse-race handoff: when the race's seed misses carry-over shapes the timed modes ask, tell the still-running
+        worker and hold up to NEWID_HOLD s for a verified snapshot that covers more (as _newid_hold). None = the worker
+        ended on its own."""
+        try:
+            fut = getattr(self, "_carry_fut", None)
+            gaps = fut.result(timeout=CARRY_CHECK_MAX + 5) if fut is not None else self._carry_gaps(snap)
+        except Exception as e:  # noqa: BLE001 - never block a handoff on a check
+            say(f"[{cid}] carry-over check note: {e}")
+            return snap
+        if not gaps or NEWID_HOLD <= 0:
+            return snap
+        dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
+        where = {s: _rel(c[0]) for s, c in carry_cases(self.lane, int(dm.group(1)), gaps).items()} if dm else {}
+        note = (f"SINGLE IS CORRECT (the reuse race won with an earlier solver) -- keep going for {NEWID_HOLD:g}s more: "
+                f"the Time Trial / Mastery contracts also ask {len(gaps)} field shape(s) carried over from earlier days "
+                f"that this solver does NOT reproduce on their earlier GM-verified cases: "
+                + "; ".join(f"`{s}` (case {where.get(s, '?')})" for s in gaps[:8])
+                + ". Make solve.py answer them from the bytes (the earlier day's solver that did is next to that case), "
+                "run `hctf solver-test` once, then stop. No submit needed; the harness hands over the moment they pass.")
+        if INBOX:
+            from . import inbox
+            inbox.post(cli.cdir(cid), note, key="carry")
+        say(f"[{cid}] reuse-race seed misses {len(gaps)} carry-over shape(s) the timed modes ask "
+            f"({', '.join(gaps[:4])}): worker told, handoff held up to {NEWID_HOLD:g}s")
+        end, seen = time.time() + NEWID_HOLD, None
+        while time.time() < end:
+            if done.wait(SPEC_POLL):
+                return None
+            if ready.is_set():
+                return snap
+            m = self._solver_mtimes()
+            if not m or self._newid_key(m) == seen or time.time() - max(m.values()) < NEWID_STABLE:
+                continue
+            seen = self._newid_key(m)
+            s2 = self._spec_snapshot(cid)
+            if s2 is None:
+                continue
+            g2 = self._carry_gaps(s2)
+            if len(g2) < len(gaps):
+                say(f"[{cid}] carry-over hold: the solver now covers {len(gaps) - len(g2)}/{len(gaps)} -> handing over")
+                return s2
+        say(f"[{cid}] carry-over hold: {NEWID_HOLD:g}s passed without a fix -> handing over the race's solver")
+        return snap
+
     def _prepush_verified(self, cid, snap, warm=True):
         """Push the verified snapshot to Homebase while the worker is ended and the single recorded (D9: single
         CORRECT -> TT start 3.9-6.6 s per lane; the kickoff's VPN rsync sat inside it)."""
@@ -4369,6 +4767,8 @@ class Chain:
                 self._web_speed_gate(cid)
             else:
                 self._mastery_speed_gate(cid)
+        if mode == "time_trial":
+            self._codify_hold(cid)
         clock_retries = 0
         resume_continues = 0
         rate_retries = 0
@@ -4832,9 +5232,13 @@ class Chain:
         """The last attempt of cid ran out of its solver budget on a slow Homebase VM with NO clock (deadline None):
         a local re-run of the same live attempt is cheaper than a speed generalize."""
         last = timed.last_result(cid) or {}
-        return bool(last.get("solver_too_slow") and str(last.get("routed", "")).startswith("homebase")
-                    and last.get("deadline") is None and (last.get("no_clock") or last.get("run_for_time") is False)
-                    and workers.slow_vm())
+        if not (str(last.get("routed", "")).startswith("homebase") and last.get("deadline") is None
+                and (last.get("no_clock") or last.get("run_for_time") is False) and workers.slow_vm()):
+            return False
+        # D22 post-mortem: a budget cut-off on the VM comes back as `solver_incomplete` (every field empty), not as
+        # `solver_too_slow` -- treat it the same (re-run locally) instead of generalizing a solver that is fine.
+        n = workers._contract_shape(cid)[0] or int(last.get("gm_remaining") or 0) or len(last.get("missing") or [])
+        return bool(last.get("solver_too_slow") or vm_budget_exhausted(last, n))
 
     @staticmethod
     def _gm_passed(cid):
@@ -4954,13 +5358,17 @@ class Chain:
         self.recover_interrupted_generalize()
         modes = self.only_modes or ["single_solve", "time_trial", "mastery"]
         from . import webtarget
-        if webtarget.is_live_lane(self.lane) and any(
-                m in self.entries and not cli.is_complete(self.entries[m]["id"]) for m in modes):
-            # web: hold one of the team's target slots for the whole chain (re-entrant: each stage's _web_slot nests in
-            # it), so the Time Trial requested at the single's CORRECT (_web_tt_kick) never pushes the team past SLOTS
-            with webtarget.slot(self.base, log=say):
-                return self._run_modes(modes)
-        return self._run_modes(modes)
+        try:
+            if webtarget.is_live_lane(self.lane) and any(
+                    m in self.entries and not cli.is_complete(self.entries[m]["id"]) for m in modes):
+                # web: hold one of the team's target slots for the whole chain (re-entrant: each stage's _web_slot nests
+                # in it), so the Time Trial requested at the single's CORRECT (_web_tt_kick) never pushes the team past
+                # SLOTS
+                with webtarget.slot(self.base, log=say):
+                    return self._run_modes(modes)
+            return self._run_modes(modes)
+        finally:
+            self._stop_codify()
 
     def _run_modes(self, modes):
         if "single_solve" in modes and not self._web_slot("single_solve", self.single):
@@ -5277,6 +5685,7 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
     if RETRIEVAL:   # before the release wait: ready long before the drop (a missing index = no retrieval block)
         from . import retrieval
         retrieval.build_async(log=say)
+    warm_lane_shapes_async(day, log=say)   # also before the release wait (D22 post-mortem #10)
     gov = Governor(hb_enabled=bool(hb_slots))
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}

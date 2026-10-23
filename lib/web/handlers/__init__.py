@@ -317,3 +317,32 @@ _HANDLERS = {
     "upload": upload,
     "csrf": csrf,
 }
+
+
+def _load_plugins():
+    """Per-class plugin modules next to this file (`lib/web/handlers/<slug>.py`), each with KEY_MAP = [(clue-key regex,
+    name)] and HANDLERS = {name: fn(base, clues) -> proof or None}. The web codify worker writes one IN-RUN the moment
+    a new class is cracked (D22 post-mortem #8/#9): this run's Mastery -- whose 3 targets put today's class on ANY slot --
+    and every later day's compounded targets pick it up at import, with no adoption step and no lost update between two
+    web chains editing this file at once. A broken plugin is skipped, never fatal. The ratchet may fold it in here."""
+    import importlib
+    import sys
+    from pathlib import Path
+    for p in sorted(Path(__file__).parent.glob("*.py")):
+        if p.name.startswith("_"):
+            continue
+        try:
+            mod = importlib.import_module(f"{__name__}.{p.stem}")
+            hs = dict(getattr(mod, "HANDLERS", None) or {})
+            for pat, name in list(getattr(mod, "KEY_MAP", None) or []):
+                # a built-in keeps its name; the same plugin may map several clue-key patterns to one handler
+                if name in hs and callable(hs[name]) and _HANDLERS.get(name, hs[name]) is hs[name]:
+                    re.compile(pat)
+                    _HANDLERS[name] = hs[name]
+                    if (pat, name) not in _KEY_MAP:
+                        _KEY_MAP.append((pat, name))
+        except Exception as e:  # noqa: BLE001 - one bad plugin must not sink the dispatch
+            print(f"web handler plugin {p.name}: {e!r}", file=sys.stderr)
+
+
+_load_plugins()

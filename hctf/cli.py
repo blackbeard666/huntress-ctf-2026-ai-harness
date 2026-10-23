@@ -1404,7 +1404,7 @@ def c_timeline(a):
     if not a.day and not a.log:
         print("give --day N or --log PATH", file=sys.stderr)
         return 2
-    print(timeline.report(day=a.day, log=a.log))
+    print(timeline.report(day=a.day, log=a.log, t0=getattr(a, "t0", None)))
     return 0
 
 
@@ -1626,6 +1626,7 @@ def main(argv=None):
     ptl = sub.add_parser("timeline", help="per-chain T+ per mode, attempts, generalize cycles, LLM vs overhead")
     ptl.add_argument("--day", type=int)
     ptl.add_argument("--log", help="a dayNN.log path (default .run/dayNN.log)")
+    ptl.add_argument("--t0", help="HH:MM:SS to count T+ from, e.g. the drop 21:00:00 (default: the run's release line)")
     pfd = sub.add_parser("feed", help="live milestone feed of a run (solved k/N, blocked, generalize, duel, hints)")
     pfd.add_argument("--day", type=int)
     pfd.add_argument("--log", help="a run log path (default .run/dayNN.log)")
