@@ -3,6 +3,13 @@
 
 D1: feed / timeline / kpi / effort_report count a web Time Trial passed by the live answer during the codify wait
     (D25: shell-company + resolver-revolt TTs uncounted -> feed 22/24, kpi web 7/9 while the GM had 24/24).
+D2: lib.web.plugin verifies a draft plugin on a (local mock) target and promotes it atomically -- never an unverified
+    or broken one over a working plugin; the web answer-first prompt asks for the plugin first; a plugin in place at the
+    single's CORRECT makes codify a hardening pass and skips the TT's parallel live answer.
+D3: a blocked web Mastery waits for codify's plugin (reconnect with start) like the TT; a TT live pass requests the
+    Mastery target before the live worker is joined; the target kicks are once-per-chain under concurrency.
+D4: companion-key routing (protected_reference without inventory_route is not Day 14's class).
+No GM, no live targets, no workers: fakes + a 127.0.0.1 mock server.
 
 Run:  source bin/env.sh && python3 tests/test_d25_web.py      (exit 0 = all pass)
 """
@@ -93,6 +100,422 @@ if real.exists():
     k = kpi.compute(25, log=real, root=str(real.parents[1]))
     check("D1 real .run/day25.log: regular 15/15 + web 9/9", k["modes_solved"] == 15 and k["web_solved"] == 9,
           {x: k.get(x) for x in ("modes_solved", "web_solved", "web_modes")})
+
+
+# ---- D2: lib.web.plugin -- verify on a live (mock) target, promote atomically --------------------------------------------
+import contextlib  # noqa: E402
+import http.server  # noqa: E402
+import json  # noqa: E402
+import os  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+import urllib.parse  # noqa: E402
+
+from lib.web import plugin as webplugin  # noqa: E402
+
+
+@contextlib.contextmanager
+def patched(pairs):
+    saved = {k: getattr(*k) for k in pairs}
+    try:
+        for (obj, name), v in pairs.items():
+            setattr(obj, name, v)
+        yield
+    finally:
+        for (obj, name), v in saved.items():
+            setattr(obj, name, v)
+
+
+class Shell(http.server.BaseHTTPRequestHandler):
+    """A D25 shell-company-shaped kit: /api/clues + a worker route that runs `ls -ld <path>` (injectable after `;`)."""
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        u = urllib.parse.urlparse(self.path)
+        q = urllib.parse.parse_qs(u.query)
+        if u.path == "/api/clues":
+            body = {"current_role": "viewer", "example_path": "/app/static", "feature_route": "/api/worker",
+                    "framework": "gin", "input_parameter": "path"}
+        elif u.path == "/api/worker":
+            path = (q.get("path") or [""])[0]
+            out = f"drwxr-xr-x 2 app app 4096 {path.split(';')[0]}"
+            if ";cat /run/huntress/objective.txt" in path:
+                out += "\nproof_0123456789abcdef"
+            body = {"ok": True, "effect": "worker_command_completed", "stdout": out}
+        else:
+            body = {"error": "not_found"}
+        data = json.dumps(body).encode()
+        self.send_response(200 if "error" not in body else 404)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(data)
+
+
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Shell)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+BASE = f"http://127.0.0.1:{srv.server_address[1]}/"
+
+GOOD = """import urllib.parse
+from lib import websolve
+
+
+def exploit(base, clues):
+    url = urllib.parse.urljoin(base, clues["feature_route"])
+    p = clues.get("input_parameter") or "path"
+    body = websolve.fetch(url + "?" + urllib.parse.urlencode({p: clues["example_path"] + ";cat /run/huntress/objective.txt"}))[1]
+    return websolve.proof(body)
+
+
+KEY_MAP = [(r"example_path|input_parameter", "day99_web_zz_shell")]
+HANDLERS = {"day99_web_zz_shell": exploit}
+"""
+TD = Path(tempfile.mkdtemp())
+DRAFTS, HDIR = TD / "drafts", TD / "handlers"
+DRAFTS.mkdir()
+HDIR.mkdir()
+draft = DRAFTS / "day99_web_zz_shell.py"
+draft.write_text(GOOD)
+with patched({(webplugin, "BACKUP_DIR"): TD / "backup"}):
+    rep = webplugin.verify(draft, BASE, timeout=10, dest_dir=HDIR)
+    final = HDIR / "day99_web_zz_shell.py"
+    check("D2 plugin verify: a working draft returns the proof (rc 0) on the live target",
+          rep["rc"] == 0 and rep.get("proof") == "proof_0123456789abcdef" and rep["concept_keys"], rep)
+    check("D2 ... and is promoted byte-identical, no temp file left in the handlers dir",
+          final.read_text() == GOOD and not [x for x in HDIR.iterdir() if x.name.startswith(".")], list(HDIR.iterdir()))
+    # a draft that returns nothing must not replace the working plugin
+    broken = DRAFTS / "sub" / "day99_web_zz_shell.py"
+    broken.parent.mkdir()
+    broken.write_text(GOOD.replace("return websolve.proof(body)", "return None"))
+    rep = webplugin.verify(broken, BASE, timeout=10, dest_dir=HDIR)
+    check("D2 a draft with no proof: rc 1, the working plugin is NOT overwritten", rep["rc"] == 1
+          and final.read_text() == GOOD, rep)
+    broken.write_text("KEY_MAP = [(r'example_path', 'day99_web_zz_shell')]\nHANDLERS = {}\nimport nonexistent_mod_zz\n")
+    rep = webplugin.verify(broken, BASE, timeout=10, dest_dir=HDIR)
+    check("D2 a draft that does not import: rc 2, not promoted", rep["rc"] == 2 and final.read_text() == GOOD, rep)
+    broken.write_text(GOOD.replace('r"example_path|input_parameter"', 'r"graphql_route"'))
+    rep = webplugin.verify(broken, BASE, timeout=10, dest_dir=HDIR)
+    check("D2 a draft whose KEY_MAP matches no /api/clues key: rc 3 (the solver would never dispatch to it)",
+          rep["rc"] == 3 and final.read_text() == GOOD, rep)
+    bad = DRAFTS / "shell_plugin.py"
+    bad.write_text(GOOD)
+    rep = webplugin.verify(bad, BASE, timeout=10, dest_dir=HDIR)
+    check("D2 a draft not named dayNN_web_<slug>.py is refused (rc 2)", rep["rc"] == 2, rep)
+    slow = DRAFTS / "sub" / "day99_web_zz_shell.py"
+    slow.write_text(GOOD.replace("    url = urllib", "    import time; time.sleep(30)\n    url = urllib"))
+    t0 = time.time()
+    rep = webplugin.verify(slow, BASE, timeout=1.0, dest_dir=HDIR)
+    check("D2 a hanging handler is bounded by --timeout (rc 1, not promoted)",
+          rep["rc"] == 1 and time.time() - t0 < 5 and final.read_text() == GOOD, (rep, time.time() - t0))
+    v2 = GOOD + "\n# v2\n"
+    draft.write_text(v2)
+    rep = webplugin.verify(draft, BASE, timeout=10, dest_dir=HDIR)
+    check("D2 a verified improvement replaces the plugin; the old one is backed up",
+          rep["rc"] == 0 and final.read_text() == v2 and len(list((TD / "backup").glob("day99_web_zz_shell.*.py"))) == 1,
+          rep)
+    io_buf = __import__("io").StringIO()
+    with contextlib.redirect_stdout(io_buf):
+        rc = webplugin.main([str(draft), BASE, "--no-promote", "--timeout", "10"])
+    out = io_buf.getvalue()
+    check("D2 CLI: prints PROOF + a JSON summary, --no-promote does not promote",
+          rc == 0 and "PROOF proof_0123456789abcdef" in out and "PROMOTED" not in out
+          and json.loads(out.strip().splitlines()[-1])["rc"] == 0, out)
+
+# ---- D2: the harness side (prompt, codify as a hardening pass, no parallel live answer) ---------------------------------
+from hctf import cli, orchestrate, timed, workers  # noqa: E402
+
+PLUG = TD / "lib_handlers" / "day25_web_x.py"
+PLUG.parent.mkdir()
+
+
+def bare_chain():
+    ch = orchestrate.Chain.__new__(orchestrate.Chain)
+    ch.lane, ch.base = "web", "web-exploitation-day-25-x"
+    ch.entries = {"single_solve": {"id": "web-exploitation-day-25-x"},
+                  "time_trial": {"id": "web-exploitation-day-25-x/time_trial"},
+                  "mastery": {"id": "web-exploitation-day-25-x/mastery"}}
+    ch.sdir = ROOT / "challenges" / "day25" / "web-x" / "solver"
+    return ch
+
+
+started = []
+
+
+def fake_start(self):
+    started.append(self)
+    return self
+
+
+said = []
+base_env = {(orchestrate, "say"): lambda *a, **k: said.append(a[0] if a else ""),
+            (orchestrate, "web_plugin_path"): lambda sdir: PLUG, (orchestrate.WebCodify, "start"): fake_start,
+            (cli, "is_complete"): lambda cid: False}
+with patched(base_env):
+    PLUG.unlink(missing_ok=True)
+    ch = bare_chain()
+    orchestrate.Chain._start_codify(ch, "web-exploitation-day-25-x")
+    check("D2 no plugin at the single's CORRECT: codify writes it (not a hardening pass)",
+          isinstance(ch._codify, orchestrate.WebCodify) and not ch._codify.prelanded and not ch._web_plugin_pre)
+    PLUG.write_text(GOOD.replace("day99_web_zz_shell", "day25_web_x"))
+    ch = bare_chain()
+    orchestrate.Chain._start_codify(ch, "web-exploitation-day-25-x")
+    check("D2 plugin promoted by the single's worker: codify starts as a HARDENING pass",
+          isinstance(ch._codify, orchestrate.WebCodify) and ch._codify.prelanded and ch._web_plugin_pre
+          and any("already in place" in m for m in said), said[-2:])
+    with patched({(orchestrate, "WEB_PAR_LIVE"): True, (orchestrate, "LIVE_ANSWER"): True,
+                  (orchestrate, "WebParLive"): lambda *a: (_ for _ in ()).throw(AssertionError("par live started"))}):
+        r = orchestrate.Chain._web_par_live(ch, "web-exploitation-day-25-x/time_trial", "time_trial", 0, False)
+    check("D2 ... and the TT's first attempt gets no parallel live answer (the runner dispatches to the plugin)",
+          r is None)
+    with patched({(orchestrate, "WEB_CODIFY_HARDEN"): False}):
+        ch = bare_chain()
+        orchestrate.Chain._start_codify(ch, "web-exploitation-day-25-x")
+    check("D2 HCTF_WEB_CODIFY_HARDEN=0 + a plugin in place: no codify worker", ch._codify is False and ch._web_plugin_pre)
+
+    # the codify prompt: hardening text only for a pre-landed plugin; the draft + verifier flow always
+    rendered = {}
+    with patched({(workers, "render"): lambda t, **kw: rendered.update(kw) or "x",
+                  (orchestrate, "single_method_text"): lambda d: "curl ...",
+                  (orchestrate.Chain, "run_worker"): lambda self, *a, **k: 0,
+                  (orchestrate.WebCodify, "landed"): lambda self, timeout=15: False,
+                  (orchestrate, "_rel"): str}):
+        ch = bare_chain()
+        wc = orchestrate.WebCodify(ch, "web-exploitation-day-25-x", prelanded=True)
+        wc._run()
+        check("D2 hardening codify prompt says a verified plugin is in place", "ALREADY in place" in rendered["harden"])
+        wc = orchestrate.WebCodify(ch, "web-exploitation-day-25-x", prelanded=False)
+        wc._run()
+        check("D2 first-write codify prompt carries no hardening text", rendered["harden"] == "")
+    tmpl = (ROOT / "hctf" / "prompts" / "codify.md").read_text()
+    check("D2 codify prompt: draft in $TMPDIR + lib.web.plugin verifier, never the plugin path in place",
+          "$TMPDIR/{name}.py" in tmpl and "-m lib.web.plugin" in tmpl and "NEVER write that path directly" in tmpl
+          and "{harden}" in tmpl)
+
+# the web answer-first prompt asks for the plugin first (draft -> verifier -> submit its PROOF)
+AF = TD / "af"
+AF.mkdir()
+contract = {"attempt_id": "att-s", "answer_ids": ["proof-1"], "targets": [{"id": "Target 1", "url": "https://t1/"}],
+            "questions": [{"id": "proof-1", "question": "Read the proof", "artifact": "Target 1"}]}
+cdir = ROOT / ".run" / "test_d25_web_af"
+cdir.mkdir(parents=True, exist_ok=True)
+(cdir / "start.json").write_text(json.dumps(contract))
+af_env = {(cli, "load"): lambda cid, n: contract if n == "start.json" else None, (cli, "cdir"): lambda cid: cdir,
+          (timed, "latest_artifacts"): lambda cid: cdir, (orchestrate, "triage_summary"): lambda cid, cap=0: "(none)",
+          (orchestrate, "web_plugin_path"): lambda sdir: ROOT / "lib" / "web" / "handlers" / "day25_web_x.py"}
+try:
+    with patched(af_env):
+        ch = bare_chain()
+        af = orchestrate.AnswerFirst(ch, "web-exploitation-day-25-x")
+        check("D2 web answer-first prompt: PLUGIN FIRST, draft in $TMPDIR, run the verifier on the single's target",
+              "PLUGIN FIRST" in af.prompt and "$TMPDIR/day25_web_x.py" in af.prompt
+              and "-m lib.web.plugin $TMPDIR/day25_web_x.py https://t1/" in af.prompt, af.prompt[-900:])
+        with patched({(orchestrate, "WEB_SINGLE_PLUGIN"): False}):
+            af = orchestrate.AnswerFirst(ch, "web-exploitation-day-25-x")
+        check("D2 HCTF_WEB_SINGLE_PLUGIN=0: the old answer-only prompt", "PLUGIN FIRST" not in af.prompt)
+        ch.lane = "warmups"
+        af = orchestrate.AnswerFirst(ch, "warmups-day-25")
+        check("D2 non-web answer-first prompt unchanged (no plugin text)", "PLUGIN FIRST" not in af.prompt)
+finally:
+    import shutil
+    shutil.rmtree(cdir, ignore_errors=True)
+
+# ---- D3: Mastery waits on codify's plugin like the TT; a TT live pass kicks the Mastery target at once ------------------
+MCID = "web-exploitation-day-25-x/mastery"
+TCID = "web-exploitation-day-25-x/time_trial"
+MLAST = {"result": "solver_incomplete", "attempt_id": "att-m", "no_clock": True, "deadline": None,
+         "missing": ["proof-4"], "verified": {"proof-1": "a", "proof-2": "b", "proof-3": "c"}}
+
+
+class FakeLive:
+    def __init__(self, attempt, pass_after=None):
+        self.attempt, self.done = attempt, threading.Event()
+        self.passed = self.all_accepted = False
+        self.t0, self.pass_after, self.finished = time.time(), pass_after, 0
+
+    def _state(self):
+        ok = self.pass_after is not None and time.time() - self.t0 >= self.pass_after
+        return ok, ok
+
+    def finish(self, wait=5.0):
+        self.finished += 1
+        self.t_finish = time.time()
+        self.done.set()
+        self.passed, self.all_accepted = self._state()
+        return self
+
+    def link(self, evt):
+        pass
+
+
+class FakeCodify:
+    def __init__(self, land_after=None):
+        self.plugin, self.t0 = TD / "day25_web_x_codify.py", time.time() - 5
+        self.plugin.unlink(missing_ok=True)
+        self.done, self.stopped, self.land_after, self.prelanded = threading.Event(), 0, land_after, True
+
+    def arm(self):
+        if self.land_after is not None:
+            threading.Timer(self.land_after, lambda: self.plugin.write_text("KEY_MAP = []\n")).start()
+
+    def landed(self, timeout=15):
+        return self.plugin.exists() and self.plugin.stat().st_mtime >= self.t0
+
+    def stop(self, join=5.0):
+        self.stopped += 1
+        self.done.set()
+
+
+class _Gov:
+    @staticmethod
+    def allow_timed():
+        return True
+
+
+def m_chain(codify, live_pass_after=None):
+    ch = bare_chain()
+    ch.entries = {"time_trial": {"id": TCID}, "mastery": {"id": MCID}}
+    ch.root, ch.gov = TD, _Gov()
+    ch._pre_attempt_done, ch._tstatus = True, {"mastery": "start_required"}
+    ch._codify, ch._web_m_kicked = codify, True
+    ch.calls = {"run": [], "gen": [], "lives": [], "kick": []}
+    for name, fn in {"_codify_hold": lambda cid: None, "_ahead_new": lambda mode: 0,
+                     "_slow_vm_no_clock": lambda cid: False, "_early_join": lambda cid: False,
+                     "_early_kw": lambda cid, untimed: {}, "_bg_gen_take": lambda cid, why, only_won=False: False,
+                     "_late_probes": lambda cid, wait=False, defer_compound=False: {},
+                     "_await_probes": lambda t, ready=None: True, "_tt_pool_untimed": lambda: False,
+                     "_tt_fix_gate": lambda cid: None, "_web_speed_gate": lambda cid: None,
+                     "_prefetch_mastery_start": lambda: None, "_gm_passed": lambda cid: False}.items():
+        setattr(ch, name, fn)
+
+    def gen(cid, **kw):
+        ch.calls["gen"].append(kw.get("live"))
+        if kw.get("live") is not None:
+            kw["live"].pass_after = 0       # the generalize's linked live answer passes meanwhile
+    ch.generalize = gen
+
+    def start_live(cid, last, fields, wrong, fixed):
+        lv = FakeLive(last.get("attempt_id"), live_pass_after)
+        ch.calls["lives"].append((last.get("attempt_id"), list(fields), lv))
+        return lv
+    ch._start_live = start_live
+    return ch
+
+
+def m_drive(ch, results, extra=None):
+    seq = iter(results)
+
+    def run(cid, sdir, log=None, **kw):
+        ch.calls["run"].append(kw.get("op", "start"))
+        if len(ch.calls["run"]) == 1 and hasattr(ch._codify, "arm"):
+            ch._codify.arm()
+        time.sleep(0.2)
+        return next(seq)
+    env = {(orchestrate, "say"): lambda *a, **k: None, (orchestrate, "set_state"): lambda *a, **k: None,
+           (orchestrate, "AUTO_EARLY"): False, (orchestrate, "LIVE_ANSWER"): True,
+           (orchestrate, "WEB_LIVE_COMPOUND"): False, (orchestrate, "TT_FIX_GATE"): True,
+           (orchestrate, "label_only_failure"): lambda w: False, (orchestrate, "_code_sig"): lambda d: {},
+           (orchestrate, "capture_variant"): lambda *a: None, (orchestrate, "record_timed_case"): lambda *a: None,
+           (orchestrate, "WEB_GEN_WAIT_POLL"): 0.05,
+           (cli, "is_complete"): lambda cid: False, (cli, "gm_solved"): lambda cid: False,
+           (cli, "save"): lambda *a, **k: None,
+           (timed, "run"): run, (timed, "last_result"): lambda cid: dict(MLAST),
+           (timed, "timed_dir"): lambda cid: TD / "tdir", (timed, "ensure_started"): lambda cid: (None, None),
+           (timed, "resolve_format_alternates"): lambda *a, **k: set(),
+           (timed, "resolve_labels_online"): lambda *a, **k: set()}
+    env.update(extra or {})
+    with patched(env):
+        return orchestrate.Chain.timed_stage(ch, "mastery")
+
+
+ch = m_chain(FakeCodify(land_after=0.3))
+ok = m_drive(ch, ["blocked", "correct"])
+check("D3 a blocked web Mastery while codify runs: waits for the plugin, reconnects with op=start, no generalize",
+      ok is True and len(ch.calls["run"]) == 2 and ch.calls["run"][1] == "start" and "retry" not in ch.calls["run"]
+      and not ch.calls["gen"], ch.calls)
+check("D3 ... its live answer works on the missing field only (proof-4)",
+      [f for _a, f, _l in ch.calls["lives"]] == [["proof-4"]], ch.calls["lives"])
+
+ch = m_chain(FakeCodify(), live_pass_after=0.2)
+ok = m_drive(ch, ["blocked"])
+check("D3 Mastery: the live answer passing during the codify wait -> correct, no generalize",
+      ok is True and len(ch.calls["run"]) == 1 and not ch.calls["gen"], ch.calls)
+
+cod = FakeCodify()
+ch = m_chain(cod)
+ok = m_drive(ch, ["blocked"], extra={(orchestrate, "WEB_CODIFY_GEN_WAIT"): 0.4})
+check("D3 Mastery wait runs out: codify ended before the ONE generalize (one writer per plugin file)",
+      cod.stopped == 1 and len(ch.calls["gen"]) == 1, (cod.stopped, ch.calls))
+
+ch = m_chain(FakeCodify(land_after=0.3))
+ok = m_drive(ch, ["blocked"], extra={(orchestrate, "WEB_CODIFY_MASTERY"): False,
+                                     (orchestrate, "WEB_CODIFY_GEN_WAIT"): 5})
+check("D3 HCTF_WEB_CODIFY_MASTERY=0: a Mastery block goes straight to the generalize (old behaviour)",
+      len(ch.calls["gen"]) == 1 and len(ch.calls["run"]) == 1, ch.calls)
+
+# a TT live pass in the codify wait kicks the Mastery target BEFORE the live worker is joined
+ch = m_chain(FakeCodify())
+ch._web_m_kicked = False
+kicks = []
+ch._web_mastery_kick = lambda: kicks.append(time.time())
+ch._prefetch_mastery_start = lambda: None
+live = FakeLive("att-t", pass_after=0.1)
+with patched({(orchestrate, "say"): lambda *a, **k: None, (orchestrate, "WEB_GEN_WAIT_POLL"): 0.05,
+              (cli, "is_complete"): lambda cid: False, (orchestrate, "LIVE_ANSWER"): True}):
+    par = orchestrate._HeldLive(live)
+    verdict, _ = orchestrate.Chain._web_codify_gen_wait(ch, TCID, "time_trial", par, {"attempt_id": "att-t"})
+check("D3 TT live pass in the codify wait: Mastery target requested once, before the live worker's join",
+      verdict == "correct" and len(kicks) == 1 and kicks[0] <= live.t_finish, (verdict, kicks))
+
+# the LiveAnswer watcher runs its on_pass hooks at the GM's CORRECT
+la = orchestrate.LiveAnswer.__new__(orchestrate.LiveAnswer)
+la.cid, la.done, la.stop_evt, la._links, la.on_pass = TCID, threading.Event(), threading.Event(), [], []
+hits = []
+la.on_pass.append(lambda: hits.append(1))
+la._state = lambda: (True, True)
+with patched({(orchestrate, "say"): lambda *a, **k: None}):
+    la._watch()
+check("D3 LiveAnswer: on_pass hooks fire once at the GM's CORRECT", hits == [1] and la.stop_evt.is_set())
+
+# once-per-chain kicks under concurrency
+calls = []
+
+
+def fake_call(cid, op, *a, **k):
+    calls.append((cid, op))
+    time.sleep(0.05)
+    return {"http": 200, "body": {"result": "active"}}
+
+
+ch = bare_chain()
+with patched({(orchestrate, "say"): lambda *a, **k: None, (cli, "call"): fake_call,
+              (cli, "is_complete"): lambda cid: False, (orchestrate, "WEB_TT_KICK"): True}):
+    ths = [threading.Thread(target=orchestrate.Chain._web_mastery_kick, args=(ch,)) for _ in range(16)]
+    [t.start() for t in ths]
+    [t.join() for t in ths]
+    time.sleep(0.4)
+check("D3 _web_mastery_kick from 16 threads: ONE start request", [c for c in calls if c[1] == "start"]
+      == [(MCID, "start")], calls)
+
+# ---- D4: companion-key routing ------------------------------------------------------------------------------------------
+from lib import web as libweb  # noqa: E402
+from lib.web import handlers as webhandlers  # noqa: E402
+
+kit18 = {"current_user": "alice", "feature_route": "/graphql", "note": "Case 7 is private", "protected_reference": "7"}
+kit14 = {"framework": "express", "feature_route": "/api/records", "inventory_route": "/api/inventory",
+         "current_role": "viewer", "protected_reference": "7"}
+d24 = "day24_web_the_api_has_opinions"
+check("D4 Day 18's kit (protected_reference, no inventory_route) no longer dispatches to Day 14's handler",
+      d24 not in [n for n, _f in webhandlers.for_key("current_user", kit18)]
+      and d24 not in [n for n, _f in webhandlers.concept_handlers("current_user", kit18)])
+check("D4 Day 14's kit still dispatches to it (inventory_route, and protected_reference beside it)",
+      d24 in [n for n, _f in webhandlers.for_key("inventory_route", kit14)]
+      and d24 in [n for n, _f in webhandlers.for_key("protected_reference", kit14)])
+check("D4 class_known: a never-seen class with protected_reference/current_user/note is NOT known (12 s budget)",
+      libweb.class_known(kit18, "current_user") is False and libweb.class_known(kit14, "inventory_route") is True)
+check("D4 handlers.gated_only: protected_reference gated without its companion, not with it",
+      webhandlers.gated_only("protected_reference", kit18) and not webhandlers.gated_only("protected_reference", kit14))
+
+srv.shutdown()
 
 if __name__ == "__main__":
     print(f"\n{'FAILED: ' + ', '.join(failures) if failures else 'all passed'}")
