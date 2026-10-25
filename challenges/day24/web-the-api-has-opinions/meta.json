@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-14-the-api-has-opinions",
+  "lane": "web",
+  "name": "🌐 The API Has Opinions",
+  "ids": {
+    "single_solve": "web-exploitation-day-14-the-api-has-opinions",
+    "time_trial": "web-exploitation-day-14-the-api-has-opinions/time_trial",
+    "mastery": "web-exploitation-day-14-the-api-has-opinions/mastery"
+  }
+}

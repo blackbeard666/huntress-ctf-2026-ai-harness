@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: the sig_bb chain behind a signature pin `if (Signature.hashCode() != 0x1badb002) return \"repackaged\"` -- the real signer never matches, so the untampered install returns 'repackaged' (host JVM oracle prints 'repackaged'); no ANS token may come out",
+ "generator_cmd": "python3 tests/data/android_fixtures/selfint_src/gen_selfint.py decoy_pin tests/data/android_fixtures/selfint_decoy_pin.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 link (manifest) + zipfile (classes.dex, assets/huntress_puzzle.json codec=analysis) + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), then java -Dctx.apk=<signed apk> -Dctx.cert=<der> -Dctx.pkg=<pkg> -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM: real java.util.zip.ZipFile / java.util.jar.JarFile on the signed APK (entry CRC / size / getInputStream dex bytes), real java.nio.ByteBuffer, MessageDigest, CRC32, Adler32, Arrays.hashCode -> 'repackaged'"
+}

@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=kotlin|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=KOTLIN-e187671b|url=https://kotlin-e187671b4c.example.invalid/stage|file_path=/tmp/huntress-kotlin/.e187671b4c91f809.stage",
+ "decoy": false,
+ "language": "kotlin",
+ "role": "downloader",
+ "id_single": "polyglot-kotlin-downloader-<field>",
+ "id_timed": "polyglot-kotlin-2a240b-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_kotlin_downloader.kts | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "answers_single": {
+  "polyglot-kotlin-downloader-language": "kotlin",
+  "polyglot-kotlin-downloader-role": "downloader",
+  "polyglot-kotlin-downloader-verdict": "suspicious",
+  "polyglot-kotlin-downloader-attack": "T1105",
+  "polyglot-kotlin-downloader-adapter": "http_client",
+  "polyglot-kotlin-downloader-host-profile": "standalone",
+  "polyglot-kotlin-downloader-obfuscation-profile": "base64",
+  "polyglot-kotlin-downloader-stage-profile": "two_stage_download_execute",
+  "polyglot-kotlin-downloader-next-language": "jscript",
+  "polyglot-kotlin-downloader-stage-count": "2",
+  "polyglot-kotlin-downloader-steps": "acquire_remote,dispatch_process",
+  "polyglot-kotlin-downloader-campaign-id": "KOTLIN-e187671b",
+  "polyglot-kotlin-downloader-url": "https://kotlin-e187671b4c.example.invalid/stage",
+  "polyglot-kotlin-downloader-file-path": "/tmp/huntress-kotlin/.e187671b4c91f809.stage"
+ },
+ "answers_timed": {
+  "polyglot-kotlin-2a240b-url-host": "kotlin-e187671b4c.example.invalid",
+  "polyglot-kotlin-2a240b-path-leaf": ".e187671b4c91f809.stage",
+  "polyglot-kotlin-2a240b-campaign-token": "e187671b",
+  "polyglot-kotlin-2a240b-next-language": "jscript"
+ }
+}

@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=sed|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=SED-d1d071bb|url=https://sed-d1d071bb9e.example.invalid/stage|file_path=/tmp/huntress-sed/.d1d071bb9edaef63.stage",
+ "decoy": false,
+ "language": "sed",
+ "role": "benign-utility",
+ "id_single": "polyglot-sed-benign-utility-<field>",
+ "id_timed": "polyglot-sed-b68757-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_sed_benign_utility.sed | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-sed-benign-utility-language": "sed",
+  "polyglot-sed-benign-utility-role": "benign_utility",
+  "polyglot-sed-benign-utility-verdict": "benign",
+  "polyglot-sed-benign-utility-attack": "none",
+  "polyglot-sed-benign-utility-adapter": "local_parser",
+  "polyglot-sed-benign-utility-host-profile": "standalone",
+  "polyglot-sed-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-sed-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-sed-benign-utility-next-language": "powershell",
+  "polyglot-sed-benign-utility-stage-count": "2",
+  "polyglot-sed-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-sed-benign-utility-campaign-id": "SED-d1d071bb",
+  "polyglot-sed-benign-utility-url": "https://sed-d1d071bb9e.example.invalid/stage",
+  "polyglot-sed-benign-utility-file-path": "/tmp/huntress-sed/.d1d071bb9edaef63.stage"
+ },
+ "answers_timed": {
+  "polyglot-sed-b68757-url-host": "sed-d1d071bb9e.example.invalid",
+  "polyglot-sed-b68757-path-leaf": ".d1d071bb9edaef63.stage",
+  "polyglot-sed-b68757-campaign-token": "d1d071bb",
+  "polyglot-sed-b68757-next-language": "powershell"
+ }
+}

@@ -1,0 +1,8 @@
+{
+ "field": "regf.truncated",
+ "expected": "true",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/regf/GENERATOR_regf_integrity.py.txt <outdir>  (stdlib struct regf/HvLE/DIRT writer) -> ntuser_dirty_truncated.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/regf/ORACLE_regf_integrity.py.txt tests/data/meta_fixtures/regf/ntuser_dirty_truncated__regf_truncated.bin  (python-registry 1.3.1 REGFBlock + regipy 6.4 REGF_HEADER/TRANSACTION_LOG/_parse_dirt_block; oracle JSON: {\"primary\": 673, \"secondary\": 672, \"stored_checksum\": \"0x75349a83\", \"checksum_valid\": true, \"hbins_size\": 12288, \"file_type\": 0, \"regipy_file_type\": 0, \"file_name\": \"\\\\??\\\\C:\\\\Users\\\\alice\\\\ntuser.dat\", \"file_size\": 13312, \"hbin_count\": 3, \"hbin_sizes\": [4096, 4096, 4096], \"hbin_walk\": 12288}); file -b -> 'MS Windows registry file, NT/2000 or above'",
+ "decoy": false,
+ "member": "NTUSER.DAT"
+}

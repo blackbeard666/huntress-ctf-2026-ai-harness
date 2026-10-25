@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_toctou_a.bin",
+ "file_b": "vcls_toctou_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-367",
+  "cwe_number": "367",
+  "vulnerability_class": "toctou"
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT   # gcc -fno-inline C twins / javac --release 11 + jar twins",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_toctou_a.bin vcls_toctou_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"call\", \"call __stack_chk_fail\", \"call fstat\", \"cmp\", \"je\", \"js\", \"lea\", \"mov\", \"sub\", \"xor\"], \"removed\": [\"call access\"]}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (C: access() then open() -> open(O_NOFOLLOW)+fstat); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

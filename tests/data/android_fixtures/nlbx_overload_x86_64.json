@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-123C9C754D679CC7",
+ "generator_cmd": "python3 tests/data/android_fixtures/nlbx_src/gen_nlbx.py overload_x86_64 tests/data/android_fixtures/nlbx_overload_x86_64.apk  # javac --release 8 + dex2jar d2j-jar2dex + gcc -shared -fPIC -O2 -s nlbx_src/nlbx.c + zipfile; puzzle codec: analysis, no data (overloaded static natives mix(JI)/mix(I) -> Java_..._Native_1Secrets_mix__JI / __I, instance native tag(String,long): GetStringUTFChars + snprintf + NewStringUTF)",
+ "oracle_cmd": "sh tests/data/android_fixtures/nlbx_src/oracle.sh tests/data/android_fixtures/nlbx_overload_x86_64.apk  # d2j-dex2jar + real JVM/JNI with the apk's own lib/x86_64/libarena.so -> Release.code() -> ANS-123C9C754D679CC7; nm -D shows the __JI / __I / tag exports"
+}

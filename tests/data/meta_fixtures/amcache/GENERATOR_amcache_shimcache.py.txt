@@ -1,0 +1,174 @@
+"""Stdlib struct writer for Amcache.hve / SYSTEM hives (nk/lh/lf/ri/vk/value-list cells + `db` big data) and raw
+Win10 AppCompatCache blobs. Usage: python3 -I GENERATOR_amcache_shimcache.py.txt <outdir>
+Writes: amcache_win10.bin (Root\\InventoryApplicationFile x3 + InventoryApplication decoy), amcache_single.bin (one
+entry, legacy REG_SZ hex Size), system_shim.bin (SYSTEM: Select\\Current=2, ControlSet001 decoy cache, ControlSet002
+cache with 0x34 header > 16344 bytes -> db), shim_blob_win10.bin (raw value, 0x30 header), not_shim.bin (PNG bytes)."""
+import struct
+import sys
+import zlib
+
+out = sys.argv[1]
+
+
+class Hive:
+    def __init__(self):
+        self.cells = bytearray()
+
+    def alloc(self, payload):
+        off = 0x20 + len(self.cells)
+        size = (len(payload) + 4 + 7) & ~7
+        self.cells += struct.pack("<i", -size) + payload + b"\0" * (size - 4 - len(payload))
+        return off
+
+    def patch(self, off, at, fmt, *vals):
+        struct.pack_into(fmt, self.cells, off - 0x20 + 4 + at, *vals)
+
+
+def utf16(s):
+    return s.encode("utf-16-le")
+
+
+def lhash(n):
+    v = 0
+    for c in n.upper():
+        v = (v * 37 + ord(c)) & 0xFFFFFFFF
+    return v
+
+
+def build(seq, base_ts, root, fname):
+    """root = (name, ts, [values], [children]); value = (name, type, data bytes). lh lists, children name-sorted."""
+    h = Hive()
+    sd = struct.pack("<BBHIIII", 1, 0, 0x8004, 0, 0, 0, 0)
+    sk = 0x20 + ((4 + 0x4C + len(root[0]) + 7) & ~7)   # the root nk is the FIRST cell (regipy/Windows), sk right after
+
+    def make_sk():
+        assert h.alloc(b"sk\0\0" + struct.pack("<IIII", 0, 0, 1, len(sd)) + sd) == sk
+        h.patch(sk, 4, "<II", sk, sk)
+
+    def key(node, parent):
+        name, ts, values, children = node
+        nm = name.encode("latin-1")
+        flags = 0x20 | (0x2C if parent is None else 0)
+        nk = h.alloc(b"nk" + struct.pack("<HQIIIIIIIIIIIIIIIHH", flags, ts, 0, parent or 0, 0, 0, 0xFFFFFFFF,
+                                         0xFFFFFFFF, 0, 0xFFFFFFFF, sk, 0xFFFFFFFF, 0, 0, 0, 0, 0, len(nm), 0) + nm)
+        if parent is None:
+            make_sk()
+        children = sorted(children, key=lambda c: c[0].upper())
+        offs = [key(c, nk) for c in children]
+        if offs:
+            lst = h.alloc(b"lh" + struct.pack("<H", len(offs)) + b"".join(
+                struct.pack("<II", o, lhash(c[0])) for o, c in zip(offs, children)))
+            h.patch(nk, 0x14, "<I", len(offs))
+            h.patch(nk, 0x1C, "<I", lst)
+        if values:
+            vks = []
+            for vn, vt, vd in values:
+                vnb = vn.encode("latin-1")
+                if len(vd) <= 4:
+                    size, doff = 0x80000000 | len(vd), struct.unpack("<I", vd.ljust(4, b"\0"))[0]
+                elif len(vd) > 16344:        # big data: db -> segment list -> 16344-byte segments
+                    segs = [h.alloc(vd[i:i + 16344]) for i in range(0, len(vd), 16344)]
+                    sl = h.alloc(b"".join(struct.pack("<I", s) for s in segs))
+                    size, doff = len(vd), h.alloc(b"db" + struct.pack("<HII", len(segs), sl, 0))
+                else:
+                    size, doff = len(vd), h.alloc(vd)
+                vks.append(h.alloc(b"vk" + struct.pack("<HIIIHH", len(vnb), size, doff, vt, 1, 0) + vnb))
+            vl = h.alloc(b"".join(struct.pack("<I", o) for o in vks))
+            h.patch(nk, 0x24, "<II", len(vks), vl)
+        return nk
+
+    root_off = key(root, None)
+    body = bytes(h.cells)
+    hbin_size = (0x20 + len(body) + 8 + 0xFFF) & ~0xFFF
+    free = hbin_size - 0x20 - len(body)
+    hbin = b"hbin" + struct.pack("<IIQQI", 0, hbin_size, 0, base_ts, 0) + body + struct.pack("<i", free) + b"\0" * (free - 4)
+    fn = utf16(fname)[:64].ljust(64, b"\0")
+    base = b"regf" + struct.pack("<IIQIIIIIII", seq, seq, base_ts, 1, 5, 0, 1, root_off, hbin_size, 1) + fn
+    base = base.ljust(508, b"\0")
+    ck = 0
+    for i in range(0, 508, 4):
+        ck ^= struct.unpack_from("<I", base, i)[0]
+    return base + struct.pack("<I", ck) + b"\0" * (0x1000 - 512) + hbin
+
+
+def sz(s):
+    return utf16(s + "\0")
+
+
+def q(v):
+    return struct.pack("<Q", v)
+
+
+def ft(unix):
+    return (unix + 11644473600) * 10000000
+
+
+T = ft(1790000000)        # 2026-09-21T14:13:20Z
+
+
+def file_entry(keyname, path, sha1, link, product, publisher, size, version, ts):
+    return (keyname, ts, [("ProgramId", 1, sz("0000f519feec486de87ed73cb92d3cac802400000000")),
+                          ("FileId", 1, sz("0000" + sha1)), ("LowerCaseLongPath", 1, sz(path)),
+                          ("Name", 1, sz(path.rsplit("\\", 1)[-1])), ("Publisher", 1, sz(publisher)),
+                          ("Version", 1, sz(version)), ("BinaryType", 1, sz("pe64_amd64")),
+                          ("ProductName", 1, sz(product)), ("LinkDate", 1, sz(link)), ("Size", 11, q(size)),
+                          ("IsOsComponent", 4, struct.pack("<I", 0))], [])
+
+
+inv = [file_entry("mimikatz.exe|8f2c1b0e2a7d1c55", "c:\\users\\ana\\downloads\\mimikatz.exe",
+                  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4", "09/19/2026 22:41:07", "mimikatz", "gentilkiwi",
+                  1355264, "2.2.0.0", T - 10000000 * 900),
+       file_entry("anydesk.exe|1a2b3c4d5e6f7081", "c:\\programdata\\anydesk\\anydesk.exe",
+                  "0a4d55a8d778e5022fab701977c5d840bbc486d0", "05/02/2026 08:12:33", "anydesk", "philandro software gmbh",
+                  5321216, "8.0.10.0", T - 10000000 * 600),
+       file_entry("rclone.exe|77aa00bb11cc22dd", "c:\\windows\\temp\\rc\\rclone.exe",
+                  "da39a3ee5e6b4b0d3255bfef95601890afd80709", "01/01/1970 00:00:00", "rclone", "https://rclone.org",
+                  59011072, "1.66.0", T - 10000000 * 300)]
+app_decoy = ("InventoryApplication", T - 10000000 * 50, [], [("0000f519feec486de87ed73cb92d3cac80240000", T - 10000000 * 60,
+             [("Name", 1, sz("AnyDesk")), ("RootDirPath", 1, sz("c:\\program files (x86)\\anydesk"))], [])])
+am = ("{11517B7C-E79D-4e20-961B-75A811715ADD}", T, [], [("Root", T - 10000000 * 10, [], [
+      ("InventoryApplicationFile", T - 10000000 * 20, [], inv), app_decoy,
+      ("InventoryDevicePnp", T - 10000000 * 70, [], [])])])
+open(out + "/amcache_win10.bin", "wb").write(build(41, T, am, "\\??\\C:\\Windows\\AppCompat\\Programs\\Amcache.hve"))
+
+one = ("psexec.exe|0f0e0d0c0b0a0908", T - 10000000 * 5000, [("FileId", 1, sz("0000C5E2D0A86F8AB0AB0E4A7AA0E61BE0E2A1B0C3D4")),
+       ("LowerCaseLongPath", 1, sz("c:\\tools\\psexec.exe")), ("Name", 1, sz("PsExec.exe")),
+       ("Publisher", 1, sz("sysinternals - www.sysinternals.com")), ("ProductName", 1, sz("sysinternals psexec")),
+       ("LinkDate", 1, sz("04/11/2023 17:02:51")), ("Size", 1, sz("0x9a8b0")), ("Version", 1, sz("2.43"))], [])
+am1 = ("{11517B7C-E79D-4e20-961B-75A811715ADD}", T - 10000000 * 4000, [], [("Root", T - 10000000 * 4000, [], [
+       ("InventoryApplicationFile", T - 10000000 * 4000, [], [one])])])
+open(out + "/amcache_single.bin", "wb").write(build(5, T - 10000000 * 4000, am1, "\\??\\C:\\Windows\\AppCompat\\Programs\\Amcache.hve"))
+
+
+def shim(header, entries, pad=0):
+    """Win10 AppCompatCache blob: header (size u32 @0 + stats), then 10ts entries."""
+    blob = struct.pack("<I", header) + b"\0" * (header - 4)
+    for path, ts, data in entries:
+        p = utf16(path)
+        body = struct.pack("<H", len(p)) + p + q(ts) + struct.pack("<I", len(data)) + data
+        blob += b"10ts" + struct.pack("<II", zlib.crc32(body), len(body)) + body
+    return blob
+
+
+big = b"\x02\x00\x00\x00" + bytes(range(256)) * 26   # per-entry data large enough to push the value past 16344 bytes
+cs2 = [("C:\\Users\\ana\\Downloads\\invoice_2026.exe", T - 10000000 * 100, big),
+       ("C:\\Windows\\System32\\cmd.exe", T - 10000000 * 86400 * 30, big),
+       ("\\??\\C:\\ProgramData\\upd\\svchost.exe", T - 10000000 * 7200, big),
+       ("C:\\Program Files\\7-Zip\\7z.exe", ft(1700000000), big)]
+cs1 = [("C:\\decoy\\old_controlset.exe", T - 10000000 * 999999, b"")]
+
+
+def sysroot(cs1e, cs2e, current):
+    def cs(name, ents, hdr):
+        return (name, T - 10000000 * 5, [], [("Control", T - 10000000 * 5, [], [("Session Manager", T - 10000000 * 5, [], [
+            ("AppCompatCache", T - 10000000 * 5, [("CacheMainSdb", 3, b"\x01" * 8), ("AppCompatCache", 3, shim(hdr, ents))], [])])])])
+    return ("ROOT", T, [], [cs("ControlSet001", cs1e, 0x30), cs("ControlSet002", cs2e, 0x34),
+                            ("Select", T - 10000000 * 2, [("Current", 4, struct.pack("<I", current)),
+                                               ("Default", 4, struct.pack("<I", current))], [])])
+
+
+open(out + "/system_shim.bin", "wb").write(build(12, T, sysroot(cs1, cs2, 2), "SYSTEM"))
+open(out + "/shim_blob_win10.bin", "wb").write(shim(0x30, [
+    ("C:\\Windows\\Temp\\a.ps1", ft(1780000000), b""), ("C:\\Users\\Public\\b.exe", ft(1785000000), b"\x00" * 12)]))
+png = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+open(out + "/not_shim.bin", "wb").write(png + struct.pack(">I", zlib.crc32(png[12:])) + b"\0" * 64)

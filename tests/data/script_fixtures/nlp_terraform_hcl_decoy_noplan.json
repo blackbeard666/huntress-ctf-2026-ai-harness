@@ -1,0 +1,11 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "language": "terraform_hcl",
+ "role": "decoy",
+ "id_single": "polyglot-terraform_hcl-decoy-<field>",
+ "id_timed": "polyglot-terraform_hcl-5f5348-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_terraform_hcl_decoy_noplan.tf | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "oracle_stdout": "status=ok;inert-analysis-fixture;no plan here"
+}

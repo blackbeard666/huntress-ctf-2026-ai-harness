@@ -1,0 +1,9 @@
+{
+ "codec": "bencode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-quail-26",
+ "encoded": "d4:00001:N4:00011:i4:00021:c4:00031:e4:00041: 4:00051:w4:00061:o4:00071:r4:00081:k4:00091: 4:00101:d4:00111:e4:00121:c4:00131:o4:00141:d4:00151:i4:00161:n4:00171:g4:00181: 4:00191:t4:00201:h4:00211:i4:00221:s4:00231: 4:00241:w4:00251:a4:00261:r4:00271:m4:00281:u4:00291:p4:00301:!4:00311: 4:00321:T4:00331:o4:00341: 4:00351:s4:00361:o4:00371:l4:00381:v4:00391:e4:00401:,4:00411: 4:00421:s4:00431:u4:00441:b4:00451:m4:00461:i4:00471:t4:00481: 4:00491:t4:00501:h4:00511:i4:00521:s4:00531: 4:00541:e4:00551:x4:00561:a4:00571:c4:00581:t4:00591: 4:00601:a4:00611:n4:00621:s4:00631:w4:00641:e4:00651:r4:00661: 4:00671:t4:00681:o4:00691: 4:00701:t4:00711:h4:00721:e4:00731: 4:00741:G4:00751:a4:00761:m4:00771:e4:00781: 4:00791:M4:00801:a4:00811:s4:00821:t4:00831:e4:00841:r4:00851::4:00861: 4:00871:a4:00881:m4:00891:b4:00901:e4:00911:r4:00921:-4:00931:q4:00941:u4:00951:a4:00961:i4:00971:l4:00981:-4:00991:24:01001:6e",
+ "generator_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-bencode'); import bencode as B; plain=sys.argv[1]; sys.stdout.buffer.write(B.encode({f'{i:04d}': c for i, c in enumerate(plain)}))\" \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-bencode'); import bencode as B\ndef w(v):\n if isinstance(v,(str,bytes)): return v if isinstance(v,str) else v.decode()\n if isinstance(v,list): return ''.join(w(x) for x in v) if any(not isinstance(x,int) for x in v) else ''.join(map(chr,v))\n if isinstance(v,dict): return ''.join(w(v[k]) for k in sorted(v))\n return ''\nprint(w(B.decode(sys.stdin.buffer.read().strip())), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-quail-26",
+ "expected": "match"
+}

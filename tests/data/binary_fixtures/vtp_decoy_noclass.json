@@ -1,0 +1,12 @@
+{
+ "family": "jvm_trigger_proof",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "vtp_decoy_noclass_a.bin",
+ "jar_b": "vtp_decoy_noclass_b.bin",
+ "expected_facts": null,
+ "generator_cmd": "bash vtp_gen.sh .   # zip -X of a lone MANIFEST.MF renamed .jar (no classfile)",
+ "oracle_cmd": "unzip -l vtp_decoy_noclass_a.bin   # no *.class member -> not JVM twins -> None",
+ "decoy": true
+}

@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.meta_version",
+ "expected": "46",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_apps.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> apps_chrome_history.db)",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_apps.py.txt apps_chrome_history.db  (Python sqlite3 / SQLite C library: PRAGMA application_id, sqlite_master ORDER BY name, SELECT key,value FROM meta; key 'meta_version') -> 46",
+ "decoy": false,
+ "member": "apps_chrome_history.db"
+}

@@ -296,6 +296,14 @@ def decode_chunk(p, _nested=False):
             cands.append((_ascii(base64.a85decode(re.sub(r"\s+", "", t), adobe=True)), 0))
         except Exception:
             pass
+    if _max_day() >= 24 and re.match(r"\d+:", t) and t.endswith(","):
+        # NETSTRINGS (warmups Day 24 "String Theory", "The comma knows where to stop": '1:N,1:i,1:c,...' = one
+        # `<len>:<char>,` per character), the whole fragment must parse
+        from lib import warmups_codecs as _wc
+        try:
+            cands.append((_wc.netstr_dec(t), 0))
+        except ValueError:
+            pass
     if _B32S.match(t) and len(t) % 8 == 0:
         try:
             cands.append((_ascii(base64.b32decode(t)), 5))

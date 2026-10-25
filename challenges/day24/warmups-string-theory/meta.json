@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-24",
+  "lane": "warmups",
+  "name": "👶 String Theory",
+  "ids": {
+    "single_solve": "warmups-day-24",
+    "time_trial": "warmups-day-24/time_trial",
+    "mastery": "warmups-day-24/mastery"
+  }
+}

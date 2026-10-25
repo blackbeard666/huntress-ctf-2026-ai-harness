@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=fish|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=FISH-c1cd9c61|url=https://fish-c1cd9c61d8.example.invalid/stage|file_path=/tmp/huntress-fish/.c1cd9c61d86311ff.stage",
+ "decoy": false,
+ "language": "fish",
+ "role": "benign-utility",
+ "id_single": "polyglot-fish-benign-utility-<field>",
+ "id_timed": "polyglot-fish-064dd1-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_fish_benign_utility.fish | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-fish-benign-utility-language": "fish",
+  "polyglot-fish-benign-utility-role": "benign_utility",
+  "polyglot-fish-benign-utility-verdict": "benign",
+  "polyglot-fish-benign-utility-attack": "none",
+  "polyglot-fish-benign-utility-adapter": "local_parser",
+  "polyglot-fish-benign-utility-host-profile": "standalone",
+  "polyglot-fish-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-fish-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-fish-benign-utility-next-language": "powershell",
+  "polyglot-fish-benign-utility-stage-count": "2",
+  "polyglot-fish-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-fish-benign-utility-campaign-id": "FISH-c1cd9c61",
+  "polyglot-fish-benign-utility-url": "https://fish-c1cd9c61d8.example.invalid/stage",
+  "polyglot-fish-benign-utility-file-path": "/tmp/huntress-fish/.c1cd9c61d86311ff.stage"
+ },
+ "answers_timed": {
+  "polyglot-fish-064dd1-url-host": "fish-c1cd9c61d8.example.invalid",
+  "polyglot-fish-064dd1-path-leaf": ".c1cd9c61d86311ff.stage",
+  "polyglot-fish-064dd1-campaign-token": "c1cd9c61",
+  "polyglot-fish-064dd1-next-language": "powershell"
+ }
+}

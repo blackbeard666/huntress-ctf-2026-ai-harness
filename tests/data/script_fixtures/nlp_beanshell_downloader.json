@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=beanshell|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=BEANSHELL-2932cc16|url=https://beanshell-2932cc16c0.example.invalid/stage|file_path=/tmp/huntress-beanshell/.2932cc16c06f8ef0.stage",
+ "decoy": false,
+ "language": "beanshell",
+ "role": "downloader",
+ "id_single": "polyglot-beanshell-downloader-<field>",
+ "id_timed": "polyglot-beanshell-b22819-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_beanshell_downloader.bsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "answers_single": {
+  "polyglot-beanshell-downloader-language": "beanshell",
+  "polyglot-beanshell-downloader-role": "downloader",
+  "polyglot-beanshell-downloader-verdict": "suspicious",
+  "polyglot-beanshell-downloader-attack": "T1105",
+  "polyglot-beanshell-downloader-adapter": "http_client",
+  "polyglot-beanshell-downloader-host-profile": "standalone",
+  "polyglot-beanshell-downloader-obfuscation-profile": "base64",
+  "polyglot-beanshell-downloader-stage-profile": "two_stage_download_execute",
+  "polyglot-beanshell-downloader-next-language": "jscript",
+  "polyglot-beanshell-downloader-stage-count": "2",
+  "polyglot-beanshell-downloader-steps": "acquire_remote,dispatch_process",
+  "polyglot-beanshell-downloader-campaign-id": "BEANSHELL-2932cc16",
+  "polyglot-beanshell-downloader-url": "https://beanshell-2932cc16c0.example.invalid/stage",
+  "polyglot-beanshell-downloader-file-path": "/tmp/huntress-beanshell/.2932cc16c06f8ef0.stage"
+ },
+ "answers_timed": {
+  "polyglot-beanshell-b22819-url-host": "beanshell-2932cc16c0.example.invalid",
+  "polyglot-beanshell-b22819-path-leaf": ".2932cc16c06f8ef0.stage",
+  "polyglot-beanshell-b22819-campaign-token": "2932cc16",
+  "polyglot-beanshell-b22819-next-language": "jscript"
+ }
+}

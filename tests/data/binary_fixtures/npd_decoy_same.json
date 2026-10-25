@@ -1,0 +1,17 @@
+{
+ "family": "native_patch_diff",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "npd_decoy_same_a.bin",
+ "file_b": "npd_decoy_same_b.bin",
+ "expected_facts": {
+  "changed_functions": "[]",
+  "changed_function_count": "0",
+  "fix_kind": "none"
+ },
+ "generator_cmd": "bash npd_gen.sh OUT   # gcc (-O0/-O2, -fno-inline, FORTIFY off) vuln/fixed C twins",
+ "oracle_cmd": "python3 npd_oracle.py npd_decoy_same_a.bin npd_decoy_same_b.bin   # binutils objdump -d (AT&T) + nm, masked per-function text compare; oracle: ",
+ "decoy": true,
+ "note": "lib.binary.native_patch_diff_field(a, b, key). fix_kind from the source change by construction (vocabulary SPECULATIVE until a GM label is seen); instruction_count_* not asserted (objdump counts alignment nops, the lib drops them); decoy: identical twins -> changed_functions [] / fix_kind none"
+}

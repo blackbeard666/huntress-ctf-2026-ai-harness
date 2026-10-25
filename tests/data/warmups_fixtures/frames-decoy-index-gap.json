@@ -1,0 +1,11 @@
+{
+ "codec": "frames-index",
+ "plain": null,
+ "encoded": "16:n,82:t,100:8,3:e,89:b,80:a,61:n,30:!,33:o,62:s,4: ,94:e,2:c,14:d,57:c,93:h,39:e,42:s,49:t,77:e,46:i,73: ,6:o,0:N,55:x,72:e,63:w,8:k,22:s,68:o,71:h,99:5,25:a,78: ,90:e,18: ,29:p,37:l,34: ,51:i,91:r,65:r,84:r,40:,,38:v,95:r,5:w,85::,56:a,27:m,96:o,32:T,54:e,12:c,60:a,64:e,67:t,74:G,76:m,24:w,35:s,70:t,45:m,1:i,98:-,26:r,81:s,47:t,10:d,28:u,20:h,41: ,66: ,87:a,88:m,86: ,31: ,92:-,17:g,23: ,58:t,59: ,52:s,83:e,79:M,44:b,9: ,11:e,69: ,36:o,53: ,48: ,19:t,13:o,15:i,43:u,97:n,21:i,50:h,75:a",
+ "generator_cmd": "perl writer above, then the frame tagged 7 removed",
+ "oracle_cmd": "perl -CSD -0777 -ne 'my %h;while(/(?:^|,)(\\d+):(.)(?=,\\d+:|$)/gs){$h{$1}=$2}my @k=sort{$a<=>$b}keys %h;my $b=$k[0];($k[$_]==$_+$b or exit 1) for 0..$#k;print map{$h{$_}}@k'",
+ "oracle_plain": "",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "indices 0..n with 7 missing: not a permutation of range(n) (the perl reader exits 1)"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.record_count_order",
+ "expected": "[\"sql01/Security_old.evtx\",\"sql01/Security.evtx\",\"sql01/Security_new.evtx\",\"hr3/Security (1).evtx\",\"hr3/Security (2).evtx\",\"hr3/Security.evtx\",\"hr3/Security_partial.evtx\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/synthesis/GENERATOR_evtx_multilog.py.txt $T -> evtxkit_b.zip (stdlib BinXML EVTX writer from tests/data/meta_fixtures/evtx/GENERATOR_evtx_binxml.py.txt: per-host logs + byte-identical duplicate + record-deleted (gapped) copy + truncated copy + report members; stdlib zipfile)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/ORACLE_evtx_multilog.py.txt evtxkit_b.zip (python-evtx 0.8.1 FileHeader/ChunkHeader/Record walk + Record.xml() <Computer>; key 'record_count_order')",
+ "decoy": false
+}

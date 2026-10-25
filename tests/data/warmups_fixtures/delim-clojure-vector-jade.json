@@ -1,0 +1,9 @@
+{
+ "codec": "delimited-fields",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-63",
+ "encoded": "[\\N \\i \\c \\e \\space \\w \\o \\r \\k \\space \\d \\e \\c \\o \\d \\i \\n \\g \\space \\t \\h \\i \\s \\space \\w \\a \\r \\m \\u \\p \\! \\space \\T \\o \\space \\s \\o \\l \\v \\e \\, \\space \\s \\u \\b \\m \\i \\t \\space \\t \\h \\i \\s \\space \\e \\x \\a \\c \\t \\space \\a \\n \\s \\w \\e \\r \\space \\t \\o \\space \\t \\h \\e \\space \\G \\a \\m \\e \\space \\M \\a \\s \\t \\e \\r \\: \\space \\j \\a \\d \\e \\- \\o \\t \\t \\e \\r \\- \\6 \\3]\n",
+ "generator_cmd": "J=tools/jvmlangs/x/usr/share/java; printf %s \"$plain\" | java -cp $J/clojure-1.12.0.jar:$J/spec.alpha-0.5.238.jar:$J/core.specs.alpha-0.4.74.jar clojure.main -e '(prn (vec (slurp *in*)))'",
+ "oracle_cmd": "J=tools/jvmlangs/x/usr/share/java; java -cp $J/clojure-1.12.0.jar:$J/spec.alpha-0.5.238.jar:$J/core.specs.alpha-0.4.74.jar clojure.main -e '(print (apply str (clojure.edn/read-string (slurp *in*))))'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-63",
+ "expected": "match"
+}

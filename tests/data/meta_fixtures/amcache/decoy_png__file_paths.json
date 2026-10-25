@@ -1,0 +1,8 @@
+{
+ "field": "amcache.file_paths",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> not_shim.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/amcache/decoy_png__file_paths.bin  (regipy AmCachePlugin) -> error: not regf",
+ "decoy": true,
+ "member": "Amcache.hve"
+}

@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=zsh|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=ZSH-476660a4|url=https://zsh-476660a440.example.invalid/stage|file_path=/tmp/huntress-zsh/.476660a4404eb198.stage",
+ "decoy": false,
+ "language": "zsh",
+ "role": "staged-chain",
+ "id_single": "polyglot-zsh-staged-chain-<field>",
+ "id_timed": "polyglot-zsh-a364c7-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_zsh_staged_chain.zsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-zsh-staged-chain-language": "zsh",
+  "polyglot-zsh-staged-chain-role": "staged_chain",
+  "polyglot-zsh-staged-chain-verdict": "suspicious",
+  "polyglot-zsh-staged-chain-attack": "T1059",
+  "polyglot-zsh-staged-chain-adapter": "operation_graph",
+  "polyglot-zsh-staged-chain-host-profile": "standalone",
+  "polyglot-zsh-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-zsh-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-zsh-staged-chain-next-language": "vbscript",
+  "polyglot-zsh-staged-chain-stage-count": "3",
+  "polyglot-zsh-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-zsh-staged-chain-campaign-id": "ZSH-476660a4",
+  "polyglot-zsh-staged-chain-url": "https://zsh-476660a440.example.invalid/stage",
+  "polyglot-zsh-staged-chain-file-path": "/tmp/huntress-zsh/.476660a4404eb198.stage"
+ },
+ "answers_timed": {
+  "polyglot-zsh-a364c7-url-host": "zsh-476660a440.example.invalid",
+  "polyglot-zsh-a364c7-path-leaf": ".476660a4404eb198.stage",
+  "polyglot-zsh-a364c7-campaign-token": "476660a4",
+  "polyglot-zsh-a364c7-next-language": "vbscript"
+ }
+}

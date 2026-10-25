@@ -1,0 +1,11 @@
+import sys; sys.path.insert(0, 'tools/dissect_esedb')
+from dissect.esedb.c_esedb import c_esedb
+d = open(sys.argv[1], 'rb').read()
+if d[4:8] != bytes.fromhex('efcdab89'):
+    print('|'.join(['none'] * 10)); sys.exit()
+h = c_esedb.DBFILEHDR(d)
+S = {1: 'just_created', 2: 'dirty_shutdown', 3: 'clean_shutdown', 4: 'being_converted', 5: 'force_detach'}
+T = lambda t: 'none' if not t.bYear else '%04d-%02d-%02dT%02d:%02d:%02dZ' % (t.bYear + 1900, t.bMonth, t.bDay, t.bHours, t.bMinutes, t.bSeconds)
+ps = h.cbPageSize
+print(ps, '0x%08x' % h.ulVersion, '0x%08x' % h.ulDaeUpdateMajor, h.dbstate, S[h.dbstate], h.attrib, len(d) // ps,
+      str(h.dbstate == 2).lower(), str(d[:ps] == d[ps:2 * ps]).lower(), T(h.signDb.logtimeCreate), T(h.logtimeAttach), sep='|')

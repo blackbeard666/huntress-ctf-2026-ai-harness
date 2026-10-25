@@ -1,0 +1,9 @@
+{
+ "codec": "netstring-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-quail-90",
+ "encoded": "10:3:Nic,3:e ,10:w,3:ork,3:,10: de,3:cod,,10:3:ing,3: t,10:h,3:is ,3:,10:war,3:mup,,10:3:! T,3:o ,10:s,3:olv,3:,10:e, ,3:sub,,10:3:mit,3: t,10:h,3:is ,3:,10:exa,3:ct ,,10:3:ans,3:we,10:r,3: to,3:,10: th,3:e G,,10:3:ame,3: M,10:a,3:ste,3:,10:r: ,3:amb,,10:3:er-,3:qu,10:a,3:il-,2:,3:90,,",
+ "generator_cmd": "printf %s \"$plain\" | perl -0777 -ne 'my $f=sub{my($s,$n)=@_;my $o=\"\";while(length $s){my $c=substr($s,0,$n,\"\");$o.=length($c).\":$c,\"}$o};print $f->($f->($_,3),10)'   # perl: 3-char netstrings, that stream re-framed in 10-char netstrings (nested)",
+ "oracle_cmd": "perl -0777 -ne 'my($o,$i)=(\"\",0);while($i<length){substr($_,$i)=~/^\\s*(\\d+):/ or last;$i+=length($&);$o.=substr($_,$i,$1);$i+=$1;$i++ if substr($_,$i,1) eq \",\"}print $o' | perl -0777 -ne 'my($o,$i)=(\"\",0);while($i<length){substr($_,$i)=~/^\\s*(\\d+):/ or last;$i+=length($&);$o.=substr($_,$i,$1);$i+=$1;$i++ if substr($_,$i,1) eq \",\"}print $o'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-quail-90",
+ "expected": "match"
+}

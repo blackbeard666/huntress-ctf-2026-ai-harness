@@ -1,0 +1,10 @@
+{
+ "codec": "string-builder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-puffin-15",
+ "encoded": "StringBuilder sb = new StringBuilder();\nsb.append(\"Nice \");\nsb.append(\"work \");\nsb.append(\"decoding \");\nsb.append(\"this \");\nsb.append(\"warmup! \");\nsb.append(\"To \");\nsb.append(\"solve, \");\nsb.append(\"submit \");\nsb.append(\"this \");\nsb.append(\"exact \");\nsb.append(\"answer \");\nsb.append(\"to \");\nsb.append(\"the \");\nsb.append(\"Game \");\nsb.append(\"Master: \");\nsb.append(\"maple-puffin-15\");\nString s = sb.toString();",
+ "generator_cmd": "python3 -I -c 'import os, re, json; print(\"StringBuilder sb = new StringBuilder();\\n\" + \"\".join(\"sb.append(%s);\\n\" % json.dumps(w) for w in re.findall(r\"\\S+\\s*\", os.environ[\"plain\"])) + \"String s = sb.toString();\", end=\"\")'   # env plain=<plain>",
+ "oracle_cmd": "d=$(mktemp -d); printf 'public class M{public static void main(String[] a){%s System.out.print(s);}}' \"$encoded\" > $d/M.java && javac -d $d $d/M.java && java -cp $d M   # env encoded=<encoded>",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-puffin-15",
+ "decoy": false,
+ "expected": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-puffin-15"
+}

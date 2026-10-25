@@ -1,0 +1,8 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": "ANS-d18d47474c25d834",
+ "decoy": false,
+ "_why": "SensorMap.mixSensorBattery(double[]): double loop arithmetic, l2f single rounding (2^60+2^36+1: double-then-float rounding gives a different token), d2f overflow -> Infinity, exact parseFloat of a near-halfway decimal, parseDouble, Math.min/max signed zero, intBitsToFloat, StrictMath.abs, rint/ceil/floor, pow + rem-double, Float/Double toString via StringBuilder.append(F/D) -> String.hashCode, 1/0 and 0%0, *-2addr float ops, long/NaN/-Inf conversions",
+ "generator_cmd": "python3 tests/data/android_fixtures/fpx_src/gen_fpx.py battery_score tests/data/android_fixtures/fpx_battery_score.apk  # javac --release 8 SensorMap.java + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator: java -cp <javac out> Probe runs SensorMap.mixSensorCode() on the host JVM (OpenJDK 25) -> prints 'ANS-d18d47474c25d834'"
+}

@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-24-patch-diffing",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Spot the Difference",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-24-patch-diffing",
+    "time_trial": "binary-reverse-engineering-day-24-patch-diffing/time_trial",
+    "mastery": "binary-reverse-engineering-day-24-patch-diffing/mastery"
+  }
+}

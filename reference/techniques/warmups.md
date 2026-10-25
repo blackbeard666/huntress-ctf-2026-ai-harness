@@ -1,4 +1,4 @@
-# warmups — technique log (days 1-23; updated after every day)
+# warmups — technique log (days 1-24; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -17,21 +17,24 @@ How this lane has looked so far (observations, not guarantees):
   (D21) -> GZIP inside BASE64 (`H4sI...`), "Another familiar wrapper. This one needs a little inflation."/"Deflated Ego"
   (D22) -> ZLIB (`78da`) inside BASE64 (`eNo...`), "The alphabet got bigger. Adobe might recognize the neighbors."/"Eighty-Five
   Alive" (D23) -> ASCII85 in Adobe `<~ ... ~>` delimiters (one layer, plain UTF-8 inside; "neighbors" = the `<~` `~>` brackets,
-  "bigger alphabet" = base16 -> 32 -> 64 -> 85). D1-D15 and D23 one layer; D16-D17 and D19-D22 two layers, the pun naming BOTH
+  "bigger alphabet" = base16 -> 32 -> 64 -> 85), "Count carefully. The comma knows where to stop."/"String Theory"
+  (D24) -> NETSTRINGS `1:N,1:i,1:c,...` (DJB `<len>:<data>,`, every chunk ONE char so far; "count" = the length prefix,
+  "comma" = the terminator, "string" = netstring). D1-D15 and D23-D24 one layer; D16-D17 and D19-D22 two layers, the pun naming BOTH
   (every number/word in a prompt may be a layer or a key; "familiar" = an already-seen codec as the outer layer). D20 was the first day whose twist was a PARAMETER of the
   previous day's codec ("Same bar" = callback, "big" = the one knob turned), not a new codec.
   Families: D12-D15 free-text letter maps, D16-D17 carriers over hex, D18 transposition, D19-D20 byte representation
-  under hex, D21-D22 COMPRESSION under base64, D23 BIGGER BASE-N ALPHABET (Ascii85). Rhythm since D19: NEW family on day
-  N, ONE knob turned on day N+1 (D19 LE -> D20 BE; D21 gzip -> D22 zlib); D23 opened a new family as predicted, so D24 is
-  most likely its knob (another 85-alphabet: RFC1924/git `b85`, Z85, btoa, no delimiters, `z`/`y` shortcuts) or an
-  even bigger alphabet (basE91, base92, base100 emoji, base122, base65536). Read "Same ..."/"Another ..." as "yesterday's
-  codec, one knob turned"; read "bigger"/"smaller" as the alphabet SIZE moving.
-- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 83, 88). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, ROT47, Morse-over-hex, Bacon-over-hex, rail-fence-3, UTF-16LE+BOM hex, UTF-16BE+BOM hex, gzip-in-base64, zlib-in-base64, `<~...~>` Ascii85, in that order so far; 113 x 23 on D23). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
+  under hex, D21-D22 COMPRESSION under base64, D23 BIGGER BASE-N ALPHABET (Ascii85), D24 FRAMING / LENGTH-PREFIXED
+  serialization (netstrings). Rhythm D19-D22: NEW family on day N, ONE knob on N+1 (LE -> BE; gzip -> zlib). D23 -> D24
+  BROKE it (the predicted Ascii85 knob never came; D24 opened framing). Only a "Same ..."/"Another ..." prompt signals a
+  knob day; otherwise expect a new family -- lib cannot prebuild every family, so on an unknown shape read the blob's
+  STRUCTURE (here `digits:char,` repeated) and ask which spec it is.
+- Mastery is cumulative. Day N mastery = 5N-2 sets (3, 8, 13, ..., 83, 88). Each set blob has N numbered lines `NN<TAB>fragment`, and line k uses day k's encoding (b64, rot13, hex, binary, decimal, octal, url-%XX, html-entity, `"\uXXXX"`, base32, unpadded base64url, plain reversed text, Atbash, Caesar+7, ROT47, Morse-over-hex, Bacon-over-hex, rail-fence-3, UTF-16LE+BOM hex, UTF-16BE+BOM hex, gzip-in-base64, zlib-in-base64, `<~...~>` Ascii85, netstrings `1:o,1:n,...`, in that order so far; 118 x 24 on D24). The last line has no trailing newline. The fragments join verbatim (split mid-word) into the same sentence.
 - Clocks: D1-D15 TT ~5-8 s and Mastery ~5-9 s windows (30 s on D1/D12); since D16 mostly `deadline: null` (D18 had
   30 s TT / 105 s Mastery again), `run_for_time: true` asks for a timed Hall of Fame attempt. The HARNESS kills solve.py at
   60 s regardless (D17 `solver_too_slow`; D21 Mastery 103 x 21 killed). Recent: D21 TT 4.1 s / Mastery 0.34 s solve;
   D22 TT 2.4 s / Mastery 108 x 22 28.2 s (solve 15.9 s); D23 TT 5.1 s (solve 0.75 s), Mastery 113 x 23 first run
   INCORRECT (all slug numbers wrong, see Pitfalls), fixed and re-submitted on the SAME attempt: 5.1 s, solve 1.2 s.
+  D24 TT 4.6 s (solve 1.85 s), Mastery 118 x 24 4.5 s (solve 1.6 s), both first try, `deadline: null`.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **Encoding per line** -- Mastery line k uses day k's encoding; detect each line's encoding from its ALPHABET, never its
@@ -88,18 +91,22 @@ How this lane has looked so far (observations, not guarantees):
   Widen the zlib test to RFC 1950 (`b[0]&15==8`, `(b[0]<<8|b[1])%31==0`, FDICT -> `zdict=` crib) and try raw deflate
   (`wbits=-15`); same rule for any wrapper (hex/b32/b85) and compressor (lzma-alone, zstd, lz4); re-run the full
   decoder on the inflated text.
-- **Base-N alphabet size / armor (D23)** -- values seen: single/TT = ONE Adobe Ascii85 string `<~...~>`, no newline, no
-  line wraps, no `z` shortcut, 141-143 B (111-113 B of plain UTF-8 -> ceil(n/4)*5 chars + 4 delimiters); Mastery line 23
-  = `<~XXXXXXX~>`, 11 chars on 113/113 lines (5 payload bytes -> 7 chars), EACH fragment with its OWN delimiters, sitting
-  next to base64 (D1, D21, D22) and base32 lines. Ascii85 alphabet `!`..`u` overlaps every other printable codec, so
-  the delimiters are the cue; bare a85 (no `<~`) would collide with ROT47 (D15) text -> slug-gate it. Parse rule (D23
-  solver `_a85`): strip whitespace; `<~...~>` -> `base64.a85decode(t, adobe=True)`, else try `a85decode(t)` (handles `z`)
-  then `b85decode` (RFC1924/git) and Z85 (`basenc --z85 -d`, or translate the Z85 alphabet to b85's); sniff
-  compression magic on the bytes, then UTF-8 + slug gate. Mastery: `register_free("a85", 23, fn)` that accepts only a
-  `<~...~>` line -- NEVER rewrite the line in place before `decode_chunked` (Pitfalls, D23). Next knobs on this axis:
-  other 85 alphabets / armors (`xbtoa Begin`, IPv6 RFC1924), bigger alphabets (basE91, base92, base100, base65536).
+- **Base-N alphabet size / armor (D23)** -- single/TT = ONE Adobe Ascii85 `<~...~>`, no newline/wraps/`z`, 141-143 B;
+  Mastery line 23 = an 11-char `<~XXXXXXX~>` per fragment, EACH with its own delimiters. The `!`..`u` alphabet overlaps
+  every printable codec, so the delimiters are the cue (bare a85 collides with ROT47 -> slug-gate). Parse rule (`_a85`):
+  `<~..~>` -> `a85decode(t, adobe=True)`, else `a85decode` (z), `b85decode`, Z85 (translate to b85's alphabet); sniff
+  magic, UTF-8 + slug gate; Mastery via `register_free("a85", 23, fn)` on the RAW line (Pitfalls, D23).
+- **Framing / length prefix (D24)** -- values seen: single/TT = ONE line of netstrings `<len>:<data>,` concatenated, no
+  separators or newline, EVERY len = `1` (444 B for ~111 chars = 4 B per char); the payload's own `,` and `:` appear
+  as data (`1:,,`, `1::,`), and spaces are data (`1: ,`). Mastery line 24 = the same 1-char netstrings over the fragment
+  (`1:o,1:n,1:-,1:3,1:7,`, trailing `,`), 810/810 prefixes `1`. Parse rule (D24 solver `_netstr`): cursor loop --
+  `\s*(\d+):` at i, take EXACTLY `len` chars, require `,` (or end) right after, advance; accept only if the WHOLE text
+  parses (else None, so plain text never matches); `register_free("netstr", 24, fn)` for the Mastery line. Never
+  `split(',')`. The loop already covers len > 1 and mixed lengths; unbuilt knobs: len in UTF-8 BYTES vs chars,
+  hex/varint/binary length prefixes, tnetstrings (type tag `,#^!~]}` instead of `,`), bencode (`4:spam`, `l..e`),
+  RESP (`$5\r\nhello\r\n`), HTTP chunked, `index:char` frames OUT OF ORDER, `count:char` run-length, nested frames.
 - **Line wrapper** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in number order.
-- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 78 on day 16, 83 x 17 lines on day 17, ..., 108 x 22 on day 22, 113 x 23 on day 23); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
+- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 78 on day 16, 83 x 17 lines on day 17, ..., 108 x 22 on day 22, 113 x 23 on day 23, 118 x 24 on day 24); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
   `artifacts[]`, only a top-level `sha256` = the zip; same on days 7-9). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
 - **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621; day 9: 644 vs 650); same sentence and encoding.
@@ -131,6 +138,7 @@ How this lane has looked so far (observations, not guarantees):
 | Lines `01<TAB>...`, `02<TAB>...` | Strip the `NN\t` prefix. Decode EACH line with its own encoding and concatenate without separators. Keep leading/trailing spaces |
 | base64 starting `H4sI` gzip (D21) or `eN` zlib `78da` (D22; prompt "wrapper", "compressed", "pressure", "squeeze", "inflation", "deflated"); also `eJ`/`eF`/`eAE` other zlib levels, `QlpoOTFBWSZT` bz2, `/Td6WFo` xz, `KLUv/` zstd, `BCJNGA` lz4, `UEsDB` zip. Hex: `1f8b`, `78xx`, `425a68`, `fd377a585a`, `28b52ffd`, `504b0304` | `base64 -d blob.txt \| gzip -dc` (D21); `python3 -c "import base64,zlib,sys;print(zlib.decompress(base64.b64decode(open(sys.argv[1]).read())).decode())" blob.txt` (D22; `zlib.decompress(b,47)` auto-detects zlib OR gzip, `-15` = headerless); `lib.decode.peel` does the stdlib ones. Triage says "looks base64" -- right, but the bytes are binary: decompress, don't score |
 | `<~` ... `~>` around `!`-`u` printable soup (`<~:2+3L+EqaECER/!@rGml...~>`, ~1.25 x the text; prompt "alphabet got bigger", "Adobe", "Eighty-Five", "neighbors") | Ascii85 (D23): `python3 -c "import base64,sys;print(base64.a85decode(open(sys.argv[1]).read().strip(),adobe=True).decode())" blob.txt`. No delimiters -> `a85decode(t)`; `0-9A-Za-z!#$%&()*+-;<=>?@^_{\|}~` -> `b85decode`; `.-:+=^!/*?&<>()[]{}@%$#` -> Z85; `xbtoa Begin` -> btoa. Then sniff magic (PDF-style a85 of zlib) |
+| `1:N,1:i,1:c,1:e,1: ,...` -- `digits:payload,` repeated, ~4x the text, the payload's `,`/`:` framed too (`1:,,`, `1::,`) (prompt "count", "comma", "stop", "string", "length") | netstrings (D24): cursor parse, NEVER split on `,`: loop `m=re.compile(r'(\d+):').match(t,i); k=int(m[1]); j=m.end(); out.append(t[j:j+k]); assert t[j+k] == ','; i=j+k+1` (D24 solver `_netstr`). Siblings: `l4:spame` bencode, `5:hello,` + type tag = tnetstring, `$5\r\n` RESP, hex-size lines = HTTP chunked, `N:c` with N > len = index or run count |
 | peel finds nothing | keyed/classical cipher: `lib.ciphers` (caesar_all, atbash, vigenere_crack, xor_crack, morse, base58, QP) |
 The generic path is `lib.decode.peel(data, accept)` (BFS over encodings) plus the day solvers in `challenges/day0N/warmups-*/solver/solve.py`. Each later solver re-checks every earlier day's cases.
 
@@ -142,37 +150,37 @@ rot-N needs a margin over the unshifted text; D6 a shell `read` loop lost the un
 WHOLE Mastery zip gave another set's slug (read the member); D8 a `str.replace` patch silently no-op'd; D11 strict len%4
 refused unpadded b64; D12 rot-N "decoded" reversed text (`69-fove-n`); D13 free lines must be assigned JOINTLY.
 
-**Days 14-22** (Caesar +7; ROT47; Morse over hex; Bacon a/b 5-groups over hex; rail fence 3/offset 0; hex of UTF-16LE
-+ `fffe` BOM; hex of UTF-16BE + `feff` BOM; gzip inside base64; zlib `78da` inside base64): CORRECT in 4.5-39 s, first
-submit each day. Lessons that still matter: D14 set22 went MISSING when a rev/Atbash swap ended in a 2-word slug (rank
-3-word slugs first). D15 ROT47 is beyond rot-N/Atbash/reversal -> `register_free`. D16/D17 a carrier's 16-symbol output
-is a middle layer (`fromhex`). D17 Mastery (83 x 17) hit the 60 s budget until `answer()` returned early. D18 the anagram
-was cracked by rail r 2..N x every offset; lib's `rail_solve` existed but the carried solver never routed to it; a TT
-start before a verified solver burned the 30 s clock. D19's BOM-aware `_hex_utf16` carried D20 byte-identical, and D21's
-magic-sniffing `_b64z` carried D22 (zlib) unchanged: write the GENERIC rule on day N and day N+1's knob is free. D21
-Mastery LOST its first run: an ad-hoc per-line BFS instead of the carried D20 lane solver -> 60 s kill.
+**Days 14-23** (Caesar +7; ROT47; Morse over hex; Bacon a/b 5-groups over hex; rail fence 3/offset 0; hex of UTF-16LE
++ `fffe` BOM; hex of UTF-16BE + `feff` BOM; gzip inside base64; zlib `78da` inside base64; Adobe Ascii85 `<~...~>`):
+CORRECT in 4.5-39 s, first submit each day. Lessons that still matter: D14 set22 went MISSING when a rev/Atbash swap
+ended in a 2-word slug (rank 3-word slugs first). D15 ROT47 is beyond rot-N/Atbash/reversal -> `register_free`. D16/D17
+a carrier's 16-symbol output is a middle layer (`fromhex`). D17 Mastery (83 x 17) hit the 60 s budget until `answer()`
+returned early. D18 the anagram was cracked by rail r 2..N x every offset; lib's `rail_solve` existed but the carried
+solver never routed to it; a TT start before a verified solver burned the 30 s clock. D19's BOM-aware `_hex_utf16`
+carried D20 byte-identical, and D21's magic-sniffing `_b64z` carried D22 (zlib) unchanged: write the GENERIC rule on day
+N and day N+1's knob is free. D21 Mastery LOST its first run: an ad-hoc per-line BFS instead of the carried D20 lane
+solver -> 60 s kill. D23 (`base64.a85decode(t, adobe=True)`, ~36 s): Mastery 113 x 23 first submit had every slug
+NUMBER wrong (+5 per digit) because `_a85_lines` pre-decoded line 23 in place and the joint free search ROT5'd the plain
+line; fixed by letting `register_free("a85", 23, ...)` claim the RAW line, re-submitted on the same attempt.
 
-**Day 23: Eighty-Five Alive** ("The alphabet got bigger. Adobe might recognize the neighbors." -- Ascii85, Adobe armor).
-- 143-byte blob, no newline: `<~:2+3L+EqaECER/!@rGmlDJ()6BPDN1G@>N/F...~>` -> plain UTF-8 sentence, one layer.
-  The pun: alphabet size 16 -> 32 -> 64 -> 85 ("got bigger", "Eighty-Five"), "Adobe" = the PostScript/PDF Ascii85
-  variant, "neighbors" = the `<~` `~>` delimiters. Triage previewed the bytes but routed no codec; the charset alone
-  (`!`-`u`, quotes/backslash-free) plus the `<~`/`~>` brackets is the fingerprint.
-- Single: one command, first submit, start 13:00:14.8Z -> CORRECT 13:00:50.9Z (~36 s; decoded at :45):
-  `python3 -I -c "import base64,sys;print(base64.a85decode(open(sys.argv[1]).read().strip(),adobe=True))" blob.txt`
-  (`adobe=True` strips the frame and REQUIRES the closing `~>` -- leading `<~` optional; without it `~` raises).
-- Solver: D22 lane solver + `_a85` (a85 -> magic sniff -> UTF-8) as a whole-blob step + `register_free("a85", 23, ...)`.
-  TT (141 B) CORRECT 5.1 s. Mastery 113 x 23: the first submit had all 113 slugs with the right WORDS and the wrong
-  NUMBER (`...-hazel-91` for `-46`, `-09` for `-54`: every digit +5). Cause: `_a85_lines` rewrote line 23 in place to
-  plain `el-46` before `decode_chunked`; the joint free-codec search, which applies SOME free codec to every unclaimed
-  line, gave that plain line a digit-only ROT5. Fix: drop the in-place rewrite for numbered blobs and let the registered
-  free codec consume the raw `<~...~>` line; re-submitted on the same attempt -> CORRECT (solve 1.2 s).
-- Lesson: a Mastery line must reach `decode_chunked` in its ORIGINAL encoding; a new codec enters only through
-  `register_free(name, day, fn)` (or `decode_chunk`). Right words + wrong NN on EVERY set = the last line (the slug tail,
-  today's codec) was mis-assigned, not a GM quirk.
+**Day 24: String Theory** ("Count carefully. The comma knows where to stop." -- NETSTRINGS, a new FRAMING family).
+- 444-byte `blob.txt`, one line, no newline: `1:N,1:i,1:c,1:e,1: ,1:w,...,1:,,1: ,...,1::,1: ,1:j,...,1:7,1:6,` -- the
+  sentence one character per netstring (D. J. Bernstein's `<decimal len>:<bytes>,`). Pun: "String" = netstring,
+  "Count" = the length prefix, "the comma knows where to stop" = `,` ends a frame that is found by COUNTING, not by
+  searching for the comma (the sentence's own `,` and `:` are payload: `1:,,`, `1::,`). One layer, plain text inside.
+  Triage previewed it but named no codec (its only hint, "exhaustive listing: exact counts", was a red herring).
+- Single: first submit, start 13:16:29.6Z -> CORRECT 13:16:59.3Z (~30 s). A cursor loop (regex `(\d+):` at i, take len
+  chars, check the `,`) decodes it; the slug was read straight off the joined text and accepted as decoded.
+- Solver: D23 lane solver + `_netstr` (whole text must parse, else None) as the FIRST whole-blob step (skipped for
+  numbered Mastery blobs) + `register_free("netstr", 24, ...)` for Mastery line 24. TT (444 B, same shape) CORRECT 4.6 s;
+  Mastery 118 x 24 CORRECT 4.5 s (solve 1.6 s), both first try -- the D23 rule (let the codec claim the RAW line) held.
+- Lesson: a structural codec (framing/serialization) has no charset fingerprint and lib had no prebuilt decoder; the
+  shape `\d+:.,` repeated (~4 B per char) IS the cue. Write such a decoder as a strict whole-text parser that returns
+  None on any mismatch, so it can sit first in the pipeline without false hits.
 
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected (days 1-23; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-24; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
@@ -201,6 +209,10 @@ Mastery LOST its first run: an ad-hoc per-line BFS instead of the carried D20 la
   (triage says "looks base64" on D19-D20 hex); unpadded base64 must be re-padded (`len%4==1` is the only impossible length).
 - FRAGMENTS: split mid-word; join with "" and keep payload whitespace (never `.strip()` a decoded fragment; spaces are
   ciphertext in transpositions). No trailing newline: shell `read` loops lose the last token. Regex-check the slug.
+- FRAMED / LENGTH-PREFIXED text (D24 netstrings): the payload contains the delimiters (`1:,,`, `1::,`), so `split(',')`
+  / `split(':')` corrupts exactly the punctuation the crib needs. Parse by COUNT with a cursor and demand the WHOLE text
+  parse (strict -> None) so the step can run first without stealing other blobs. `count:char` (RLE) and `len:data`
+  (netstring) read identically while every count is 1 -- a frame with N > 1 decides which.
 - STACKED LAYERS: a decode whose output is only hex/digits/`a`-`p`/16 symbols is a MIDDLE layer (D16 Morse -> hex, D17
   Bacon -> nibbles): decode again. Two prompt cues ("sixteen" + "dot dot dot"; "wrapper" + "compressed") = two layers.
 - COMPRESSED layers (D21): the decoded bytes are binary, so printable/English gates reject the RIGHT branch; sniff the

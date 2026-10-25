@@ -1,0 +1,109 @@
+{
+ "_doc": "per-file-hashed-contract: `<family>-<4-8 hex stem>-<field>` ids over `<stem>.<ext>`; JS style composite, campaign-token, path-leaf, indicator precedence parsed from the question (reordered vs D23)",
+ "lane": "script",
+ "target": "per-file-hashed-contract",
+ "material": "dj0xfHN0ZXBzPWVudW1lcmF0ZV90YXJnZXRzLHRyYW5zZm9ybV9jb250ZW50LHdyaXRlX3JlY292ZXJ5X25vdGV8Y2FtcGFpZ249Y2FtcGFpZ24tYjNmYjVhY2FhMnxmdW5jdGlvbi1zdHlsZT1hbm9ueW1vdXNfZXhwcmVzc2lvbnxpbnZvY2F0aW9uLXN0eWxlPWNhbGx8cHJvcGVydHktc3R5bGU9YnJhY2tldF9saXRlcmFsfGZpbGVfcGF0aD1DOlxVc2Vyc1xQdWJsaWNcSHVudHJlc3NMYWJcaW1wYWN0LWIzZmI1YWNhYTJ8bm90ZV9uYW1lPVJFQ09WRVItYjNmYjVhY2FhMi50eHQ=",
+ "rep": "base64",
+ "transform": "identity",
+ "key": null,
+ "expected": "v=1|steps=enumerate_targets,transform_content,write_recovery_note|campaign=campaign-b3fb5acaa2|function-style=anonymous_expression|invocation-style=call|property-style=bracket_literal|file_path=C:\\Users\\Public\\HuntressLab\\impact-b3fb5acaa2|note_name=RECOVER-b3fb5acaa2.txt",
+ "decoy": false,
+ "generator_cmd": "printf %s \"$PLAN\" | base64 -w0",
+ "oracle_cmd": "printf %s \"$material\" | base64 -d",
+ "pf_cases": [
+  {
+   "answer_id": "set3.jscript-9a6714-style",
+   "members": [
+    "9a6714.js"
+   ],
+   "question": {},
+   "kind": "jscript",
+   "route": [
+    "jscript",
+    "9a6714.js",
+    "style"
+   ],
+   "expected": "anonymous_expression|call|bracket_literal",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; echo \"$(kv \"$PLAN\" function-style)|$(kv \"$PLAN\" invocation-style)|$(kv \"$PLAN\" property-style)\""
+  },
+  {
+   "answer_id": "jscript-9a6714-campaign-token",
+   "members": [
+    "9a6714.js"
+   ],
+   "question": {},
+   "kind": "jscript",
+   "route": [
+    "jscript",
+    "9a6714.js",
+    "campaign-token"
+   ],
+   "expected": "b3fb5acaa2",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" campaign | cut -d- -f2-"
+  },
+  {
+   "answer_id": "jscript-9a6714-path-leaf",
+   "members": [
+    "9a6714.js"
+   ],
+   "question": {},
+   "kind": "jscript",
+   "route": [
+    "jscript",
+    "9a6714.js",
+    "path-leaf"
+   ],
+   "expected": "impact-b3fb5acaa2",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" file_path | awk -F'\\\\' '{print $NF}'"
+  },
+  {
+   "answer_id": "jscript-9a6714-indicator",
+   "members": [
+    "9a6714.js"
+   ],
+   "question": {
+    "question": "Recover the primary indicator reconstructed from 9a6714.js: submit the first indicator present in the decoded descriptor using this order: URL, recovery-note name, file path, host id."
+   },
+   "kind": "jscript",
+   "route": [
+    "jscript",
+    "9a6714.js",
+    "indicator"
+   ],
+   "expected": "RECOVER-b3fb5acaa2.txt",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" note_name  # question order URL, recovery-note name, file path: no url -> note_name"
+  },
+  {
+   "answer_id": "jscript-9a6714-indicator",
+   "members": [
+    "9a6714.js"
+   ],
+   "question": {
+    "question": "Recover the primary indicator reconstructed from 9a6714.js: submit the first indicator present in the decoded descriptor using this order: URL, upload URL, next-stage file, file path, schedule path, recovery-note name, host id."
+   },
+   "kind": "jscript",
+   "route": [
+    "jscript",
+    "9a6714.js",
+    "indicator"
+   ],
+   "expected": "C:\\Users\\Public\\HuntressLab\\impact-b3fb5acaa2",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" file_path  # D23 order: file path before recovery-note"
+  },
+  {
+   "answer_id": "jscript-9a67-steps",
+   "members": [
+    "9a67.js"
+   ],
+   "question": {},
+   "kind": "jscript",
+   "route": [
+    "jscript",
+    "9a67.js",
+    "steps"
+   ],
+   "expected": "enumerate_targets>transform_content>write_recovery_note",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" steps | tr , '>'"
+  }
+ ]
+}

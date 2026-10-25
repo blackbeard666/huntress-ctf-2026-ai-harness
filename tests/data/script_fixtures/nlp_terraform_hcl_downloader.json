@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=terraform_hcl|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=TERRAFORM_HCL-e4dc0f48|url=https://terraform_hcl-e4dc0f48c7.example.invalid/stage|file_path=/tmp/huntress-terraform_hcl/.e4dc0f48c74c6694.stage",
+ "decoy": false,
+ "language": "terraform_hcl",
+ "role": "downloader",
+ "id_single": "polyglot-terraform_hcl-downloader-<field>",
+ "id_timed": "polyglot-terraform_hcl-a7bb59-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_terraform_hcl_downloader.tf | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "answers_single": {
+  "polyglot-terraform_hcl-downloader-language": "terraform_hcl",
+  "polyglot-terraform_hcl-downloader-role": "downloader",
+  "polyglot-terraform_hcl-downloader-verdict": "suspicious",
+  "polyglot-terraform_hcl-downloader-attack": "T1105",
+  "polyglot-terraform_hcl-downloader-adapter": "http_client",
+  "polyglot-terraform_hcl-downloader-host-profile": "standalone",
+  "polyglot-terraform_hcl-downloader-obfuscation-profile": "base64",
+  "polyglot-terraform_hcl-downloader-stage-profile": "two_stage_download_execute",
+  "polyglot-terraform_hcl-downloader-next-language": "jscript",
+  "polyglot-terraform_hcl-downloader-stage-count": "2",
+  "polyglot-terraform_hcl-downloader-steps": "acquire_remote,dispatch_process",
+  "polyglot-terraform_hcl-downloader-campaign-id": "TERRAFORM_HCL-e4dc0f48",
+  "polyglot-terraform_hcl-downloader-url": "https://terraform_hcl-e4dc0f48c7.example.invalid/stage",
+  "polyglot-terraform_hcl-downloader-file-path": "/tmp/huntress-terraform_hcl/.e4dc0f48c74c6694.stage"
+ },
+ "answers_timed": {
+  "polyglot-terraform_hcl-a7bb59-url-host": "terraform_hcl-e4dc0f48c7.example.invalid",
+  "polyglot-terraform_hcl-a7bb59-path-leaf": ".e4dc0f48c74c6694.stage",
+  "polyglot-terraform_hcl-a7bb59-campaign-token": "e4dc0f48",
+  "polyglot-terraform_hcl-a7bb59-next-language": "jscript"
+ }
+}

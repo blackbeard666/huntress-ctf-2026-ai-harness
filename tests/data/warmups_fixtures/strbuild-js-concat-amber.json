@@ -1,0 +1,10 @@
+{
+ "codec": "string-builder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-17",
+ "encoded": "\"Nice \" + \"work \" + \"decoding \" + \"this \" + \"warmup! \" + \"To \" + \"solve, \" + \"submit \" + \"this \" + \"exact \" + \"answer \" + \"to \" + \"the \" + \"Game \" + \"Master: \" + \"amber-otter-17\"",
+ "generator_cmd": "tools/node/bin/node -e 'process.stdout.write(process.env.plain.match(/\\S+\\s*/g).map(w=>JSON.stringify(w)).join(\" + \"))'   # env plain=<plain>",
+ "oracle_cmd": "tools/node/bin/node -e 'process.stdout.write(String(eval(process.env.encoded)))'   # env encoded=<encoded>",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-17",
+ "decoy": false,
+ "expected": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-otter-17"
+}

@@ -1,4 +1,5 @@
-"""Windows XML Event Log (EVTX) fields (prebuilt, SPECULATIVE -- never GM-asked yet).
+"""Windows XML Event Log (EVTX) fields (prebuilt, SPECULATIVE; D24 GM-asked evtx.record_count -> promoted via
+lib/meta/evtx.py to a verified _BUILTIN entry, its FIELDS key removed here).
 
 ElfFile file header (libevtx spec, all little-endian, 4096-byte block): "ElfFile\\0" signature, first chunk number
 u64 @8, last chunk number u64 @16, next record identifier u64 @24, header size u32 @32 (128), minor version u16 @36,
@@ -49,7 +50,6 @@ FIELDS = {
     ("evtx", "first_chunk_first_event_record_id"): "chunk_value",
     ("evtx", "chunk_first_event_record_id"): "chunk_value",
     ("evtx", "first_event_record_number"): "chunk_value",
-    ("evtx", "record_count"): "record_value",
     ("evtx", "records_count"): "record_value",
     ("evtx", "event_record_count"): "record_value",
     ("evtx", "event_count"): "record_value",
@@ -209,7 +209,12 @@ def _system(xml):
 
 def _render(b, recs, idxs, deadline=0.8):
     """[_system dict or None] for recs[i] in idxs (python-evtx; one ChunkHeader per chunk so templates resolve)."""
-    from Evtx.Evtx import ChunkHeader, Record
+    try:
+        from Evtx.Evtx import ChunkHeader, Record
+    except ImportError:   # python-evtx not importable (gate allowlist): the stdlib BinXML reader, same dict keys
+        from .evtx_binxml import events
+        evs = events(b, deadline)
+        return [evs[i] for i in idxs]
     chunks, out, t0 = {}, [], time.monotonic()
     for i in idxs:
         if time.monotonic() - t0 > deadline:

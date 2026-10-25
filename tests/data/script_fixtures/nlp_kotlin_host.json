@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=kotlin|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=gradle_kts|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=KOTLIN-8db1f33d|url=https://kotlin-8db1f33df2.example.invalid/stage|file_path=/tmp/huntress-kotlin/.8db1f33df2d4f42c.stage",
+ "decoy": false,
+ "language": "kotlin",
+ "role": "host",
+ "id_single": "polyglot-kotlin-host-<field>",
+ "id_timed": "polyglot-kotlin-1223f2-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_kotlin_host.kts | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-kotlin-host-language": "kotlin",
+  "polyglot-kotlin-host-role": "staged_chain",
+  "polyglot-kotlin-host-verdict": "suspicious",
+  "polyglot-kotlin-host-attack": "T1059",
+  "polyglot-kotlin-host-adapter": "operation_graph",
+  "polyglot-kotlin-host-host-profile": "gradle_kts",
+  "polyglot-kotlin-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-kotlin-host-stage-profile": "two_stage_download_execute",
+  "polyglot-kotlin-host-next-language": "bash",
+  "polyglot-kotlin-host-stage-count": "2",
+  "polyglot-kotlin-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-kotlin-host-campaign-id": "KOTLIN-8db1f33d",
+  "polyglot-kotlin-host-url": "https://kotlin-8db1f33df2.example.invalid/stage",
+  "polyglot-kotlin-host-file-path": "/tmp/huntress-kotlin/.8db1f33df2d4f42c.stage"
+ },
+ "answers_timed": {
+  "polyglot-kotlin-1223f2-url-host": "kotlin-8db1f33df2.example.invalid",
+  "polyglot-kotlin-1223f2-path-leaf": ".8db1f33df2d4f42c.stage",
+  "polyglot-kotlin-1223f2-campaign-token": "8db1f33d",
+  "polyglot-kotlin-1223f2-next-language": "bash"
+ }
+}

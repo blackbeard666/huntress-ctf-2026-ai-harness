@@ -137,6 +137,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Trust Issues"
   },
+  "binary-reverse-engineering-day-24-patch-diffing": {
+    "day": 24,
+    "dir": "day24/binary-spot-the-difference",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Spot the Difference"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -275,6 +281,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Page Me Maybe"
   },
+  "metadata-forensics-day-24-event-horizon": {
+    "day": 24,
+    "dir": "day24/metadata-event-horizon",
+    "lane": "metadata-forensics",
+    "name": "🔎 Event Horizon"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -412,6 +424,12 @@
     "dir": "day23/mobile-hook-line-and-signal",
     "lane": "mobile-android",
     "name": "📱 Hook Line and Signal"
+  },
+  "mobile-android-day-24-emulator-alibi": {
+    "day": 24,
+    "dir": "day24/mobile-emulator-alibi",
+    "lane": "mobile-android",
+    "name": "📱 Emulator Alibi"
   },
   "read-the-rules": {
     "day": 1,
@@ -557,6 +575,12 @@
     "lane": "script-analysis",
     "name": "📜 Press Start to Decode"
   },
+  "script-analysis-day-24-jsp-webshell-source": {
+    "day": 24,
+    "dir": "day24/scripting-web-of-lies",
+    "lane": "script-analysis",
+    "name": "📜 Web of Lies"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -695,6 +719,12 @@
     "lane": "warmups",
     "name": "👶 Eighty-Five Alive"
   },
+  "warmups-day-24": {
+    "day": 24,
+    "dir": "day24/warmups-string-theory",
+    "lane": "warmups",
+    "name": "👶 String Theory"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -772,6 +802,18 @@
     "dir": "day23/web-posted-too-much",
     "lane": "web",
     "name": "🌐 Posted Too Much"
+  },
+  "web-exploitation-day-14-the-api-has-opinions": {
+    "day": 24,
+    "dir": "day24/web-the-api-has-opinions",
+    "lane": "web",
+    "name": "🌐 The API Has Opinions"
+  },
+  "web-exploitation-day-15-fetch-quest": {
+    "day": 24,
+    "dir": "day24/web-fetch-quest",
+    "lane": "web",
+    "name": "🌐 Fetch Quest"
   },
   "welcome-robots": {
     "day": 1,

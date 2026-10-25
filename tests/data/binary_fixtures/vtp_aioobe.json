@@ -1,0 +1,21 @@
+{
+ "family": "jvm_trigger_proof",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "vtp_aioobe_a.bin",
+ "jar_b": "vtp_aioobe_b.bin",
+ "expected_facts": {
+  "trigger_input": "4",
+  "trigger_input_type": "int",
+  "vulnerable_outcome": "java.lang.ArrayIndexOutOfBoundsException",
+  "corrected_result": "-1",
+  "exception_class": "java.lang.ArrayIndexOutOfBoundsException",
+  "trigger_found": "true",
+  "differing_inputs": "[\"4\"]",
+  "method": "lookup"
+ },
+ "generator_cmd": "bash vtp_gen.sh .   # javac: off-by-one i > TABLE.length vs i >= TABLE.length (static int[4] built in <clinit>) -> index==length; compiled + jarred by JDK javac/jar",
+ "oracle_cmd": "java VtpOracle.java vtp_aioobe_a.bin vtp_aioobe_b.bin TableVulnerable@TableCorrected.lookup   # real JVM, reflection over the documented candidate order",
+ "decoy": false
+}

@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=docker_build|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=DOCKERFILE-4564f8f8|url=https://dockerfile-4564f8f811.example.invalid/stage|file_path=/tmp/huntress-dockerfile/.4564f8f811a37a6f.stage",
+ "decoy": false,
+ "language": "dockerfile",
+ "role": "host",
+ "id_single": "polyglot-dockerfile-host-<field>",
+ "id_timed": "polyglot-dockerfile-631310-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_dockerfile_host.dockerfile | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-dockerfile-host-language": "dockerfile",
+  "polyglot-dockerfile-host-role": "staged_chain",
+  "polyglot-dockerfile-host-verdict": "suspicious",
+  "polyglot-dockerfile-host-attack": "T1059",
+  "polyglot-dockerfile-host-adapter": "operation_graph",
+  "polyglot-dockerfile-host-host-profile": "docker_build",
+  "polyglot-dockerfile-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-dockerfile-host-stage-profile": "two_stage_download_execute",
+  "polyglot-dockerfile-host-next-language": "bash",
+  "polyglot-dockerfile-host-stage-count": "2",
+  "polyglot-dockerfile-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-dockerfile-host-campaign-id": "DOCKERFILE-4564f8f8",
+  "polyglot-dockerfile-host-url": "https://dockerfile-4564f8f811.example.invalid/stage",
+  "polyglot-dockerfile-host-file-path": "/tmp/huntress-dockerfile/.4564f8f811a37a6f.stage"
+ },
+ "answers_timed": {
+  "polyglot-dockerfile-631310-url-host": "dockerfile-4564f8f811.example.invalid",
+  "polyglot-dockerfile-631310-path-leaf": ".4564f8f811a37a6f.stage",
+  "polyglot-dockerfile-631310-campaign-token": "4564f8f8",
+  "polyglot-dockerfile-631310-next-language": "bash"
+ }
+}

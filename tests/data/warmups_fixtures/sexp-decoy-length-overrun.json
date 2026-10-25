@@ -1,0 +1,11 @@
+{
+ "codec": "sexp",
+ "plain": null,
+ "encoded": "(3:Nic5:e wo)",
+ "generator_cmd": "printf '(3:Nic5:e wo)'   # atom length overruns the list",
+ "oracle_cmd": "tools/nettle-bin/usr/bin/sexp-conv -s advanced -w 0 | python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-sexpdata'); import sexpdata as S\ndef w(v, nohead=False):\n if isinstance(v,list): return ''.join(w(x) for x in v[(1 if nohead and len(v)>1 and isinstance(v[0],S.Symbol) else 0):] if not isinstance(x,S.Brackets))\n return str(v)\nprint(w(S.loads(sys.stdin.read(), nil=None, true=None, false=None)), end='')\"",
+ "oracle_plain": "<error: sexp-conv: Unexpected end of file.>",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "verbatim atom length overrun"
+}

@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=beanshell|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=BEANSHELL-d86d2c98|url=https://beanshell-d86d2c9848.example.invalid/stage|file_path=/tmp/huntress-beanshell/.d86d2c9848cb015a.stage",
+ "decoy": false,
+ "language": "beanshell",
+ "role": "launcher",
+ "id_single": "polyglot-beanshell-launcher-<field>",
+ "id_timed": "polyglot-beanshell-6bd3b4-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_beanshell_launcher.bsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-beanshell-launcher-language": "beanshell",
+  "polyglot-beanshell-launcher-role": "launcher",
+  "polyglot-beanshell-launcher-verdict": "suspicious",
+  "polyglot-beanshell-launcher-attack": "T1059",
+  "polyglot-beanshell-launcher-adapter": "process_builder",
+  "polyglot-beanshell-launcher-host-profile": "standalone",
+  "polyglot-beanshell-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-beanshell-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-beanshell-launcher-next-language": "batch",
+  "polyglot-beanshell-launcher-stage-count": "3",
+  "polyglot-beanshell-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-beanshell-launcher-campaign-id": "BEANSHELL-d86d2c98",
+  "polyglot-beanshell-launcher-url": "https://beanshell-d86d2c9848.example.invalid/stage",
+  "polyglot-beanshell-launcher-file-path": "/tmp/huntress-beanshell/.d86d2c9848cb015a.stage"
+ },
+ "answers_timed": {
+  "polyglot-beanshell-6bd3b4-url-host": "beanshell-d86d2c9848.example.invalid",
+  "polyglot-beanshell-6bd3b4-path-leaf": ".d86d2c9848cb015a.stage",
+  "polyglot-beanshell-6bd3b4-campaign-token": "d86d2c98",
+  "polyglot-beanshell-6bd3b4-next-language": "batch"
+ }
+}

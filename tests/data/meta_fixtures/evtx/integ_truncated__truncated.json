@@ -1,0 +1,8 @@
+{
+ "field": "evtx.truncated",
+ "expected": "true",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_integrity.py.txt <outdir>  (stdlib struct/zlib EVTX writer -> integ_truncated.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_evtx_integrity.py.txt tests/data/meta_fixtures/evtx/integ_truncated__truncated.bin  (python-evtx 0.8.1 FileHeader/ChunkHeader/Record checksums, record_num, timestamp); file -b -> 'MS Windows 10-11 Event Log, version  3.2, 2 chunks (no. 1 in use), next record no. 9'",
+ "decoy": false,
+ "member": "integ_truncated.evtx"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.application_id_ascii",
+ "expected": "GPKG",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_apps.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> apps_gpkg.db)",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_apps.py.txt apps_gpkg.db  (Python sqlite3 / SQLite C library: PRAGMA application_id, sqlite_master ORDER BY name, SELECT key,value FROM meta; key 'application_id_ascii') -> GPKG",
+ "decoy": false,
+ "member": "apps_gpkg.db"
+}

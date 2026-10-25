@@ -13,6 +13,7 @@ import base64
 import binascii
 import bisect
 import io
+import itertools
 import json
 import math
 import os
@@ -298,7 +299,28 @@ def _jvm_lang_facts(p, ca, f):
     clojure = clj_init or any(x.startswith("clojure/lang/") for x in utf)
     lang = ("kotlin" if f.get("has_kotlin_metadata") == "true" else "scala" if scala else "groovy" if groovy
             else "clojure" if clojure else "java")
-    return {"jvm_language": lang, "has_scala_signature": _jv(scala_sig), "has_scala_sig_attribute":
+    bsm = ca.get("BootstrapMethods")
+    indy = 0
+    for m in p["methods"]:
+        code = dict(m["attributes"]).get("Code")
+        if code and len(code) >= 8:
+            try:
+                indy += sum(op == 0xba for _, op, _ in jvm_code_decode(code[8:8 + int.from_bytes(code[4:8], "big")]))
+            except (ValueError, struct.error, IndexError):
+                pass
+    names = [m["name"] or "" for m in p["methods"]]
+    anon = [n for n in names if "$anonfun$" in n]
+    synth = [m["name"] for m in p["methods"] if m["access"] & 0x1000]
+    # Scala 3 writes a 16-byte TASTY attribute (UUID of the .tasty) and no ScalaSig/ScalaInlineInfo; Scala 2 the reverse
+    smaj = "3" if "TASTY" in ca else "2" if scala_sig or "ScalaInlineInfo" in ca else "none"
+    return {"has_tasty_attribute": _jv("TASTY" in ca), "scala_major": smaj,
+            "bootstrap_method_count": str(int.from_bytes(bsm[:2], "big")) if bsm and len(bsm) >= 2 else "0",
+            "invokedynamic_count": str(indy),
+            "invokedynamic_cp_count": str(sum(1 for e in p["cp"] if e and e[0] == 18)),
+            "anonfun_methods": _jv(anon), "anonfun_method_count": str(len(anon)),
+            "lambda_methods": _jv([n for n in names if n.startswith("lambda$") or "$anonfun$" in n]),
+            "synthetic_methods": _jv(synth), "synthetic_method_count": str(len(synth)),
+            "has_module_field": _jv(module), "jvm_language": lang, "has_scala_signature": _jv(scala_sig), "has_scala_sig_attribute":
             _jv("ScalaSig" in ca), "is_scala_module": _jv(bool(scala and module)),
             "scala_companion_of": this[:-1] if scala and module else "none",
             "is_groovy_object": _jv("groovy/lang/GroovyObject" in p["interfaces"]),
@@ -371,8 +393,14 @@ def jar_jvm_facts(data, member=None, question=None):
             "kotlin" if out["has_kotlin_runtime"] == "true" else "none")
     out.update(container_format="jar", jar_language=lang, clojure_namespaces=_jv([_clj_ns(n) for n in inits]),
                jvm_language=lang)
-    target = member or jvm_member_from_question(question, names) or \
+    main_ent = out["main_class"].replace(".", "/") + ".class" if out["main_class"] != "none" else None
+    unit = re.search(r"(?<![\w$/.-])([\w$/-]+\.(?:scala|clj|cljc|groovy|kt|java))\b", question or "")
+    explicit = member or jvm_member_from_question(question.replace(unit.group(1), " ") if unit else question, names)
+    uprim = _jvm_unit_primary(z, names, _jvm_unit_start(z, names, unit.group(1)) if unit else main_ent)
+    target = explicit or (uprim[0] if unit and uprim[0] else None) or \
+        (uprim[0] if uprim[0] and re.search(r"(?i)\bprimary\s+class", question or "") else None) or \
         (out["main_class"] if out["main_class"] != "none" else None)
+    out.update(_jvm_unit_fields(z, names, uprim))
     out["jvm_member"] = "none"
     if target:
         ent = target if target.endswith(".class") else target.replace(".", "/") + ".class"
@@ -382,6 +410,77 @@ def jar_jvm_facts(data, member=None, question=None):
             cf = None
         if cf:
             out = {**cf, **out, "jvm_member": ent, "jvm_language": cf["jvm_language"]}
+    return out
+
+
+def _jvm_cf(z, names, ent):
+    try:
+        return classfile_facts(z.read(ent)) if ent and ent in names else None
+    except (zipfile.BadZipFile, OSError, EOFError, RuntimeError, ValueError, KeyError):
+        return None
+
+
+def _jvm_unit_start(z, names, unit):
+    """Class entry a source unit names ("Day24Vulnerable000.scala", "hello/core.clj"): app classes whose SourceFile
+    is that file name, preferring the one named after it (X / X$ / X__init), then one with main(String[]); falls back to
+    the entry whose basename is the unit stem. None when nothing matches."""
+    fn = unit.rsplit("/", 1)[-1]
+    stem = fn.rsplit(".", 1)[0]
+    pre = unit.rsplit(".", 1)[0].replace(".", "/") if "/" in unit else None
+    cand = []
+    for n in [n for n in names if n.endswith(".class") and not n.startswith("META-INF/")
+              and not JVM_LIBRARY.search(n)][:512]:
+        cf = _jvm_cf(z, names, n)
+        if cf and cf["source_file"] == fn:
+            cand.append((n, cf))
+    if not cand:
+        cand = [(n, None) for n in names if n.rsplit("/", 1)[-1] in (f"{stem}.class", f"{stem}$.class")]
+    for suf in (".class", "$.class", "__init.class"):
+        hit = [n for n, _ in cand if n.rsplit("/", 1)[-1] == stem.replace("-", "_") + suf
+               and (pre is None or n.startswith(pre.replace("-", "_")))]
+        if hit:
+            return hit[0]
+    # Clojure: -main compiles to <ns>$_main (the gen-class stub and <ns>__init carry no SourceFile)
+    hit = [n for n, cf in cand if cf and cf["has_main"] == "true"] or [n for n, _ in cand if n.endswith("$_main.class")]
+    return (hit or [n for n, _ in cand] or [None])[0]
+
+
+def _jvm_unit_primary(z, names, ent):
+    """(primary entry, forwarder entry) of the unit whose class entry is `ent`: scalac `object X` -> X$.class (the
+    module: MODULE$, the logic, the config ldc) is primary and X.class (static forwarders, Main-Class) the forwarder;
+    Clojure gen-class X -> X__init.class primary; otherwise X itself, no forwarder. (None, None) when `ent` is absent."""
+    if not ent or ent not in names:
+        return None, None
+    base = ent[:-6]
+    if base.endswith("$"):
+        cf = _jvm_cf(z, names, ent)
+        if cf and cf["has_module_field"] == "true":
+            return ent, (base[:-1] + ".class" if base[:-1] + ".class" in names else None)
+        return ent, None
+    cf = _jvm_cf(z, names, base + "$.class")
+    if cf and cf["has_module_field"] == "true":
+        return base + "$.class", ent
+    if base + "__init.class" in names and not base.endswith("__init"):
+        return base + "__init.class", ent
+    return ent, None
+
+
+def _jvm_unit_fields(z, names, prim):
+    """primary_/forwarder_ class + classfile fields (each classfile_facts key prefixed) and the jar's scala_major."""
+    out = {}
+    tasty = [n for n in names if n.endswith(".tasty")]
+    for role, ent in zip(("primary", "forwarder"), prim):
+        cf = _jvm_cf(z, names, ent) if ent else None
+        out[f"{role}_classfile"] = ent if cf else "none"
+        out[f"{role}_class"] = cf["this_class"] if cf else "none"
+        out[f"{role}_class_dotted"] = cf["this_class_dotted"] if cf else "none"
+        for k, v in (cf or {}).items():
+            out[f"{role}_{k}"] = v
+        out[f"{role}_scala_major"] = out.get(f"{role}_scala_major", "none")
+    out["module_class"] = out["primary_class"] if out.get("primary_has_module_field") == "true" else "none"
+    majors = {out.get("primary_scala_major"), out.get("forwarder_scala_major")}
+    out.update(tasty_entries=_jv(tasty), tasty_count=str(len(tasty)), has_tasty_entries=_jv(bool(tasty)),
+               scala_major="3" if tasty or "3" in majors else "2" if "2" in majors else "none")
     return out
 
 
@@ -395,6 +494,1922 @@ def jvm_field(data, field, member=None, question=None):
     if f is None:
         return None
     return f.get(field, "none")
+
+
+# --- JVM twin-jar patch diff (D24 "spot the difference": vulnerable vs corrected Scala jar) --------------------------
+# Classes are matched after stripping the role token (Day24Vulnerable000$ ~ Day24Corrected000$, derived from the
+# names themselves), methods by name + descriptor; Code is compared with constant-pool operands RESOLVED to symbols
+# (raw #indexes shift between builds), branch targets as instruction indexes, ldc_w folded into ldc; LineNumberTable /
+# StackMapTable / LocalVariableTable ignored. Lambdas compare by their implementation method (LambdaMetafactory
+# handle); LambdaDeserialize's handle list (grows with every new lambda) is ignored, so $deserializeLambda$ only
+# changes when its code does. Answer spellings follow javap: `score`, `(Ljava/lang/String;)I`, `scala/Option$.apply`.
+_JOPS = ("nop aconst_null iconst_m1 iconst_0 iconst_1 iconst_2 iconst_3 iconst_4 iconst_5 lconst_0 lconst_1 fconst_0 "
+         "fconst_1 fconst_2 dconst_0 dconst_1 bipush sipush ldc ldc_w ldc2_w iload lload fload dload aload " +
+         " ".join(f"{t}load_{n}" for t in "ilfda" for n in range(4)) +
+         " iaload laload faload daload aaload baload caload saload istore lstore fstore dstore astore " +
+         " ".join(f"{t}store_{n}" for t in "ilfda" for n in range(4)) +
+         " iastore lastore fastore dastore aastore bastore castore sastore pop pop2 dup dup_x1 dup_x2 dup2 dup2_x1 "
+         "dup2_x2 swap iadd ladd fadd dadd isub lsub fsub dsub imul lmul fmul dmul idiv ldiv fdiv ddiv irem lrem frem "
+         "drem ineg lneg fneg dneg ishl lshl ishr lshr iushr lushr iand land ior lor ixor lxor iinc i2l i2f i2d l2i "
+         "l2f l2d f2i f2l f2d d2i d2l d2f i2b i2c i2s lcmp fcmpl fcmpg dcmpl dcmpg ifeq ifne iflt ifge ifgt ifle "
+         "if_icmpeq if_icmpne if_icmplt if_icmpge if_icmpgt if_icmple if_acmpeq if_acmpne goto jsr ret tableswitch "
+         "lookupswitch ireturn lreturn freturn dreturn areturn return getstatic putstatic getfield putfield "
+         "invokevirtual invokespecial invokestatic invokeinterface invokedynamic new newarray anewarray arraylength "
+         "athrow checkcast instanceof monitorenter monitorexit wide multianewarray ifnull ifnonnull goto_w "
+         "jsr_w").split()
+assert len(_JOPS) == 0xca
+_JLEN = {**{o: 2 for o in (0x10, 0x12, 0xa9, 0xbc, *range(0x15, 0x1a), *range(0x36, 0x3b))},
+         **{o: 3 for o in (0x11, 0x13, 0x14, 0x84, *range(0x99, 0xa9), *range(0xb2, 0xb9), 0xbb, 0xbd, 0xc0, 0xc1,
+                           0xc6, 0xc7)},
+         0xb9: 5, 0xba: 5, 0xc5: 4, 0xc8: 5, 0xc9: 5}
+_JBRANCH = set(range(0x99, 0xa9)) | {0xc6, 0xc7, 0xc8, 0xc9}
+_JROLE_HINT = re.compile(r"(?i)vuln|correct|patch|fix|secur|safe|orig|bug|broken|before|after|old|new|good|bad")
+
+
+def jvm_code_decode(code):
+    """JVM bytecode -> [(pc, opcode, operands tuple)] (JVMS 6.5; tableswitch/lookupswitch/wide decoded). Raises
+    ValueError on an unknown opcode or a truncated stream."""
+    out, pc, n = [], 0, len(code)
+    while pc < n:
+        op = code[pc]
+        if op >= 0xca:
+            raise ValueError(f"opcode {op:#x}")
+        if op in (0xaa, 0xab):
+            q = (pc + 4) & ~3
+            default, = struct.unpack_from(">i", code, q)
+            if op == 0xaa:
+                lo, hi = struct.unpack_from(">ii", code, q + 4)
+                if not 0 <= hi - lo < 1 << 16:
+                    raise ValueError("tableswitch")
+                offs = struct.unpack_from(f">{hi - lo + 1}i", code, q + 12)
+                arg, nxt = (default, tuple((lo + k, d) for k, d in enumerate(offs))), q + 12 + 4 * (hi - lo + 1)
+            else:
+                np_, = struct.unpack_from(">i", code, q + 4)
+                if not 0 <= np_ < 1 << 16:
+                    raise ValueError("lookupswitch")
+                kv = struct.unpack_from(f">{2 * np_}i", code, q + 8)
+                arg, nxt = (default, tuple(zip(kv[::2], kv[1::2]))), q + 8 + 8 * np_
+            out.append((pc, op, arg))
+            pc = nxt
+            continue
+        if op == 0xc4:   # wide <op> u2 [s2 for iinc]
+            sub = code[pc + 1]
+            ln = 6 if sub == 0x84 else 4
+            raw = code[pc + 2:pc + ln]
+            if len(raw) != ln - 2:
+                raise ValueError("truncated")
+            out.append((pc, sub, struct.unpack(">Hh" if sub == 0x84 else ">H", raw)))
+            pc += ln
+            continue
+        ln = _JLEN.get(op, 1)
+        raw = code[pc + 1:pc + ln]
+        if len(raw) != ln - 1:
+            raise ValueError("truncated")
+        if op in _JBRANCH:
+            arg = struct.unpack(">i" if ln == 5 else ">h", raw)
+        elif op in (0x10,):
+            arg = struct.unpack(">b", raw)
+        elif op in (0x11,):
+            arg = struct.unpack(">h", raw)
+        elif op == 0x84:
+            arg = (raw[0], struct.unpack(">b", raw[1:])[0])
+        elif op in (0xb9, 0xba, 0xc5):
+            arg = (struct.unpack(">H", raw[:2])[0], *raw[2:])
+        elif ln == 3:
+            arg = struct.unpack(">H", raw)
+        else:
+            arg = tuple(raw)
+        out.append((pc, op, arg))
+        pc += ln
+    return out
+
+
+def _jpd_cpl(a, b):
+    n = 0
+    while n < len(a) and n < len(b) and a[n] == b[n]:
+        n += 1
+    return n
+
+
+def _jpd_role(names_a, names_b):
+    """(token a, token b) that turns A's class names into B's (Day24Vulnerable000$ / Day24Corrected000$ ->
+    ('Vulnerable', 'Corrected')), or ('', '') when the names already match."""
+    oa, ob = sorted(set(names_a) - set(names_b))[:200], sorted(set(names_b) - set(names_a))[:200]
+    votes = {}
+    for a in oa:
+        for b in ob:
+            p = _jpd_cpl(a, b)
+            s = _jpd_cpl(a[p:][::-1], b[p:][::-1])
+            ta, tb = a[p:len(a) - s], b[p:len(b) - s]
+            while p and (ta[:1].islower() or tb[:1].islower()) and a[p - 1].isalpha():   # widen to whole
+                p -= 1                                                                    # CamelCase words
+                ta, tb = a[p] + ta, b[p] + tb
+            while s and a[len(a) - s].islower():   # Unp/P -> Unpatched/Patched
+                ta, tb, s = ta + a[len(a) - s], tb + b[len(b) - s], s - 1
+            if ta and tb and "/" not in ta + tb:
+                k = (ta, tb)
+                votes[k] = votes.get(k, 0) + 1 + 2 * bool(_JROLE_HINT.search(ta + tb))
+    if not votes:
+        return "", ""
+    return max(votes, key=lambda k: (votes[k], len(k[0]) + len(k[1])))
+
+
+def _jpd_class(cb, role):
+    """One .class -> {"name", "size", "methods": [(name, descriptor, access, code facts | None)]}; None if unparsable."""
+    p = classfile_parse(cb)
+    if not p:
+        return None
+    cp, u, cname = p["cp"], p["_u"], p["_cname"]
+    tok = role
+
+    def nm(s):
+        if not tok or s is None:
+            return s
+        return s.replace(tok, "\0R").replace(tok.lower(), "\0r")
+
+    def ref(i):   # Field/Method/InterfaceMethodref -> (class, name, desc)
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e or e[0] not in (9, 10, 11):
+            return None, None, None
+        nt = cp[e[1][1]]
+        return cname(e[1][0]), u(nt[1][0]), u(nt[1][1])
+
+    def mh(i):   # MethodHandle -> class.name:desc
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e or e[0] != 15:
+            return None
+        c, n, d = ref(e[1][1])
+        return f"{c}.{n}:{d}"
+
+    def const(i):
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e:
+            return "?"
+        t, v = e
+        return (repr(u(v)) if t == 8 else cname(i) if t == 7 else u(v) if t == 16 else repr(v) if t in (3, 4, 5, 6)
+                else mh(i) if t == 15 else f"cp{t}")
+
+    bsms = []
+    braw = dict(p["attributes"]).get("BootstrapMethods")
+    if braw and len(braw) >= 2:
+        o = 2
+        for _ in range(struct.unpack_from(">H", braw, 0)[0]):
+            bm, na = struct.unpack_from(">HH", braw, o)
+            args = struct.unpack_from(f">{na}H", braw, o + 4)
+            o += 4 + 2 * na
+            bsms.append((mh(bm), args))
+
+    def indy(i):
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e or e[0] != 18:
+            return "?", None
+        bi, nti = e[1]
+        nt = cp[nti][1]
+        bm, args = bsms[bi] if bi < len(bsms) else ("?", ())
+        lam = "LambdaMetafactory" in (bm or "")
+        impl = next((mh(a) for a in args if cp[a] and cp[a][0] == 15), None) if lam else None
+        keep = [const(a) for a in args if cp[a] and cp[a][0] != 15]
+        return f"{u(nt[0])}:{u(nt[1])} bsm={bm} impl={impl} args={keep}", impl
+
+    methods = []
+    for m in p["methods"]:
+        raw = next((b for n, b in m["attributes"] if n == "Code"), None)
+        cf = None
+        if raw and len(raw) >= 8:
+            ln = struct.unpack_from(">I", raw, 4)[0]
+            code = raw[8:8 + ln]
+            ins = jvm_code_decode(code)
+            idx = {pc: k for k, (pc, _, _) in enumerate(ins)}
+            toks, invokes, lambdas, ops = [], [], [], []
+            for pc, op, arg in ins:
+                mn = _JOPS[op]
+                ops.append(mn)
+                if op in _JBRANCH:
+                    t = f"{mn} @{idx.get(pc + arg[0], '?')}"
+                elif op in (0xaa, 0xab):
+                    t = f"{mn} {idx.get(pc + arg[0], '?')} " + ",".join(f"{k}:{idx.get(pc + d, '?')}" for k, d in arg[1])
+                elif op in (0x12, 0x13, 0x14):
+                    t = f"{'ldc2_w' if op == 0x14 else 'ldc'} {const(arg[0])}"
+                elif 0xb2 <= op <= 0xb9:
+                    c, n, d = ref(arg[0])
+                    t = f"{mn} {c}.{n}:{d}"
+                    if op >= 0xb6:
+                        invokes.append((f"{c}.{n}", f"{c}.{n}:{d}"))
+                elif op == 0xba:
+                    s, impl = indy(arg[0])
+                    t = f"{mn} {s}"
+                    if impl:
+                        lambdas.append(impl)
+                elif op in (0xbb, 0xbd, 0xc0, 0xc1, 0xc5):
+                    t = f"{mn} {cname(arg[0])} {arg[1:]}"
+                else:
+                    t = f"{mn} {arg}" if arg else mn
+                toks.append(nm(t))
+            et, o = [], 8 + ln
+            ne = struct.unpack_from(">H", raw, o)[0] if o + 2 <= len(raw) else 0
+            for k in range(ne):
+                s, e_, h, ct = struct.unpack_from(">HHHH", raw, o + 2 + 8 * k)
+                et.append((idx.get(s), idx.get(e_, len(ins)), idx.get(h), nm(cname(ct)) if ct else "any"))
+            cf = {"tokens": tuple(toks), "exc": tuple(et), "code_length": ln, "insns": len(ins), "ops": ops,
+                  "invokes": [(nm(a), nm(b)) for a, b in invokes], "lambdas": [nm(x) for x in lambdas],
+                  "max_stack": struct.unpack_from(">H", raw, 0)[0], "max_locals": struct.unpack_from(">H", raw, 2)[0]}
+        methods.append((m["name"], m["descriptor"], m["access"], cf))
+    return {"name": p["this"], "norm": nm(p["this"]), "size": len(cb), "methods": methods, "nm": nm}
+
+
+def _jpd_classes(blob):
+    b = bytes(blob)
+    if b[:4] == b"\xca\xfe\xba\xbe":   # a bare .class: its this_class names it (role token derivation)
+        p = classfile_parse(b)
+        return [((p and p["this"] or "class") + ".class", b)]
+    return [(n, c) for n, c in jar_app_classes(b) if c[:4] == b"\xca\xfe\xba\xbe"]
+
+
+def _jpd_uniq(xs):
+    return list(dict.fromkeys(xs))
+
+
+def _jpd_fix_kind(ma, mb):
+    """Classify the fix from the before/after code facts (vocabulary SPECULATIVE until a GM label is seen)."""
+    ta, tb = ma or {"ops": [], "invokes": [], "exc": (), "tokens": ()}, mb or {"ops": [], "invokes": [], "exc": (),
+                                                                               "tokens": ()}
+    inv_a, inv_b = {x for x, _ in ta["invokes"]}, {x for x, _ in tb["invokes"]}
+    add_inv = inv_b - inv_a
+    add_ops = {o: tb["ops"].count(o) - ta["ops"].count(o) for o in set(tb["ops"])}
+    grew = lambda *os_: any(add_ops.get(o, 0) > 0 for o in os_)   # noqa: E731
+    if len(tb["exc"]) > len(ta["exc"]):
+        return "exception_handler"
+    if grew("ifnull", "ifnonnull") or any(re.search(r"(Option\$\.apply|Optional\.ofNullable|requireNonNull|"
+                                                    r"Objects\.(isNull|nonNull)|checkNotNull)$", x) for x in add_inv):
+        return "null_guard"
+    if grew("arraylength") or any(re.search(r"(checkIndex|checkFromToIndex|isDefinedAt|lift|indices)$", x)
+                                  for x in add_inv):
+        return "bounds_check"
+    if any(re.search(r"\.(length|isEmpty|nonEmpty|size|isBlank)(\$extension)?$", x) for x in add_inv) \
+            or grew("if_icmplt", "if_icmpge", "if_icmpgt", "if_icmple"):
+        return "length_check"
+    if ta["ops"] == tb["ops"] and ta["tokens"] != tb["tokens"]:
+        return "constant_change"
+    return "logic_change"
+
+
+def jvm_patch_diff(jar_a, jar_b):
+    """Per-class / per-method bytecode diff of twin JVM builds (A = before/vulnerable, B = after/corrected; jar or
+    bare .class bytes) -> {field: answer string}; None when either side holds no parsable class. Fields:
+    changed_methods / changed_method_names / changed_method(_descriptor/_signature) / changed_method_count,
+    changed_class(_a/_b/es), unchanged_methods(_names), added_/removed_methods, method_count_{a,b}, code_length_ /
+    instruction_count_ / max_stack_ / max_locals_ / exception_table_count_ / classfile_size_{a,b}, added_/
+    removed_invokes (+_signatures), added_/removed_lambdas (+_raw), added_/removed_opcodes, fix_kind, role_a/_b.
+    _before/_after and _vulnerable/_corrected alias every _a/_b field."""
+    try:
+        return _jvm_patch_diff(jar_a, jar_b)
+    except Exception:   # noqa: BLE001 -- malformed / decoy input: no answer
+        return None
+
+
+def _jvm_patch_diff(jar_a, jar_b):
+    ca, cb = _jpd_classes(jar_a), _jpd_classes(jar_b)
+    if not ca or not cb:
+        return None
+
+    def names(cl):
+        return [n[:-6] if n.endswith(".class") else n for n, _ in cl]
+    ra, rb = _jpd_role(names(ca), names(cb))
+    pa = [x for x in (_jpd_class(c, ra) for _, c in ca) if x]
+    pb = [x for x in (_jpd_class(c, rb) for _, c in cb) if x]
+    if not pa or not pb:
+        return None
+    bmap = {x["norm"]: x for x in pb}
+    if len(pa) == len(pb) == 1:
+        bmap = {pa[0]["norm"]: pb[0]}
+    rows, changed_classes = [], []
+    for A in pa:
+        B = bmap.get(A["norm"])
+        if not B:
+            continue
+        mb = {(n, B["nm"](d)): (acc, cf) for n, d, acc, cf in B["methods"]}
+        ma = {(n, A["nm"](d)): (acc, cf) for n, d, acc, cf in A["methods"]}
+        ch, same = [], []
+        for n, d, acc, cf in A["methods"]:
+            k = (n, A["nm"](d))
+            if k not in mb:
+                continue
+            acc2, cf2 = mb[k]
+            sig = lambda c: c and (c["tokens"], c["exc"])   # noqa: E731
+            (ch if acc != acc2 or sig(cf) != sig(cf2) else same).append((n, d, cf, cf2))
+        added = [(n, d) for n, d, _, _ in B["methods"] if (n, B["nm"](d)) not in ma]
+        removed = [(n, d) for n, d, _, _ in A["methods"] if (n, A["nm"](d)) not in mb]
+        if ch or added or removed:
+            changed_classes.append(A["name"])
+        rows.append((A, B, ch, same, added, removed))
+    if not rows:
+        return None
+    rows.sort(key=lambda r: (not r[2], not (r[4] or r[5])))
+    A, B, ch, same, added, removed = rows[0]
+    f = {"role_a": ra or "none", "role_b": rb or "none", "classes_compared": str(len(rows)),
+         "changed_classes": _jv(changed_classes), "changed_class_count": str(len(changed_classes))}
+    if not changed_classes:
+        f.update({"changed_methods": "[]", "changed_method_names": "[]", "changed_method_count": "0",
+                  "fix_kind": "none", "changed_class": "none"})
+        return f
+    sig = lambda n, d: f"{n}{d}"   # noqa: E731
+    first = ch[0] if ch else None
+    f.update({
+        "changed_class": A["name"], "changed_class_a": A["name"], "changed_class_b": B["name"],
+        "changed_class_dotted": A["name"].replace("/", "."),
+        "changed_methods": _jv([sig(n, d) for n, d, _, _ in ch]),
+        "changed_method_names": _jv([n for n, _, _, _ in ch]), "changed_method_count": str(len(ch)),
+        "changed_method": first[0] if first else "none",
+        "changed_method_descriptor": first[1] if first else "none",
+        "changed_method_signature": sig(first[0], first[1]) if first else "none",
+        "unchanged_methods": _jv([sig(n, d) for n, d, _, _ in same]),
+        "unchanged_method_names": _jv([n for n, _, _, _ in same]), "unchanged_method_count": str(len(same)),
+        "added_methods": _jv([sig(n, d) for n, d in added]), "added_method_names": _jv([n for n, _ in added]),
+        "removed_methods": _jv([sig(n, d) for n, d in removed]), "removed_method_names": _jv([n for n, _ in removed]),
+        "added_method_count": str(len(added)), "removed_method_count": str(len(removed)),
+        "method_count_a": str(len(A["methods"])), "method_count_b": str(len(B["methods"])),
+        "classfile_size_a": str(A["size"]), "classfile_size_b": str(B["size"]),
+        "jar_size_a": str(len(jar_a)), "jar_size_b": str(len(jar_b)),
+    })
+    xa, xb = (first[2], first[3]) if first else (None, None)
+    for side, c in (("a", xa), ("b", xb)):
+        for k, v in (("code_length", "code_length"), ("instruction_count", "insns"), ("max_stack", "max_stack"),
+                     ("max_locals", "max_locals")):
+            f[f"{k}_{side}"] = str(c[v]) if c else "none"
+        f[f"exception_table_count_{side}"] = str(len(c["exc"])) if c else "none"
+    unrole = lambda s, r: s.replace("\0R", r).replace("\0r", r.lower())   # noqa: E731
+    ia = [x for x, _ in (xa or {}).get("invokes", [])]
+    ib = [x for x, _ in (xb or {}).get("invokes", [])]
+    sa = [x for _, x in (xa or {}).get("invokes", [])]
+    sb = [x for _, x in (xb or {}).get("invokes", [])]
+    f["invokes_a"] = _jv(_jpd_uniq(unrole(x, ra) for x in ia)) if xa else "none"
+    f["invokes_b"] = _jv(_jpd_uniq(unrole(x, rb) for x in ib)) if xb else "none"
+    f["added_invokes"] = _jv(_jpd_uniq(unrole(x, rb) for x in ib if x not in ia))
+    f["removed_invokes"] = _jv(_jpd_uniq(unrole(x, ra) for x in ia if x not in ib))
+    f["added_invoke_signatures"] = _jv(_jpd_uniq(unrole(x, rb) for x in sb if x not in sa))
+    f["removed_invoke_signatures"] = _jv(_jpd_uniq(unrole(x, ra) for x in sa if x not in sb))
+    la, lb = (xa or {}).get("lambdas", []), (xb or {}).get("lambdas", [])
+    short = lambda x: re.sub(r"\$adapted$", "", x.split(":")[0].rsplit(".", 1)[-1])   # noqa: E731
+    f["added_lambdas"] = _jv(_jpd_uniq(short(x) for x in lb if x not in la))
+    f["removed_lambdas"] = _jv(_jpd_uniq(short(x) for x in la if x not in lb))
+    f["added_lambdas_raw"] = _jv(_jpd_uniq(unrole(x, rb) for x in lb if x not in la))
+    f["removed_lambdas_raw"] = _jv(_jpd_uniq(unrole(x, ra) for x in la if x not in lb))
+    f["invokedynamic_count_a"] = str((xa or {}).get("ops", []).count("invokedynamic"))
+    f["invokedynamic_count_b"] = str((xb or {}).get("ops", []).count("invokedynamic"))
+    oa, ob = (xa or {}).get("ops", []), (xb or {}).get("ops", [])
+    f["added_opcodes"] = _jv(sorted({o for o in ob if ob.count(o) > oa.count(o)}))
+    f["removed_opcodes"] = _jv(sorted({o for o in oa if oa.count(o) > ob.count(o)}))
+    f["opcodes_a"], f["opcodes_b"] = _jv(sorted(set(oa))), _jv(sorted(set(ob)))
+    f["catch_types_a"] = _jv(_jpd_uniq(unrole(e[3], ra) for e in (xa or {}).get("exc", ())))
+    f["catch_types_b"] = _jv(_jpd_uniq(unrole(e[3], rb) for e in (xb or {}).get("exc", ())))
+    f["fix_kind"] = _jpd_fix_kind(xa, xb) if first else ("method_added" if added else "method_removed")
+    for k in [k for k in f if k.endswith(("_a", "_b"))]:
+        base, s = k[:-2], k[-1]
+        f[base + ("_before" if s == "a" else "_after")] = f[k]
+        f[base + ("_vulnerable" if s == "a" else "_corrected")] = f[k]
+    return f
+
+
+def jvm_patch_diff_field(jar_a, jar_b, field):
+    """One jvm_patch_diff fact as an answer string; "none" when absent, None when the inputs aren't JVM twins."""
+    f = jvm_patch_diff(jar_a, jar_b)
+    return None if f is None else f.get(field, "none")
+
+
+# --- Native twin patch diff (ELF x86/x86-64 vulnerable/fixed builds: C/C++/Rust/Go) ------------------------------
+# Functions come from .symtab/.dynsym FUNC symbols (sized), else .eh_frame FDEs (stripped -> sub_<hex addr of A>).
+# Twins match by name, else by unique normalised-body hash, else by best (calls, strings, mnemonic shape) score.
+# capstone-lite instructions are normalised: branch targets -> in-function instruction index / imp:<name> (PLT,
+# GOT slot, __x_chk folded to x) / fn:<name>; RIP-relative and absolute image addresses -> str:"..." / obj:<name> /
+# fn:<name> / MEM; immediates kept; nop/int3 padding dropped. Vocabulary of fix_kind is SPECULATIVE (no GM label yet).
+_NPD_RUNTIME = re.compile(r"^(_init|_fini|_start|deregister_tm_clones|register_tm_clones|__do_global_dtors_aux|"
+                          r"frame_dummy|__libc_csu_init|__libc_csu_fini|_dl_relocate_static_pie)$")
+_NPD_UNSAFE = {"strcpy": ("strncpy", "strlcpy", "strcpy_s", "stpncpy", "memcpy", "snprintf"),
+               "stpcpy": ("stpncpy", "strncpy", "strlcpy"),
+               "gets": ("fgets", "gets_s", "getline", "read", "fread"),
+               "sprintf": ("snprintf", "sprintf_s", "asprintf"), "vsprintf": ("vsnprintf", "vsprintf_s"),
+               "strcat": ("strncat", "strlcat", "strcat_s"), "wcscpy": ("wcsncpy", "wcscpy_s"),
+               "scanf": ("fgets", "scanf_s"), "sscanf": ("strtol", "strtoul", "sscanf_s"), "atoi": ("strtol",),
+               "memcpy": ("memmove", "memcpy_s"), "system": ("execve", "execv", "execvp", "posix_spawn"),
+               "rand": ("getrandom", "arc4random"), "tmpnam": ("mkstemp",), "mktemp": ("mkstemp",),
+               "realpath": ("canonicalize_file_name",), "alloca": ("malloc",), "strtok": ("strtok_r",)}
+_NPD_SIGNED, _NPD_UNSIGNED = ("jl", "jle", "jg", "jge"), ("jb", "jbe", "ja", "jae")
+_NPD_REL = {"jl": "jle", "jle": "jl", "jg": "jge", "jge": "jg", "jb": "jbe", "jbe": "jb", "ja": "jae", "jae": "ja"}
+_NPD_JCC = set(_NPD_SIGNED + _NPD_UNSIGNED)
+_NPD_HEX = re.compile(r"(?<![\w$])(-?)0x([0-9a-f]+)")
+_NPD_RIP = re.compile(r"\[(rip|eip) ([+-]) 0x([0-9a-f]+)\]")
+
+
+def _npd_imp(n):
+    n = n.split("@")[0]
+    m = re.fullmatch(r"__(\w+?)_chk", n)
+    return m.group(1) if m else n
+
+
+def _npd_elf(data):
+    """ELF x86 -> {"bits", "funcs": [(addr, size, name, named)], "exec": [(lo, hi, bytes)], "secs", "imp", "obj"}."""
+    from elftools.elf.elffile import ELFFile
+    from elftools.elf.relocation import RelocationSection
+    from elftools.elf.sections import SymbolTableSection
+    ef = ELFFile(io.BytesIO(data))
+    if ef["e_machine"] not in ("EM_X86_64", "EM_386"):
+        return None
+    bits = 64 if ef.elfclass == 64 else 32
+    secs, exe = [], []
+    for s in ef.iter_sections():
+        if s["sh_addr"] and s["sh_type"] != "SHT_NOBITS" and s["sh_size"]:
+            d = s.data()
+            secs.append((s["sh_addr"], s["sh_addr"] + len(d), d, s.name))
+            if s["sh_flags"] & 4:
+                exe.append((s["sh_addr"], s["sh_addr"] + len(d), d, s.name))
+    if not exe:
+        return None
+    slot = {}
+    for s in ef.iter_sections():
+        if isinstance(s, RelocationSection) and s["sh_link"]:
+            st = ef.get_section(s["sh_link"])
+            for r in s.iter_relocations():
+                if r["r_info_sym"]:
+                    nm_ = st.get_symbol(r["r_info_sym"]).name
+                    if nm_:
+                        slot[r["r_offset"]] = _npd_imp(nm_)
+    import capstone
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64 if bits == 64 else capstone.CS_MODE_32)
+    gotplt = next((lo for lo, _, _, n in secs if n == ".got.plt"), 0) or next((lo for lo, _, _, n in secs
+                                                                                if n == ".got"), 0)
+    imp = {}
+    for lo, hi, d, n in exe:
+        if not n.startswith(".plt"):
+            continue
+        for a, sz, mn, op in md.disasm_lite(d, lo):
+            if not mn.endswith("jmp") or "ptr" not in op:
+                continue
+            m = _NPD_RIP.search(op)
+            if m:
+                tgt = a + sz + (1 if m.group(2) == "+" else -1) * int(m.group(3), 16)
+            else:
+                m = re.search(r"\[(?:ebx \+ )?0x([0-9a-f]+)\]", op)
+                if not m:
+                    continue
+                tgt = int(m.group(1), 16) + (gotplt if "ebx" in op else 0)
+            if tgt in slot:
+                imp[lo + ((a - lo) & ~15)] = slot[tgt]
+    funcs, obj, seen = [], {}, set()
+    for s in ef.iter_sections():
+        if not isinstance(s, SymbolTableSection):
+            continue
+        for y in s.iter_symbols():
+            t, v, z = y["st_info"]["type"], y["st_value"], y["st_size"]
+            if t == "STT_OBJECT" and y.name and v:
+                obj.setdefault(v, y.name)
+            if t != "STT_FUNC" or not v or not z or v in seen or not y.name:
+                continue
+            if any(lo <= v < hi for lo, hi, _, _ in exe):
+                seen.add(v)
+                funcs.append((v, z, y.name, True))
+    if not funcs:   # stripped: .eh_frame FDE ranges (.eh_frame_hdr table first; pyelftools CFI walk is slow)
+        try:
+            for v, z in (_npd_ehhdr(secs) or [(h["initial_location"], h["address_range"]) for h in
+                                              (getattr(e, "header", None) for e in ef.get_dwarf_info().EH_CFI_entries())
+                                              if h is not None and "initial_location" in h]):
+                if z:
+                    if v not in seen and v != ef["e_entry"] and any(lo <= v < hi and n_ not in (".init", ".fini")
+                                                                    and not n_.startswith(".plt")
+                                                                    for lo, hi, _, n_ in exe):
+                        seen.add(v)
+                        funcs.append((v, z, f"sub_{v:x}", False))
+        except Exception:   # noqa: BLE001 -- no/odd eh_frame
+            pass
+    funcs.sort()
+    return {"bits": bits, "funcs": funcs, "exec": exe, "secs": secs, "imp": imp, "slot": slot, "obj": obj, "md": md}
+
+
+def _npd_same_raw(x, y):
+    """True when two same-size function bodies differ only in 4-byte fields after a rel32 call/jmp/jcc opcode or a
+    RIP-relative ModRM (mod=00 rm=101) -- i.e. the code only moved."""
+    if len(x) != len(y) or not x:
+        return False
+    if x == y:
+        return True
+    k, n = 0, len(x)
+    while k < n:
+        if x[k] == y[k]:
+            k += 1
+            continue
+        for st in range(max(1, k - 3), k + 1):
+            p = x[st - 1]
+            if p != y[st - 1] or st + 4 > n:
+                continue
+            if p in (0xe8, 0xe9) or (st >= 2 and x[st - 2] == 0x0f and 0x80 <= p <= 0x8f) or \
+                    (st >= 2 and p & 0xc7 == 0x05 and x[st - 2] in (0x8b, 0x8d, 0x89, 0x3b, 0x39, 0x03, 0x2b, 0xff,
+                                                                    0x10, 0x11, 0x28, 0x29, 0x6f, 0x7f, 0xc7, 0x83,
+                                                                    0x81, 0x80, 0xc6, 0x0b, 0x33, 0x23, 0x85, 0xb6,
+                                                                    0xb7, 0xbe, 0xbf, 0x63, 0x2e, 0x2f, 0x58, 0x59,
+                                                                    0x5c, 0x5e, 0x54, 0x57, 0x88, 0x38, 0x3a)):
+                k = st + 4
+                break
+        else:
+            return False
+    return True
+
+
+def _npd_ehhdr(secs):
+    """[(pc_begin, pc_range)] from .eh_frame_hdr's binary-search table (datarel sdata4) + each FDE's pcrel sdata4
+    pc_begin/pc_range (gcc/clang x86 default); [] when the encodings differ (caller falls back to pyelftools)."""
+    hdr = next(((lo, d) for lo, _, d, n in secs if n == ".eh_frame_hdr"), None)
+    if not hdr or len(hdr[1]) < 12:
+        return []
+    lo, d = hdr
+    ver, pe, ce, te = d[:4]
+    if ver != 1 or ce != 0x03 or te != 0x3b or pe != 0x1b:
+        return []
+    cnt, = struct.unpack_from("<I", d, 8)
+    out = []
+    for k in range(min(cnt, (len(d) - 12) // 8)):
+        _, fo = struct.unpack_from("<ii", d, 12 + 8 * k)
+        fa = lo + fo
+        fb = _npd_bytes({"secs": secs}, fa, 16)
+        if len(fb) < 16:
+            return []
+        pcb, pcr = struct.unpack_from("<iI", fb, 8)
+        out.append((fa + 8 + pcb, pcr))
+    return out
+
+
+def _npd_bytes(img, a, n):
+    for lo, hi, d, _ in img["secs"]:
+        if lo <= a < hi:
+            return d[a - lo:a - lo + n]
+    return b""
+
+
+def _npd_ref(img, t, fnames):
+    if t in img["imp"]:
+        return f"imp:{img['imp'][t]}"
+    if t in img["slot"]:
+        return f"imp:{img['slot'][t]}"
+    if t in fnames:
+        return f"fn:{fnames[t]}"
+    if t in img["obj"]:
+        return f"obj:{img['obj'][t]}"
+    s = _npd_bytes(img, t, 96)
+    if s and not any(lo <= t < hi for lo, hi, _, _ in img["exec"]):
+        z = s.split(b"\0", 1)
+        if len(z) == 2 and z[0] and all(32 <= c < 127 or c in (9, 10, 13) for c in z[0]):
+            return "str:" + json.dumps(z[0].decode())
+    return "MEM"
+
+
+def _npd_body(img, fn, fnames):
+    """One function -> list of (normalised token, mnemonic, raw op_str)."""
+    a0, sz, name, _ = fn
+    code = _npd_bytes(img, a0, sz)
+    raw = [(a, s, mn, op) for a, s, mn, op in img["md"].disasm_lite(code, a0) if mn not in ("nop", "int3")]
+    idx = {a: k for k, (a, _, _, _) in enumerate(raw)}
+    lo_img = min(lo for lo, _, _, _ in img["secs"])
+    hi_img = max(hi for _, hi, _, _ in img["secs"])
+    out = []
+    for a, s, mn, op in raw:
+        base = mn.split()[-1]
+        if (base.startswith("j") or base == "call" or base.startswith("loop")) and re.fullmatch(r"0x[0-9a-f]+", op):
+            t = int(op, 16)
+            tok = f"{mn} L{idx[t]}" if t in idx else f"{mn} {_npd_ref(img, t, fnames)}"
+        else:
+            def rip(m, a=a, s=s):
+                return "[" + _npd_ref(img, a + s + (1 if m.group(2) == "+" else -1) * int(m.group(3), 16), fnames) + "]"
+
+            def absv(m):
+                v = int(m.group(2), 16)
+                return _npd_ref(img, v, fnames) if not m.group(1) and v >= 0x1000 and lo_img <= v < hi_img \
+                    else m.group(0)
+            tok = mn + (" " + _NPD_HEX.sub(absv, _NPD_RIP.sub(rip, op)) if op else "")
+        out.append((tok, base, op))
+    return out
+
+
+def _npd_calls(body):
+    return [t.split(" ", 1)[1][4:] for t, b, _ in body if b == "call" and " imp:" in t] + \
+        [t.split("[imp:", 1)[1].rstrip("]") for t, b, _ in body if b == "call" and "[imp:" in t]
+
+
+def _npd_pairs(body, kinds, test=False):
+    """count of cmp (or test r,r when test) immediately followed by a jcc in kinds -> list of cmp operand strings."""
+    out = []
+    for (t0, b0, o0), (_, b1, _) in zip(body, body[1:]):
+        rr = b0 == "test" and len({x.strip() for x in o0.split(",")}) == 1
+        if test:
+            if rr and b1 in kinds:
+                out.append(o0)
+        elif b0 == "cmp" and b1 in kinds or rr and b1 in ("js", "jl", "jns", "jge"):   # + negative-index guard
+            out.append(o0)
+    return out
+
+
+def _npd_frame(body):
+    for t, b, o in body[:12]:
+        m = re.fullmatch(r"[re]?sp, (0x[0-9a-f]+|\d+)", o) if b == "sub" else None
+        if m:
+            return int(m.group(1), 0)
+    return None
+
+
+def _npd_func_diff(ba, bb):
+    import difflib
+    ta, tb = [x[0] for x in ba], [x[0] for x in bb]
+    sm = difflib.SequenceMatcher(None, ta, tb, autojunk=False)
+    added, removed, flips, consts = [], [], [], []
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        if op == "equal":
+            continue
+        removed += ta[i1:i2]
+        added += tb[j1:j2]
+        if op == "replace" and i2 - i1 == j2 - j1:
+            for x, y in zip(ba[i1:i2], bb[j1:j2]):
+                if x[1] != y[1] and x[1] in _NPD_JCC and y[1] in _NPD_JCC:
+                    flips.append(f"{x[1]}->{y[1]}")
+                elif x[1] == y[1]:
+                    va, vb = _NPD_HEX.findall(x[0]), _NPD_HEX.findall(y[0])
+                    if len(va) == len(vb) and _NPD_HEX.sub("#", x[0]) == _NPD_HEX.sub("#", y[0]):
+                        for p, q in zip(va, vb):
+                            if p != q:
+                                consts.append(f"{p[0]}0x{p[1]}->{q[0]}0x{q[1]}")
+    ca, cb = _npd_calls(ba), _npd_calls(bb)
+    rem_c = [c for c in dict.fromkeys(ca) if c not in cb]
+    add_c = [c for c in dict.fromkeys(cb) if c not in ca]
+    repl = []
+    for r in rem_c:
+        cand = [x for x in add_c if x in _NPD_UNSAFE.get(r, ()) or x in (r[:3] + "n" + r[3:], r + "_s", "f" + r,
+                                                                           "sn" + r[1:], r[:4] + "n" + r[4:])]
+        if not cand and len(rem_c) == len(add_c) == 1:
+            cand = add_c
+        if cand:
+            repl.append(f"{r}->{cand[0]}")
+    fa, fb = _npd_frame(ba), _npd_frame(bb)
+    bnd = (_npd_pairs(ba, _NPD_JCC), _npd_pairs(bb, _NPD_JCC))
+    nul = (_npd_pairs(ba, ("je", "jne"), True), _npd_pairs(bb, ("je", "jne"), True))
+    nul_cmp = sum(1 for t, b, o in bb if b == "cmp" and o.endswith(", 0")) - \
+        sum(1 for t, b, o in ba if b == "cmp" and o.endswith(", 0"))
+
+    def null_after_free(body):
+        n = 0
+        for k, (t, b, o) in enumerate(body):
+            if b == "call" and re.search(r"imp:(free|delete|_ZdlPv\w*|_ZdaPv\w*|g_free|kfree)\b", t):
+                n += any(x[1] == "mov" and re.search(r"ptr \[.*\], 0$", x[2]) for x in body[k + 1:k + 4])
+        return n
+    fmt_a = [t for t in ta if "str:" in t and "%" in t]
+    fmt_b = [t for t in tb if "str:" in t and "%" in t]
+    pf = re.compile(r"^v?[fsd]?n?printf|^syslog|^err|^warn")
+    sign = [x for x in flips if (x.split("->")[0] in _NPD_SIGNED) != (x.split("->")[1] in _NPD_SIGNED)]
+    obo = [x for x in flips if _NPD_REL.get(x.split("->")[0]) == x.split("->")[1]]
+    obo_c = [x for x in consts if abs(int(x.split("->")[0], 16) - int(x.split("->")[1], 16)) == 1]
+    unsafe_repl = [x for x in repl if x.split("->")[0] in _NPD_UNSAFE]
+    if unsafe_repl:
+        kind = "replaced_unsafe_call"
+    elif null_after_free(bb) > null_after_free(ba):
+        kind = "null_after_free"
+    elif len(fmt_b) > len(fmt_a) and any(pf.search(c) for c in cb) and not add_c:
+        kind = "format_string"
+    elif len(nul[1]) > len(nul[0]) or nul_cmp > 0 and len(bnd[1]) <= len(bnd[0]):
+        kind = "null_check"
+    elif len(bnd[1]) > len(bnd[0]):
+        kind = "bounds_check"
+    elif sign:
+        kind = "signedness"
+    elif obo or obo_c:
+        kind = "off_by_one"
+    elif repl:
+        kind = "replaced_call"
+    elif fa != fb:
+        kind = "frame_size_change"
+    elif consts:
+        kind = "constant_change"
+    else:
+        kind = "logic_change"
+    new_b = [x for x in bnd[1] if x not in bnd[0]] or bnd[1][len(bnd[0]):]
+    return {"fix_kind": kind, "added_instructions": added, "removed_instructions": removed,
+            "added_instruction_count": len(added), "removed_instruction_count": len(removed),
+            "instruction_count_a": len(ta), "instruction_count_b": len(tb),
+            "calls_a": list(dict.fromkeys(ca)), "calls_b": list(dict.fromkeys(cb)),
+            "removed_calls": rem_c, "added_calls": add_c, "replaced_calls": repl,
+            "frame_size_a": fa, "frame_size_b": fb, "comparison_flips": flips, "changed_constants": consts,
+            "bounds_checks_a": len(bnd[0]), "bounds_checks_b": len(bnd[1]),
+            "inserted_bounds_check": len(bnd[1]) > len(bnd[0]),
+            "bounds_check_operands": new_b if len(bnd[1]) > len(bnd[0]) else [],
+            "inserted_null_check": len(nul[1]) > len(nul[0]) or nul_cmp > 0,
+            "null_after_free": null_after_free(bb) > null_after_free(ba),
+            "signedness_change": bool(sign), "off_by_one": bool(obo or obo_c),
+            "mnemonics_a": sorted({x[1] for x in ba}), "mnemonics_b": sorted({x[1] for x in bb})}
+
+
+def _npd_match(fa, fb, ba, bb):
+    """[(i, j)] pairs of matched function indexes (fa/fb lists, ba/bb normalised bodies)."""
+    pairs, ua, ub = [], set(range(len(fa))), set(range(len(fb)))
+    nb = {}
+    for j, f in enumerate(fb):
+        if f[3]:
+            nb.setdefault(f[2], j)
+    for i, f in enumerate(fa):
+        j = nb.get(f[2]) if f[3] else None
+        if j is not None and j in ub:
+            pairs.append((i, j))
+            ua.discard(i)
+            ub.discard(j)
+    named = all(f[3] for f in fa) and all(f[3] for f in fb) and fa and fb
+    if named:
+        return pairs, ua, ub
+    h = lambda b: hash(tuple(re.sub(r"fn:\S+", "fn", t) for t, _, _ in b))   # noqa: E731
+    ha, hb = {}, {}
+    for i in ua:
+        ha.setdefault(h(ba[i]), []).append(i)
+    for j in ub:
+        hb.setdefault(h(bb[j]), []).append(j)
+    for k, xs in ha.items():
+        if len(xs) == 1 and len(hb.get(k, ())) == 1:
+            pairs.append((xs[0], hb[k][0]))
+            ua.discard(xs[0])
+            ub.discard(hb[k][0])
+    import difflib
+
+    def feat(b):
+        return ({t for t, _, _ in b if "imp:" in t or "str:" in t or "obj:" in t}, [x[1] for x in b])
+    if len(ua) * len(ub) <= 40000:
+        fA, fB = {i: feat(ba[i]) for i in ua}, {j: feat(bb[j]) for j in ub}
+        cand = []
+        for i in ua:
+            for j in ub:
+                sa, sb = fA[i][0], fB[j][0]
+                jac = len(sa & sb) / len(sa | sb) if sa | sb else 0.5
+                r = difflib.SequenceMatcher(None, fA[i][1], fB[j][1], autojunk=False).quick_ratio()
+                cand.append((jac + r, i, j))
+        for sc, i, j in sorted(cand, reverse=True):
+            if sc >= 0.9 and i in ua and j in ub:
+                pairs.append((i, j))
+                ua.discard(i)
+                ub.discard(j)
+    return pairs, ua, ub
+
+
+def native_patch_diff(a, b):
+    """Per-function diff of twin native builds (A = vulnerable/before, B = fixed/after; ELF x86/x86-64 bytes) ->
+    {field: answer string}; None when either side is not a parsable x86 ELF with functions. Fields:
+    changed_functions (A address order) / changed_function / changed_function_count / changed_function_address(_a/_b),
+    unchanged_function_count, added_/removed_functions, function_count_a/b, fix_kind (replaced_unsafe_call,
+    null_after_free, format_string, null_check, bounds_check, signedness, off_by_one, replaced_call,
+    frame_size_change, constant_change, logic_change; "none" when nothing changed), added_/removed_instructions(+
+    _count), instruction_count_a/b, calls_a/b, added_/removed_calls, replaced_calls / replaced_call ("strcpy->
+    strncpy"), unsafe_call / safe_call, frame_size_a/b (+ _hex), comparison_flips / comparison_flip ("jle->jl"),
+    changed_constants, inserted_bounds_check / bounds_check_operands, inserted_null_check, null_after_free,
+    signedness_change, off_by_one. "<field>:<function>" per changed function; _before/_after, _vulnerable/_fixed/
+    _patched alias every _a/_b field."""
+    try:
+        return _native_patch_diff(bytes(a), bytes(b))
+    except Exception:   # noqa: BLE001 -- malformed / decoy input: no answer
+        return None
+
+
+def _native_patch_diff(a, b):
+    if a[:4] != b"\x7fELF" or b[:4] != b"\x7fELF":
+        return None
+    ia, ib = _npd_elf(a), _npd_elf(b)
+    if not ia or not ib or not ia["funcs"] or not ib["funcs"]:
+        return None
+    fa = [f for f in ia["funcs"] if not _NPD_RUNTIME.match(f[2])]
+    fb = [f for f in ib["funcs"] if not _NPD_RUNTIME.match(f[2])]
+    if max(len(fa), len(fb)) > 3000 and not all(x[3] for x in fa + fb):
+        return None   # huge stripped twins: no symbol anchor, too slow to align inside the clock
+    deadline = time.monotonic() + 2.5
+    na = {f[0]: f[2] for f in ia["funcs"]} if all(f[3] for f in fa) else {f[0]: "?" for f in ia["funcs"]}
+    nb = {f[0]: f[2] for f in ib["funcs"]} if all(f[3] for f in fb) else {f[0]: "?" for f in ib["funcs"]}
+    same = set()   # name-matched twins whose bytes differ only inside rel32/disp32 fields: unchanged, no disasm
+    if all(x[3] for x in fa) and all(x[3] for x in fb):
+        ixb = {x[2]: x for x in fb}
+        for x in fa:
+            y = ixb.get(x[2])
+            if y and _npd_same_raw(_npd_bytes(ia, x[0], x[1]), _npd_bytes(ib, y[0], y[1])):
+                same.add(x[2])
+    ba, bb = [], []
+    for fs, img, nm_, out in ((fa, ia, na, ba), (fb, ib, nb, bb)):
+        for f in fs:
+            if time.monotonic() > deadline:
+                return None
+            out.append([("=" + f[2], "", "")] if f[2] in same else _npd_body(img, f, nm_))
+    pairs, ua, ub = _npd_match(fa, fb, ba, bb)
+    pairs.sort()
+    changed = [(i, j) for i, j in pairs if [t for t, _, _ in ba[i]] != [t for t, _, _ in bb[j]]]
+    f = {"function_count_a": str(len(fa)), "function_count_b": str(len(fb)),
+         "matched_function_count": str(len(pairs)),
+         "changed_functions": _jv([fa[i][2] for i, _ in changed]), "changed_function_count": str(len(changed)),
+         "unchanged_function_count": str(len(pairs) - len(changed)),
+         "added_functions": _jv([fb[j][2] for j in sorted(ub)]), "removed_functions": _jv([fa[i][2] for i in sorted(ua)]),
+         "stripped_a": str(not all(x[3] for x in fa)).lower(), "stripped_b": str(not all(x[3] for x in fb)).lower()}
+    if not changed:
+        f.update({"fix_kind": "none", "changed_function": "none"})
+        return f
+    for n, (i, j) in enumerate(changed):
+        d = _npd_func_diff(ba[i], bb[j])
+        pre = {"changed_function": fa[i][2], "changed_function_a": fa[i][2], "changed_function_b": fb[j][2],
+               "changed_function_address": hex(fa[i][0]), "changed_function_address_a": hex(fa[i][0]),
+               "changed_function_address_b": hex(fb[j][0]), "function_size_a": str(fa[i][1]),
+               "function_size_b": str(fb[j][1])}
+        for k, v in d.items():
+            if isinstance(v, bool):
+                v = str(v).lower()
+            elif isinstance(v, list):
+                v = _jv(v)
+            elif v is None:
+                v = "none"
+            pre[k] = str(v)
+        for k in ("frame_size_a", "frame_size_b"):
+            pre[k + "_hex"] = hex(int(pre[k])) if pre[k] != "none" else "none"
+        for k, src in (("replaced_call", "replaced_calls"), ("comparison_flip", "comparison_flips"),
+                       ("changed_constant", "changed_constants")):
+            pre[k] = d[src][0] if d[src] else "none"
+        pre["unsafe_call"] = d["replaced_calls"][0].split("->")[0] if d["replaced_calls"] else "none"
+        pre["safe_call"] = d["replaced_calls"][0].split("->")[1] if d["replaced_calls"] else "none"
+        for k, v in pre.items():
+            f[f"{k}:{fa[i][2]}"] = v
+            if n == 0:
+                f[k] = v
+    for k in [k for k in f if k.endswith(("_a", "_b")) and ":" not in k]:
+        base, s = k[:-2], k[-1]
+        for al in (("_before", "_after"), ("_vulnerable", "_fixed"), ("_vulnerable", "_patched")):
+            f[base + al[s == "b"]] = f[k]
+    return f
+
+
+def native_patch_diff_field(a, b, field):
+    """One native_patch_diff fact; "none" when absent, None when the inputs aren't x86 ELF twins."""
+    f = native_patch_diff(a, b)
+    return None if f is None else f.get(field, "none")
+
+
+# --- Vulnerability class of a twin-build fix (CWE token + snake_case name) ------------------------------------------
+# Rule table over the jvm_patch_diff / native_patch_diff facts (A = vulnerable, B = fixed). The GM spelling is
+# UNKNOWN (D24 fixture = CWE-476 null guard): answer "CWE-<n>" / "<n>" / the snake_case name, or hand an enum's
+# accepted_values to vuln_class_pick(). Unclassifiable fix -> None (the worker answers), unchanged twins -> "none".
+_VC_NAMES = {
+    476: ("null_pointer_dereference", "null_dereference", "null_deref", "null_pointer", "null_pointer_deref", "npd"),
+    125: ("out_of_bounds_read", "oob_read", "buffer_over_read", "buffer_overread", "out_of_bounds_access"),
+    787: ("out_of_bounds_write", "oob_write", "buffer_overflow", "stack_buffer_overflow", "heap_buffer_overflow",
+          "buffer_overrun", "classic_buffer_overflow", "buffer_copy_without_checking_size"),
+    193: ("off_by_one", "off_by_one_error"),
+    190: ("integer_overflow", "integer_overflow_or_wraparound", "int_overflow", "integer_wraparound", "arithmetic_overflow"),
+    195: ("signedness_error", "signed_to_unsigned_conversion_error", "signedness", "signed_unsigned_mismatch",
+          "integer_signedness", "sign_conversion"),
+    134: ("format_string", "use_of_externally_controlled_format_string", "format_string_vulnerability",
+          "uncontrolled_format_string", "format_string_injection"),
+    416: ("use_after_free", "uaf", "dangling_pointer"),
+    415: ("double_free",),
+    369: ("divide_by_zero", "division_by_zero", "div_by_zero", "divide_by_zero_error"),
+    252: ("unchecked_return_value", "unchecked_return", "unchecked_error_condition"),
+    367: ("toctou", "toctou_race_condition", "time_of_check_time_of_use", "race_condition"),
+    78: ("command_injection", "os_command_injection", "shell_injection"),
+    89: ("sql_injection", "sqli"),
+    22: ("path_traversal", "directory_traversal"),
+    502: ("unsafe_deserialization", "deserialization_of_untrusted_data", "insecure_deserialization"),
+    248: ("uncaught_exception", "unhandled_exception", "improper_exception_handling"),
+    338: ("weak_prng", "use_of_cryptographically_weak_prng", "insecure_randomness"),
+    377: ("insecure_temporary_file", "insecure_temp_file"),
+}
+_VC_MEMO = []
+_VC_JLOAD = {"iaload", "baload", "caload", "saload", "laload", "faload", "daload", "aaload"}
+_VC_JSTORE = {"iastore", "bastore", "castore", "sastore", "lastore", "fastore", "dastore", "aastore"}
+_VC_CPY = re.compile(r"^(mem(cpy|move|set)|str(n?cpy|n?cat|lcpy|lcat)|stpn?cpy|w?mem\w*|v?sn?printf|gets|fgets|read|"
+                     r"recv\w*|fread|scanf|sscanf|fscanf|wcs\w*cpy)$")
+_VC_ZT = re.compile(r"^(?:test (\w+), \1|cmp (\w+|(?:byte|word|dword|qword) ptr \[[^\]]*\]), 0)$")
+
+
+def _vc_list(f, k):
+    try:
+        v = json.loads(f.get(k) or "[]")
+        return v if isinstance(v, list) else []
+    except ValueError:
+        return []
+
+
+def _vc_w32(opnd):
+    """Width of a zero-tested operand: True for 32-bit (int: divisor/flag), False for 64-bit (pointer)."""
+    return bool(re.fullmatch(r"e\w\w|r\d+d|dword ptr .*|[a-d]l|[sd]il|r\d+b|byte ptr .*|word ptr .*|\w\w", opnd))
+
+
+def _vc_native(f):
+    rem, add = _vc_list(f, "removed_instructions"), _vc_list(f, "added_instructions")
+    ca, cb = _vc_list(f, "calls_a"), _vc_list(f, "calls_b")
+    rc, ac = _vc_list(f, "removed_calls"), _vc_list(f, "added_calls")
+    ma, mb = set(_vc_list(f, "mnemonics_a")), set(_vc_list(f, "mnemonics_b"))
+    fk, repl = f.get("fix_kind"), _vc_list(f, "replaced_calls")
+    zt = [m.group(1) or m.group(2) for m in (_VC_ZT.match(t) for t in add) if m]
+    free_rm = sum("imp:free" in t for t in rem) - sum("imp:free" in t for t in add)
+    if any(c in ("access", "faccessat", "stat", "lstat", "__xstat", "__lxstat", "stat64") for c in rc) \
+            and any(re.match(r"^(f?open(at)?(64)?|creat|unlink|rename|chmod|chown)$", c) for c in ca):
+        return 367, "check-then-use call removed"
+    unsafe = repl[0].split("->")[0] if fk == "replaced_unsafe_call" and repl else ""
+    if unsafe in ("system", "popen") or any(c in ("system", "popen") for c in rc) and \
+            any(re.match(r"^(execv\w*|execl\w*|posix_spawnp?|fork)$", c) for c in ac):
+        return 78, "shell call replaced"
+    if any(c in ("system", "popen") for c in ca + cb) and any(re.match(r"^(strpbrk|strcspn|strspn|strchr|isalnum|"
+                                                                      r"isalpha|isdigit|__ctype_b_loc)$", c) for c in ac):
+        return 78, "shell argument sanitised"
+    if any(re.match(r"^(sqlite3_exec|mysql_(real_)?query|PQexec)$", c) for c in rc) or \
+            any(re.match(r"^(sqlite3_(prepare\w*|bind_\w+)|mysql_stmt_\w+|PQexecParams|PQprepare)$", c) for c in ac):
+        return 89, "query built by string -> prepared/bound"
+    if unsafe in ("rand", "srand", "random"):
+        return 338, "weak PRNG replaced"
+    if unsafe in ("tmpnam", "mktemp", "tempnam"):
+        return 377, "temp-name call replaced"
+    if unsafe:
+        return 787, f"unbounded {unsafe} replaced"
+    if any(c in ("realpath", "canonicalize_file_name", "basename", "__xpg_basename") for c in ac) or \
+            any("str:" in t and re.search(r"\"[^\"]*\.\.[/\\\\]?[^\"]*\"", t) for t in add):
+        return 22, "path canonicalised / '..' rejected"
+    if fk == "null_after_free":
+        return (415, "second free removed") if free_rm > 0 else (416, "pointer nulled after free")
+    if free_rm > 0 and fk != "null_check":
+        return 415, "free removed"
+    if any("imp:free" in t for t in rem) and any("imp:free" in t for t in add):
+        return 416, "free moved after the last use"
+    if fk == "format_string":
+        return 134, "format literal added"
+    if (mb - ma) & {"jo", "jno", "seto", "setno", "jc", "setc", "setb"} or \
+            any(re.match(r"^__(add|sub|mul|neg)v[sdt]i3$|^__builtin_\w+_overflow$|^__mulodi4$", c) for c in ac):
+        return 190, "overflow flag test added"
+    if ma & {"div", "idiv"} and any(_vc_w32(z) for z in zt):
+        return 369, "divisor zero test added"
+    if fk == "null_check" and zt and all(_vc_w32(z) for z in zt) and \
+            any(re.match(r"^(set[ug]id|sete[ug]id|setres[ug]id|read|write|recv|send|chdir|chroot|fread|fwrite|fseek|"
+                         r"mkdir|pthread_mutex_lock|seteuid|setgroups|close)$", c) for c in ca):
+        return 252, "return value now tested"
+    if fk == "null_check":
+        return 476, "null test added"
+    if fk == "signedness":
+        return 195, "signed -> unsigned compare"
+    if fk == "off_by_one":
+        return 193, "comparison/limit tightened by one"
+    if fk == "bounds_check":
+        if any(_VC_CPY.match(c) for c in ca) or f.get("_st_a"):
+            return 787, "bounds check before a write"
+        return 125, "bounds check before a read"
+    if fk == "frame_size_change" and f.get("frame_size_b", "none") != "none" and \
+            int(f.get("frame_size_b")) > int(f.get("frame_size_a") if f.get("frame_size_a", "none") != "none" else 0):
+        return 787, "buffer enlarged"
+    return None, "unclassified " + str(fk)
+
+
+def _vc_jvm(f):
+    ia, ib = _vc_list(f, "invokes_a"), _vc_list(f, "invokes_b")
+    ai, ri = _vc_list(f, "added_invokes"), _vc_list(f, "removed_invokes")
+    sig = _vc_list(f, "added_invoke_signatures")
+    oa, ob = set(_vc_list(f, "opcodes_a")), set(_vc_list(f, "opcodes_b"))
+    ao, ro = set(_vc_list(f, "added_opcodes")), set(_vc_list(f, "removed_opcodes"))
+    am = _vc_list(f, "added_method_names")
+    exc = [x for x in _vc_list(f, "catch_types_b") if x not in _vc_list(f, "catch_types_a")]
+    fk = f.get("fix_kind")
+    has = lambda xs, rx: any(re.search(rx, x) for x in xs)   # noqa: E731
+    if has(ia + ib, r"ObjectInputStream\.readObject|XMLDecoder\.readObject|readUnshared") and (
+            has(ai, r"ObjectInputFilter|setObjectInputFilter|resolveClass|ValidatingObjectInputStream|Filter\.") or
+            "resolveClass" in am or has(ri, r"\.readObject$|readUnshared$")):
+        return 502, "deserialization filtered"
+    if has(ri, r"Statement\.(execute\w*)$|Connection\.createStatement$") and \
+            has(ai, r"prepareStatement$|PreparedStatement\.set\w+$|PreparedStatement\.execute\w*$"):
+        return 89, "string query -> PreparedStatement"
+    if has(ia + ib, r"Runtime\.exec$|ProcessBuilder\.(<init>|command|start)$") and (
+            has(sig, r"Runtime\.exec:\(\[Ljava/lang/String;") or has(ri, r"Runtime\.exec$") and
+            has(ai, r"ProcessBuilder") or
+            has(ai, r"String\.(matches|contains|indexOf|replace\w*|chars)$|Pattern\.|Matcher\.|Character\.is")):
+        return 78, "command argument sanitised"
+    if has(ai, r"File\.getCanonical(Path|File)$|Path\.(normalize|toRealPath|startsWith)$|FilenameUtils\.normalize|"
+               r"Paths?\.get.*normalize"):
+        return 22, "path canonicalised"
+    if has(ri, r"File\.(exists|canRead|canWrite|isFile|isDirectory)$") and \
+            has(ia + ib, r"File(Input|Output)Stream\.<init>|Files\.new|RandomAccessFile"):
+        return 367, "check-then-use removed"
+    if has(ai, r"(Math|StrictMath)\.(add|subtract|multiply|increment|decrement|negate|to)\w*Exact$"):
+        return 190, "exact arithmetic"
+    if has(ai, r"(Integer|Long)\.(compareUnsigned|toUnsigned\w+|divideUnsigned|remainderUnsigned)$|"
+               r"(Byte|Short)\.toUnsigned\w+$"):
+        return 195, "unsigned conversion"
+    if any(re.search(r"NullPointerException$", x) for x in exc):
+        return 476, "NPE caught"
+    if any(re.search(r"IndexOutOfBounds\w*$", x) for x in exc):
+        return 125, "index exception caught"
+    if any(re.search(r"ArithmeticException$", x) for x in exc):
+        return 369, "ArithmeticException caught"
+    if oa & {"idiv", "irem", "ldiv", "lrem"} and (ao & {"ifeq", "ifne", "lcmp"} or fk == "logic_change"
+                                                  and ob & {"ifeq", "ifne"}) and "ifnull" not in ao:
+        return 369, "divisor zero test added"
+    if fk == "null_guard":
+        return 476, "null guard added"
+    swaps = {("if_icmpgt", "if_icmpge"), ("if_icmpge", "if_icmpgt"), ("if_icmplt", "if_icmple"),
+             ("if_icmple", "if_icmplt"), ("ifgt", "ifge"), ("ifge", "ifgt"), ("iflt", "ifle"), ("ifle", "iflt")}
+    if len(ao) == len(ro) == 1 and (next(iter(ro)), next(iter(ao))) in swaps:
+        return 193, "relational branch tightened by one"
+    if fk in ("bounds_check", "length_check", "exception_handler"):
+        if oa & _VC_JSTORE or has(ia, r"System\.arraycopy$|Arrays\.fill$|\.put$|\.set$|\.setCharAt$"):
+            return 787, "bounds check before a write"
+        if oa & _VC_JLOAD or has(ia, r"\.(charAt|codePointAt|substring|get|apply|getBytes)$") or \
+                any(re.search(r"IndexOutOfBounds", x) for x in exc):
+            return 125, "bounds check before a read"
+    if fk == "exception_handler" and exc:
+        return 248, "exception now caught"
+    return None, "unclassified " + str(fk)
+
+
+def vuln_class_from_facts(f, platform=None):
+    """(cwe int | None, evidence) from a jvm_patch_diff / native_patch_diff fact dict."""
+    if not f:
+        return None, "no facts"
+    plat = platform or ("jvm" if "role_a" in f else "native")
+    return (_vc_jvm if plat == "jvm" else _vc_native)(f)
+
+
+
+def patch_vuln_class(a, b):
+    """Twin builds (A = vulnerable, B = fixed: jars/.class or x86 ELF) -> {field: answer}; None when neither diff
+    parses. Fields: cwe / cwe_id / cwe_token ("CWE-476"), cwe_number ("476"), vulnerability_class / vuln_class /
+    bug_class / cwe_name / class_name ("null_pointer_dereference"), cwe_with_name ("CWE-476: null_pointer_dereference"),
+    cwe_aliases (JSON), platform, fix_kind, evidence. Unchanged twins -> "none"; unclassifiable fix -> field absent."""
+    a, b = bytes(a), bytes(b)
+    if _VC_MEMO and _VC_MEMO[0] == a and _VC_MEMO[1] == b:   # several fields of one pair: diff once
+        return _VC_MEMO[2]
+    try:
+        r = _patch_vuln_class(a, b)
+    except Exception:   # noqa: BLE001 -- malformed / decoy input: no answer
+        r = None
+    _VC_MEMO[:] = [a, b, r]
+    return r
+
+
+def _vc_indexed_store(body):
+    for t, mn, op in body:
+        if mn.startswith(("mov", "stos")) and ", " in op:
+            dst = op.split(", ")[0]
+            m = re.search(r"ptr \[([^\]]*)\]", dst)
+            if m and "rip" not in m.group(1):
+                regs = [x.strip() for x in re.split(r"[+-]", m.group(1)) if re.match(r"^[a-z]\w*(\*\d)?$", x.strip())]
+                if len(regs) >= 2 or any("*" in x for x in regs):
+                    return True
+    return False
+
+
+def _patch_vuln_class(a, b):
+    f, plat = None, None
+    if a[:4] == b"\x7fELF" and b[:4] == b"\x7fELF":
+        f, plat = _native_patch_diff(a, b), "native"
+        if f and f.get("fix_kind") == "bounds_check" and f.get("changed_function", "none") != "none":
+            ia = _npd_elf(a)
+            fn = next((x for x in ia["funcs"] if x[2] == f["changed_function"] and
+                       hex(x[0]) == f.get("changed_function_address")), None) if ia else None
+            if fn:
+                nm_ = {x[0]: x[2] for x in ia["funcs"]} if all(x[3] for x in ia["funcs"]) else \
+                    {x[0]: "?" for x in ia["funcs"]}
+                f = dict(f, _st_a=_vc_indexed_store(_npd_body(ia, fn, nm_)))
+    else:
+        f, plat = _jvm_patch_diff(a, b), "jvm"
+    if not f:
+        return None
+    out = {"platform": plat, "fix_kind": f.get("fix_kind", "none")}
+    if f.get("fix_kind") in (None, "none"):
+        return dict(out, **{k: "none" for k in ("cwe", "cwe_id", "cwe_token", "cwe_number", "vulnerability_class",
+                                                "vuln_class", "bug_class", "cwe_name", "class_name", "cwe_with_name")})
+    n, ev = vuln_class_from_facts(f, plat)
+    out["evidence"] = ev
+    if n is None:
+        return out
+    name = _VC_NAMES[n][0]
+    out.update({"cwe": f"CWE-{n}", "cwe_id": f"CWE-{n}", "cwe_token": f"CWE-{n}", "cwe_number": str(n),
+                "vulnerability_class": name, "vuln_class": name, "bug_class": name, "cwe_name": name,
+                "class_name": name, "cwe_with_name": f"CWE-{n}: {name}", "cwe_aliases": _jv(list(_VC_NAMES[n]))})
+    return out
+
+
+def patch_vuln_class_field(a, b, field):
+    """One patch_vuln_class fact; "none" when absent, None when the inputs aren't comparable twins."""
+    f = patch_vuln_class(a, b)
+    return None if f is None else f.get(field, "none")
+
+
+def vuln_class_pick(cwe, accepted_values):
+    """Map a CWE (int / "CWE-476" / snake name) onto a GM enum's accepted_values spelling; None when no value fits."""
+    m = re.search(r"\d+", str(cwe))
+    n = int(m.group()) if m else next((k for k, v in _VC_NAMES.items() if str(cwe) in v), None)
+    if n is None:
+        return None
+    norm = lambda s: re.sub(r"[^a-z0-9]+", "_", str(s).lower()).strip("_")   # noqa: E731
+    vals = list(accepted_values or ())
+    for v in vals:
+        if re.search(rf"(?<!\d){n}(?!\d)", str(v)) and re.search(r"cwe|^\W*\d+\W*$", str(v), re.I):
+            return v
+    al = _VC_NAMES.get(n, ())
+    for v in vals:
+        if norm(v) in al:
+            return v
+    for v in vals:
+        if any(x in norm(v) or norm(v) in x for x in al if len(norm(v)) > 3):
+            return v
+    return None
+
+
+# --- JVM trigger proof: tiny bytecode evaluator over the changed method of twin builds -------------------------
+class _JtThrow(Exception):
+    def __init__(self, cls):
+        super().__init__(cls)
+        self.cls = cls
+
+
+class _JtUnk(Exception):
+    pass
+
+
+class _JtObj:
+    def __init__(self, cls):
+        self.cls, self.f = cls, {}
+
+
+class _JtArr(list):
+    pass
+
+
+class _JtOpt:   # scala.Option / java.util.Optional (v is the payload; empty when not some)
+    def __init__(self, v, some):
+        self.v, self.some = v, some
+
+
+class _JtLam:
+    def __init__(self, kind, owner, name, desc, cap):
+        self.kind, self.owner, self.name, self.desc, self.cap = kind, owner, name, desc, cap
+
+
+_JT_NPE, _JT_SIOOBE, _JT_AIOOBE = ("java/lang/NullPointerException", "java/lang/StringIndexOutOfBoundsException",
+                                   "java/lang/ArrayIndexOutOfBoundsException")
+_JT_SUPER = {_JT_NPE: "java/lang/RuntimeException", _JT_SIOOBE: "java/lang/IndexOutOfBoundsException",
+             _JT_AIOOBE: "java/lang/IndexOutOfBoundsException",
+             "java/lang/IndexOutOfBoundsException": "java/lang/RuntimeException",
+             "java/lang/ArithmeticException": "java/lang/RuntimeException",
+             "java/lang/NumberFormatException": "java/lang/IllegalArgumentException",
+             "java/lang/IllegalArgumentException": "java/lang/RuntimeException",
+             "java/lang/IllegalStateException": "java/lang/RuntimeException",
+             "java/util/NoSuchElementException": "java/lang/RuntimeException",
+             "java/lang/NegativeArraySizeException": "java/lang/RuntimeException",
+             "java/lang/ClassCastException": "java/lang/RuntimeException",
+             "java/lang/UnsupportedOperationException": "java/lang/RuntimeException",
+             "java/lang/RuntimeException": "java/lang/Exception", "java/lang/Exception": "java/lang/Throwable",
+             "java/lang/Error": "java/lang/Throwable"}
+_JT_PARAM = re.compile(r"\[*(?:L[^;]+;|[BCDFIJSZ])")
+_JT_I32 = lambda v: ((v + (1 << 31)) & 0xffffffff) - (1 << 31)   # noqa: E731
+_JT_I64 = lambda v: ((v + (1 << 63)) & ((1 << 64) - 1)) - (1 << 63)   # noqa: E731
+
+
+def _jt_isa(cls, want):
+    while cls:
+        if cls == want:
+            return True
+        cls = _JT_SUPER.get(cls)
+    return False
+
+
+def _jt_str(v, t="L"):
+    if v is None:
+        return "null"
+    if isinstance(v, str):
+        return v
+    if t == "C":
+        return chr(v & 0xffff)
+    if t == "Z":
+        return "true" if v else "false"
+    if isinstance(v, _JtOpt):
+        return f"Some({_jt_str(v.v)})" if v.some else "None"
+    if isinstance(v, (int, float)):
+        return str(v)
+    raise _JtUnk("tostr")
+
+
+def _jt_parse_int(s, lo=-(1 << 31), hi=(1 << 31) - 1):
+    if s is None or not re.fullmatch(r"[+-]?[0-9]+", s) or not lo <= int(s) <= hi:
+        raise _JtThrow("java/lang/NumberFormatException")
+    return int(s)
+
+
+def _jt_jhash(s):
+    h = 0
+    for ch in s.encode("utf-16-be").decode("utf-16-be"):
+        h = (31 * h + ord(ch)) & 0xffffffff
+    return _JT_I32(h)
+
+
+class _JtVm:
+    def __init__(self, classes, budget=20000, deadline=None):
+        self.classes, self.statics, self.inited = classes, {}, set()
+        self.steps, self.deadline = budget, deadline
+
+    def method(self, cls, name, desc):
+        seen = 0
+        while cls in self.classes and seen < 16:
+            p = self.classes[cls]
+            for m in p["methods"]:
+                if m["name"] == name and (desc is None or m["descriptor"] == desc):
+                    return cls, p, m
+            cls, seen = p.get("super"), seen + 1
+        return None
+
+    def clinit(self, cls):
+        if cls in self.inited or cls not in self.classes:
+            return
+        self.inited.add(cls)
+        if self.method(cls, "<clinit>", "()V"):
+            try:
+                self.run(cls, "<clinit>", "()V", [], depth=1)
+            except _JtThrow:
+                pass
+
+    def call_lam(self, lam, args):
+        a = list(lam.cap) + list(args)
+        if lam.kind == 8:   # newInvokeSpecial
+            o = _JtObj(lam.owner)
+            self.invoke("special", lam.owner, "<init>", lam.desc, o, a, 1)
+            return o
+        if lam.kind == 6:
+            return self.invoke("static", lam.owner, lam.name, lam.desc, None, a, 1)
+        if not a:
+            raise _JtUnk("lam recv")
+        return self.invoke("virtual", lam.owner, lam.name, lam.desc, a[0], a[1:], 1)
+
+    def invoke(self, kind, owner, name, desc, recv, args, depth):
+        if kind != "static":
+            if recv is None:
+                raise _JtThrow(_JT_NPE)
+            if isinstance(recv, _JtLam) and name not in ("equals", "hashCode", "toString", "getClass"):
+                return self.call_lam(recv, args)
+            tgt = recv.cls if kind != "special" and isinstance(recv, _JtObj) and recv.cls in self.classes else owner
+            hit = self.method(tgt, name, desc) or (self.method(owner, name, desc) if tgt != owner else None)
+        else:
+            hit = self.method(owner, name, desc)
+        if hit and any(n == "Code" for n, _ in hit[2]["attributes"]):
+            if name == "<init>" or kind == "static":
+                self.clinit(hit[0])
+            return self.run(hit[0], name, desc, ([] if kind == "static" else [recv]) + list(args), depth + 1)
+        return _jt_stub(self, owner, name, desc, recv, args)
+
+    def run(self, cls, name, desc, args, depth=0):
+        if depth > 40:
+            raise _JtUnk("depth")
+        hit = self.method(cls, name, desc)
+        if not hit:
+            raise _JtUnk("no method")
+        _, p, m = hit
+        raw = next((b for n, b in m["attributes"] if n == "Code"), None)
+        if not raw:
+            raise _JtUnk("no code")
+        mstack, mloc, ln = struct.unpack_from(">HHI", raw, 0)
+        code = raw[8:8 + ln]
+        key = (cls, name, desc)
+        ins = p.setdefault("_jt_code", {}).get(key)
+        if ins is None:
+            ins = jvm_code_decode(code)
+            p["_jt_code"][key] = ins
+        idx = {pc: k for k, (pc, _, _) in enumerate(ins)}
+        o, et = 8 + ln, []
+        for k in range(struct.unpack_from(">H", raw, o)[0] if o + 2 <= len(raw) else 0):
+            s, e_, h, ct = struct.unpack_from(">HHHH", raw, o + 2 + 8 * k)
+            et.append((s, e_, h, p["_cname"](ct) if ct else None))
+        loc = [None] * max(mloc, 1)
+        j = 0
+        for v, t in zip(args, (["L"] if len(args) > len(_JT_PARAM.findall(desc.split(")")[0])) else [])
+                        + _JT_PARAM.findall(desc.split(")")[0])):
+            if j < len(loc):
+                loc[j] = v
+            j += 2 if t in ("J", "D") else 1
+        rtype = desc.split(")")[1]
+        st, k = [], 0
+        cp, u, cname = p["cp"], p["_u"], p["_cname"]
+        while True:
+            self.steps -= 1
+            if self.steps < 0 or (self.deadline and not self.steps % 512 and time.monotonic() > self.deadline):
+                raise _JtUnk("budget")
+            if not 0 <= k < len(ins):
+                raise _JtUnk("pc")
+            pc, op, arg = ins[k]
+            try:
+                r = self.step(p, cp, u, cname, pc, op, arg, st, loc, idx, depth)
+            except _JtThrow as ex:
+                h = next((hh for s, e_, hh, ct in et if s <= pc < e_ and (ct is None or _jt_isa(ex.cls, ct))), None)
+                if h is None:
+                    raise
+                st[:] = [_JtObj(ex.cls)]
+                k = idx[h]
+                continue
+            if r is None:
+                k += 1
+            elif r[0] == "jmp":
+                k = idx[r[1]]
+            else:
+                return r[1] if rtype != "V" else None
+
+    def ref(self, cp, u, cname, i):
+        e = cp[i]
+        nt = cp[e[1][1]]
+        return cname(e[1][0]), u(nt[1][0]), u(nt[1][1])
+
+    def step(self, p, cp, u, cname, pc, op, arg, st, loc, idx, depth):
+        mn = _JOPS[op]
+        pop, push = st.pop, st.append
+        if mn == "nop" or mn == "checkcast":
+            return None
+        if mn == "aconst_null":
+            push(None)
+        elif mn.startswith(("iconst_", "lconst_")):
+            push(-1 if mn.endswith("m1") else int(mn[-1]))
+        elif mn in ("bipush", "sipush"):
+            push(arg[0])
+        elif mn in ("ldc", "ldc_w", "ldc2_w"):
+            t, v = cp[arg[0]]
+            if t == 8:
+                push(u(v))
+            elif t in (3, 4, 5, 6):
+                push(v)
+            else:
+                raise _JtUnk("ldc")
+        elif mn[1:5] == "load" and len(mn) <= 7 and mn[0] in "ilfda":
+            push(loc[int(mn[-1]) if "_" in mn else arg[0]])
+        elif mn[1:6] == "store" and len(mn) <= 8 and mn[0] in "ilfda":
+            loc[int(mn[-1]) if "_" in mn else arg[0]] = pop()
+        elif mn == "iinc":
+            loc[arg[0]] = _JT_I32(loc[arg[0]] + arg[1])
+        elif mn in ("pop",):
+            pop()
+        elif mn == "dup":
+            push(st[-1])
+        elif mn == "dup_x1":
+            st.insert(-2, st[-1])
+        elif mn == "swap":
+            st[-1], st[-2] = st[-2], st[-1]
+        elif mn[0] in "il" and mn[1:] in ("add", "sub", "mul", "div", "rem", "and", "or", "xor", "shl", "shr", "ushr"):
+            b, a = pop(), pop()
+            w, bits = (_JT_I32, 32) if mn[0] == "i" else (_JT_I64, 64)
+            op_ = mn[1:]
+            if op_ in ("div", "rem") and b == 0:
+                raise _JtThrow("java/lang/ArithmeticException")
+            if op_ == "div":
+                r = abs(a) // abs(b) * (1 if (a < 0) == (b < 0) else -1)
+            elif op_ == "rem":
+                r = a - (abs(a) // abs(b) * (1 if (a < 0) == (b < 0) else -1)) * b
+            elif op_ in ("shl", "shr", "ushr"):
+                s = b & (bits - 1)
+                r = a << s if op_ == "shl" else a >> s if op_ == "shr" else (a & ((1 << bits) - 1)) >> s
+            else:
+                r = {"add": a + b, "sub": a - b, "mul": a * b, "and": a & b, "or": a | b, "xor": a ^ b}[op_]
+            push(w(r))
+        elif mn in ("ineg", "lneg"):
+            push((_JT_I32 if mn[0] == "i" else _JT_I64)(-pop()))
+        elif mn in ("i2l", "l2i", "i2c", "i2b", "i2s"):
+            v = pop()
+            push(v if mn == "i2l" else _JT_I32(v) if mn == "l2i" else v & 0xffff if mn == "i2c"
+                 else ((v + 128) & 0xff) - 128 if mn == "i2b" else ((v + 32768) & 0xffff) - 32768)
+        elif mn == "lcmp":
+            b, a = pop(), pop()
+            push((a > b) - (a < b))
+        elif mn in ("ifeq", "ifne", "iflt", "ifge", "ifgt", "ifle"):
+            v = pop()
+            if isinstance(v, bool):
+                v = int(v)
+            if not isinstance(v, int):
+                raise _JtUnk("if on ref")
+            if {"ifeq": v == 0, "ifne": v != 0, "iflt": v < 0, "ifge": v >= 0, "ifgt": v > 0, "ifle": v <= 0}[mn]:
+                return "jmp", pc + arg[0]
+        elif mn.startswith("if_icmp"):
+            b, a = pop(), pop()
+            if {"eq": a == b, "ne": a != b, "lt": a < b, "ge": a >= b, "gt": a > b, "le": a <= b}[mn[7:]]:
+                return "jmp", pc + arg[0]
+        elif mn in ("if_acmpeq", "if_acmpne"):
+            b, a = pop(), pop()
+            if (a is b) == (mn == "if_acmpeq"):
+                return "jmp", pc + arg[0]
+        elif mn in ("ifnull", "ifnonnull"):
+            if (pop() is None) == (mn == "ifnull"):
+                return "jmp", pc + arg[0]
+        elif mn in ("goto", "goto_w"):
+            return "jmp", pc + arg[0]
+        elif mn in ("tableswitch", "lookupswitch"):
+            v = pop()
+            return "jmp", pc + dict(arg[1]).get(v, arg[0])
+        elif mn.endswith("return"):
+            return "ret", (pop() if mn != "return" else None)
+        elif mn == "athrow":
+            v = pop()
+            raise _JtThrow(_JT_NPE if v is None else v.cls if isinstance(v, _JtObj) else "java/lang/Throwable")
+        elif mn in ("newarray", "anewarray"):
+            n = pop()
+            if n < 0:
+                raise _JtThrow("java/lang/NegativeArraySizeException")
+            push(_JtArr([0 if mn == "newarray" else None] * min(n, 1 << 16)))
+        elif mn == "arraylength":
+            a = pop()
+            if a is None:
+                raise _JtThrow(_JT_NPE)
+            push(len(a))
+        elif mn in ("iaload", "laload", "baload", "caload", "saload", "aaload"):
+            i, a = pop(), pop()
+            if a is None:
+                raise _JtThrow(_JT_NPE)
+            if not 0 <= i < len(a):
+                raise _JtThrow(_JT_AIOOBE)
+            push(a[i])
+        elif mn in ("iastore", "lastore", "bastore", "castore", "sastore", "aastore"):
+            v, i, a = pop(), pop(), pop()
+            if a is None:
+                raise _JtThrow(_JT_NPE)
+            if not 0 <= i < len(a):
+                raise _JtThrow(_JT_AIOOBE)
+            a[i] = v
+        elif mn in ("getstatic", "putstatic"):
+            c, n, d = self.ref(cp, u, cname, arg[0])
+            if c in self.classes:
+                self.clinit(c)
+                if mn == "putstatic":
+                    self.statics[(c, n)] = pop()
+                elif (c, n) in self.statics:
+                    push(self.statics[(c, n)])
+                elif n == "MODULE$":
+                    push(self.statics.setdefault((c, n), _JtObj(c)))
+                else:
+                    raise _JtUnk("static")
+            elif mn == "getstatic" and (n == "MODULE$" or c == "java/lang/System"):
+                push(_JtOpt(None, False) if c == "scala/None$" else _JtObj(c))
+            else:
+                raise _JtUnk("ext static")
+        elif mn in ("getfield", "putfield"):
+            c, n, d = self.ref(cp, u, cname, arg[0])
+            v = pop() if mn == "putfield" else None
+            o = pop()
+            if o is None:
+                raise _JtThrow(_JT_NPE)
+            if not isinstance(o, _JtObj):
+                raise _JtUnk("field")
+            if mn == "putfield":
+                o.f[n] = v
+            else:
+                push(o.f.get(n, None if d[0] in "L[" else 0))
+        elif mn == "new":
+            push(_JtObj(cname(arg[0])))
+        elif mn == "instanceof":
+            v, t = pop(), cname(arg[0])
+            push(int(v is not None and (t == "java/lang/Object" or (isinstance(v, str) and t in (
+                "java/lang/String", "java/lang/CharSequence")) or (isinstance(v, _JtObj) and _jt_isa(v.cls, t)))))
+        elif mn.startswith("invoke") and mn != "invokedynamic":
+            c, n, d = self.ref(cp, u, cname, arg[0])
+            na = len(_JT_PARAM.findall(d.split(")")[0]))
+            args = st[len(st) - na:] if na else []
+            del st[len(st) - na:]
+            kind = mn[6:]
+            recv = pop() if kind != "static" else None
+            r = self.invoke(kind, c, n, d, recv, args, depth)
+            if not d.endswith(")V"):
+                push(r)
+        elif mn == "invokedynamic":
+            push(self.indy(p, cp, u, cname, arg[0], st))
+        else:
+            raise _JtUnk(mn)
+        return None
+
+    def indy(self, p, cp, u, cname, i, st):
+        bi, nti = cp[i][1]
+        name, d = u(cp[nti][1][0]), u(cp[nti][1][1])
+        types = _JT_PARAM.findall(d.split(")")[0])
+        cap = st[len(st) - len(types):] if types else []
+        del st[len(st) - len(types):]
+        braw = p.get("_jt_bsm")
+        if braw is None:
+            braw = dict(p["attributes"]).get("BootstrapMethods") or b"\0\0"
+            bs, o = [], 2
+            for _ in range(struct.unpack_from(">H", braw, 0)[0]):
+                bm, na = struct.unpack_from(">HH", braw, o)
+                bs.append((bm, struct.unpack_from(f">{na}H", braw, o + 4)))
+                o += 4 + 2 * na
+            p["_jt_bsm"] = braw = bs
+        bm, bargs = braw[bi]
+
+        def mh(j):
+            e = cp[j]
+            if not e or e[0] != 15:
+                return None
+            kind, r = e[1]
+            return (kind, *self.ref(cp, u, cname, r))
+        b = mh(bm)
+        if b and b[2] == "makeConcatWithConstants":
+            recipe = u(cp[bargs[0]][1]) if bargs and cp[bargs[0]][0] == 8 else None
+            if recipe is None:
+                raise _JtUnk("concat")
+            it, out = iter(zip(cap, types)), []
+            for ch in recipe:
+                if ch == "\1":
+                    v, t = next(it)
+                    out.append(_jt_str(v, t))
+                else:
+                    out.append(ch)
+            return "".join(out)
+        impl = next((mh(a) for a in bargs if cp[a] and cp[a][0] == 15), None)
+        if not b or "Metafactory" not in b[1] or not impl:
+            raise _JtUnk("indy")
+        return _JtLam(impl[0], impl[1], impl[2], impl[3], cap)
+
+
+def _jt_truthy(v):
+    if isinstance(v, (bool, int)):
+        return bool(v)
+    raise _JtUnk("bool")
+
+
+def _jt_stub(vm, owner, name, desc, recv, args):
+    """Library model: java.lang.String/Integer/Math/Objects/Optional/StringBuilder, scala Predef/StringOps/Option/
+    BoxesRunTime. Anything else is unknown (the evaluation is abandoned, never guessed)."""
+    a = list(args)
+    if name == "<init>":
+        if isinstance(recv, _JtObj):
+            if recv.cls == "java/lang/StringBuilder":
+                recv.f["sb"] = [a[0] if a and isinstance(a[0], str) else ""]
+            elif recv.cls == "scala/Some":
+                recv.f["v"] = a[0] if a else None
+            elif recv.cls not in _JT_SUPER and recv.cls not in vm.classes and recv.cls != "java/lang/Object" \
+                    and not recv.cls.endswith(("Exception", "Error")):
+                raise _JtUnk("init")
+        return None
+    if isinstance(recv, str) or (owner == "java/lang/String" and recv is not None):
+        s = recv
+        if name == "length":
+            return len(s)
+        if name == "isEmpty":
+            return int(not s)
+        if name == "isBlank":
+            return int(not s.strip())
+        if name == "charAt":
+            if not 0 <= a[0] < len(s):
+                raise _JtThrow(_JT_SIOOBE)
+            return ord(s[a[0]])
+        if name in ("equals", "contentEquals"):
+            return int(isinstance(a[0], str) and a[0] == s)
+        if name == "equalsIgnoreCase":
+            return int(isinstance(a[0], str) and a[0].lower() == s.lower())
+        if name == "hashCode":
+            return _jt_jhash(s)
+        if name == "substring":
+            b, e = a[0], (a[1] if len(a) > 1 else len(s))
+            if not 0 <= b <= e <= len(s):
+                raise _JtThrow(_JT_SIOOBE)
+            return s[b:e]
+        if name in ("startsWith", "endsWith", "contains", "indexOf", "concat", "compareTo", "lastIndexOf"):
+            if a[0] is None:
+                raise _JtThrow(_JT_NPE)
+            x = chr(a[0]) if isinstance(a[0], int) else a[0]
+            if name == "indexOf":
+                return s.find(x, *(a[1:2]))
+            if name == "lastIndexOf":
+                return s.rfind(x)
+            if name == "concat":
+                return s + x
+            if name == "compareTo":
+                d = next((ord(p_) - ord(q) for p_, q in zip(s, x) if p_ != q), len(s) - len(x))
+                return d
+            return int(getattr(s, {"startsWith": "startswith", "endsWith": "endswith"}.get(name, "__contains__"))(x))
+        if name == "trim":
+            return s.strip("".join(map(chr, range(33))))
+        if name in ("toUpperCase", "toLowerCase"):
+            return s.upper() if name == "toUpperCase" else s.lower()
+        if name in ("toString", "intern"):
+            return s
+        if name == "toCharArray":
+            return _JtArr(ord(c) for c in s)
+        raise _JtUnk(f"String.{name}")
+    if owner == "java/lang/String" and recv is None and name == "valueOf":
+        return _jt_str(a[0], _JT_PARAM.findall(desc.split(")")[0])[0])
+    if owner in ("java/lang/Integer", "java/lang/Long", "java/lang/Short", "java/lang/Byte", "java/lang/Character",
+                 "java/lang/Boolean"):
+        if name in ("parseInt", "parseLong") or (name == "valueOf" and isinstance(a[0] if a else 0, str)) \
+                or a == [] and False:
+            return _jt_parse_int(a[0]) if name != "parseLong" else _jt_parse_int(a[0], -(1 << 63), (1 << 63) - 1)
+        if name == "valueOf" or name.endswith("Value"):
+            if name.endswith("Value") and recv is None:
+                raise _JtThrow(_JT_NPE)
+            return a[0] if name == "valueOf" else recv
+        if name == "isDigit":
+            return int(chr(a[0]).isdigit())
+        if name == "isLetter":
+            return int(chr(a[0]).isalpha())
+        if name in ("toUpperCase", "toLowerCase") and isinstance(a[0], int):
+            return ord(chr(a[0]).upper() if name == "toUpperCase" else chr(a[0]).lower())
+        raise _JtUnk(f"{owner}.{name}")
+    if owner == "java/lang/Math" and name in ("abs", "max", "min"):
+        w = _JT_I64 if "J" in desc else _JT_I32
+        return w(abs(a[0])) if name == "abs" else (max if name == "max" else min)(a[0], a[1])
+    if owner == "java/util/Objects":
+        if name == "requireNonNull":
+            if a[0] is None:
+                raise _JtThrow(_JT_NPE)
+            return a[0]
+        if name in ("isNull", "nonNull"):
+            return int((a[0] is None) == (name == "isNull"))
+        if name == "equals":
+            return int(a[0] is a[1] or (a[0] is not None and a[0] == a[1]))
+        raise _JtUnk("Objects")
+    if owner == "java/lang/StringBuilder" and isinstance(recv, _JtObj):
+        if name == "append":
+            recv.f.setdefault("sb", [""]).append(_jt_str(a[0], _JT_PARAM.findall(desc.split(")")[0])[0]))
+            return recv
+        if name == "toString":
+            return "".join(recv.f.get("sb", []))
+        if name == "length":
+            return len("".join(recv.f.get("sb", [])))
+        raise _JtUnk("sb")
+    if owner == "java/io/PrintStream":
+        return None
+    if owner == "scala/Predef$" and name in ("augmentString", "wrapString"):
+        return a[0]
+    if owner in ("scala/collection/StringOps$", "scala/collection/immutable/StringOps$"):
+        s = a[0]
+        if s is None:
+            raise _JtThrow(_JT_NPE)
+        if name in ("nonEmpty$extension", "isEmpty$extension"):
+            return int(bool(s) == (name == "nonEmpty$extension"))
+        if name in ("size$extension", "length$extension"):
+            return len(s)
+        if name == "apply$extension":
+            if not 0 <= a[1] < len(s):
+                raise _JtThrow(_JT_SIOOBE)
+            return ord(s[a[1]])
+        if name == "head$extension":
+            if not s:
+                raise _JtThrow("java/util/NoSuchElementException")
+            return ord(s[0])
+        if name == "toInt$extension":
+            return _jt_parse_int(s)
+        raise _JtUnk(f"StringOps.{name}")
+    if owner == "scala/runtime/BoxesRunTime":
+        if name.startswith("boxTo"):
+            return a[0]
+        if name.startswith("unboxTo"):
+            return 0 if a[0] is None else a[0]
+        if name == "equals":
+            return int(a[0] == a[1])
+        raise _JtUnk("Boxes")
+    if owner in ("scala/Option$", "java/util/Optional") and recv is None or isinstance(recv, _JtObj) and \
+            recv.cls == "scala/Option$":
+        if name in ("apply", "ofNullable"):
+            return _JtOpt(a[0], a[0] is not None)
+        if name == "of":
+            if a[0] is None:
+                raise _JtThrow(_JT_NPE)
+            return _JtOpt(a[0], True)
+        if name == "empty":
+            return _JtOpt(None, False)
+        raise _JtUnk("Option$")
+    if isinstance(recv, _JtObj) and recv.cls == "scala/Some":
+        recv = _JtOpt(recv.f.get("v"), True)
+    if isinstance(recv, _JtOpt):
+        o, java = recv, owner.startswith("java/")
+        if name in ("isEmpty", "isDefined", "nonEmpty", "isPresent"):
+            return int(o.some == (name != "isEmpty"))
+        if name == "get":
+            if not o.some:
+                raise _JtThrow("java/util/NoSuchElementException")
+            return o.v
+        if name in ("getOrElse", "orElseGet"):
+            return o.v if o.some else vm.call_lam(a[0], [])
+        if name == "orElse" and java:
+            return o.v if o.some else a[0]
+        if name == "orNull":
+            return o.v if o.some else None
+        if name == "orElseThrow":
+            if o.some:
+                return o.v
+            raise _JtThrow("java/util/NoSuchElementException") if not a else _JtThrow(
+                getattr(vm.call_lam(a[0], []), "cls", "java/lang/Throwable"))
+        if name in ("filter", "filterNot"):
+            if not o.some:
+                return o
+            keep = _jt_truthy(vm.call_lam(a[0], [o.v])) == (name == "filter")
+            return o if keep else _JtOpt(None, False)
+        if name in ("map", "flatMap"):
+            if not o.some:
+                return o
+            r = vm.call_lam(a[0], [o.v])
+            if name == "flatMap":
+                return r
+            return _JtOpt(r, r is not None or not java)
+        if name in ("exists", "forall"):
+            return int(_jt_truthy(vm.call_lam(a[0], [o.v]))) if o.some else int(name == "forall")
+        raise _JtUnk(f"Option.{name}")
+    raise _JtUnk(f"{owner}.{name}")
+
+
+_JT_STR_SEED = (None, "", "a", "A", "0", " ", "ab", "abc", "-1", "abcd", "abcdefgh")
+_JT_INT_SEED = (0, -1, 1, 2, -(1 << 31), (1 << 31) - 1)
+
+
+def _jt_consts(ms):
+    ints, strs = [], []
+    for p, m in ms:
+        raw = next((b for n, b in m["attributes"] if n == "Code"), b"")
+        try:
+            ins = jvm_code_decode(raw[8:8 + struct.unpack_from(">I", raw, 4)[0]]) if len(raw) >= 8 else []
+        except Exception:   # noqa: BLE001
+            continue
+        for _, op, arg in ins:
+            mn = _JOPS[op]
+            if mn.startswith("iconst_"):
+                ints.append(-1 if mn.endswith("m1") else int(mn[-1]))
+            elif mn in ("bipush", "sipush"):
+                ints.append(arg[0])
+            elif mn in ("ldc", "ldc_w") and p["cp"][arg[0]]:
+                t, v = p["cp"][arg[0]]
+                if t == 3:
+                    ints.append(v)
+                elif t == 8:
+                    strs.append(p["_u"](v))
+    return _jpd_uniq(ints)[:16], _jpd_uniq(strs)[:8]
+
+
+def _jt_candidates(types, ints, strs):
+    ks = [k for c in ints for k in (c, c + 1, c - 1) if 0 <= k <= 64]
+    per = []
+    for t in types:
+        if t == "Ljava/lang/String;" or t in ("Ljava/lang/Object;", "Ljava/lang/CharSequence;"):
+            per.append(_jpd_uniq(list(_JT_STR_SEED) + strs + ["a" * k for k in ks])[:40])
+        elif t in ("I", "S", "B", "C", "J"):
+            per.append(_jpd_uniq(list(_JT_INT_SEED) + [x for c in ints for x in (c, c + 1, c - 1)]
+                                 + list(range(3, 17)))[:48])
+        elif t == "Z":
+            per.append([0, 1])
+        elif t[:1] == "[" and t[1:] in ("I", "B", "C", "S", "J"):
+            per.append([None, _JtArr()] + [_JtArr([0] * k) for k in _jpd_uniq([1, 2, *ks])[:12]])
+        elif t == "[Ljava/lang/String;":
+            per.append([None, _JtArr(), _JtArr([None]), _JtArr([""]), _JtArr(["a"])] +
+                       [_JtArr(["a"] * k) for k in _jpd_uniq([2, *ks])[:8]])
+        else:
+            per.append([None])
+    combos = sorted(itertools.product(*(range(len(x)) for x in per)), key=lambda c: (sum(c), c))[:600]
+    return [[per[j][i] for j, i in enumerate(c)] for c in combos]
+
+
+def _jt_lit(v, t):
+    if v is None:
+        return "null"
+    if isinstance(v, str):
+        return json.dumps(v, ensure_ascii=False)
+    if isinstance(v, _JtArr):
+        el = t[1:]
+        return "{" + ", ".join(_jt_lit(x, el) for x in v) + "}" if v else "{}"
+    if t == "C":
+        return repr(chr(v & 0xffff))
+    if t == "Z":
+        return "true" if v else "false"
+    return str(v)
+
+
+def _jt_jar_classes(blob):
+    out = {}
+    for _, cb in _jpd_classes(blob):
+        p = classfile_parse(cb)
+        if p:
+            out[p["this"]] = p
+    return out
+
+
+def _jt_eval(classes, cls, name, desc, args, deadline):
+    vm = _JtVm(classes, deadline=deadline)
+    hit = vm.method(cls, name, desc)
+    if not hit:
+        return "unknown", None
+    static = bool(hit[2]["access"] & 0x0008)
+    try:
+        vm.clinit(cls)
+        recv = None
+        if not static:
+            recv = vm.statics.get((cls, "MODULE$")) or _JtObj(cls)
+        r = vm.run(cls, name, desc, ([] if static else [recv]) + list(args))
+        return "return", r
+    except _JtThrow as ex:
+        return "exception", ex.cls
+    except (_JtUnk, RecursionError, IndexError, KeyError, TypeError, ValueError, AttributeError, struct.error):
+        return "unknown", None
+
+
+def jvm_method_eval(jar, cls, name, desc, args):
+    """Statically evaluate one method of a jar / .class with the bytecode model -> ("return", value) |
+    ("exception", internal class name) | ("unknown", None). Strings are str, null None, ints int."""
+    try:
+        return _jt_eval(_jt_jar_classes(jar), cls, name, desc, args, time.monotonic() + 0.5)
+    except Exception:   # noqa: BLE001
+        return "unknown", None
+
+
+def jvm_trigger_proof(jar_a, jar_b, method=None):
+    """'Prove the old one was really broken': run the changed method of twin JVM builds (A = vulnerable / before,
+    B = corrected / after) through a tiny bytecode evaluator over candidate inputs derived from the method's
+    descriptor and constants (null, "", 1-char strings, index==length strings, 0/-1/1/MIN/MAX, constants +-1),
+    in simplicity order; the FIRST input where the builds differ (A throws, B returns preferred) is the trigger.
+    Never executes the sample. -> {field: answer string} | None (not JVM twins). Fields: trigger_input (Java
+    literal, `null`), trigger_input_raw, trigger_input_type, vulnerable_outcome (dotted exception class or the
+    return value), vulnerable_outcome_kind (exception/return), corrected_result / corrected_outcome(_kind),
+    exception_class (+_simple/_internal), trigger_found, differing_inputs/_count, candidates_tested, method;
+    every vulnerable_/corrected_ fact is aliased as _a/_b, before_/after_, old_/new_, original_/fixed_."""
+    try:
+        return _jvm_trigger_proof(jar_a, jar_b, method)
+    except Exception:   # noqa: BLE001 -- malformed / decoy input: no answer
+        return None
+
+
+def _jvm_trigger_proof(jar_a, jar_b, method):
+    d = _jvm_patch_diff(jar_a, jar_b)
+    if d is None:
+        return None
+    ca, cb = _jt_jar_classes(jar_a), _jt_jar_classes(jar_b)
+    name = method or d.get("changed_method", "none")
+    cls_a, cls_b = d.get("changed_class_a"), d.get("changed_class_b")
+    none = {k: "none" for k in ("trigger_input", "trigger_input_raw", "trigger_input_type", "vulnerable_outcome",
+                                "vulnerable_outcome_kind", "corrected_result", "corrected_outcome",
+                                "corrected_outcome_kind", "vulnerable_result", "exception_class",
+                                "exception_class_simple", "exception_class_internal")}
+    none.update({"trigger_found": "false", "differing_inputs": "[]", "differing_input_count": "0",
+                 "candidates_tested": "0", "method": name})
+    if name == "none" or cls_a not in ca or cls_b not in cb:
+        return _jt_alias(none)
+    ma = [m for m in ca[cls_a]["methods"] if m["name"] == name]
+    mb = [m for m in cb[cls_b]["methods"] if m["name"] == name]
+    if not ma or not mb:
+        return _jt_alias(none)
+    da = d.get("changed_method_descriptor") if not method else ma[0]["descriptor"]
+    m_a = next((m for m in ma if m["descriptor"] == da), ma[0])
+    ra, rb = d.get("role_a", "none"), d.get("role_b", "none")
+    want_b = m_a["descriptor"].replace(ra, rb) if ra not in ("", "none") else m_a["descriptor"]
+    m_b = next((m for m in mb if m["descriptor"] == want_b), None) or next(
+        (m for m in mb if len(_JT_PARAM.findall(m["descriptor"])) == len(_JT_PARAM.findall(m_a["descriptor"]))), None)
+    if not m_b:
+        return _jt_alias(none)
+    desc_a, desc_b = m_a["descriptor"], m_b["descriptor"]
+    types = _JT_PARAM.findall(desc_a.split(")")[0])
+    rtype = desc_a.split(")")[1]
+    lam_ms = [(p, m) for p in (ca[cls_a], cb[cls_b]) for m in p["methods"]
+              if m["name"] in (name, "<clinit>") or name in m["name"]]   # + $anonfun$<name>$N lambdas, statics
+    ints, strs = _jt_consts(lam_ms)
+    cands = _jt_candidates(types, ints, strs)
+    deadline = time.monotonic() + 0.6
+    first, alt, diffs, tested = None, None, [], 0
+    for args in cands:
+        if time.monotonic() > deadline:
+            break
+        tested += 1
+        oa = _jt_eval(ca, cls_a, name, desc_a, args, deadline)
+        ob = _jt_eval(cb, cls_b, name, desc_b, args, deadline)
+        if "unknown" in (oa[0], ob[0]) or oa == ob:
+            continue
+        diffs.append(", ".join(_jt_lit(v, t) for v, t in zip(args, types)))
+        if first is None and oa[0] == "exception" and ob[0] == "return":
+            first = (args, oa, ob)
+        elif alt is None:
+            alt = (args, oa, ob)
+        if first and len(diffs) >= 10:
+            break
+    hit = first or alt
+    f = dict(none)
+    f.update({"differing_inputs": _jv(diffs[:10]), "differing_input_count": str(len(diffs)),
+              "candidates_tested": str(tested), "method": name, "method_descriptor": desc_a})
+    if not hit:
+        return _jt_alias(f)
+    args, oa, ob = hit
+    lit = ", ".join(_jt_lit(v, t) for v, t in zip(args, types))
+    raw = ", ".join(_jt_str(v, t) if not isinstance(v, _JtArr) else _jt_lit(v, t) for v, t in zip(args, types))
+    a0 = args[0] if len(args) == 1 else None
+    ttype = ("null" if len(args) == 1 and a0 is None else "empty_string" if a0 == "" else
+             "string" if isinstance(a0, str) else "array" if isinstance(a0, _JtArr) else
+             "int" if len(args) == 1 else "tuple")
+
+    def show(o):
+        return o[1].replace("/", ".") if o[0] == "exception" else _jt_str(o[1], rtype)
+    exc = oa if oa[0] == "exception" else ob if ob[0] == "exception" else None
+    f.update({"trigger_found": "true", "trigger_input": lit, "trigger_input_raw": raw, "trigger_input_type": ttype,
+              "vulnerable_outcome": show(oa), "vulnerable_result": show(oa), "vulnerable_outcome_kind": oa[0],
+              "corrected_outcome": show(ob), "corrected_result": show(ob), "corrected_outcome_kind": ob[0],
+              "vulnerable_crashes": "true" if oa[0] == "exception" else "false",
+              "corrected_crashes": "true" if ob[0] == "exception" else "false"})
+    if exc:
+        f.update({"exception_class": exc[1].replace("/", "."), "exception_class_simple": exc[1].rsplit("/", 1)[-1],
+                  "exception_class_internal": exc[1]})
+    return _jt_alias(f)
+
+
+def _jt_alias(f):
+    for k in [k for k in f if k.startswith(("vulnerable_", "corrected_"))]:
+        vuln = k.startswith("vulnerable_")
+        base = k.split("_", 1)[1]
+        for pa, pb in (("before", "after"), ("old", "new"), ("original", "fixed"), ("unpatched", "patched")):
+            f.setdefault(f"{pa if vuln else pb}_{base}", f[k])
+        f.setdefault(f"{base}_{'a' if vuln else 'b'}", f[k])
+        f.setdefault(f"{base}_{'vulnerable' if vuln else 'corrected'}", f[k])
+    return f
+
+
+def jvm_trigger_field(jar_a, jar_b, field, method=None):
+    """One jvm_trigger_proof fact; "none" when absent, None when the inputs aren't JVM twins."""
+    f = jvm_trigger_proof(jar_a, jar_b, method)
+    return None if f is None else f.get(field, "none")
 
 
 # --- packing -------------------------------------------------------------------------------------

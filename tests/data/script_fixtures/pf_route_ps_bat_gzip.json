@@ -1,0 +1,92 @@
+{
+ "_doc": "per-file-hashed-contract: PowerShell secondary/tertiary keyed by scenario, batch graph|control|expansion, indicator falls through to upload URL under the D23 order",
+ "lane": "script",
+ "target": "per-file-hashed-contract",
+ "material": "H4sIAAAAAAACAy1Py2rDMBD8lX5AaieHEijoUHrpoYH8gdhIE1uw0YrV2sRBH18VfBpmYF6rO7VqKNWxBDL4f+BDURRSeFPK9Q49LIWFolc8xNBqQCZN4uqWbYal4IMwI1iS3AI9CqUpu++vy/X9fCY6nto9MVw1mrArwyuV1mk2d5FXYqbxYzi+/SzZFLX+0q3tpYuym81K/RzH3Ytn72AMKa/EKY5LaZNSmV1M9JAcW5AeI+ygKspYwX5aSGPDs/RLfaavtvVJEUwbor9Rnv4AaZCLSg0BAAA=",
+ "rep": "gzip_base64",
+ "transform": "identity",
+ "key": null,
+ "expected": "v=1|steps=locate_local,prepare_transfer,upload_remote|scenario=synthetic_collection|campaign=CAMP-77aa01|file=stage-77aa01.zip|agent=Mozilla/5.0 HuntressLab|upload_url=https://77aa01.example.invalid/up|graph=diamond|control=errorlevel_guard|expansion_style=delayed_bang",
+ "decoy": false,
+ "generator_cmd": "printf %s \"$PLAN\" | gzip -9n | base64 -w0",
+ "oracle_cmd": "printf %s \"$material\" | base64 -d | gunzip",
+ "pf_cases": [
+  {
+   "answer_id": "powershell-3bad9c-secondary",
+   "members": [
+    "3bad9c.ps1"
+   ],
+   "question": {},
+   "kind": "powershell",
+   "route": [
+    "powershell",
+    "3bad9c.ps1",
+    "secondary"
+   ],
+   "expected": "stage-77aa01.zip",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d | gunzip); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" file  # scenario=synthetic_collection -> staged file name"
+  },
+  {
+   "answer_id": "powershell-3bad9c-tertiary",
+   "members": [
+    "3bad9c.ps1"
+   ],
+   "question": {},
+   "kind": "powershell",
+   "route": [
+    "powershell",
+    "3bad9c.ps1",
+    "tertiary"
+   ],
+   "expected": "Mozilla/5.0 HuntressLab",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d | gunzip); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" agent  # collection -> user agent"
+  },
+  {
+   "answer_id": "batch-34c1d9-style",
+   "members": [
+    "34c1d9.cmd"
+   ],
+   "question": {},
+   "kind": "batch",
+   "route": [
+    "batch",
+    "34c1d9.cmd",
+    "style"
+   ],
+   "expected": "diamond|errorlevel_guard|delayed_bang",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d | gunzip); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; echo \"$(kv \"$PLAN\" graph)|$(kv \"$PLAN\" control)|$(kv \"$PLAN\" expansion_style)\""
+  },
+  {
+   "answer_id": "batch-34c1d9-indicator",
+   "members": [
+    "34c1d9.cmd"
+   ],
+   "question": {
+    "question": "Recover the primary indicator reconstructed from 34c1d9.cmd: submit the first indicator present in the decoded descriptor using this order: URL, upload URL, next-stage file, file path, schedule path, recovery-note name, host id."
+   },
+   "kind": "batch",
+   "route": [
+    "batch",
+    "34c1d9.cmd",
+    "indicator"
+   ],
+   "expected": "https://77aa01.example.invalid/up",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d | gunzip); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" upload_url  # no url key"
+  },
+  {
+   "answer_id": "batch-34c1d9-campaign-token",
+   "members": [
+    "34c1d9.cmd"
+   ],
+   "question": {},
+   "kind": "batch",
+   "route": [
+    "batch",
+    "34c1d9.cmd",
+    "campaign-token"
+   ],
+   "expected": "77aa01",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | base64 -d | gunzip); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" campaign | cut -d- -f2-"
+  }
+ ]
+}

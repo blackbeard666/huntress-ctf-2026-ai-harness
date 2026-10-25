@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=DOCKERFILE-4fddf36c|url=https://dockerfile-4fddf36c54.example.invalid/stage|file_path=/tmp/huntress-dockerfile/.4fddf36c54555a23.stage",
+ "decoy": false,
+ "language": "dockerfile",
+ "role": "benign-utility",
+ "id_single": "polyglot-dockerfile-benign-utility-<field>",
+ "id_timed": "polyglot-dockerfile-1f807f-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_dockerfile_benign_utility.dockerfile | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-dockerfile-benign-utility-language": "dockerfile",
+  "polyglot-dockerfile-benign-utility-role": "benign_utility",
+  "polyglot-dockerfile-benign-utility-verdict": "benign",
+  "polyglot-dockerfile-benign-utility-attack": "none",
+  "polyglot-dockerfile-benign-utility-adapter": "local_parser",
+  "polyglot-dockerfile-benign-utility-host-profile": "standalone",
+  "polyglot-dockerfile-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-dockerfile-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-dockerfile-benign-utility-next-language": "powershell",
+  "polyglot-dockerfile-benign-utility-stage-count": "2",
+  "polyglot-dockerfile-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-dockerfile-benign-utility-campaign-id": "DOCKERFILE-4fddf36c",
+  "polyglot-dockerfile-benign-utility-url": "https://dockerfile-4fddf36c54.example.invalid/stage",
+  "polyglot-dockerfile-benign-utility-file-path": "/tmp/huntress-dockerfile/.4fddf36c54555a23.stage"
+ },
+ "answers_timed": {
+  "polyglot-dockerfile-1f807f-url-host": "dockerfile-4fddf36c54.example.invalid",
+  "polyglot-dockerfile-1f807f-path-leaf": ".4fddf36c54555a23.stage",
+  "polyglot-dockerfile-1f807f-campaign-token": "4fddf36c",
+  "polyglot-dockerfile-1f807f-next-language": "powershell"
+ }
+}

@@ -1,0 +1,29 @@
+{
+ "family": "jvm_patch_diff",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "pdiff_d24_a.bin",
+ "jar_b": "pdiff_d24_b.bin",
+ "expected_facts": {
+  "changed_class": "Day24Vulnerable000$",
+  "method_count_a": "8",
+  "method_count_b": "13",
+  "instruction_count_a": "12",
+  "instruction_count_b": "11",
+  "classfile_size_a": "4660",
+  "classfile_size_b": "5628",
+  "added_invokes": "[\"scala/Option$.apply\",\"scala/Option.filter\",\"scala/Option.map\",\"scala/Option.getOrElse\",\"scala/runtime/BoxesRunTime.unboxToInt\"]",
+  "removed_invokes": "[\"scala/Predef$.augmentString\",\"scala/collection/StringOps$.nonEmpty$extension\",\"java/lang/String.charAt\"]",
+  "added_lambdas": "[\"$anonfun$score$1\",\"$anonfun$score$2\",\"$anonfun$score$3\"]",
+  "changed_method": "score",
+  "changed_method_descriptor": "(Ljava/lang/String;)I",
+  "changed_methods": "[\"score(Ljava/lang/String;)I\"]",
+  "changed_method_count": "1",
+  "fix_kind": "null_guard"
+ },
+ "generator_cmd": "GM artifact (D24 binary-spot-the-difference twin Scala jars, cached evidence d24--sample-{vulnerable,corrected}.jar)",
+ "oracle_cmd": "python3 pdiff_oracle.py pdiff_d24_a.bin pdiff_d24_b.bin Vulnerable Corrected   # zipfile + JDK javap -c -p/-v; javap changed method: ['public int score(java.lang.String);']",
+ "decoy": false,
+ "note": "lib.binary.jvm_patch_diff_field(a, b, key). null-unsafe nonEmpty(s)/charAt -> Option(s).filter.map.getOrElse (Option$.apply is the null guard). changed_method(_descriptor) = the javap -s spelling of the oracle's changed method; fix_kind from the source change (vocabulary SPECULATIVE)"
+}

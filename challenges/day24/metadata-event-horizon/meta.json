@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-24-event-horizon",
+  "lane": "metadata-forensics",
+  "name": "🔎 Event Horizon",
+  "ids": {
+    "single_solve": "metadata-forensics-day-24-event-horizon",
+    "time_trial": "metadata-forensics-day-24-event-horizon/time_trial",
+    "mastery": "metadata-forensics-day-24-event-horizon/mastery"
+  }
+}

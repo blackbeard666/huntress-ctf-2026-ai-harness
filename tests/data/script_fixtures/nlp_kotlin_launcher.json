@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=kotlin|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=KOTLIN-7cf6affb|url=https://kotlin-7cf6affbb3.example.invalid/stage|file_path=/tmp/huntress-kotlin/.7cf6affbb34d7fa8.stage",
+ "decoy": false,
+ "language": "kotlin",
+ "role": "launcher",
+ "id_single": "polyglot-kotlin-launcher-<field>",
+ "id_timed": "polyglot-kotlin-de489d-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_kotlin_launcher.kts | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-kotlin-launcher-language": "kotlin",
+  "polyglot-kotlin-launcher-role": "launcher",
+  "polyglot-kotlin-launcher-verdict": "suspicious",
+  "polyglot-kotlin-launcher-attack": "T1059",
+  "polyglot-kotlin-launcher-adapter": "process_builder",
+  "polyglot-kotlin-launcher-host-profile": "standalone",
+  "polyglot-kotlin-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-kotlin-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-kotlin-launcher-next-language": "batch",
+  "polyglot-kotlin-launcher-stage-count": "3",
+  "polyglot-kotlin-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-kotlin-launcher-campaign-id": "KOTLIN-7cf6affb",
+  "polyglot-kotlin-launcher-url": "https://kotlin-7cf6affbb3.example.invalid/stage",
+  "polyglot-kotlin-launcher-file-path": "/tmp/huntress-kotlin/.7cf6affbb34d7fa8.stage"
+ },
+ "answers_timed": {
+  "polyglot-kotlin-de489d-url-host": "kotlin-7cf6affbb3.example.invalid",
+  "polyglot-kotlin-de489d-path-leaf": ".7cf6affbb34d7fa8.stage",
+  "polyglot-kotlin-de489d-campaign-token": "7cf6affb",
+  "polyglot-kotlin-de489d-next-language": "batch"
+ }
+}

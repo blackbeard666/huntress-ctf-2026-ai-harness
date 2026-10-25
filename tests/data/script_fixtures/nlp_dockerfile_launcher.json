@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=DOCKERFILE-399ef05e|url=https://dockerfile-399ef05e2c.example.invalid/stage|file_path=/tmp/huntress-dockerfile/.399ef05e2c853c9f.stage",
+ "decoy": false,
+ "language": "dockerfile",
+ "role": "launcher",
+ "id_single": "polyglot-dockerfile-launcher-<field>",
+ "id_timed": "polyglot-dockerfile-760ddb-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_dockerfile_launcher.dockerfile | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-dockerfile-launcher-language": "dockerfile",
+  "polyglot-dockerfile-launcher-role": "launcher",
+  "polyglot-dockerfile-launcher-verdict": "suspicious",
+  "polyglot-dockerfile-launcher-attack": "T1059",
+  "polyglot-dockerfile-launcher-adapter": "process_builder",
+  "polyglot-dockerfile-launcher-host-profile": "standalone",
+  "polyglot-dockerfile-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-dockerfile-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-dockerfile-launcher-next-language": "batch",
+  "polyglot-dockerfile-launcher-stage-count": "3",
+  "polyglot-dockerfile-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-dockerfile-launcher-campaign-id": "DOCKERFILE-399ef05e",
+  "polyglot-dockerfile-launcher-url": "https://dockerfile-399ef05e2c.example.invalid/stage",
+  "polyglot-dockerfile-launcher-file-path": "/tmp/huntress-dockerfile/.399ef05e2c853c9f.stage"
+ },
+ "answers_timed": {
+  "polyglot-dockerfile-760ddb-url-host": "dockerfile-399ef05e2c.example.invalid",
+  "polyglot-dockerfile-760ddb-path-leaf": ".399ef05e2c853c9f.stage",
+  "polyglot-dockerfile-760ddb-campaign-token": "399ef05e",
+  "polyglot-dockerfile-760ddb-next-language": "batch"
+ }
+}

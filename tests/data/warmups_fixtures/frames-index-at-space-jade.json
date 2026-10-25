@@ -1,0 +1,9 @@
+{
+ "codec": "frames-index",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-904",
+ "encoded": "s@81 d@10  @4 c@57 s@35 M@79 t@47 a@25 e@39 -@91  @48  @66 i@21 t@82 o@6 m@76 h@20 o@13 t@58  @69  @9 e@72 a@75 e@64 w@63 :@85 s@22 r@84  @18 i@51 -@97 o@33 c@12 e@54 o@68 G@74 s@42 r@26 e@11 t@93  @34 h@71 t@94 d@89 u@28 e@3 s@52 o@36 n@61 w@5 g@17 i@1  @41 4@100 t@70 j@87 c@2 r@7 r@96  @59 N@0 v@38 a@60 k@8  @31 u@43  @86 l@37 m@45 0@99 x@55 T@32 s@62 e@77  @73 e@95 p@29 a@80 t@67 t@49 o@92 !@30 d@14 e@90 i@46 a@56 i@15 w@24 r@65 ,@40 a@88 9@98  @23 b@44 n@16 e@83 h@50 t@19  @78 m@27  @53",
+ "generator_cmd": "perl -CSD -MList::Util=shuffle -0777 -ne 'srand(5);my @c=split//;my @i=shuffle(0..$#c);print join(\" \",map{sprintf(\"%s@%d\",$c[$_],$_)}@i)'",
+ "oracle_cmd": "perl -CSD -0777 -ne 'my %h;while(/(.)@(\\d+)(?: |$)/gs){$h{$2}=$1}my @k=sort{$a<=>$b}keys %h;my $b=$k[0];($k[$_]==$_+$b or exit 1) for 0..$#k;print map{$h{$_}}@k'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-904",
+ "expected": "match"
+}

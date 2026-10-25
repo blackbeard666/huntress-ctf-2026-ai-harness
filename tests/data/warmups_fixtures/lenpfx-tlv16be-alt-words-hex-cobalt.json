@@ -1,0 +1,9 @@
+{
+ "codec": "length-prefix",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moth-90",
+ "encoded": "1000054e69636520200005776f726b201000096465636f64696e672020000574686973201000087761726d75702120200003546f20100007736f6c76652c202000077375626d6974201000057468697320200006657861637420100007616e7377657220200003746f201000047468652020000547616d65201000084d61737465723a2020000e636f62616c742d6d6f74682d3930",
+ "generator_cmd": "perl -e 'my $i=0; print pack(\"(C n/a*)*\", map { (0x10 * (1 + $i++ % 2), $_) } $ENV{plain} =~ /\\S+\\s*/g)'| xxd -p | tr -d '\\n'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | perl -0777 -ne 'my @v = unpack(\"(C n/a*)*\", $_); print @v[grep { $_ % 2 } 0..$#v]'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-moth-90",
+ "expected": "match"
+}

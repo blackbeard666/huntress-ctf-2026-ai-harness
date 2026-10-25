@@ -1,0 +1,11 @@
+{
+ "codec": "length-prefix",
+ "plain": null,
+ "encoded": "54686520717569636b2062726f776e20666f78206a756d7073206f76657220746865206c617a7920646f67206e6561722074686520726976657262616e6b206174206461776e2e",
+ "generator_cmd": "printf %s \"$plain\"| xxd -p | tr -d '\\n'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | perl -0777 -ne 'print unpack(\"(C/a*)*\", $_)'",
+ "oracle_plain": "he quick brown fox jumps over the lazy dog near the riverbank at dawn.",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "the perl/protobuf reader is lenient (garbage frames or a short read); a decoy = plain text under hex/b64 (owned by those decoders) or frames that do not cover the WHOLE stream"
+}

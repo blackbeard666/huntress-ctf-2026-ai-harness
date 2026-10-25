@@ -1,0 +1,8 @@
+{
+ "field": "amcache.application_file_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> system_shim.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/amcache/decoy_system_hive__application_file_count.bin  (regipy AmCachePlugin) -> no amcache entries (no Root\\\\InventoryApplicationFile; SYSTEM hive)",
+ "decoy": true,
+ "member": "Amcache.hve"
+}

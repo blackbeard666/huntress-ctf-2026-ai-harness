@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=fish|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=FISH-186d854f|url=https://fish-186d854fb6.example.invalid/stage|file_path=/tmp/huntress-fish/.186d854fb6501873.stage",
+ "decoy": false,
+ "language": "fish",
+ "role": "staged-chain",
+ "id_single": "polyglot-fish-staged-chain-<field>",
+ "id_timed": "polyglot-fish-3b33ec-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_fish_staged_chain.fish | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-fish-staged-chain-language": "fish",
+  "polyglot-fish-staged-chain-role": "staged_chain",
+  "polyglot-fish-staged-chain-verdict": "suspicious",
+  "polyglot-fish-staged-chain-attack": "T1059",
+  "polyglot-fish-staged-chain-adapter": "operation_graph",
+  "polyglot-fish-staged-chain-host-profile": "standalone",
+  "polyglot-fish-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-fish-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-fish-staged-chain-next-language": "vbscript",
+  "polyglot-fish-staged-chain-stage-count": "3",
+  "polyglot-fish-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-fish-staged-chain-campaign-id": "FISH-186d854f",
+  "polyglot-fish-staged-chain-url": "https://fish-186d854fb6.example.invalid/stage",
+  "polyglot-fish-staged-chain-file-path": "/tmp/huntress-fish/.186d854fb6501873.stage"
+ },
+ "answers_timed": {
+  "polyglot-fish-3b33ec-url-host": "fish-186d854fb6.example.invalid",
+  "polyglot-fish-3b33ec-path-leaf": ".186d854fb6501873.stage",
+  "polyglot-fish-3b33ec-campaign-token": "186d854f",
+  "polyglot-fish-3b33ec-next-language": "vbscript"
+ }
+}

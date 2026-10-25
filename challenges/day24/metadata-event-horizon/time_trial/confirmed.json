@@ -1,0 +1,33 @@
+{
+  "e84fee75-2c9a-4eb8-a058-4fb747f299ef": {
+    "roster-filename": "roster-14e93c.csv",
+    "evidence-note-size-bytes": "226",
+    "evidence-note-copy-md5": "43638038359959e826800df30e832670",
+    "roster-sha1": "5413f5b10f36b88d66c95304e0173e47fbcd4b6f",
+    "evidence-note-sha256": "7f6fb7e49a8bfcb3158fccbcdbd407aeaf861b262ae9cd328433d5d14efc56db",
+    "roster-magic-prefix-hex-16": "686f73746e616d652c6f776e65722c6f",
+    "evidence-note-text-utf8-bom-present": "true",
+    "d04-jpeg-001-jpeg-sof-dimensions-pixels": "734x940",
+    "d05-png-001-png-ihdr-dimensions-pixels": "626x794",
+    "d06-pdf-001-pdf-header-version": "1.2",
+    "d07-zip-001-zip-eocd-total-entries": "5",
+    "d07-zip-001-zip-central-directory-member-names": "[\"box-22/part-3.log\",\"room-08/doc-5.txt\",\"room-10/doc-7.csv\",\"room-38/doc-7.csv\",\"tray-29/doc-9.csv\"]",
+    "d09-pe-001-pe-coff-machine-u16-hex": "0x01f0",
+    "d09-pe-001-pe-address-of-entry-point-rva-hex": "0x0007838e",
+    "d09-pe-001-pe-version-original-filename": "y263ozb1mvu.exe",
+    "d12-dotnet-001-dotnet-mvid-guid": "e807ad5c-f550-1c40-958c-00369560c616",
+    "d13-msi-001-msi-product-code-guid": "{734C4C39-54A8-43CE-96F0-9520CB7F68C2}",
+    "d14-lnk-001-lnk-target-path-windows": "C:\\Data\\Staging\\estuary\\taskhost.exe",
+    "d15-ooxml-001-ooxml-external-relationship-targets": "[\"http://ravencinder.example.net/control/32914cd2\",\"https://yarrow-island.invalid/ref/5093beaf0f\"]",
+    "d16-email-001-email-message-id": "<atlas-299668.114b47@quartz.corp.example.test>",
+    "d17-audio-001-media-primary-audio-codec-name": "opus",
+    "d18-video-001-media-primary-video-dimensions": "262x246",
+    "d19-elf-001-elf-e-machine-u16-hex": "0x003e",
+    "d20-macho-001-macho-cpu-type-set": "[\"0x01000007\",\"0x0100000c\",\"0x01000012\"]",
+    "d21-apk-001-apk-package-name": "com.glacier.tools.p56r",
+    "d22-jar-001-jar-main-class": "agent.util.core.ConsoleLJ",
+    "d23-sqlite-001-sqlite-page-size-bytes": "8192",
+    "d24-evtx-001-evtx-record-count": "43",
+    "metadata-day-24-synthesis-sha256-order": "[\"events-001.evtx\",\"evidence-note-bc2d3a.txt\",\"document-001.pdf\",\"collector-001.elf\",\"shortcut-001.lnk\"]"
+  }
+}

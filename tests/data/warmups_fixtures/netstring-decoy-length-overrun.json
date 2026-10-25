@@ -1,0 +1,11 @@
+{
+ "codec": "netstring-any",
+ "plain": null,
+ "encoded": "5:hello,20:short,3:end,",
+ "generator_cmd": "printf '5:hello,20:short,3:end,'  # 2nd frame declares 20 but only 12 bytes follow -> truncated/corrupt, whole text does not parse",
+ "oracle_cmd": "perl -0777 -ne 'my($o,$i)=(\"\",0);while($i<length){substr($_,$i)=~/^\\s*(\\d+):/ or last;$i+=length($&);$o.=substr($_,$i,$1);$i+=$1;$i++ if substr($_,$i,1) eq \",\"}print $o'",
+ "oracle_plain": "helloshort,3:end,",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "the perl reader is lenient (stops at the first non-frame, clamps an overrun substr); a decoy = its frames do not cover the WHOLE text / a declared len runs past the end"
+}

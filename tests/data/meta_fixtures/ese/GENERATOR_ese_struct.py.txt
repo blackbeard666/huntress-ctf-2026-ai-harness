@@ -1,0 +1,77 @@
+"""Stdlib struct writer for synthetic ESE (JET Blue) database files -- no Windows ESE engine on this host.
+Header layout = ESE DBFILEHDR (open-source Extensible-Storage-Engine daedef.hxx; the same struct dissect.esedb
+c_esedb.DBFILEHDR and the libesedb format doc use): checksum u32 @0, magic 0x89abcdef @4, ulVersion @8, attrib
+@12, dbtimeDirtied u64 @16, signDb {ulRandom u32 @24, logtimeCreate 8B @28, szComputerName 16B @36}, dbstate u32 @52,
+lgposConsistent @56, logtimeConsistent @64, logtimeAttach @72, lgposAttach @80, logtimeDetach @88, lgposDetach @96,
+dbid @104, ..., dwMajorVersion @216, dwMinorVersion @220, dwBuildNumber @224, lSPNumber @228, ulDaeUpdateMajor @232,
+cbPageSize @236.  LOGTIME = sec, min, hour, day, month(1-12), year-1900, flags, flags.
+Usage: python3 -I GENERATOR_ese_struct.py.txt <outdir>"""
+import os
+import sqlite3
+import struct
+import sys
+
+
+def logtime(y, mo, d, h, mi, s):
+    return bytes([s, mi, h, d, mo, y - 1900, 0, 0])
+
+
+def header(ps, version, revision, attrib, state, dbtime, created, attach, detach, consistent, osv, rnd):
+    h = bytearray(ps)
+    struct.pack_into("<IIIiQ", h, 0, 0, 0x89ABCDEF, version, attrib, dbtime)
+    struct.pack_into("<I", h, 24, rnd)
+    h[28:36] = created
+    struct.pack_into("<I", h, 52, state)
+    h[64:72] = consistent
+    h[72:80] = attach
+    h[88:96] = detach
+    struct.pack_into("<I", h, 104, 1)
+    struct.pack_into("<IIII", h, 216, *osv, 0)
+    struct.pack_into("<II", h, 232, revision, ps)
+    # legacy XOR checksum over the 4 KiB header (seed 0x89abcdef ^ every u32 after the checksum field)
+    x = 0x89ABCDEF
+    for (w,) in struct.iter_unpack("<I", bytes(h[4:4096])):
+        x ^= w
+    struct.pack_into("<I", h, 0, x)
+    return h
+
+
+def db(ps, npages, shadow_same=True, **kw):
+    h = header(ps, **kw)
+    sh = bytearray(h)
+    if not shadow_same:                      # stale shadow: older dbtime
+        struct.pack_into("<Q", sh, 16, kw["dbtime"] - 0x10)
+    body = bytearray()
+    for i in range(npages - 2):              # empty database pages (pgno i+1), just filler
+        p = bytearray(ps)
+        struct.pack_into("<I", p, 0, 0x5A5A0000 + i)
+        body += p
+    return bytes(h + sh + body)
+
+
+Z = bytes(8)
+cases = {
+    "srum_clean_4k": db(4096, 10, True, version=0x620, revision=0x14, attrib=0, state=3, dbtime=0x1F2E,
+                        created=logtime(2024, 3, 15, 10, 20, 30), attach=logtime(2024, 3, 16, 8, 0, 0),
+                        detach=logtime(2024, 3, 16, 9, 30, 15), consistent=logtime(2024, 3, 16, 9, 30, 15),
+                        osv=(10, 0, 19041), rnd=0x1234ABCD),
+    "webcache_dirty_32k": db(32768, 3, False, version=0x620, revision=0x14, attrib=0, state=2, dbtime=0x88AA,
+                             created=logtime(2023, 11, 2, 23, 59, 58), attach=logtime(2025, 1, 7, 14, 5, 9),
+                             detach=Z, consistent=Z, osv=(10, 0, 22631), rnd=0x0BADF00D),
+    "ntds_8k_new_streaming": db(8192, 3, True, version=0x620, revision=0x11, attrib=1, state=1, dbtime=0x10,
+                                created=logtime(2019, 7, 1, 0, 0, 1), attach=Z, detach=Z, consistent=Z,
+                                osv=(6, 3, 9600), rnd=0x00000042),
+}
+out = sys.argv[1]
+os.makedirs(out, exist_ok=True)
+for name, b in cases.items():
+    with open(os.path.join(out, name + ".bin"), "wb") as f:
+        f.write(b)
+# decoy: a real SQLite database renamed like an ESE file (wrong magic)
+p = os.path.join(out, "decoy_sqlite_renamed.bin")
+if os.path.exists(p):
+    os.remove(p)
+c = sqlite3.connect(p)
+c.execute("create table SruDbIdMapTable(IdType int, IdIndex int, IdBlob blob)")
+c.commit()
+c.close()

@@ -1,0 +1,8 @@
+{
+ "field": "synthesis.databases_by_application",
+ "expected": "{\"Chrome Cookies\":[\"apps_chrome_cookies.db\"],\"Chrome History\":[\"apps_chrome_history.db\"],\"Firefox places\":[\"apps_firefox_places.db\"],\"WhatsApp msgstore.db\":[\"apps_whatsapp.db\"],\"iMessage chat.db\":[\"apps_imessage.db\"],\"unknown\":[\"apps_htrt.db\"]}",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_apps.sh.txt <outdir> -> apps_kit.zip (sqlite3 CLI dbs + renamed-text decoy apps_decoy.db + readme.txt, zip -X)",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_apps.py.txt apps_kit.zip (Python sqlite3 deserialize per member, non-SQLite skipped, fingerprint table) -> {\"Chrome Cookies\":[\"apps_chrome_cookies.db\"],\"Chrome History\":[\"apps_chrome_history.db\"],\"Firefox places\":[\"apps_firefox_places.db\"],\"WhatsApp msgstore.db\":[\"apps_whatsapp.db\"],\"iMessage chat.db\":[\"apps_imessage.db\"],\"unknown\":[\"apps_htrt.db\"]}",
+ "decoy": false,
+ "member": "apps_kit.zip"
+}

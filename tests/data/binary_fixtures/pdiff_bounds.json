@@ -1,0 +1,29 @@
+{
+ "family": "jvm_patch_diff",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "pdiff_bounds_a.bin",
+ "jar_b": "pdiff_bounds_b.bin",
+ "expected_facts": {
+  "changed_class": "GateVulnerable",
+  "method_count_a": "5",
+  "method_count_b": "5",
+  "instruction_count_a": "6",
+  "instruction_count_b": "14",
+  "classfile_size_a": "1131",
+  "classfile_size_b": "1170",
+  "added_invokes": "[]",
+  "removed_invokes": "[]",
+  "added_lambdas": "[]",
+  "changed_method": "pick",
+  "changed_method_descriptor": "(I)I",
+  "changed_methods": "[\"pick(I)I\"]",
+  "changed_method_count": "1",
+  "fix_kind": "bounds_check"
+ },
+ "generator_cmd": "bash pdiff_gen.sh OUT   # javac --release 11 GateVulnerable/GateCorrected.java + jar cfm",
+ "oracle_cmd": "python3 pdiff_oracle.py pdiff_bounds_a.bin pdiff_bounds_b.bin Vulnerable Corrected   # zipfile + JDK javap -c -p/-v; javap changed method: ['public static int pick(int);']",
+ "decoy": false,
+ "note": "lib.binary.jvm_patch_diff_field(a, b, key). corrected adds 'if (i < 0 || i >= TABLE.length) return -1;' (arraylength compare) by construction. changed_method(_descriptor) = the javap -s spelling of the oracle's changed method; fix_kind from the source change (vocabulary SPECULATIVE)"
+}

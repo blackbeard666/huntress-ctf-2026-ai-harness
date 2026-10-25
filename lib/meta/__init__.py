@@ -95,16 +95,48 @@ _BUILTIN = {
     # D23: SQLite header page size (u16 BE @16, 1 = 65536) as a base-10 int -- prebuilt sqlite.sqlite_value promoted:
     # 4096 single, 8192 TT, 512..65536 on all 7 Mastery sets (24/24 cases)
     ("sqlite", "page_size_bytes"): _v("sqlite:page_size_bytes", 23),
+    # D24: EVTX record count = "**\\0\\0" records walked through EVERY physical ElfChnk (not the header's next_record_id)
+    # -- prebuilt evtx.record_value promoted via evtx.py: 3 single, 43 TT, 9..119 on all 8 Mastery sets (10/10 cases)
+    ("evtx", "record_count"): _v("evtx:record_count", 24),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"
 CONFLICTS = []      # [(module, key, reason)] -- prebuilt registrations refused at import
 
 
+_FIELDS_AT = re.compile(r"^FIELDS\s*=\s*\{", re.M)
+_CLOSE_AT = re.compile(r"^\}", re.M)
+
+
+def _fields_fast(src):
+    """The `FIELDS = {...}` statement alone (from its line to the first column-0 `}` that closes it), or None.
+    ast.parse of all ~150 prebuilt modules (1.8 MB) was 0.5 s of every lane-solver process (D24 Mastery case 1.03 s)."""
+    m = _FIELDS_AT.search(src)
+    if m is None:
+        return None
+    for c in _CLOSE_AT.finditer(src, m.end()):
+        try:
+            body = ast.parse(src[m.start():c.end()]).body
+        except (SyntaxError, ValueError):
+            continue
+        if len(body) == 1 and isinstance(body[0], ast.Assign):
+            return body[0]
+        return None
+    return None
+
+
 def _prebuilt_fields(path):
     """The literal FIELDS dict of a prebuilt module, read with ast (no import), or {}."""
     try:
-        tree = ast.parse(Path(path).read_text())
+        src = Path(path).read_text()
+        node = _fields_fast(src)
+        if node is not None:
+            try:
+                val = ast.literal_eval(node.value)
+                return val if isinstance(val, dict) else {}
+            except ValueError:
+                pass
+        tree = ast.parse(src)
     except (OSError, SyntaxError, ValueError):
         return {}
     for node in tree.body:

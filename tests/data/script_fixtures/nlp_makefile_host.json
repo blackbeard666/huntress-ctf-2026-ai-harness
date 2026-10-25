@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=makefile|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=make_build|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=MAKEFILE-770ea8bc|url=https://makefile-770ea8bc7f.example.invalid/stage|file_path=/tmp/huntress-makefile/.770ea8bc7f179fd8.stage",
+ "decoy": false,
+ "language": "makefile",
+ "role": "host",
+ "id_single": "polyglot-makefile-host-<field>",
+ "id_timed": "polyglot-makefile-646b69-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_makefile_host.mk | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-makefile-host-language": "makefile",
+  "polyglot-makefile-host-role": "staged_chain",
+  "polyglot-makefile-host-verdict": "suspicious",
+  "polyglot-makefile-host-attack": "T1059",
+  "polyglot-makefile-host-adapter": "operation_graph",
+  "polyglot-makefile-host-host-profile": "make_build",
+  "polyglot-makefile-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-makefile-host-stage-profile": "two_stage_download_execute",
+  "polyglot-makefile-host-next-language": "bash",
+  "polyglot-makefile-host-stage-count": "2",
+  "polyglot-makefile-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-makefile-host-campaign-id": "MAKEFILE-770ea8bc",
+  "polyglot-makefile-host-url": "https://makefile-770ea8bc7f.example.invalid/stage",
+  "polyglot-makefile-host-file-path": "/tmp/huntress-makefile/.770ea8bc7f179fd8.stage"
+ },
+ "answers_timed": {
+  "polyglot-makefile-646b69-url-host": "makefile-770ea8bc7f.example.invalid",
+  "polyglot-makefile-646b69-path-leaf": ".770ea8bc7f179fd8.stage",
+  "polyglot-makefile-646b69-campaign-token": "770ea8bc",
+  "polyglot-makefile-646b69-next-language": "bash"
+ }
+}

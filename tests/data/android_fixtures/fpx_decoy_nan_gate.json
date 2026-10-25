@@ -1,0 +1,8 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same SensorMap layout with an empty sample window: score = 0f/0 = NaN, `score > 0.5f` is cmpl-float so the token branch is dead and the live branch returns 'ANS-' + 15 hex (near-miss); an evaluator with cmpg bias for `>` emits ANS-7f4a7c15e1f779b9",
+ "generator_cmd": "python3 tests/data/android_fixtures/fpx_src/gen_fpx.py decoy_nan_gate tests/data/android_fixtures/fpx_decoy_nan_gate.apk  # javac --release 8 SensorMap.java + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator: java -cp <javac out> Probe runs SensorMap.mixSensorCode() on the host JVM (OpenJDK 25) -> prints 'ANS-80b583ea61f779b' (15 hex: no valid token)"
+}

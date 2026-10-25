@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=elixir|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=ELIXIR-ee1e140c|url=https://elixir-ee1e140ccd.example.invalid/stage|file_path=/tmp/huntress-elixir/.ee1e140ccd68e1b0.stage",
+ "decoy": false,
+ "language": "elixir",
+ "role": "launcher",
+ "id_single": "polyglot-elixir-launcher-<field>",
+ "id_timed": "polyglot-elixir-1bb371-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_elixir_launcher.exs | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-elixir-launcher-language": "elixir",
+  "polyglot-elixir-launcher-role": "launcher",
+  "polyglot-elixir-launcher-verdict": "suspicious",
+  "polyglot-elixir-launcher-attack": "T1059",
+  "polyglot-elixir-launcher-adapter": "process_builder",
+  "polyglot-elixir-launcher-host-profile": "standalone",
+  "polyglot-elixir-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-elixir-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-elixir-launcher-next-language": "batch",
+  "polyglot-elixir-launcher-stage-count": "3",
+  "polyglot-elixir-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-elixir-launcher-campaign-id": "ELIXIR-ee1e140c",
+  "polyglot-elixir-launcher-url": "https://elixir-ee1e140ccd.example.invalid/stage",
+  "polyglot-elixir-launcher-file-path": "/tmp/huntress-elixir/.ee1e140ccd68e1b0.stage"
+ },
+ "answers_timed": {
+  "polyglot-elixir-1bb371-url-host": "elixir-ee1e140ccd.example.invalid",
+  "polyglot-elixir-1bb371-path-leaf": ".ee1e140ccd68e1b0.stage",
+  "polyglot-elixir-1bb371-campaign-token": "ee1e140c",
+  "polyglot-elixir-1bb371-next-language": "batch"
+ }
+}

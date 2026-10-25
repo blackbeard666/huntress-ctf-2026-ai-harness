@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.parent_application",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_apps.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> apps_decoy.db (printf text renamed .db))",
+ "oracle_cmd": "file -b apps_decoy.db -> 'ASCII text' (no SQLite magic; Python sqlite3 deserialize -> DatabaseError) -> none",
+ "decoy": true,
+ "member": "apps_decoy.db"
+}

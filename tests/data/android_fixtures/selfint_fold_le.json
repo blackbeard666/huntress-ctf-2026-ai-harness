@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": "ANS-ee8936e8591575ec",
+ "decoy": false,
+ "_why": "Release.code(Context): signingInfo.getApkContentsSigners()[0].toByteArray() -> SHA-1 -> fold v = v*31 + b (signed bytes, long); JarFile(getPackageCodePath()).getEntry(assets/huntress_puzzle.json).getCrc(); MD5 over getInputStream(classes.dex) then digest(ByteBuffer.allocate(8).putLong(v).array()); ByteBuffer.wrap(m).order(LITTLE_ENDIAN).getLong(8) ^ (long) ByteBuffer.wrap(m, 2, 6).getInt() << 7",
+ "generator_cmd": "python3 tests/data/android_fixtures/selfint_src/gen_selfint.py fold_le tests/data/android_fixtures/selfint_fold_le.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 link (manifest) + zipfile (classes.dex, assets/huntress_puzzle.json codec=analysis) + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), then java -Dctx.apk=<signed apk> -Dctx.cert=<der> -Dctx.pkg=<pkg> -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM: real java.util.zip.ZipFile / java.util.jar.JarFile on the signed APK (entry CRC / size / getInputStream dex bytes), real java.nio.ByteBuffer, MessageDigest, CRC32, Adler32, Arrays.hashCode -> 'ANS-ee8936e8591575ec'"
+}

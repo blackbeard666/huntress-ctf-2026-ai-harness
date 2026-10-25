@@ -1,0 +1,21 @@
+{
+ "family": "jvm_trigger_proof",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "vtp_sioobe_a.bin",
+ "jar_b": "vtp_sioobe_b.bin",
+ "expected_facts": {
+  "trigger_input": "\"\"",
+  "trigger_input_raw": "",
+  "trigger_input_type": "empty_string",
+  "vulnerable_outcome": "java.lang.StringIndexOutOfBoundsException",
+  "corrected_result": "-1",
+  "exception_class": "java.lang.StringIndexOutOfBoundsException",
+  "trigger_found": "true",
+  "method": "fourth"
+ },
+ "generator_cmd": "bash vtp_gen.sh .   # javac: null-guarded charAt(len>3?3:0) without the isEmpty guard -> \"\" faults; compiled + jarred by JDK javac/jar",
+ "oracle_cmd": "java VtpOracle.java vtp_sioobe_a.bin vtp_sioobe_b.bin FourthVulnerable@FourthCorrected.fourth   # real JVM, reflection over the documented candidate order",
+ "decoy": false
+}

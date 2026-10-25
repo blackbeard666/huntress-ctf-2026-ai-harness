@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=swift|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=SWIFT-3aaa223e|url=https://swift-3aaa223e05.example.invalid/stage|file_path=/tmp/huntress-swift/.3aaa223e052f0bac.stage",
+ "decoy": false,
+ "language": "swift",
+ "role": "benign-utility",
+ "id_single": "polyglot-swift-benign-utility-<field>",
+ "id_timed": "polyglot-swift-73a87e-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_swift_benign_utility.swift | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-swift-benign-utility-language": "swift",
+  "polyglot-swift-benign-utility-role": "benign_utility",
+  "polyglot-swift-benign-utility-verdict": "benign",
+  "polyglot-swift-benign-utility-attack": "none",
+  "polyglot-swift-benign-utility-adapter": "local_parser",
+  "polyglot-swift-benign-utility-host-profile": "standalone",
+  "polyglot-swift-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-swift-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-swift-benign-utility-next-language": "powershell",
+  "polyglot-swift-benign-utility-stage-count": "2",
+  "polyglot-swift-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-swift-benign-utility-campaign-id": "SWIFT-3aaa223e",
+  "polyglot-swift-benign-utility-url": "https://swift-3aaa223e05.example.invalid/stage",
+  "polyglot-swift-benign-utility-file-path": "/tmp/huntress-swift/.3aaa223e052f0bac.stage"
+ },
+ "answers_timed": {
+  "polyglot-swift-73a87e-url-host": "swift-3aaa223e05.example.invalid",
+  "polyglot-swift-73a87e-path-leaf": ".3aaa223e052f0bac.stage",
+  "polyglot-swift-73a87e-campaign-token": "3aaa223e",
+  "polyglot-swift-73a87e-next-language": "powershell"
+ }
+}

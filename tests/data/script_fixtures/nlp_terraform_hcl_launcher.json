@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=terraform_hcl|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=TERRAFORM_HCL-d8f2bded|url=https://terraform_hcl-d8f2bded6c.example.invalid/stage|file_path=/tmp/huntress-terraform_hcl/.d8f2bded6c0a1932.stage",
+ "decoy": false,
+ "language": "terraform_hcl",
+ "role": "launcher",
+ "id_single": "polyglot-terraform_hcl-launcher-<field>",
+ "id_timed": "polyglot-terraform_hcl-c21878-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_terraform_hcl_launcher.tf | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-terraform_hcl-launcher-language": "terraform_hcl",
+  "polyglot-terraform_hcl-launcher-role": "launcher",
+  "polyglot-terraform_hcl-launcher-verdict": "suspicious",
+  "polyglot-terraform_hcl-launcher-attack": "T1059",
+  "polyglot-terraform_hcl-launcher-adapter": "process_builder",
+  "polyglot-terraform_hcl-launcher-host-profile": "standalone",
+  "polyglot-terraform_hcl-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-terraform_hcl-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-terraform_hcl-launcher-next-language": "batch",
+  "polyglot-terraform_hcl-launcher-stage-count": "3",
+  "polyglot-terraform_hcl-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-terraform_hcl-launcher-campaign-id": "TERRAFORM_HCL-d8f2bded",
+  "polyglot-terraform_hcl-launcher-url": "https://terraform_hcl-d8f2bded6c.example.invalid/stage",
+  "polyglot-terraform_hcl-launcher-file-path": "/tmp/huntress-terraform_hcl/.d8f2bded6c0a1932.stage"
+ },
+ "answers_timed": {
+  "polyglot-terraform_hcl-c21878-url-host": "terraform_hcl-d8f2bded6c.example.invalid",
+  "polyglot-terraform_hcl-c21878-path-leaf": ".d8f2bded6c0a1932.stage",
+  "polyglot-terraform_hcl-c21878-campaign-token": "d8f2bded",
+  "polyglot-terraform_hcl-c21878-next-language": "batch"
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "frames-index",
+ "plain": null,
+ "encoded": "1:e,0:h,2:l,4:o,2:l",
+ "generator_cmd": "hand-written: index 2 appears twice, 3 never",
+ "oracle_cmd": "perl -CSD -0777 -ne 'my %h;while(/(?:^|,)(\\d+):(.)(?=,\\d+:|$)/gs){$h{$1}=$2}my @k=sort{$a<=>$b}keys %h;my $b=$k[0];($k[$_]==$_+$b or exit 1) for 0..$#k;print map{$h{$_}}@k'",
+ "oracle_plain": "",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "repeated index -> not a permutation (perl reader exits 1)"
+}

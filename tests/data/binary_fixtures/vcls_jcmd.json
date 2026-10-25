@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_jcmd_a.bin",
+ "file_b": "vcls_jcmd_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-78",
+  "cwe_number": "78",
+  "vulnerability_class": "command_injection"
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT   # gcc -fno-inline C twins / javac --release 11 + jar twins",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_jcmd_a.bin vcls_jcmd_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"aastore\", \"athrow\", \"dup\", \"iconst_1\", \"iconst_2\", \"iconst_3\", \"ifne\", \"java/lang/String.matches\", \"ldc\", \"new\"], \"removed\": [\"invokestatic\", \"java/lang/Runtime.exec\", \"java/lang/Runtime.getRuntime\"]}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (Java: exec(\"ping \"+host) -> matches() + exec(String[])); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

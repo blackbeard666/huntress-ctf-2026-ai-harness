@@ -1,4 +1,4 @@
-# metadata-forensics — technique log (days 1-23; updated after every day)
+# metadata-forensics — technique log (days 1-24; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, D8: "new, dynamic variations/mutations"): solvers derive structure, degrade per field.
@@ -6,62 +6,72 @@ How this lane has looked so far (observations, not guarantees):
   dims, Mach-O became FAT, zip CD order shuffled) -- every carried extractor must parse the general case, not D-day's sample.
 - Every day = ONE evidence zip (plain Deflate, no password). D1-7: one tiny member, one fact; D8-9: cumulative kit in
   every mode; D10-14: one field everywhere. **D15+ split the modes**: single = 1 field (the new member), TT = cumulative
-  kit (D15 20 -> D23 28 fields, +1/day), Mastery = N kits x the TT set (N=5 to D21, 6 D22, SEVEN D23), incl. a
+  kit (D15 20 -> D24 29 fields, +1/day), Mastery = N kits x the TT set (N=5 to D21, 6 D22, 7 D23, 8 D24), incl. a
   cross-member "synthesis" question. Pre-arm EVERY earlier family AND the synthesis before the timed run.
 - Member families: note/text -> jpg -> png -> pdf -> inner zip -> Go PE (D9-11) -> .NET dll (D12) -> MSI (D13) -> LNK
   (D14) -> OOXML `.docx` (D15) -> `.eml` (D16) -> WAV (D17) -> MP4 (D18) -> ELF (D19) -> Mach-O `macos-001.bin` (D20)
-  -> APK `mobile-001.apk` (D21) -> JAR `application-001.jar` (D22) -> SQLite `database-001.sqlite` (D23). D19-22 =
-  runnable formats (one header/identity/launch field each); D23 turned to APPLICATION DATA (a database header field).
+  -> APK `mobile-001.apk` (D21) -> JAR `application-001.jar` (D22) -> SQLite `database-001.sqlite` (D23) -> EVTX
+  `events-001.evtx` (D24). D19-22 = runnable formats; D23 APPLICATION DATA (db header); D24 opened WINDOWS DFIR logs
+  with the first field that needs a STRUCTURE WALK (count records), not one header offset.
   fmt word = an ABSTRACT namespace sometimes (`email` not `eml`; `media` for audio D17 AND video D18, ffprobe
-  vocabulary), else the plain format (`pe` `msi` `lnk` `elf` `macho` `apk` `jar` `sqlite`) -- read it from the question.
+  vocabulary), else the plain format (`pe` `msi` `lnk` `elf` `macho` `apk` `jar` `sqlite` `evtx`) -- read it from the question.
 - Fields, one new per day: identity -> magic prefix -> `text.utf8_bom_present` -> `jpeg.sof_dimensions_pixels` ->
   `png.ihdr_dimensions_pixels` -> `pdf.header_version` -> `zip.eocd_total_entries` -> `zip.central_directory_member_names`
   -> `pe.coff_machine_u16_hex` -> `pe.address_of_entry_point_rva_hex` -> `pe.version_original_filename` ->
   `dotnet.mvid_guid` -> `msi.product_code_guid` -> `lnk.target_path_windows` -> `ooxml.external_relationship_targets` ->
   `email.message_id` -> `media.primary_audio_codec_name` -> `media.primary_video_dimensions` -> `elf.e_machine_u16_hex`
-  -> `macho.cpu_type_set` -> `apk.package_name` -> `jar.main_class` -> `sqlite.page_size_bytes`.
+  -> `macho.cpu_type_set` -> `apk.package_name` -> `jar.main_class` -> `sqlite.page_size_bytes` ->
+  `evtx.record_count`.
   Question `Determine <fmt>.<field> for <member>`; id `dNN-<family>-NNN-<fmt>-<field>` (`.`/`_` -> `-`), `dNN` = the
   family's first day; `<family>` != `<fmt>` only for media (`d17-audio-001-media-`, `d18-video-...`).
 - Flavor text promises extra findings that are NEVER asked (collisions, crops/claimed device, D19 deployment groups,
   D20 fleet, D21 rebuilds vs clones, D22 nested launchers, D23 "copied, truncated, embedded, and mislabeled ... connect
-  databases to parent applications, and find the impossible claim"); the single sample delivers less. Graded = the
+  databases to parent applications, and find the impossible claim", D24 "duplicated, truncated, and bundled with
+  reports ... find the selectively shortened timeline"); the single sample delivers less. Graded = the
   STRUCTURAL truth; names/extensions/secondary metadata are the lie. Titles pun on the field (D19 "Little Endian" =
   EI_DATA; D20 "Universal Appeal" = fat; D21 "Package Deal"; D22 "Main Character Energy" = `Main-Class`; D23 "Page Me
-  Maybe" = page size). The flavor's depth shows up in the TIMED carry-over mutations (D23 fat Mach-O), not new fields.
+  Maybe" = page size; D24 "Event Horizon" = how far the records reach = record count). The flavor's depth shows up in
+  the TIMED carry-over mutations (D23 fat Mach-O, D24 M4A/FLAC audio), not in new fields.
 - Singles: D1-9 first-submit ~27-60 s; D10, D13, D15 lost ONE submit to a convention (padding, braces, list order);
   D16 lost TWO (`none`, stripped `<>`); D20 lost ONE (`["arm64"]` -> hex won). Race probe from the prebuilt `lib.meta`
   registry: D18 ~5 s, D19 ~13 s, D22 ~19 s, D23 ~29 s (`lib/meta/prebuilt/sqlite.py`); registry MISS -> live worker D17
-  ~24 s, D21 ~32 s. TT/Mastery: CORRECT every day; D15-17 + D19 after an offline generalize (synthesis dispatch
-  missing); D23 after one wrong TT submit + generalize (list ORDER under mutation); D18, D20-22 in-window first try.
+  ~24 s, D21 ~32 s; D24 live worker ~21 s (own struct chunk walk; prebuilt `evtx.py` also had `record_count`).
+  TT/Mastery: CORRECT every day; D15-17 + D19 after an offline generalize (synthesis dispatch missing); D23 after one
+  wrong TT submit + generalize (list ORDER under mutation); D18, D20-22, D24 in-window first try
+  (D24: TT 29 fields 8.4 s, Mastery 232 fields 5.6 s, zero generalize -- the D23 fixes held under new mutations).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
-- **Delivery layout** -- see "Delivery layouts seen". Names drift: D1-14 `metadata-day-NN-evidence[-0N].zip`; D15-23
-  TT `evidence.zip`, Mastery `evidence-01.zip` holding `evidence-01..0N.zip` (N=5; D22 6; D23 7). Route by the ref's
+- **Delivery layout** -- see "Delivery layouts seen". Names drift: D1-14 `metadata-day-NN-evidence[-0N].zip`; D15-24 TT
+  `evidence.zip`, Mastery `evidence-01.zip` holding `evidence-01..0N.zip` (N=5; D22 6; D23 7; D24 8). Route by the ref's
   text before `->` and by sha256, never a hard-coded name.
 - **Field-set / set count** -- D7 TT 11 / Mastery 22; D8-9 12-13 everywhere; D10-14 one; D15 1/20/100 ... D21 1/26/130
-  (+1 field/day); D22 1/27/162 (6 sets); D23 1/28/196 (7 sets). Enumerate `setN.` prefixes from the live ids. Families:
-  identity + `d04-jpeg` `d05-png` `d06-pdf` `d07-zip` (eocd, CD names) `d09-pe` (machine, entry RVA, OriginalFilename)
-  `d12-dotnet` `d13-msi` `d14-lnk` `d15-ooxml` `d16-email` `d17-audio` `d18-video` `d19-elf` `d20-macho` `d21-apk`
-  `d22-jar` `d23-sqlite` + synthesis. Dispatch on the answer-id SUFFIX (reference solver answering all 28:
-  `challenges/day23/metadata-page-me-maybe/solver/solve.py`; lane seed `local_answer` + `synthesis_answer` + lib.meta).
+  (+1 field/day); D22 1/27/162 (6 sets); D23 1/28/196 (7 sets); D24 1/29/232 (8 sets). Enumerate `setN.` prefixes from
+  the live ids. Families: identity + `d04-jpeg` `d05-png` `d06-pdf` `d07-zip` (eocd, CD names) `d09-pe` (machine, entry
+  RVA, OriginalFilename) `d12-dotnet` `d13-msi` `d14-lnk` `d15-ooxml` `d16-email` `d17-audio` `d18-video` `d19-elf`
+  `d20-macho` `d21-apk` `d22-jar` `d23-sqlite` `d24-evtx` + synthesis. Dispatch on the answer-id SUFFIX (reference
+  solver answering all 29: `challenges/day24/metadata-event-horizon/solver/solve.py`; lane seed `local_answer` +
+  `synthesis_answer` + lib.meta).
 - **fmt word vs registry key vs id family** -- D16 `email.*` (prebuilt said `eml`); D17/D18 `media.*` ids
   `d17-audio-`/`d18-video-`; D19 `elf.e_machine_u16_hex` (spec name keeps its underscore -> `e-machine`); D20
   `macho.cpu_type_set`; D21 `apk.package_name`; D22 `jar.main_class` (container word, attribute snake_cased); D23
-  `sqlite.page_size_bytes` (plain format word; unit suffix `_bytes` on an integer). Vocabulary = the field's home tool
-  (ffprobe) or the spec struct/attribute; binary-header codes ALWAYS raw `0x` hex, even without `_hex` (D20). Rule: take
-  `<fmt>.<field>` from the question (or the slug after `-NNN-`), map fmt synonyms (`email`<->`eml`/`mime`;
-  `media`<->`audio`/`video`/`av`; `jar`<->`java_archive`/`war`; `sqlite`<->`sqlite3`/`db`), route the extractor by MAGIC
-  + member names, fall back to the same field under any fmt.
-- **Member values (D23: EVERYTHING re-rolls)** -- never cache across sets/modes. Seen re-rolling: identity member sizes
-  (D15-22 33/29 B; D23 72-378 B, CRLF or LF rosters, BOM `true` in some sets), jpg/png dims, PDF header `1.0`/`1.4`/
-  `1.5`/`2.0`, D7 entry count 2-13, PE Machine (`0x014c` `0x8664` `0xaa64` earlier; D23 also `0x01c0` ARM, `0x01c2`
-  Thumb, `0x01c4` ARMNT, `0x01f0` PowerPC, `0x0ebc` EFI byte code, `0x5064` RISCV64), entry RVA, MVID, ProductCode,
-  LNK target (C:/D:, varied dirs), docx targets (1-5), Message-ID, audio codec (`pcm_s16le` -> D23 also `mp3`, `opus`,
-  `vorbis`), video dims (no longer 320x180), ELF e_machine (`0x003e` -> D23 `0x0003`, `0x0028`, `0x002b` SPARCV9,
-  `0x0102` LoongArch), Mach-O thin -> D23 FAT with 2-3 slices of {`0x00000007` `0x0000000c` `0x00000012` `0x01000007`
-  `0x0100000c` `0x01000012` `0x0200000c`}, APK package (`io.*`/`net.*`/`org.*`/`com.*`), JAR Main-Class (dotted,
-  1-4 parts), SQLite page size 512-65536 (65536 stored as `1`). Rule: decode the general structure (byte order from the
-  file, walk every slice/chunk/stream, map every tag), never the D-day sample's constant.
+  `sqlite.page_size_bytes` (plain format word; unit suffix `_bytes` on an integer); D24 `evtx.record_count` (plain).
+  Vocabulary = the field's home tool (ffprobe) or the spec struct/attribute; binary-header codes ALWAYS raw `0x` hex,
+  even without `_hex` (D20). Rule: take `<fmt>.<field>` from the question (or the slug after `-NNN-`), map fmt synonyms
+  (`email`<->`eml`/`mime`; `media`<->`audio`/`video`/`av`; `jar`<->`java_archive`/`war`; `sqlite`<->`sqlite3`/`db`;
+  `evtx`<->`evt`/`eventlog`), route the extractor by MAGIC + member names, fall back to the same field under any fmt.
+- **Member values (D23+D24: EVERYTHING re-rolls, new values every day)** -- never cache across sets/modes. Seen
+  re-rolling: identity member sizes (D15-22 33/29 B; D23 72-378 B, CRLF or LF rosters, BOM `true` in some sets), jpg/png
+  dims, PDF header `1.0`-`2.0`, D7 entry count 2-13, PE Machine (`0x014c` `0x8664` `0xaa64` earlier; D23
+  also `0x01c0` ARM, `0x01c2` Thumb, `0x01c4` ARMNT, `0x01f0` PowerPC, `0x0ebc` EFI byte code, `0x5064` RISCV64; D24 +
+  `0x0266` MIPS16), entry RVA, MVID, ProductCode, LNK target (C:/D:, varied dirs), docx targets (1-5), Message-ID, audio
+  codec (`pcm_s16le` -> D23 also `mp3`, `opus`, `vorbis`; D24 + `aac` from `ftyp M4A ` and `flac` from `fLaC`, all still
+  named `audio-001.wav`), video dims (no longer 320x180), ELF e_machine (`0x003e` -> D23 `0x0003`, `0x0028`, `0x002b`
+  SPARCV9, `0x0102` LoongArch; D24 + `0x0016` S390, `0x00b7` AArch64, `0x00f3` RISC-V), Mach-O thin -> D23 FAT with 2-3
+  slices of {`0x00000007` `0x0000000c` `0x00000012` `0x01000007` `0x0100000c` `0x01000012` `0x0200000c`} (D24 also a
+  60-B THIN LE-32 `ce fa ed fe` ARM -> `["0x0000000c"]`), APK package (`io.*`/`net.*`/`org.*`/`com.*`), JAR Main-Class
+  (dotted, 1-4 parts), SQLite page size 512-65536 (65536 stored as `1`; D24 + 2048), EVTX record
+  count 3-119 (one 64 KiB chunk so far). Rule: decode the general structure (byte order from the file, walk every
+  slice/chunk/stream, map every tag), never the D-day sample's constant.
 - **List ORDER under mutation (D23)** -- D8-D22 zips stored CD entries already sorted, so "CD order" and "sorted"
   coincided; D23 shuffled the CD and the GM REJECTED CD order, accepted ascending sort. Fat Mach-O slices: ascending
   `0x%08x` accepted (fat_arch order != the accepted answer). Rule: every `json` list answer = values sorted ascending
@@ -71,13 +81,13 @@ How this lane has looked so far (observations, not guarantees):
   `roster.csv`); each identity question picks one per set: ids `<member-stem>-{filename,size-bytes,md5,sha1,sha256,
   magic-prefix-hex-16,text-utf8-bom-present}`. Filename question artifact = the container only -> map the stem.
 - **Synthesis / cross-member** (D15+) -- id `metadata-day-NN-synthesis-<algo>-order` (TODAY's NN), kind `json`, norm
-  `case_insensitive`, text "Compute the full-file SHA-256 digest of each named file, then submit a compact JSON array
-  of their filenames in ascending digest order. Files: [...]". Rule: regex `Files:\s*(\[.*?\])`, resolve each under the
+  `case_insensitive`, text "Compute the full-file SHA-256 digest of each named file, then submit a compact JSON array of
+  their filenames in ascending digest order. Files: [...]". Rule: regex `Files:\s*(\[.*?\])`, resolve each under the
   ref's container, `hashlib.new(algo)` over raw bytes, sort by hex digest, emit names --
   `lib.meta.synthesis.digest_order(question, get_bytes, algo)` with get_bytes bound INSIDE the per-set worker. Shape:
-  note + re-picked kit members + TODAY's member; 4 names D15-20, FIVE D21-23. The list differs between the 409 contract
-  and the live attempt AND between sets of one Mastery (D23: note/png/msi/mp4/sqlite vs note/pdf/lnk/mp4/sqlite) --
-  parse each set's own text. Only sha256 seen.
+  note + re-picked kit members + TODAY's member; 4 names D15-20, FIVE D21-24 (D24: note/pdf/elf/lnk/evtx). The list
+  differs between the 409 contract and the live attempt AND between sets of one Mastery (D23: note/png/msi/mp4/sqlite vs
+  note/pdf/lnk/mp4/sqlite) -- parse each set's own text. Only sha256 seen.
 - **Decoys** -- renamed copies, misleading extensions, secondary metadata (EXIF, catalog /Version): answer from the
   structural bytes of the named member. Kits pool `collector-001.elf` with `MZ` members: `elf.*` of a non-ELF = `none`.
 - **Answer kinds** -- `exact_text`, `integer`, `pattern` (hashes case-insensitive; `0x`-hex `trim` only -> lowercase),
@@ -108,6 +118,7 @@ How this lane has looked so far (observations, not guarantees):
 | `apk.*` / `.apk` (`PK` + `AndroidManifest.xml` + `classes.dex`) | manifest is BINARY AXML (`03 00 08 00`): `aapt dump badging f.apk \| head -1`; stdlib `lib/meta/apk.py manifest_attr(axml, 'manifest', 'package')`. Triage routes APKs to `$mobile-android` -- ignore it |
 | `jar.*` / `.jar/.war/.ear` (`PK` + `META-INF/MANIFEST.MF`) | `unzip -p f.jar META-INF/MANIFEST.MF` (CRLF, 72-B lines, ONE-space continuations); main section up to the first blank line; `Main-Class` verbatim. Spring Boot: `Start-Class` = app. `lib/meta/prebuilt/jar.py` |
 | `sqlite.*` / `.sqlite/.db/.sqlite3` (`SQLite format 3\0` @0) | 100-B header, BIG-endian: page size u16 @16 (`1` = 65536), write/read ver @18/@19 (2 = WAL), file change counter @24, in-header db size (pages) @28, freelist @32/@36, encoding u32 @56 (1 UTF-8, 2 UTF-16le, 3 UTF-16be), user_version @60, application_id @68, version-valid-for @92, SQLITE_VERSION_NUMBER @96. `xxd -s 16 -l 2 f`; `file f` prints the summary; `sqlite3 f 'PRAGMA page_size'`. In-window `lib/meta/prebuilt/sqlite.py` (header + stdlib sqlite_master walk + browser history) |
+| `evtx.*` / `.evtx` (`ElfFile\0` @0, `ElfChnk\0` @0x1000) | LE everywhere. File header: next_record_id u64 @24, chunk count u16 @42, version @36/@38 (3.2), flags u32 @120 (1 dirty, 2 full). Each 64 KiB chunk: first/last record number @8/@16, ids @24/@32, free-space offset u32 @48; records `2a 2a 00 00` from chunk+0x200, size u32 @+4, EventRecordID u64 @+8, FILETIME @+16. `record_count` = walk EVERY chunk's records up to its free offset (D24); `file f` prints chunks + next record no.; python-evtx `Evtx.Evtx` (worker-only). `lib/meta/prebuilt/evtx.py` |
 | `dotnet.*` / Mono assembly | data dir 14 -> CLI header -> `BSJB` -> `#~` -> Module row 0 Mvid (1-based #GUID idx) -> `uuid.UUID(bytes_le=..)`. `lib/meta/dotnet.py` |
 | `msi.*` / `.msi` (OLE `d0 cf 11 e0`) | fast: `strings -n 6 x.msi \| grep -aoE 'ProductCode\{[0-9A-F-]{36}\}'`; exact: CFB `!_StringPool`/`!_StringData` -> `!Property`. `olefile` in venv |
 | `lnk.*` / `.lnk` (`4c 00 00 00` + CLSID 00021401) | LinkFlags @0x14 (0x1 IDList, 0x2 LinkInfo, 0x80 Unicode); target = LinkInfo LocalBasePath (+CommonPathSuffix) verbatim, else IDList. `lib.meta.lnk:target_path` |
@@ -129,33 +140,33 @@ How this lane has looked so far (observations, not guarantees):
 `0x%08x` (unpadded REJECTED), `version_original_filename` verbatim -> D12 `dotnet.mvid_guid` (`uuid.UUID(bytes_le)`
 lowercase, no braces) -> D13 `msi.product_code_guid` (stored WITH braces; brace-less REJECTED) -> D14 `lnk.target_path_windows`.
 
-**Days 15-22** (single = 1 new-family field; TT/Mastery = cumulative kit + synthesis): D15 `ooxml.external_relationship_
+**Days 15-23** (single = 1 new-family field; TT/Mastery = cumulative kit + synthesis): D15 `ooxml.external_relationship_
 targets` (rels `TargetMode="External"` Targets SORTED; rels order REJECTED). D16 `email.message_id` (VERBATIM with `<>`;
 2 lost: id regex -> `none`, stripped brackets). D17 `media.primary_audio_codec_name` (WAV PCM16 -> `pcm_s16le`). D18
 `media.primary_video_dimensions` (first `vide` trak stsd -> `320x180`). D19 "Little Endian" `elf.e_machine_u16_hex`
 (@18 in EI_DATA order -> `0x003e`). D20 "Universal Appeal" `macho.cpu_type_set` (THIN arm64 -> `["0x0100000c"]`;
 `["arm64"]` REJECTED). D21 "Package Deal" `apk.package_name` (binary-AXML `<manifest package=>` verbatim, NOT
 `android:label`). D22 "Main Character Energy" `jar.main_class` (MANIFEST.MF `Main-Class` verbatim, dotted, no
-`.class`; prebuilt `jar.py` race hit ~19 s; an unwired-template `none` submit landed after CORRECT -- harmless that
-time). Timed D15-17 + D19: synthesis dispatch missing -> `solver_incomplete` -> offline generalize; D18, D20-22 first try.
+`.class`; an unwired-template `none` submit landed after CORRECT -- harmless that time). D23 "Page Me Maybe"
+`sqlite.page_size_bytes` (u16 BE @16, `1` = 65536; prebuilt race hit ~29 s; timed kit MUTATED for the first time ->
+1 wrong TT submit on CD-order names, Mastery generalize for sorted compact JSON). Timed D15-17 + D19: synthesis
+dispatch missing -> `solver_incomplete` -> offline generalize; D18, D20-22 first try.
 
-**Day 23 — Page Me Maybe** (`sqlite.page_size_bytes`, kind `integer`, norm `trim`, id
-`d23-sqlite-001-sqlite-page-size-bytes`). Prompt: "Application databases have been copied, truncated, embedded, and
-mislabeled. Validate page geometry, connect databases to parent applications, and find the impossible claim."
-- Artifact: `metadata-day-23-evidence.zip` (536 B) -> `database-001.sqlite` (12 288 B = 3 x 4096-B pages; `file`:
-  "SQLite 3.x database, application id 1213485652 (`0x48545254` "HTRT"), user version 7, last written using SQLite
-  version 3046000, file counter 9, database pages 3"). Header consistent (in-header size 3 x 4096 = file length,
-  change counter == version-valid-for) -- the truncation / embedding / parent-app / "impossible claim" flavor was unasked.
-- Insight: page size = u16 BIG-endian @16 of the 100-byte header (`10 00` -> 4096); the value `1` means 65536 (seen in a
-  Mastery set). Answer the integer in bytes. Not `PRAGMA page_count`, not file size / pages.
-- Tools: `xxd -s 16 -l 2 f`; `file f`; `sqlite3 f 'PRAGMA page_size'`; in-window `lib/meta/prebuilt/sqlite.py` (built
-  D16-night `sqlite-header` gap) answered in the race probe -> GM CORRECT ~29 s, 0 wrong.
-- Timed: TT 28 fields / Mastery 196 (SEVEN sets); sqlite values 512/1024/4096/8192/16384/32768/65536 all read right.
-  The carry-over kit MUTATED (see Variant axes). TT lost ONE submit: `zip.central_directory_member_names` in stored CD
-  order REJECTED (CD shuffled for the first time) -> ascending sort CORRECT. Mastery: the pre-submit guard caught the
-  same CD list emitted as a Python repr and fat Mach-O cputypes in fat_arch order -> `solver_incomplete` -> 3 generalize
-  workers -> sorted compact JSON -> CORRECT on the single GM submit (in-window 5.9 s). Spelling confirmed: page size =
-  plain base-10 bytes; sorted lists for CD names and cputype sets.
+**Day 24 — Event Horizon** (`evtx.record_count`, kind `integer`, norm `trim`, id `d24-evtx-001-evtx-record-count`).
+Prompt: "Windows event logs from several hosts have been duplicated, truncated, and bundled with reports. Count records
+accurately and find the selectively shortened timeline."
+- Artifact: `metadata-day-24-evidence.zip` (1452 B) -> `events-001.evtx` (69 632 B = 4 KiB file header + ONE 64 KiB
+  chunk; `file`: "MS Windows 10-11 Event Log, version 3.2, 1 chunks (no. 0 in use), next record no. 4"). 3 records.
+  Duplicates / truncation / "reports" / shortened timeline: unasked (one clean file per set in every mode).
+- Insight: a COUNT field = walk the structure: for each `ElfChnk` (64 KiB, from 0x1000) iterate records `**\0\0` from
+  chunk+0x200, step by size u32 @+4, stop at the chunk's free-space offset u32 @48. In all 9 D24 files header
+  `next_record_id - 1` == chunk `last - first + 1` == walked count (no gaps yet) -- the walk is the robust reading if a
+  shortened/dirty variant makes them disagree. Not the chunk count, not the header's next id.
+- Tools: `xxd -l 128 f; xxd -s 4096 -l 128 f`; `file f`; python-evtx (`Evtx.Evtx(path).get_file_header()`,
+  `chunk.records()`) for cross-check. Live local worker wrote a ~15-line struct walk -> GM CORRECT ~21 s, 0 wrong.
+- Timed: TT 29 fields (8.4 s in-window) / Mastery 232 = EIGHT sets (5.6 s) -- both CORRECT first submit, no generalize.
+  New kit mutations handled by the D23-generalized extractors: M4A/AAC + FLAC audio under `.wav`, thin LE-32 Mach-O,
+  PE `0x0266`, ELF `0x0016`/`0x00b7`/`0x00f3`, SQLite 2048. Spelling confirmed: record count = plain base-10 integer.
 
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes: base-10 integer, no units. Hashes: hex, case ignored.
@@ -164,6 +175,7 @@ mislabeled. Validate page geometry, connect databases to parent applications, an
   width/height of v:0 (coded size, NOT rotated, not the tkhd display size).
 - PDF header version: bare `x.y`; absent -> literal `none` (wording; `none` not yet GM-confirmed). Counts: plain integer.
   Struct sizes with a `_bytes` suffix (D23 page size): the decoded integer in bytes (`1` on disk -> `65536`).
+  Record counts (`evtx.record_count`, D24): number of records actually present (chunk walk), base-10.
 - JSON lists -- compact, double quotes, no spaces, values SORTED ascending:
   - `zip.central_directory_member_names`: full stored paths, sorted (D23 TT: CD order REJECTED; D8-22 disk order was sorted).
   - `ooxml.external_relationship_targets`: Target strings sorted (D15; rels-file order REJECTED).
@@ -188,8 +200,8 @@ mislabeled. Validate page geometry, connect databases to parent applications, an
 
 ## Delivery layouts seen (resolve these before parsing)
 - Single / TT: one zip; members named in `artifact` after `->` (filename questions: artifact = the zip only). Mastery
-  (most days, all of D15-23): ONE download holding `-01.zip`..`-0N.zip` (D7 three levels; D15-21 five kits, D22 six, D23
-  seven, 4.6 MB); refs `<set zip> -> <member>`, names reused per set -> resolve by (set zip, member). D9: download
+  (most days, all of D15-24): ONE download holding `-01.zip`..`-0N.zip` (D7 three levels; D15-21 five kits, D22 six, D23
+  seven, D24 eight); refs `<set zip> -> <member>`, names reused per set -> resolve by (set zip, member). D9: download
   `<id>-mastery.zip` vs refs `...-evidence-0N.zip` -> resolve by sha256 (`lib.common.container_by_sha`). D6: two
   same-named downloads -> `delivery N: <zip>` refs. Member numbering shifts between pre-fetched contract and live attempt.
 
@@ -211,14 +223,15 @@ mislabeled. Validate page geometry, connect databases to parent applications, an
   Only submit from the solver once `solve.py` prints a real value for EVERY id.
 - Id-slug parsing (D16, 1 wrong): ids repeat the fmt word (`d16-email-001-email-message-id`); anchor `-\d+-<fmt>-(.+)$`.
   Never submit `none` without grepping the bytes -- `none` = absent in the artifact, not "my parser returned None".
-- Field suffix picks the spelling: `_u16_hex` = raw struct value (D9 not `i386`); `_codec_name` = tool vocabulary
-  (`pcm_s16le`, not tag `1`); NO suffix on a binary-header code (D20) is still raw hex; `_bytes` = decoded integer.
+- Field suffix picks the spelling (see GM conventions): `_u16_hex` raw struct, `_codec_name` tool vocabulary, `_bytes` integer.
 - Byte order: ELF EI_DATA @5 / the Mach-O magic decide (fat headers ALWAYS BE, slices carry their own magic); SQLite
   header is ALWAYS big-endian. Fat cputype is in BOTH fat_arch and the slice header -- may disagree in a variant: the
   set field reads fat_arch. Video geometry has FOUR sources (stsd, SPS crop = ffprobe, tkhd, matrix); trust SPS-cropped.
+- EVTX (D24): count by WALKING records in every chunk (a chunk's free-space offset ends it; slack after it is not a
+  record); header next_record_id is a claim that a dirty/truncated/shortened log can break; a log may hold several
+  chunks and a non-first chunk may be empty or zeroed. EventRecordID gaps = the "shortened timeline" sibling.
 - SQLite: page size `1` = 65536 (u16 overflow); WAL (`@18/@19 == 2`) does not change the page size; a truncated or
   embedded copy keeps a valid header -- read the header of the NAMED member, don't infer from file length.
-- Manifest attributes (D22): CRLF, 72-byte wrap with ONE-space continuations, case-insensitive names, main section only.
 - A pre-fetched TT/Mastery `contract.json` is the 409 `start_required` body (questions, NO `answer_ids`); answer under
   the live ids. Only the named field is graded -- the flavor never widens it.
 - Container-of-containers: a naive `rfind(PK\x05\x06)` reads the OUTER EOCD. Resolve the named member's bytes first
@@ -230,5 +243,5 @@ mislabeled. Validate page geometry, connect databases to parent applications, an
 - Tools installed: exiftool, poppler, qpdf, mutool, pdf-parser, pdfid, pngcheck, zsteg, steghide, binwalk, foremost,
   mediainfo, sqlite3 (CLI + python; `sqlite3` module is worker-only, not in the prebuild gate), ImageMagick,
   readelf/objdump, aapt + apktool/jadx (`source bin/env.sh`), olevba/oleid, olefile, pefile, pyelftools, LnkParse3,
-  dnfile, mutagen, androguard (.venv); msitools under tools/msitools; ffmpeg 7.0.2 (no ffprobe) at
-  `tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2` (not on PATH). NOT installed: ffprobe, sox.
+  dnfile, mutagen, androguard, python-evtx `Evtx` + `evtx_dump.py` (.venv); msitools under tools/msitools; ffmpeg
+  7.0.2 at `tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2` (not on PATH). NOT: ffprobe, sox.

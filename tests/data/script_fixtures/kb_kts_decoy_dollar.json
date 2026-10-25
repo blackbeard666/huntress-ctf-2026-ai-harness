@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "kts",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/kb_gen.py  (kb_kts_decoy_dollar)",
+ "oracle_cmd": "sed -n '2p' tests/data/script_fixtures/kb_kts_decoy_dollar.kts | perl -pe 's/^\\s+//; s/\\$\\{\\x27\\$\\x27\\}/\\$/g'  # no v=3 plan"
+}

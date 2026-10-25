@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.file_page_count",
+ "expected": "4",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_integrity.sh.txt <outdir>  (coreutils cp/head/dd + sqlite3 CLI 3.46.1 + Pillow) -> padded.sqlite",
+ "oracle_cmd": "stat -c %s -> 16384; file -b -> 'database pages 3, file counter 9, version-valid-for 9'; PRAGMA page_size 4096, page_count 3, integrity_check ok -> 16384 - 12288 = 4096 trailing",
+ "decoy": false,
+ "member": "database-padded.sqlite"
+}

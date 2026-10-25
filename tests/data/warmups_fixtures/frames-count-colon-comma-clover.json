@@ -1,0 +1,9 @@
+{
+ "codec": "frames-count",
+ "plain": "Wooo, nice work decoding this warmup!!! Too good, submit this exact answer to the Game Master: clover-moose-1100",
+ "encoded": "1:W,3:o,1:,,1: ,1:n,1:i,1:c,1:e,1: ,1:w,1:o,1:r,1:k,1: ,1:d,1:e,1:c,1:o,1:d,1:i,1:n,1:g,1: ,1:t,1:h,1:i,1:s,1: ,1:w,1:a,1:r,1:m,1:u,1:p,3:!,1: ,1:T,2:o,1: ,1:g,2:o,1:d,1:,,1: ,1:s,1:u,1:b,1:m,1:i,1:t,1: ,1:t,1:h,1:i,1:s,1: ,1:e,1:x,1:a,1:c,1:t,1: ,1:a,1:n,1:s,1:w,1:e,1:r,1: ,1:t,1:o,1: ,1:t,1:h,1:e,1: ,1:G,1:a,1:m,1:e,1: ,1:M,1:a,1:s,1:t,1:e,1:r,1::,1: ,1:c,1:l,1:o,1:v,1:e,1:r,1:-,1:m,2:o,1:s,1:e,1:-,2:1,2:0",
+ "generator_cmd": "perl -CSD -0777 -ne 'my @o;while(/((.)\\2*)/gs){push @o,sprintf(\"%d:%s\",length($1),$2)}print join(\",\",@o)'",
+ "oracle_cmd": "perl -CSD -0777 -ne 'my $o=\"\";while(/(\\d+):(.)(?:,|$)/gs){$o.=$2 x $1}print $o'",
+ "oracle_plain": "Wooo, nice work decoding this warmup!!! Too good, submit this exact answer to the Game Master: clover-moose-1100",
+ "expected": "match"
+}

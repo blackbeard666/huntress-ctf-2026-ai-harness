@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=swift|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=SWIFT-eef26d86|url=https://swift-eef26d8659.example.invalid/stage|file_path=/tmp/huntress-swift/.eef26d8659c7f7b4.stage",
+ "decoy": false,
+ "language": "swift",
+ "role": "staged-chain",
+ "id_single": "polyglot-swift-staged-chain-<field>",
+ "id_timed": "polyglot-swift-add506-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_swift_staged_chain.swift | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-swift-staged-chain-language": "swift",
+  "polyglot-swift-staged-chain-role": "staged_chain",
+  "polyglot-swift-staged-chain-verdict": "suspicious",
+  "polyglot-swift-staged-chain-attack": "T1059",
+  "polyglot-swift-staged-chain-adapter": "operation_graph",
+  "polyglot-swift-staged-chain-host-profile": "standalone",
+  "polyglot-swift-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-swift-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-swift-staged-chain-next-language": "vbscript",
+  "polyglot-swift-staged-chain-stage-count": "3",
+  "polyglot-swift-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-swift-staged-chain-campaign-id": "SWIFT-eef26d86",
+  "polyglot-swift-staged-chain-url": "https://swift-eef26d8659.example.invalid/stage",
+  "polyglot-swift-staged-chain-file-path": "/tmp/huntress-swift/.eef26d8659c7f7b4.stage"
+ },
+ "answers_timed": {
+  "polyglot-swift-add506-url-host": "swift-eef26d8659.example.invalid",
+  "polyglot-swift-add506-path-leaf": ".eef26d8659c7f7b4.stage",
+  "polyglot-swift-add506-campaign-token": "eef26d86",
+  "polyglot-swift-add506-next-language": "vbscript"
+ }
+}

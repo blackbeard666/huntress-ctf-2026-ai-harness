@@ -1,0 +1,11 @@
+{
+ "codec": "delimited-fields",
+ "plain": null,
+ "encoded": "Agenda: coffee, standup, \"quick\" sync; then lunch | notes, etc.",
+ "generator_cmd": "printf %s 'Agenda: coffee, standup, \"quick\" sync; then lunch | notes, etc.'   # hand-written prose with , ; | and quotes",
+ "oracle_cmd": "ruby -rcsv -e 'print CSV.parse(STDIN.read, col_sep: \",\").flatten.join'",
+ "oracle_plain": "",
+ "oracle_note": "oracle rc=1: /usr/share/rubygems-integration/all/gems/csv-3.3.5/lib/csv/parser.rb:1090:in `parse_quotable_robust': Illegal quoting in line 1. (CSV::MalformedCSVError)",
+ "decoy": true,
+ "expected": "none"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "http-chunked",
+ "plain": "none",
+ "encoded": "12 angry men\nbe 3 bears ate\n0 left\n",
+ "generator_cmd": "printf '12 angry men\\nbe 3 bears ate\\n0 left\\n'   # prose whose lines open with numbers/hex-looking words",
+ "oracle_cmd": "printf %s \"$encoded\" | /usr/bin/python3 -c 'import sys,h11\nc=h11.Connection(h11.SERVER); c.receive_data(b\"POST / HTTP/1.1\\r\\nHost: x\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n\"+sys.stdin.buffer.read()); o=b\"\"\ntry:\n while True:\n  e=c.next_event()\n  if isinstance(e,h11.Data): o+=e.data\n  elif isinstance(e,h11.EndOfMessage): break\n  elif e is h11.NEED_DATA: o=None; break\nexcept h11.RemoteProtocolError: o=None\nsys.stdout.buffer.write(o if o is not None else b\"none\")'  # h11 rejects -> none",
+ "oracle_plain": "none",
+ "decoy": true,
+ "why": "prose whose lines open with numbers/hex-looking words",
+ "expected": "none"
+}

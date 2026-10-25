@@ -1,0 +1,36 @@
+# Oracle for sqlite_apps fixtures: Python's sqlite3 module (the SQLite C library) reads each db -- NOT the harness walker.
+# usage: python3 -I ORACLE_sqlite_apps.py.txt <db-or-kit.zip>
+# parent_application = the spec fingerprint table (coverage-atlas row sqlite-app-attribution) over the library's table list.
+import io, json, sqlite3, struct, sys, zipfile
+APPS = [("Chrome History", [{"urls", "visits"}]), ("Chrome Cookies", [{"cookies", "meta"}]), ("Chrome Login Data", [{"logins"}]),
+        ("Chrome Web Data", [{"autofill"}]), ("Firefox places", [{"moz_places", "moz_historyvisits"}, {"moz_places"}]),
+        ("Firefox cookies", [{"moz_cookies"}]), ("Firefox formhistory", [{"moz_formhistory"}]),
+        ("Safari History.db", [{"history_items", "history_visits"}]),
+        ("WhatsApp msgstore.db", [{"messages", "jid"}, {"message", "jid"}, {"jid", "chat_list"}]),
+        ("iMessage chat.db", [{"message", "handle", "chat"}]), ("Android mmssms.db", [{"sms", "pdu"}]),
+        ("contacts2.db", [{"raw_contacts"}]), ("Windows ActivitiesCache.db", [{"activity", "activityoperation"}]),
+        ("Windows wpndatabase.db", [{"notification", "notificationhandler"}]), ("Skype main.db", [{"messages", "conversations"}])]
+def facts(b):
+    c = sqlite3.connect(":memory:")
+    try:
+        c.deserialize(b)
+        t = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name")]
+    except sqlite3.DatabaseError:
+        return None
+    aid = c.execute("PRAGMA application_id").fetchone()[0] & 0xffffffff
+    raw = struct.pack(">I", aid)
+    low = {x.lower() for x in t}
+    meta = dict(c.execute("SELECT key, value FROM meta")) if "meta" in low else {}
+    return {"application_id_ascii": raw.decode() if aid and all(0x20 <= x < 0x7f for x in raw) else "none",
+            "parent_application": next((n for n, s in APPS if any(x <= low for x in s)), "unknown"),
+            "meta_version": meta.get("version", "none"), "meta_last_compatible_version": meta.get("last_compatible_version", "none"),
+            "table_fingerprint": json.dumps(sorted(t), separators=(",", ":"))}
+p = sys.argv[1]; b = open(p, "rb").read()
+if p.endswith(".zip"):
+    z = zipfile.ZipFile(io.BytesIO(b)); g = {}
+    for n in z.namelist():
+        f = facts(z.read(n))
+        if f: g.setdefault(f["parent_application"], []).append(n)
+    print(json.dumps({k: sorted(g[k]) for k in sorted(g)}, separators=(",", ":")))
+else:
+    print(json.dumps(facts(b)))

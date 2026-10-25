@@ -1,0 +1,21 @@
+{
+ "family": "jvm_trigger_proof",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "vtp_d24_scala_a.bin",
+ "jar_b": "vtp_d24_scala_b.bin",
+ "expected_facts": {
+  "trigger_input": "null",
+  "trigger_input_type": "null",
+  "vulnerable_outcome": "java.lang.NullPointerException",
+  "corrected_result": "-1",
+  "exception_class": "java.lang.NullPointerException",
+  "trigger_found": "true",
+  "method": "score",
+  "method_descriptor": "(Ljava/lang/String;)I"
+ },
+ "generator_cmd": "cp of the D24 GM artifacts d24--sample-{vulnerable,corrected}.jar (Scala 2.13, 'Huntress deterministic Scala factory') == pdiff_d24_{a,b}.bin",
+ "oracle_cmd": "javap -c -p 'Day24Vulnerable000$.class' 'Day24Corrected000$.class'   # score: StringOps$.nonEmpty$extension(augmentString(s)) derefs null (CWE-476) vs Option(s).filter.map.getOrElse(-1); scala-library not bundled so not runnable -- semantics per reference/coverage D24 (GM-confirmed fix)",
+ "decoy": false
+}

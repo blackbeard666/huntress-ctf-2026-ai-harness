@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "pdiff_d24_a.bin",
+ "file_b": "pdiff_d24_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-476",
+  "cwe_number": "476",
+  "vulnerability_class": "null_pointer_dereference"
+ },
+ "generator_cmd": "reused twin (see pdiff_gen.sh / json)",
+ "oracle_cmd": "python3 vcls_oracle.py pdiff_d24_a.bin pdiff_d24_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"aload_0\", \"areturn\", \"getstatic\", \"iconst_m1\", \"invokedynamic\", \"invokestatic\", \"invokevirtual\", \"ireturn\", \"scala/Option.filter\", \"scala/Option.getOrElse\", \"scala/Option.map\", \"scala/runtime/BoxesRunTime.boxToBoolean\", \"scala/runtime/BoxesRunTime.boxToInteger\", \"scala/runtime/BoxesRunTime.unboxToInt\"], \"removed\": [\"aload_1\", \"ifeq\"]}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (Scala (GM D24 twin): nonEmpty(s)/charAt -> Option(s) guard); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

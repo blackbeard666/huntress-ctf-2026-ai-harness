@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=elixir|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=mix_task|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ELIXIR-a4d07598|url=https://elixir-a4d0759829.example.invalid/stage|file_path=/tmp/huntress-elixir/.a4d07598296af893.stage",
+ "decoy": false,
+ "language": "elixir",
+ "role": "host",
+ "id_single": "polyglot-elixir-host-<field>",
+ "id_timed": "polyglot-elixir-92b4cb-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_elixir_host.exs | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-elixir-host-language": "elixir",
+  "polyglot-elixir-host-role": "staged_chain",
+  "polyglot-elixir-host-verdict": "suspicious",
+  "polyglot-elixir-host-attack": "T1059",
+  "polyglot-elixir-host-adapter": "operation_graph",
+  "polyglot-elixir-host-host-profile": "mix_task",
+  "polyglot-elixir-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-elixir-host-stage-profile": "two_stage_download_execute",
+  "polyglot-elixir-host-next-language": "bash",
+  "polyglot-elixir-host-stage-count": "2",
+  "polyglot-elixir-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-elixir-host-campaign-id": "ELIXIR-a4d07598",
+  "polyglot-elixir-host-url": "https://elixir-a4d0759829.example.invalid/stage",
+  "polyglot-elixir-host-file-path": "/tmp/huntress-elixir/.a4d07598296af893.stage"
+ },
+ "answers_timed": {
+  "polyglot-elixir-92b4cb-url-host": "elixir-a4d0759829.example.invalid",
+  "polyglot-elixir-92b4cb-path-leaf": ".a4d07598296af893.stage",
+  "polyglot-elixir-92b4cb-campaign-token": "a4d07598",
+  "polyglot-elixir-92b4cb-next-language": "bash"
+ }
+}

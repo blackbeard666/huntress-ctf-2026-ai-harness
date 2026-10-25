@@ -1,0 +1,9 @@
+{
+ "codec": "length-prefix",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-31",
+ "encoded": "014e01690163016501200177016f0172016b0120016401650163016f01640169016e0167012001740168016901730120017701610172016d01750170012101200154016f01200173016f016c01760165012c0120017301750162016d016901740120017401680169017301200165017801610163017401200161016e017301770165017201200174016f0120017401680165012001470161016d01650120014d01610173017401650172013a01200163016f01620161016c0174012d016f0174017401650172012d01330131",
+ "generator_cmd": "perl -CS -e 'binmode STDOUT; print pack(\"(C/a*)*\", map { utf8::encode(my $x = $_); $x } split //, $ENV{plain})'| xxd -p | tr -d '\\n'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | perl -0777 -ne 'print unpack(\"(C/a*)*\", $_)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-31",
+ "expected": "match"
+}

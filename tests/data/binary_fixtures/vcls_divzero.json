@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_divzero_a.bin",
+ "file_b": "vcls_divzero_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-369",
+  "cwe_number": "369",
+  "vulnerability_class": "divide_by_zero"
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT   # gcc -fno-inline C twins / javac --release 11 + jar twins",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_divzero_a.bin vcls_divzero_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"cmp\", \"jmp\", \"jne\", \"mov\"], \"removed\": []}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (C: n / d -> if (d == 0) return -1); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

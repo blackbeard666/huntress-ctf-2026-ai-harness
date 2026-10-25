@@ -1,0 +1,19 @@
+{
+ "family": "jvm_trigger_proof",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "vtp_nfe_trycatch_a.bin",
+ "jar_b": "vtp_nfe_trycatch_b.bin",
+ "expected_facts": {
+  "trigger_input": "null",
+  "vulnerable_outcome": "java.lang.NullPointerException",
+  "corrected_result": "-1",
+  "exception_class": "java.lang.NullPointerException",
+  "trigger_found": "true",
+  "method": "port"
+ },
+ "generator_cmd": "bash vtp_gen.sh .   # javac: instance Integer.parseInt(s.trim())+1 vs the same in try/catch(RuntimeException) -> -1 (exception table); compiled + jarred by JDK javac/jar",
+ "oracle_cmd": "java VtpOracle.java vtp_nfe_trycatch_a.bin vtp_nfe_trycatch_b.bin PortUnpatched@PortPatched.port   # real JVM, reflection over the documented candidate order",
+ "decoy": false
+}

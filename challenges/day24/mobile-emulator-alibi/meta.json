@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-24-emulator-alibi",
+  "lane": "mobile-android",
+  "name": "📱 Emulator Alibi",
+  "ids": {
+    "single_solve": "mobile-android-day-24-emulator-alibi",
+    "time_trial": "mobile-android-day-24-emulator-alibi/time_trial",
+    "mastery": "mobile-android-day-24-emulator-alibi/mastery"
+  }
+}

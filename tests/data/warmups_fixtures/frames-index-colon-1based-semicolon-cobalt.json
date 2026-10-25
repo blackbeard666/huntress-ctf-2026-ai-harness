@@ -1,0 +1,9 @@
+{
+ "codec": "frames-index",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-31",
+ "encoded": "64:w;58:c;82:s;33:T;74: ;48:t;24: ;18:g;80:M;29:u;88:c;42: ;7:o;83:t;51:h;5: ;52:i;16:i;75:G;91:a;70: ;94:-;61:a;55:e;76:a;36:s;44:u;1:N;93:t;90:b;38:l;22:i;20:t;95:l;12:e;65:e;19: ;81:a;92:l;49: ;10: ;2:i;46:m;86::;15:d;40:e;62:n;28:m;66:r;101:1;53:s;77:m;59:t;41:,;26:a;79: ;87: ;60: ;45:b;14:o;11:d;97:n;89:o;98:x;99:-;43:s;50:t;32: ;54: ;71:t;78:e;69:o;72:h;6:w;31:!;56:x;85:r;47:i;13:c;35: ;23:s;34:o;68:t;27:r;100:3;39:v;17:n;67: ;84:e;37:o;25:w;3:c;4:e;63:s;9:k;73:e;30:p;57:a;8:r;96:y;21:h",
+ "generator_cmd": "perl -CSD -MList::Util=shuffle -0777 -ne 'srand(23);my @c=split//;my @i=shuffle(0..$#c);print join(\";\",map{sprintf(\"%d:%s\",$_+1,$c[$_])}@i)'",
+ "oracle_cmd": "perl -CSD -0777 -ne 'my %h;while(/(?:^|;)(\\d+):(.)(?=;\\d+:|$)/gs){$h{$1}=$2}my @k=sort{$a<=>$b}keys %h;my $b=$k[0];($k[$_]==$_+$b or exit 1) for 0..$#k;print map{$h{$_}}@k'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-31",
+ "expected": "match"
+}

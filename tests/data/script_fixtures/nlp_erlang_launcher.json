@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=erlang|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=ERLANG-4be519d1|url=https://erlang-4be519d130.example.invalid/stage|file_path=/tmp/huntress-erlang/.4be519d130024361.stage",
+ "decoy": false,
+ "language": "erlang",
+ "role": "launcher",
+ "id_single": "polyglot-erlang-launcher-<field>",
+ "id_timed": "polyglot-erlang-6826b3-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_erlang_launcher.erl | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-erlang-launcher-language": "erlang",
+  "polyglot-erlang-launcher-role": "launcher",
+  "polyglot-erlang-launcher-verdict": "suspicious",
+  "polyglot-erlang-launcher-attack": "T1059",
+  "polyglot-erlang-launcher-adapter": "process_builder",
+  "polyglot-erlang-launcher-host-profile": "standalone",
+  "polyglot-erlang-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-erlang-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-erlang-launcher-next-language": "batch",
+  "polyglot-erlang-launcher-stage-count": "3",
+  "polyglot-erlang-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-erlang-launcher-campaign-id": "ERLANG-4be519d1",
+  "polyglot-erlang-launcher-url": "https://erlang-4be519d130.example.invalid/stage",
+  "polyglot-erlang-launcher-file-path": "/tmp/huntress-erlang/.4be519d130024361.stage"
+ },
+ "answers_timed": {
+  "polyglot-erlang-6826b3-url-host": "erlang-4be519d130.example.invalid",
+  "polyglot-erlang-6826b3-path-leaf": ".4be519d130024361.stage",
+  "polyglot-erlang-6826b3-campaign-token": "4be519d1",
+  "polyglot-erlang-6826b3-next-language": "batch"
+ }
+}

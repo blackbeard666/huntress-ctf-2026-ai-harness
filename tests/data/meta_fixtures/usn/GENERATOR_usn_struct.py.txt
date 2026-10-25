@@ -1,0 +1,59 @@
+"""Independent stdlib writer of $UsnJrnl:$J excerpts (USN_RECORD_V2, MS-FSCC 2.4 / winioctl.h layout).
+Usage: python3 -I this <outdir>  -> usn_sparse_v2.bin, usn_single_v2.bin, decoy_zero_sparse.bin"""
+import datetime
+import os
+import struct
+import sys
+
+PAGE = 0x1000
+
+
+def ft(s):
+    d = datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%S") - datetime.datetime(1601, 1, 1)
+    return (d.days * 86400 + d.seconds) * 10**7 + 1234567       # sub-second noise
+
+
+def ref(entry, seq):
+    return entry | (seq << 48)
+
+
+def rec(frn, pfrn, usn, ts, reason, name, attr=0x20):
+    nm = name.encode("utf-16-le")
+    ln = (60 + len(nm) + 7) & ~7
+    body = struct.pack("<IHHQQqQIIIIHH", ln, 2, 0, frn, pfrn, usn, ft(ts), reason, 0, 0x100, attr, len(nm), 60) + nm
+    return body + b"\0" * (ln - len(body))
+
+
+def journal(prefix, events):
+    """events: (frn, pfrn, ts, reason, name); USNs = absolute stream offsets; records never cross a page."""
+    out = bytearray(b"\0" * prefix)
+    for e in events:
+        r = rec(e[0], e[1], len(out) + 0, e[2], e[3], e[4])
+        if len(out) // PAGE != (len(out) + len(r) - 1) // PAGE:
+            out += b"\0" * (PAGE - len(out) % PAGE)
+        r = rec(e[0], e[1], len(out), e[2], e[3], e[4])
+        out += r
+    out += b"\0" * (PAGE - len(out) % PAGE)
+    return bytes(out)
+
+
+root, ex, doc, tmp, note = ref(5, 5), ref(0x1a2b3, 3), ref(0x2004, 7), ref(0x2005, 1), ref(0x30, 2)
+ev = [(ex, root, "2026-03-14T09:26:53", 0x100, "evil.exe"),
+      (ex, root, "2026-03-14T09:26:53", 0x102, "evil.exe"),
+      (ex, root, "2026-03-14T09:26:54", 0x80000102, "evil.exe"),
+      (doc, root, "2026-03-14T09:30:01", 0x1000, "report.docx"),
+      (doc, root, "2026-03-14T09:30:01", 0x2000, "report_old.docx"),
+      (doc, root, "2026-03-14T09:30:01", 0x80002000, "report_old.docx"),
+      (tmp, root, "2026-03-14T09:31:10", 0x100, "stage.tmp"),
+      (tmp, root, "2026-03-14T09:31:12", 0x80000200, "stage.tmp")]
+# pad the first page so the last records spill onto the next page (tail zero padding inside the stream)
+ev += [(note, root, "2026-03-14T10:0%d:00" % i, 0x8000 | (0x80000000 if i % 2 else 0), "notes_%02d.txt" % i)
+       for i in range(9)] * 6
+ev.append((note, root, "2026-03-15T08:00:00", 0x80000200, "notes_08.txt"))
+os.makedirs(sys.argv[1], exist_ok=True)
+open(os.path.join(sys.argv[1], "usn_sparse_v2.bin"), "wb").write(journal(0x3000, ev))
+one = ref(0x4f1, 0x12)
+open(os.path.join(sys.argv[1], "usn_single_v2.bin"), "wb").write(journal(0, [
+    (one, ref(0x23, 1), "2025-11-02T23:59:58", 0x100, "Invoice_8812.pdf.lnk"),
+    (one, ref(0x23, 1), "2025-11-02T23:59:58", 0x80000100, "Invoice_8812.pdf.lnk")]))
+open(os.path.join(sys.argv[1], "decoy_zero_sparse.bin"), "wb").write(b"\0" * 0x5000)

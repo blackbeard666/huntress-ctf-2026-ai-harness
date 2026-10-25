@@ -1,0 +1,11 @@
+{
+ "codec": "tnetstring",
+ "plain": null,
+ "encoded": "12:5:hello,1:x?]",
+ "generator_cmd": "printf '12:5:hello,1:x?]'   # inner frame tagged '?' (not a tnetstring type)",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-tnet'); import tnetstring as T\ndef w(v):\n if isinstance(v,bytes): return v.decode()\n if isinstance(v,list): return ''.join(w(x) for x in v) if any(not isinstance(x,int) for x in v) else ''.join(map(chr,v))\n if isinstance(v,dict): return ''.join(w(v[k]) for k in sorted(v, key=int))\n return ''\nd=sys.stdin.buffer.read().strip(); v,r=T.pop(d)\nassert not r.strip(), 'trailing bytes'\nprint(w(v), end='')\"",
+ "oracle_plain": "<error: ValueError: Not a tnetstring: invalid type tag.>",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "tnetstring3 rejects the unknown type tag -> not a tnetstring"
+}

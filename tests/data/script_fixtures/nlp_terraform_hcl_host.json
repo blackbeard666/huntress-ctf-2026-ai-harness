@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=terraform_hcl|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=local_exec|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=TERRAFORM_HCL-34afa333|url=https://terraform_hcl-34afa33333.example.invalid/stage|file_path=/tmp/huntress-terraform_hcl/.34afa333338414bd.stage",
+ "decoy": false,
+ "language": "terraform_hcl",
+ "role": "host",
+ "id_single": "polyglot-terraform_hcl-host-<field>",
+ "id_timed": "polyglot-terraform_hcl-07b2dd-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_terraform_hcl_host.tf | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-terraform_hcl-host-language": "terraform_hcl",
+  "polyglot-terraform_hcl-host-role": "staged_chain",
+  "polyglot-terraform_hcl-host-verdict": "suspicious",
+  "polyglot-terraform_hcl-host-attack": "T1059",
+  "polyglot-terraform_hcl-host-adapter": "operation_graph",
+  "polyglot-terraform_hcl-host-host-profile": "local_exec",
+  "polyglot-terraform_hcl-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-terraform_hcl-host-stage-profile": "two_stage_download_execute",
+  "polyglot-terraform_hcl-host-next-language": "bash",
+  "polyglot-terraform_hcl-host-stage-count": "2",
+  "polyglot-terraform_hcl-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-terraform_hcl-host-campaign-id": "TERRAFORM_HCL-34afa333",
+  "polyglot-terraform_hcl-host-url": "https://terraform_hcl-34afa33333.example.invalid/stage",
+  "polyglot-terraform_hcl-host-file-path": "/tmp/huntress-terraform_hcl/.34afa333338414bd.stage"
+ },
+ "answers_timed": {
+  "polyglot-terraform_hcl-07b2dd-url-host": "terraform_hcl-34afa33333.example.invalid",
+  "polyglot-terraform_hcl-07b2dd-path-leaf": ".34afa333338414bd.stage",
+  "polyglot-terraform_hcl-07b2dd-campaign-token": "34afa333",
+  "polyglot-terraform_hcl-07b2dd-next-language": "bash"
+ }
+}

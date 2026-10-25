@@ -1,0 +1,8 @@
+{
+ "field": "usn.file_names",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/usn/GENERATOR_usn_struct.py.txt <outdir>  (stdlib struct USN_RECORD_V2 writer, sparse zero prefix + page-tail zero padding -> decoy_zero_sparse.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dissect .venv/bin/python -P tests/data/meta_fixtures/usn/ORACLE_usn_dissect.py.txt <outdir>/decoy_zero_sparse.bin  (dissect.ntfs 3.16 UsnJrnl(fh).records(); field 'file_names'); all-zero sparse $J: dissect yields 0 records",
+ "decoy": true,
+ "member": "$J"
+}

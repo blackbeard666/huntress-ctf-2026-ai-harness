@@ -1,0 +1,8 @@
+{
+ "field": "evtx.log_cleared",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_binxml.py.txt <outdir>  (legacy .evt 'LfLe' header renamed .evtx -> decoy_evt_legacy_records.bin)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_evtx_semantics.py.txt tests/data/meta_fixtures/evtx/decoy_evt_legacy_records__log_cleared.bin log_cleared  (pyevtx-rs 0.13.1 = Rust evtx crate, records_json EventData/System)",
+ "decoy": true,
+ "member": "decoy_evt_legacy_records.evtx"
+}

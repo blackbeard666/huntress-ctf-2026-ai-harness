@@ -1,0 +1,8 @@
+{
+ "field": "amcache.link_date",
+ "expected": "04/11/2023 17:02:51",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> amcache_single.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/amcache/amcache_single__link_date.bin  (regipy AmCachePlugin) -> entries[0].link_date",
+ "decoy": false,
+ "member": "Amcache.hve"
+}

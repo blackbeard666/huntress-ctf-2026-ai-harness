@@ -1,0 +1,9 @@
+{
+ "codec": "bencode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mink-39",
+ "encoded": "li78ei105ei99ei101ei32ei119ei111ei114ei107ei32ei100ei101ei99ei111ei100ei105ei110ei103ei32ei116ei104ei105ei115ei32ei119ei97ei114ei109ei117ei112ei33ei32ei84ei111ei32ei115ei111ei108ei118ei101ei44ei32ei115ei117ei98ei109ei105ei116ei32ei116ei104ei105ei115ei32ei101ei120ei97ei99ei116ei32ei97ei110ei115ei119ei101ei114ei32ei116ei111ei32ei116ei104ei101ei32ei71ei97ei109ei101ei32ei77ei97ei115ei116ei101ei114ei58ei32ei99ei108ei111ei118ei101ei114ei45ei109ei105ei110ei107ei45ei51ei57ee",
+ "generator_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-bencode'); import bencode as B; plain=sys.argv[1]; sys.stdout.buffer.write(B.encode([ord(c) for c in plain]))\" \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-bencode'); import bencode as B\ndef w(v):\n if isinstance(v,(str,bytes)): return v if isinstance(v,str) else v.decode()\n if isinstance(v,list): return ''.join(w(x) for x in v) if any(not isinstance(x,int) for x in v) else ''.join(map(chr,v))\n if isinstance(v,dict): return ''.join(w(v[k]) for k in sorted(v))\n return ''\nprint(w(B.decode(sys.stdin.buffer.read().strip())), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mink-39",
+ "expected": "match"
+}

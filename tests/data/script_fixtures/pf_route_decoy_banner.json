@@ -1,0 +1,69 @@
+{
+ "_doc": "per-file-hashed-contract DECOY: base64 of a banner (no descriptor); routes whose stem names no member and every field read from the non-plan must be None",
+ "lane": "script",
+ "target": "per-file-hashed-contract",
+ "material": "aGVsbG8gd29ybGQsIHRoaXMgaXMgb25seSBhIGJhbm5lciBhbmQgbm8gZGVzY3JpcHRvcg==",
+ "rep": "base64",
+ "transform": "identity",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "printf %s 'hello world, this is only a banner and no descriptor' | base64 -w0",
+ "oracle_cmd": "printf %s \"$material\" | base64 -d | grep -c '^v=' (0: no plan)",
+ "pf_cases": [
+  {
+   "answer_id": "jscript-9a6714-style",
+   "members": [
+    "ffffff.js"
+   ],
+   "question": {},
+   "kind": "jscript",
+   "route": null,
+   "expected": null,
+   "oracle_cmd": "stem 9a6714 is not a member"
+  },
+  {
+   "answer_id": "jscript-zz6714-style",
+   "members": [
+    "zz6714.js"
+   ],
+   "question": {},
+   "kind": "jscript",
+   "route": null,
+   "expected": null,
+   "oracle_cmd": "zz6714 is not hex"
+  },
+  {
+   "answer_id": "jscript-ab12cd-campaign-token",
+   "members": [
+    "ab12cd.js"
+   ],
+   "question": {},
+   "kind": "jscript",
+   "route": [
+    "jscript",
+    "ab12cd.js",
+    "campaign-token"
+   ],
+   "expected": null,
+   "oracle_cmd": "printf %s \"$material\" | base64 -d | grep -c campaign (0)"
+  },
+  {
+   "answer_id": "jscript-ab12cd-indicator",
+   "members": [
+    "ab12cd.js"
+   ],
+   "question": {
+    "question": "Recover the primary indicator reconstructed from ab12cd.js: submit the first indicator present in the decoded descriptor using this order: URL, upload URL, next-stage file, file path, schedule path, recovery-note name, host id."
+   },
+   "kind": "jscript",
+   "route": [
+    "jscript",
+    "ab12cd.js",
+    "indicator"
+   ],
+   "expected": null,
+   "oracle_cmd": "no descriptor -> no indicator"
+  }
+ ]
+}

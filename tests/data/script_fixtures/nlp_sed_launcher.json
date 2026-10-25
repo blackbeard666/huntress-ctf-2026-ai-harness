@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=sed|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=SED-f107f654|url=https://sed-f107f6543b.example.invalid/stage|file_path=/tmp/huntress-sed/.f107f6543b96acfd.stage",
+ "decoy": false,
+ "language": "sed",
+ "role": "launcher",
+ "id_single": "polyglot-sed-launcher-<field>",
+ "id_timed": "polyglot-sed-04c239-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_sed_launcher.sed | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-sed-launcher-language": "sed",
+  "polyglot-sed-launcher-role": "launcher",
+  "polyglot-sed-launcher-verdict": "suspicious",
+  "polyglot-sed-launcher-attack": "T1059",
+  "polyglot-sed-launcher-adapter": "process_builder",
+  "polyglot-sed-launcher-host-profile": "standalone",
+  "polyglot-sed-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-sed-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-sed-launcher-next-language": "batch",
+  "polyglot-sed-launcher-stage-count": "3",
+  "polyglot-sed-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-sed-launcher-campaign-id": "SED-f107f654",
+  "polyglot-sed-launcher-url": "https://sed-f107f6543b.example.invalid/stage",
+  "polyglot-sed-launcher-file-path": "/tmp/huntress-sed/.f107f6543b96acfd.stage"
+ },
+ "answers_timed": {
+  "polyglot-sed-04c239-url-host": "sed-f107f6543b.example.invalid",
+  "polyglot-sed-04c239-path-leaf": ".f107f6543b96acfd.stage",
+  "polyglot-sed-04c239-campaign-token": "f107f654",
+  "polyglot-sed-04c239-next-language": "batch"
+ }
+}

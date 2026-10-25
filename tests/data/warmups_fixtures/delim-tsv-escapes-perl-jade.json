@@ -1,0 +1,9 @@
+{
+ "codec": "delimited-fields",
+ "plain": "Nice work decoding this warmup! \\o/\t To solve, submit this exact answer to the Game Master: jade-lynx-72",
+ "encoded": "N\ti\tc\te\t \tw\to\tr\tk\t \td\te\tc\to\td\ti\tn\tg\t \tt\th\ti\ts\t \tw\ta\tr\tm\tu\tp\t!\t \t\\\\\to\t/\t\\t\t \tT\to\t \ts\to\tl\tv\te\t,\t \ts\tu\tb\tm\ti\tt\t \tt\th\ti\ts\t \te\tx\ta\tc\tt\t \ta\tn\ts\tw\te\tr\t \tt\to\t \tt\th\te\t \tG\ta\tm\te\t \tM\ta\ts\tt\te\tr\t:\t \tj\ta\td\te\t-\tl\ty\tn\tx\t-\t7\t2",
+ "generator_cmd": "perl -CSA -e 'print join \"\\t\", map { (my $c = $_) =~ s/\\\\/\\\\\\\\/g; $c =~ s/\\t/\\\\t/g; $c =~ s/\\n/\\\\n/g; $c } split //, $ARGV[0]' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys,codecs; t=sys.stdin.read(); print(''.join(codecs.decode(f, 'unicode_escape') for f in t.split(chr(9))), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! \\o/\t To solve, submit this exact answer to the Game Master: jade-lynx-72",
+ "expected": "match"
+}

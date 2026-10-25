@@ -1,0 +1,6 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-B71F1EFF1F608E8C",
+ "generator_cmd": "python3 tests/data/android_fixtures/nlbx_src/gen_nlbx.py regnat_arm64 tests/data/android_fixtures/nlbx_regnat_arm64.apk  # javac --release 8 + dex2jar d2j-jar2dex + aarch64-linux-gnu-gcc -shared -fPIC -O2 -s nlbx_src/nlbx.c + zipfile; puzzle codec: analysis, no data (-DNLBX_REGNAT: static fold(JJ)J / salt(I)I bound only by JNI_OnLoad RegisterNatives, no Java_* exports)",
+ "oracle_cmd": "sh tests/data/android_fixtures/nlbx_src/oracle.sh tests/data/android_fixtures/nlbx_regnat_arm64.apk -DNLBX_REGNAT '-DNLBX_JCLS=\"com/huntress/mobile/d24/Vault\"'  # d2j-dex2jar + real JVM/JNI (JNI_OnLoad RegisterNatives) on the host x86_64 build of the same nlbx.c -> Release.code() -> ANS-B71F1EFF1F608E8C; nm -D lib/arm64-v8a/libarena.so | grep -c Java_ -> 0"
+}

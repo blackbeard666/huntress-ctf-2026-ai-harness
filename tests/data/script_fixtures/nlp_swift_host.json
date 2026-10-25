@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=swift|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=swift_script|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=SWIFT-b11d0661|url=https://swift-b11d066128.example.invalid/stage|file_path=/tmp/huntress-swift/.b11d06612826b060.stage",
+ "decoy": false,
+ "language": "swift",
+ "role": "host",
+ "id_single": "polyglot-swift-host-<field>",
+ "id_timed": "polyglot-swift-d9554b-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_swift_host.swift | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-swift-host-language": "swift",
+  "polyglot-swift-host-role": "staged_chain",
+  "polyglot-swift-host-verdict": "suspicious",
+  "polyglot-swift-host-attack": "T1059",
+  "polyglot-swift-host-adapter": "operation_graph",
+  "polyglot-swift-host-host-profile": "swift_script",
+  "polyglot-swift-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-swift-host-stage-profile": "two_stage_download_execute",
+  "polyglot-swift-host-next-language": "bash",
+  "polyglot-swift-host-stage-count": "2",
+  "polyglot-swift-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-swift-host-campaign-id": "SWIFT-b11d0661",
+  "polyglot-swift-host-url": "https://swift-b11d066128.example.invalid/stage",
+  "polyglot-swift-host-file-path": "/tmp/huntress-swift/.b11d06612826b060.stage"
+ },
+ "answers_timed": {
+  "polyglot-swift-d9554b-url-host": "swift-b11d066128.example.invalid",
+  "polyglot-swift-d9554b-path-leaf": ".b11d06612826b060.stage",
+  "polyglot-swift-d9554b-campaign-token": "b11d0661",
+  "polyglot-swift-d9554b-next-language": "bash"
+ }
+}

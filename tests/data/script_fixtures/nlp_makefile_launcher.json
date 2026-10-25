@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=makefile|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=MAKEFILE-3aaeb5cf|url=https://makefile-3aaeb5cf64.example.invalid/stage|file_path=/tmp/huntress-makefile/.3aaeb5cf647de5f4.stage",
+ "decoy": false,
+ "language": "makefile",
+ "role": "launcher",
+ "id_single": "polyglot-makefile-launcher-<field>",
+ "id_timed": "polyglot-makefile-9e232f-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_makefile_launcher.mk | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-makefile-launcher-language": "makefile",
+  "polyglot-makefile-launcher-role": "launcher",
+  "polyglot-makefile-launcher-verdict": "suspicious",
+  "polyglot-makefile-launcher-attack": "T1059",
+  "polyglot-makefile-launcher-adapter": "process_builder",
+  "polyglot-makefile-launcher-host-profile": "standalone",
+  "polyglot-makefile-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-makefile-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-makefile-launcher-next-language": "batch",
+  "polyglot-makefile-launcher-stage-count": "3",
+  "polyglot-makefile-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-makefile-launcher-campaign-id": "MAKEFILE-3aaeb5cf",
+  "polyglot-makefile-launcher-url": "https://makefile-3aaeb5cf64.example.invalid/stage",
+  "polyglot-makefile-launcher-file-path": "/tmp/huntress-makefile/.3aaeb5cf647de5f4.stage"
+ },
+ "answers_timed": {
+  "polyglot-makefile-9e232f-url-host": "makefile-3aaeb5cf64.example.invalid",
+  "polyglot-makefile-9e232f-path-leaf": ".3aaeb5cf647de5f4.stage",
+  "polyglot-makefile-9e232f-campaign-token": "3aaeb5cf",
+  "polyglot-makefile-9e232f-next-language": "batch"
+ }
+}

@@ -1,0 +1,8 @@
+{
+ "field": "amcache.file_paths",
+ "expected": "[\"c:\\\\programdata\\\\anydesk\\\\anydesk.exe\",\"c:\\\\users\\\\ana\\\\downloads\\\\mimikatz.exe\",\"c:\\\\windows\\\\temp\\\\rc\\\\rclone.exe\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> amcache_win10.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/amcache/amcache_win10__file_paths.bin  (regipy AmCachePlugin) -> sorted(lower_case_long_path)",
+ "decoy": false,
+ "member": "Windows/AppCompat/Programs/Amcache.hve"
+}

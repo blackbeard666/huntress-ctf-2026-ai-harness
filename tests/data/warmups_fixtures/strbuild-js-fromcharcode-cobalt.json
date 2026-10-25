@@ -1,0 +1,10 @@
+{
+ "codec": "string-builder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-58",
+ "encoded": "String.fromCharCode(78, 105, 99, 101, 32, 119, 111, 114, 107, 32, 100, 101, 99, 111, 100, 105, 110, 103, 32, 116, 104, 105, 115, 32, 119, 97, 114, 109, 117, 112, 33, 32, 84, 111, 32, 115, 111, 108, 118, 101, 44, 32, 115, 117, 98, 109, 105, 116, 32, 116, 104, 105, 115, 32, 101, 120, 97, 99, 116, 32, 97, 110, 115, 119, 101, 114, 32, 116, 111, 32, 116, 104, 101, 32, 71, 97, 109, 101, 32, 77, 97, 115, 116, 101, 114, 58, 32, 99, 111, 98, 97, 108, 116, 45, 104, 101, 114, 111, 110, 45, 53, 56)",
+ "generator_cmd": "tools/node/bin/node -e 'process.stdout.write(\"String.fromCharCode(\"+[...process.env.plain].map(c=>c.charCodeAt(0)).join(\", \")+\")\")'   # env plain=<plain>",
+ "oracle_cmd": "tools/node/bin/node -e 'process.stdout.write(String(eval(process.env.encoded)))'   # env encoded=<encoded>",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-58",
+ "decoy": false,
+ "expected": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-58"
+}

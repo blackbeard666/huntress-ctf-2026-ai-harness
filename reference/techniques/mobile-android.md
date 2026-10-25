@@ -1,4 +1,4 @@
-# mobile-android — technique log (days 1-23; updated after every day)
+# mobile-android — technique log (days 1-24; updated after every day)
 
 How the lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -12,38 +12,41 @@ How the lane has looked so far (observations, not guarantees):
   link, nested Intent, mutable PendingIntent, allowBackup, ContentProvider, JS interface, cleartext, X509 trust manager,
   NSC, SharedPreferences, SQLite authz, Keystore, predictable nonce d14, `jni_secret` d15, `jni_length` d16,
   `identifier_obfuscation` d17, `string_decryption` d18, `reflective_dispatch` d19, `dynamic_dex` d20, `anti_debug` d21,
-  `root_detection` d22, `hook_detection` "hook and instrumentation detection" d23. Through d22 the theme was flavour
-  only (stub classes never needed). **d23 TT/Mastery is the first build where the answer is COMPUTED by dex code.**
-- Puzzle JSON v1 (`schema: huntress.mobile.puzzle.v1`, d1-d23 single, d1-d22 TT/Mastery): the answer sits behind a
+  `root_detection` d22, `hook_detection` "hook and instrumentation detection" d23, `emulator_detection` "emulator
+  environment detection" d24. Through d22 the theme was flavour only (stub classes never needed). **Since d23 TT/Mastery
+  COMPUTE the answer in dex code**; the theme is now one pure-arithmetic gate fn inside that chain (no Android API yet).
+- Puzzle JSON v1 (`schema: huntress.mobile.puzzle.v1`, d1-d24 single, d1-d22 TT/Mastery): the answer sits behind a
   rotating `codec` (plain, reverse, base64, xor+key, split, hex, caesar+key, native, indexed, reflection, dynamic =
-  pointer to `assets/payload.dex`; old codecs recur: d21 reverse, d22 base64, d23 xor). Keys re-roll per variant.
-- **Puzzle JSON v2 (NEW d23 TT + every d23 Mastery set):** `{"schema":"huntress.mobile.puzzle.v2","day":N,"codec":
+  pointer to `assets/payload.dex`; old codecs recur: d21 reverse, d22 base64, d23 xor, d24 split). Keys re-roll.
+- **Puzzle JSON v2 (d23 + d24 TT and every Mastery set):** `{"schema":"huntress.mobile.puzzle.v2","day":N,"codec":
   "analysis","build":"<12 hex>"}` -- NO `data`. The answer is `Release.code(Context)` evaluated statically (see Day 23).
   Older days' Mastery sets were REGENERATED in v2 (d02/d06/d10/d14/d15/d22 all `analysis`), not replayed from v1.
-- **Since d15 Mastery is a MIXED-DAY bundle** (d15-d21 5 sets, d22 6, d23 SEVEN: d02, d06, d10, d14, d15, d22, d23), all
+- **Since d15 Mastery is a MIXED-DAY bundle** (d15-d21 5 sets, d22 6, d23 7, d24 EIGHT: +1 set per day since d22), all
   under today's prompt. Solve each set from its own APK; never assume the set count or the schema.
 - In every APK `.ChallengeActivity` builds a device-loopback URL `http://127.0.0.1:19090/mobile/attempt/<id>/evidence?
   case_id=..&client_secret=SECRET-..&proof=<answer>`. NOT reachable (it is the phone's loopback). The GM accepted the
-  statically recovered value on all 23 days.
+  statically recovered value on all 24 days.
 - Pattern d16-d22: the SINGLE variant carries flavour, the TT build carries the mechanic as dex strings (`decryptByte`,
   `dispatch`, `moduleContract`, `debuggerGate`, `rootSignals` + `STRUCTURAL`). d23 broke it for real: the TT build carried
-  executable mechanics. Always open the TT/Mastery APK fresh -- the single's shape is not the timed shape.
+  executable mechanics; d24 repeated the split (single v1 `split`, timed v2). Always open the TT/Mastery APK fresh.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
-- **Puzzle schema (NEW d23)** -- v1 in the single, v2 `analysis` (no `data`, field `build`) in TT and in ALL 7 Mastery
-  sets incl. old days. Rule: branch on the JSON, not on the day: `data` present -> codec chain below; `codec ==
+- **Puzzle schema (d23, d24)** -- v1 in the single, v2 `analysis` (no `data`, field `build`) in TT and in ALL Mastery
+  sets incl. old days (d23 7/7, d24 8/8). Rule: branch on the JSON, not on the day: `data` present -> codec chain below; `codec ==
   "analysis"` / no `data` / schema v2 -> evaluate the `Release.code` chain in dex; neither -> code scanners.
 - **Puzzle codec (v1)** -- single + TT shared the day's codec through d22. `key` (xor byte d4/d11/d18/d23: 81, 104, 109,
   205, 99, ... full 0-255; caesar shift d7/d14) and split/offset params re-roll per variant: read them every time. Keyless
   codecs (`reverse`, `base64`, `native`, `reflection`) differ only in `data`. d17 `indexed`: same `order[i] = (3+7i) mod
-  20` every variant. d20 `dynamic`: `data` = `assets/payload.dex` everywhere. Rule: decode by declared codec,
+  20` every variant. `split` (d5/d10/d24): `data:""`, 3 `parts` (lens 9/5/6, the `ANS-X` piece is not first) + `order
+  [2,0,1]` every time seen; `order[i]` = output slot of `parts[i]`. d20 `dynamic`: `data` = `assets/payload.dex` everywhere. Rule: decode by declared codec,
   fullmatch `^ANS-[0-9A-F]{16}$`; entry path -> read the entry; unknown name -> `ANS-` known-plaintext; int list ->
   scatter and gather.
-- **Computed-chain shape (NEW d23, v2)** -- per build: class names (`Core`, `Guard`, `Mix`, `Util`, `Probe`, `Tab`,
-  theme-named `HookScan`/`TrampolineMap`/`SignalBank`/`TrustAnchor`), method names `<verb><ThemeWord><2 hex>` (`mixPatcheb`,
-  `scanSignal61`, `finTrampoline2d`), seed `const-wide`, mixer constants, probe kinds/args (`Probe.s1/s2/s3`), the theme
-  gate fn (`instrumentationSignals = (a^b^c)&7` d23, `gateStreamac = ((a*3)^b^c)&255` d14, `gateDomain87 = ((a^b)+c)&255`
-  d10), extras (d14 `Tab.build` LCG `long[16]` table walked 6 rounds; d15 `native long nativeShare(long)` in
+- **Computed-chain shape (d23-d24, v2)** -- per build: class names (`Core`, `Guard`, `Mix`, `Util`, `Probe`, `Tab`,
+  theme-named `HookScan`/`TrampolineMap`/`SignalBank`/`TrustAnchor`, d24 `BoardCheck`/`SensorMap`), method names
+  `<verb><ThemeWord><2 hex>` (`mixPatcheb`, `scanAlibi87`, `finEmud6`), seed `const-wide`, mixer constants, probe kinds/args
+  (`s1: ((i*a+b)^c)&4095==d`, `s2: ((i^c)*a+b)&4095==d`, `s3`), the theme gate fn (`instrumentationSignals = (a^b^c)&7`
+  d23, `emulatorScore = (a+b+c)%4` d24, `gateStreamac = ((a*3)^b^c)&255` d14, `gateDomain87 = ((a^b)+c)&255` d10;
+  old-day sets `gateRelay*` d03, `gateVerify*` d09, `gateSplit*` d10), extras (d14 `Tab.build` LCG `long[16]` table walked 6 rounds; d15 `native long nativeShare(long)` in
   `libarena.so`, pure add/xor/imul/rol arithmetic). Fixed: `Release.code` = `"ANS-"` + 16 nibbles via
   `"0123456789ABCDEF".charAt((v >>> i) & 15)` of `fin(Mix.f1(token())) ^ K`; `proof` = `Long.toHexString(token())`.
   Rule: INTERPRET from the entry (`Release.code`, the value reaching `proof=`); never key on names; unreferenced
@@ -52,9 +55,10 @@ How the lane has looked so far (observations, not guarantees):
   d23 TT/Mastery = computed by dex (+ JNI for the d15 set). Fallback chain: v2 eval, `raw_entry_scan`, `dex_strings`,
   `strings -a lib/*/*.so | grep ANS-`, `extract_answer`.
 - **Mastery set mix (d15+)** -- fixtures of DIFFERENT days (codec/schema, theme, package `dNN`, extra entries); JSON `day`
-  and dex `DAY` name the source day; picks re-roll per attempt; last set = today's. d16 the question's case ref did NOT
+  and dex `DAY` name the source day; picks re-roll per attempt; last set = today's (d24: d03 d06 d09 d10+NSC d15+.so d17
+  d23 d24). d16 the question's case ref did NOT
   match the APK (d23 they matched). Rule: per-set, schema-agnostic decoding -- never branch on the day or case ref.
-- **Mastery packaging** -- `delivery N: <name>_mastery_0N.apk` per set: pair by sha256. 3, 5, 6 (d22) or 7 (d23) sets,
+- **Mastery packaging** -- `delivery N: <name>_mastery_0N.apk` per set: pair by sha256. 3, 5, 6, 7 (d23), 8 (d24) sets,
   ids `setN.answer`. Loop over the contract's answer_ids.
 - **Per-variant identity** -- case ref `MOB-NN-<10 hex>`, package suffix `v<12 hex>`, `client_secret`, attempt slug, v2
   `build`. None fed the answer so far (watch `build`: a natural future seed).
@@ -73,7 +77,7 @@ How the lane has looked so far (observations, not guarantees):
 |---|---|
 | `*.apk`, answer `ANS- + 16 uppercase hex` | `unzip -p x.apk assets/huntress_puzzle.json` (triage.md pre-extracts + prints it) |
 | puzzle v1 `{"codec":..,"data":..}` | decode per codec (list below); fullmatch `^ANS-[0-9A-F]{16}$` before submitting |
-| **puzzle v2 `"codec":"analysis"`, no `data`** (d23) | answer = `Release.code(ctx)`. Fast manual path: `jadx -q -d j x.apk`; copy non-Activity sources; stub `package android.content; public class Context {}`; `Main` prints `Release.code(null)`; `javac` + `java`. Or port the ~6 static long fns to python (mask 2^64, `>>>` = logical) |
+| **puzzle v2 `"codec":"analysis"`, no `data`** (d23-d24) | answer = `Release.code(ctx)`. First: `lib.android.puzzle_candidates` (deep Dalvik eval; d24 0.4 s). Manual fallback: `jadx -q -d j x.apk`; copy non-Activity sources; stub `package android.content; public class Context {}`; `Main` prints `Release.code(null)`; `javac` + `java`. Or port the ~6 static long fns to python (mask 2^64, `>>>` = logical) |
 | v2 chain calls a `native` method (d23 d15 set `nativeShare(long)`) | `objdump -d -M intel lib/*/libarena.so` the export (~10 insns of movabs/add/xor/imul/rol) and port to python, or unicorn-emulate it. Do NOT `ctypes.CDLL` the artifact on the host |
 | `Probe.s1/s2/s3(a,b,c,d)` loops | 12-bit inverse search: smallest i<4096 with f(i)==d, else -1. Pure, cheap: just evaluate |
 | `data` is a path (`assets/payload.dex`, d20) | `unzip -p x.apk assets/payload.dex \| strings -a \| grep ANS-`; no dex magic -> known-plaintext unwrap |
@@ -83,6 +87,7 @@ How the lane has looked so far (observations, not guarantees):
 | Nothing decodes | `lib.android.extract_answer`, then `strings -a classes*.dex assets/* lib/*/*.so \| grep ANS-` |
 | Theme stubs (d17-d22: `a`/decoy, `decryptByte`, `dispatch`, `debuggerGate`, `rootSignals`) | asset first. Code-side: `dex_eval_scan`/`reflection_scan`/`clean_device_scan`, then `proof_flow_scan` to keep the value reaching `proof=` |
 | Hook/instrumentation theme (d23 `hook_detection`, prompt "real signals vs generated false positives") | v2 chain; the gate fn is pure arithmetic over probe results; look-alike `seal*`/`K*` members nobody calls are the decoys |
+| Emulator theme (d24 `emulator_detection`, prompt "defeat app-owned environment checks on the same pinned emulator used by the solve oracle") | same v2 chain, gate `emulatorScore=(a+b+c)%4` over Probe ints; `KQemu*`/`sealEmu*` = decoys; no Build/qemu API. Just run the solver |
 | Loopback `127.0.0.1:19090` | do NOT chase it: device-local. The answer is static |
 | Prompt demands a live action (d8 "replay", d9 "exploit CA", d20 "signed") | still static: `unzip -l` for extra entries first |
 | Mastery `delivery N: foo_mastery_0N.apk` | strip the prefix (`lib.common.find_artifact`); ids `setN.answer`; each set may be another day AND another schema |
@@ -91,7 +96,8 @@ Puzzle codecs seen (v1): `plain`, `native` (d15-d16), `reflection` (d19) = plain
 `reverse` (d2, d8, d21); `base64` (d3, d9, d13, d22); `hex` (d6, d12); `caesar` (d7, d14: `chr(ord(c)-key)` over EVERY
 char, sign from `data[:4]`); `xor` (d4, d11, d18, d23 single: base64 + int key 0-255); `split` (d5, d10: `parts[]` +
 `order[]`); `indexed` (d17). v2: `analysis` (d23). `lib.android.decode_payload` / `puzzle_candidates` / `decode_any`
-cover v1. Code-side: `bytecode_vm_scan` (`_DxVM`, bigger budget) reproduced the d23 TT value but resolved only 2 of
+cover v1; v2 = lib's deep Dalvik evaluator (`_DxeDeepVM`, via `puzzle_candidates`) + solve.py `_native_eval`
+(unicorn JNI hop). Code-side: `bytecode_vm_scan` (`_DxVM`, bigger budget) reproduced the d23 TT value but resolved only 2 of
 8 v2 APKs; also `renamed_chain_scan`, `proof_flow_scan`, `dex_eval_scan`, `reflection_scan`, `ans_compose_scan`
 (on v2 it returns ANS-shaped DECOYS from the dead mixers -- never submit its first hit).
 
@@ -113,33 +119,34 @@ entry path, answer a const in `assets/payload.dex` class `...payload.Module`. d2
 `debuggable=true`, no probe code. d22 Root of Trust `base64`, no probe code; first 6-set Mastery; title pun = key
 attestation ASN.1 `RootOfTrust`.
 
-**Day 23 — Hook Line and Signal** (`CONTROL="hook_detection"`, `STRUCTURAL="hook and instrumentation detection"`; prompt
-"Separate real instrumentation signals from generated false positives.")
-- Single: plain v1 6-entry fixture (12704 B, dex 2604 B), `{"codec":"xor","data":"<b64>","key":81}`. Race probe
-  CORRECT 22.4 s after start (13:00:14.9Z -> 13:00:37.3Z).
-- TT: SAME 12704 B size but puzzle **v2 `analysis`**, dex 5684 B, no `ANS-` literal anywhere. jadx shows:
-  `Release.token() = HookScan.mixPatcheb(Util.scanSignal61(Util.mixTrampoline79(<const long>)))`; `scanSignal61` xors
-  in three `Probe.s3/s3/s2(...)` results times constants plus `HookLineAndSignal.instrumentationSignals(a,b,c)*K`;
-  `Release.code` = `"ANS-%016X"` of `Util.finTrampoline2d(Mix.f1(token())) ^ K`. ChallengeActivity only calls `code`
-  if the `answer` extra equalsIgnoreCase `Release.proof` (= `Long.toHexString(token())`), then puts `code` in `proof=`.
-  Unreferenced look-alikes (`TrampolineMap.sealTrampolinec7`, `Util.sealHook30`, `HookScan.sealHook1e`, `KHook59`,
-  `KPatchea`) are the "generated false positives". Live worker: jadx -> python port of 6 fns -> CORRECT 94.5 s after
-  start (no clock).
-- Mastery: 7 sets (d02, d06, d10, d14, d15, d22, d23), ALL v2. Live worker: jadx all 7, `javac` the non-Activity
-  sources against a 1-line `android.content.Context` stub, one `Main` per set printing `Release.proof(null)` +
-  `Release.code(null)` -> 6 accepted at ~97 s; d15 set: `nativeShare(long)` -> Java stub printed the native input,
-  native result computed, re-run -> CORRECT ~2.0 min after start. (The worker called the export via `ctypes.CDLL` on the
-  host -- it worked because the fn is pure arithmetic, but it runs untrusted code: emulate or port instead.)
-- Solver: the carried-over solver was SILENT on every v2 APK (the harness then probed with `ANS-0123456789ABCDEF`,
-  marked incorrect). Generalize workers found `lib.android.bytecode_vm_scan` reproduces the TT value with a raised step
-  budget but resolves only 2 of 8 v2 APKs (Context param stored in a static, array ops, native call); they were cut off
-  at CORRECT, so **solve.py still has no v2 path** -- a v2 evaluator is tomorrow's top prebuild.
-- GM spelling unchanged: `answer` / `setN.answer`, `exact`. 0 wrong answers from workers.
+**Day 23 — Hook Line and Signal** (`hook_detection`; prompt "Separate real instrumentation signals from generated false
+positives"). Single v1 `xor` (key 81): race probe CORRECT 22.4 s. TT + all 7 Mastery sets: FIRST v2 `analysis` (dex
+5.7 KB, no `ANS-` literal): `Release.code` = hex of `fin(Mix.f1(token())) ^ K`, `token()` = 3 nested static long fns
+folding `Probe.s*` results and `instrumentationSignals(a,b,c)`; `ChallengeActivity` only calls `code` if the `answer` extra
+equalsIgnoreCase `Release.proof`. Unreferenced `seal*`/`K*` look-alikes = the "generated false positives". The
+carried-over solver was silent on every v2 APK; live workers hand-solved (jadx -> python port, TT 94.5 s; Mastery: javac
+the non-Activity sources against a 1-line `android.content.Context` stub, ~2.0 min; d15 set's `nativeShare(long)` via
+`ctypes.CDLL` = sandbox violation). The v2 evaluator was then built overnight (lib deep evaluator + solve.py JNI hop).
+
+**Day 24 — Emulator Alibi** (`CONTROL="emulator_detection"`, `STRUCTURAL="emulator environment detection"`; prompt
+"Defeat app-owned environment checks on the same pinned emulator used by the solve oracle.") -- all three modes first try.
+- Single: plain v1 6-entry fixture (12704 B, dex 2596 B), `{"codec":"split","data":"","parts":[3 pieces],"order":
+  [2,0,1]}` -> `r[order[i]] = parts[i]`. The prebuilt solver's race probe answered: CORRECT **16.3 s** after start
+  (13:16:29.4Z -> 13:16:45.8Z); the LLM worker only re-ran `solve.py` + `hctf submit --from-solver`.
+- TT: v2 `analysis` (dex ~5.6 KB). `token() = BoardCheck.mixSensor4b(Util.scanAlibi87(Util.mixBoard95(<seed>)))`;
+  `scanAlibi87` xors in `Probe.s2, s2, s1` results times constants plus `EmulatorAlibi.emulatorScore(a,b,c)*K` with
+  `emulatorScore = (a+b+c) % 4`; `Release.code` = `"ANS-"` + nibbles of `Util.finEmud6(Mix.f1(token())) ^ K`. Decoys:
+  `BoardCheck.sealAlibi93/sealSensorb2`, `SensorMap.sealEmu5a`, `KBoarde8`, `KSensor0b`, `KQemu6c`. Despite the prompt there
+  is NO emulator probe (no `Build.*`, `goldfish`, `ro.kernel.qemu`, sensors, telephony) in any dex -- the "pinned emulator"
+  is the oracle's, not something to fake. Carried-over solver: CORRECT 2.52 s total (solve 0.39 s).
+- Mastery: FIRST 8-set bundle (d03, d06, d09, d10 +NSC, d15 +`libarena.so`, d17, d23, d24), ALL v2; only the d15 set
+  touches `java/lang/System` (loadLibrary). Solver CORRECT 3.09 s (solve 0.94 s for 8 sets); d15 set via the unicorn JNI hop.
+- GM spelling unchanged (`answer` / `setN.answer`, `exact`, `ANS-` + 16 uppercase hex). 0 wrong, 0 time lost.
 
 ## GM answer conventions learned
-- One field, `answer`. Single solve and TT use id `answer`; Mastery uses `setN.answer` (3, 5, 6 or 7 sets).
+- One field, `answer`. Single solve and TT use id `answer`; Mastery uses `setN.answer` (3, 5, 6, 7 or 8 sets).
 - Format `ANS-` + exactly 16 UPPERCASE hex, normalization `exact`. v2 code already emits uppercase via the hex table.
-- No worker-derived mobile answer has ever been rejected (d1-d23). Only harness placeholders from a silent solver were.
+- No worker-derived mobile answer has ever been rejected (d1-d24). Only harness placeholders from a silent solver were.
 - Mastery feedback per set: `{"result":"accepted","remaining":N,"accepted_ids":[..]}`, then `CORRECT` on the last.
 - Prompt boilerplate: "For case MOB-NN-<10 hex> in package com.huntress.mobile.dNN.v<12 hex>". Never needed.
 
@@ -147,7 +154,7 @@ attestation ASN.1 `RootOfTrust`.
 - **Single shape != timed shape** (d23): single was v1 `xor`, TT/Mastery v2 computed. A solver tested only on the single
   (and on old v1 auto cases) emitted nothing in TT and all 7 Mastery sets. Treat a schema bump as a new construct family.
 - **Generalize cut off at CORRECT** (d23): the live worker hand-solved; the generalize workers died before writing the
-  v2 path, so the next day's carried-over solver is still v1-only. Record the method in lib/notes, not in a dead log.
+  v2 path. The overnight prebuild closed it, and d24 went 3/3 on the solver alone -- the lib path is what carries a day.
 - **Regex-compose decoys** (d23): the hex table `"0123456789ABCDEF"` and `"ANS-"` both sit in `Release`; dead mixers make
   more ANS-shaped values (`ans_compose_scan`). Only the value of `Release.code` reached from ChallengeActivity counts.
 - **Running artifact native code** (d23 `ctypes.CDLL(libarena.so)`): violates the sandbox rule. The export was ~10
@@ -163,10 +170,13 @@ attestation ASN.1 `RootOfTrust`.
 - **Timed windows** are start + download + submit; solve must be <1 s pure python (no jadx/javac subprocess in solve.py).
 - **Prompt wording escalated for 22 days while the artifact did not -- then d23 delivered** (d8 "replay", d15 "split",
   d19 "call graphs", d20 "signed module", d21 "state machine", d22 "multiple root signals", d23 "real signals vs generated
-  false positives" = probe results + dead look-alike mixers). Judge by the APK (schema, dex size jump 2.6 -> 5.7 KB,
+  false positives" = probe results + dead look-alike mixers; d24 "pinned emulator used by the solve oracle" = still a
+  pure gate fn, nothing to emulate). Judge by the APK (schema, dex size jump 2.6 -> 5.7 KB,
   `Release`/`Probe` classes, `native` methods), never by the verb.
 - **Escalation is not monotonic** (d21 back to `reverse` after d20's pointer; d23 single still v1). Keep every decoder.
-- **Escalation watch:** v2 `analysis` is now the timed baseline. Next cheap steps: chain reads Android state (assets
+- **Escalation watch:** v2 `analysis` is the timed baseline (d23, d24 unchanged in shape; only the gate fn and class
+  names follow the theme). If a chain ever reads the environment, note the d24 wording: the oracle runs on a PINNED
+  EMULATOR, so evaluate both a clean-Pixel and a stock-AVD profile and report both. Next cheap steps: chain reads Android state (assets
   JSON `build`, PackageManager signature, Resources, SharedPreferences, `Build.*`) -- stub with the APK's own bytes and a
   clean retail device; probes that hit hook/emulator/tamper APIs inside the chain (clean answer per signal); flattened
   or VM-dispatched mixers; Kotlin `object` singletons; JNI in more sets; the `proof` gate demanding a derived input.

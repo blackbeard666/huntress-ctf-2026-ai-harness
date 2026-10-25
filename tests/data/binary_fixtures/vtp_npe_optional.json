@@ -1,0 +1,23 @@
+{
+ "family": "jvm_trigger_proof",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "vtp_npe_optional_a.bin",
+ "jar_b": "vtp_npe_optional_b.bin",
+ "expected_facts": {
+  "trigger_input": "null",
+  "trigger_input_type": "null",
+  "vulnerable_outcome": "java.lang.NullPointerException",
+  "vulnerable_outcome_kind": "exception",
+  "corrected_result": "-1",
+  "corrected_outcome_kind": "return",
+  "exception_class": "java.lang.NullPointerException",
+  "exception_class_simple": "NullPointerException",
+  "trigger_found": "true",
+  "method": "head"
+ },
+ "generator_cmd": "bash vtp_gen.sh .   # javac: s.length() > 0 ? s.charAt(0) : -1  vs  Optional.ofNullable(s).filter(!isEmpty).map(charAt(0)).orElse(-1) (3 indy lambdas); compiled + jarred by JDK javac/jar",
+ "oracle_cmd": "java VtpOracle.java vtp_npe_optional_a.bin vtp_npe_optional_b.bin HeadVulnerable@HeadCorrected.head   # real JVM, reflection over the documented candidate order",
+ "decoy": false
+}

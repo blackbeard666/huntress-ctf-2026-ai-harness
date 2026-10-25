@@ -1,0 +1,8 @@
+{
+ "field": "eventlog.record_ids",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_integrity.py.txt <outdir>  (stdlib struct/zlib EVTX writer -> decoy_evt_legacy_integ.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_evtx_integrity.py.txt tests/data/meta_fixtures/eventlog/decoy_evt_legacy_integ__record_ids.bin  (python-evtx 0.8.1 FileHeader/ChunkHeader/Record checksums, record_num, timestamp); file -b -> 'data (LfLe legacy .evt, not ElfFile)'",
+ "decoy": true,
+ "member": "decoy_evt_legacy_integ.evtx"
+}

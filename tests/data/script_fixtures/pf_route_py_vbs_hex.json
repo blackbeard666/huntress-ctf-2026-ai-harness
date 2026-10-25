@@ -1,0 +1,90 @@
+{
+ "_doc": "per-file-hashed-contract: python carrier|windows_chain and syntax|obfuscation, VBS representation|transform|control, url-host; 8-hex member stem",
+ "lane": "script",
+ "target": "per-file-hashed-contract",
+ "material": "763d317c73746570733d616371756972655f72656d6f74652c77726974655f66696c657c63616d706169676e5f69643d63616d706169676e2d663239666634653163657c636172726965723d7079326578655f77696e646f77735f736572766963657c77696e646f77735f636861696e3d72756e5f6b65795f64657363726970746f727c73796e7461783d77616c7275735f62696e64696e677c6f62667573636174696f6e3d66737472696e675f667261676d656e74737c726570726573656e746174696f6e3d6865785f636f6c6f6e7c7472616e73666f726d3d73696e676c655f627974655f786f727c636f6e74726f6c3d73656c6563745f636173657c75726c3d68747470733a2f2f663239666634653163652e6578616d706c652e696e76616c69642f61333538363735662e7079",
+ "rep": "hex",
+ "transform": "identity",
+ "key": null,
+ "expected": "v=1|steps=acquire_remote,write_file|campaign_id=campaign-f29ff4e1ce|carrier=py2exe_windows_service|windows_chain=run_key_descriptor|syntax=walrus_binding|obfuscation=fstring_fragments|representation=hex_colon|transform=single_byte_xor|control=select_case|url=https://f29ff4e1ce.example.invalid/a358675f.py",
+ "decoy": false,
+ "generator_cmd": "printf %s \"$PLAN\" | xxd -p | tr -d '\\n'",
+ "oracle_cmd": "printf %s \"$material\" | xxd -r -p",
+ "pf_cases": [
+  {
+   "answer_id": "python-737ea4c0-carrier",
+   "members": [
+    "737ea4c0.py"
+   ],
+   "question": {},
+   "kind": "python",
+   "route": [
+    "python",
+    "737ea4c0.py",
+    "carrier"
+   ],
+   "expected": "py2exe_windows_service|run_key_descriptor",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | xxd -r -p); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; echo \"$(kv \"$PLAN\" carrier)|$(kv \"$PLAN\" windows_chain)\""
+  },
+  {
+   "answer_id": "python-737ea4c0-obfuscation",
+   "members": [
+    "737ea4c0.py"
+   ],
+   "question": {},
+   "kind": "python",
+   "route": [
+    "python",
+    "737ea4c0.py",
+    "obfuscation"
+   ],
+   "expected": "walrus_binding|fstring_fragments",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | xxd -r -p); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; echo \"$(kv \"$PLAN\" syntax)|$(kv \"$PLAN\" obfuscation)\""
+  },
+  {
+   "answer_id": "vbscript-c5e912-style",
+   "members": [
+    "c5e912.vbs"
+   ],
+   "question": {},
+   "kind": "vbscript",
+   "route": [
+    "vbscript",
+    "c5e912.vbs",
+    "style"
+   ],
+   "expected": "hex_colon|single_byte_xor|select_case",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | xxd -r -p); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; echo \"$(kv \"$PLAN\" representation)|$(kv \"$PLAN\" transform)|$(kv \"$PLAN\" control)\""
+  },
+  {
+   "answer_id": "python-737ea4c0-url-host",
+   "members": [
+    "737ea4c0.py"
+   ],
+   "question": {},
+   "kind": "python",
+   "route": [
+    "python",
+    "737ea4c0.py",
+    "url-host"
+   ],
+   "expected": "f29ff4e1ce.example.invalid",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | xxd -r -p); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" url | awk -F/ '{print $3}'"
+  },
+  {
+   "answer_id": "python-737ea4c0-campaign-token",
+   "members": [
+    "737ea4c0.py"
+   ],
+   "question": {},
+   "kind": "python",
+   "route": [
+    "python",
+    "737ea4c0.py",
+    "campaign-token"
+   ],
+   "expected": "f29ff4e1ce",
+   "oracle_cmd": "PLAN=$(printf %s \"$MAT\" | xxd -r -p); kv(){ printf %s \"$1\" | tr '|' '\\n' | awk -F= -v k=\"$2\" '$1==k{sub(/^[^=]*=/,\"\");print;exit}'; }; kv \"$PLAN\" campaign_id | cut -d- -f2-"
+  }
+ ]
+}

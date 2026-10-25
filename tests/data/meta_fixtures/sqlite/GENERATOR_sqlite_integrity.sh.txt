@@ -1,0 +1,14 @@
+#!/bin/sh
+# Generator for the integ_* sqlite integrity fixtures. $1 = output dir. Needs coreutils, sqlite3 CLI (3.46.1), Pillow.
+set -e
+OUT=$1; SRC=challenges/day23/metadata-page-me-maybe/single_solve/work/extracted/metadata-day-23-evidence/database-001.sqlite
+cp "$SRC" "$OUT/consistent.sqlite"                                # D23 single: 3 pages x 4096, header valid
+head -c 8192 "$SRC" > "$OUT/truncated.sqlite"                     # last page cut: 8192 < 3 x 4096
+{ cat "$SRC"; head -c 4096 /dev/zero; } > "$OUT/padded.sqlite"    # one page of zero padding appended
+cp "$SRC" "$OUT/patched.sqlite"                                   # impossible claims: max payload 65, schema 5
+printf '\101' | dd of="$OUT/patched.sqlite" bs=1 seek=21 conv=notrunc 2>/dev/null
+printf '\000\000\000\005' | dd of="$OUT/patched.sqlite" bs=1 seek=44 conv=notrunc 2>/dev/null
+rm -f "$OUT/big.sqlite"
+sqlite3 "$OUT/big.sqlite" "PRAGMA page_size=65536; CREATE TABLE t(x); INSERT INTO t VALUES(1);"   # stored 0x0001
+python3 -c "from PIL import Image; Image.new('RGB',(4,4),(255,0,0)).save('$OUT/decoy.png')"
+cp "$OUT/decoy.png" "$OUT/decoy.sqlite"                           # renamed PNG impostor

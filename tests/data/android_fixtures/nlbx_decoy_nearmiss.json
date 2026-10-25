@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/android_fixtures/nlbx_src/gen_nlbx.py decoy_nearmiss tests/data/android_fixtures/nlbx_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex + gcc -shared -fPIC -O2 -s nlbx_src/nlbx.c + zipfile; puzzle codec: analysis, no data (near miss: same dex as overload_x86_64, .so exports built for class Native_Secret)",
+ "oracle_cmd": "sh tests/data/android_fixtures/nlbx_src/oracle.sh tests/data/android_fixtures/nlbx_decoy_nearmiss.apk  # real JVM: UnsatisfiedLinkError 'int com.huntress.mobile.d24.Native_Secrets.mix(int)' -> Release.code() never returns a token"
+}

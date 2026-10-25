@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "npd_bounds_a.bin",
+ "file_b": "npd_bounds_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-787",
+  "cwe_number": "787",
+  "vulnerability_class": "out_of_bounds_write"
+ },
+ "generator_cmd": "reused twin (see npd_gen.sh / json)",
+ "oracle_cmd": "python3 vcls_oracle.py npd_bounds_a.bin npd_bounds_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"cmp\", \"ja\", \"lea\", \"nop\", \"pop\", \"ret\"], \"removed\": [\"add\"]}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (C: buf[idx] = 1 -> idx >= sizeof buf guard); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

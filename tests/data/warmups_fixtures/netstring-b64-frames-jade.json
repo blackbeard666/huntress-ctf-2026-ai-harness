@@ -1,0 +1,9 @@
+{
+ "codec": "netstring-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-47",
+ "encoded": "12:TmljZSB3b3Jr,12:IGRlY29kaW5n,12:IHRoaXMgd2Fy,12:bXVwISBUbyBz,12:b2x2ZSwgc3Vi,12:bWl0IHRoaXMg,12:ZXhhY3QgYW5z,12:d2VyIHRvIHRo,12:ZSBHYW1lIE1h,12:c3RlcjogamFk,12:ZS1tYXJ0ZW4t,4:NDc=,",
+ "generator_cmd": "o=; s=$plain; while [ -n \"$s\" ]; do c=${s:0:9}; s=${s:9}; b=$(printf %s \"$c\" | base64 -w0); o+=\"${#b}:$b,\"; done; printf %s \"$o\"   # bash + coreutils base64: each 9-char chunk base64-encoded, then netstring-framed",
+ "oracle_cmd": "perl -MMIME::Base64 -0777 -ne 'my($o,$i)=(\"\",0);while($i<length){substr($_,$i)=~/^\\s*(\\d+):/ or last;$i+=length($&);$o.=decode_base64(substr($_,$i,$1));$i+=$1;$i++ if substr($_,$i,1) eq \",\"}print $o'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-47",
+ "expected": "match"
+}

@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=makefile|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=MAKEFILE-8ceaabb9|url=https://makefile-8ceaabb94e.example.invalid/stage|file_path=/tmp/huntress-makefile/.8ceaabb94ec109ac.stage",
+ "decoy": false,
+ "language": "makefile",
+ "role": "benign-utility",
+ "id_single": "polyglot-makefile-benign-utility-<field>",
+ "id_timed": "polyglot-makefile-55bdc2-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_makefile_benign_utility.mk | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-makefile-benign-utility-language": "makefile",
+  "polyglot-makefile-benign-utility-role": "benign_utility",
+  "polyglot-makefile-benign-utility-verdict": "benign",
+  "polyglot-makefile-benign-utility-attack": "none",
+  "polyglot-makefile-benign-utility-adapter": "local_parser",
+  "polyglot-makefile-benign-utility-host-profile": "standalone",
+  "polyglot-makefile-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-makefile-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-makefile-benign-utility-next-language": "powershell",
+  "polyglot-makefile-benign-utility-stage-count": "2",
+  "polyglot-makefile-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-makefile-benign-utility-campaign-id": "MAKEFILE-8ceaabb9",
+  "polyglot-makefile-benign-utility-url": "https://makefile-8ceaabb94e.example.invalid/stage",
+  "polyglot-makefile-benign-utility-file-path": "/tmp/huntress-makefile/.8ceaabb94ec109ac.stage"
+ },
+ "answers_timed": {
+  "polyglot-makefile-55bdc2-url-host": "makefile-8ceaabb94e.example.invalid",
+  "polyglot-makefile-55bdc2-path-leaf": ".8ceaabb94ec109ac.stage",
+  "polyglot-makefile-55bdc2-campaign-token": "8ceaabb9",
+  "polyglot-makefile-55bdc2-next-language": "powershell"
+ }
+}

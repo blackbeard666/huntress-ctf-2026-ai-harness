@@ -1,0 +1,8 @@
+{
+ "field": "shimcache.entry_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> amcache_win10.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/shimcache/decoy_amcache_hive__entry_count.bin  (regipy ShimCacheParser) -> shimcache_error: no \\\\Select / AppCompatCache",
+ "decoy": true,
+ "member": "SYSTEM"
+}

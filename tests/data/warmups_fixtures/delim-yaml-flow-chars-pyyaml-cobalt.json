@@ -1,0 +1,9 @@
+{
+ "codec": "delimited-fields",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-raven-25",
+ "encoded": "[N, i, c, e, ' ', w, o, r, k, ' ', d, e, c, o, d, i, n, g, ' ', t, h, i, s, ' ', w, a, r, m, u, p, '!', ' ', T, o, ' ', s, o, l, v, e, ',', ' ', s, u, b, m, i, t, ' ', t, h, i, s, ' ', e, x, a, c, t, ' ', a, n, s, w, e, r, ' ', t, o, ' ', t, h, e, ' ', G, a, m, e, ' ', M, a, s, t, e, r, ':', ' ', c, o, b, a, l, t, '-', r, a, v, e, n, '-', '2', '5']",
+ "generator_cmd": "python3 -I -c \"import sys,yaml; sys.stdout.write(yaml.safe_dump(list(sys.argv[1]), default_flow_style=True, width=10**9).strip())\" \"$plain\"",
+ "oracle_cmd": "ruby -ryaml -e 'v = YAML.safe_load(STDIN.read); raise \"not a list of strings\" unless v.is_a?(Array) && v.all? { |x| x.is_a?(String) }; print v.join'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-raven-25",
+ "expected": "match"
+}

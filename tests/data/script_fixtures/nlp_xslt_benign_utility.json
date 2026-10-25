@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=xslt|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=XSLT-33bd525c|url=https://xslt-33bd525ca3.example.invalid/stage|file_path=/tmp/huntress-xslt/.33bd525ca3f4f834.stage",
+ "decoy": false,
+ "language": "xslt",
+ "role": "benign-utility",
+ "id_single": "polyglot-xslt-benign-utility-<field>",
+ "id_timed": "polyglot-xslt-2c0cc5-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_xslt_benign_utility.xsl | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-xslt-benign-utility-language": "xslt",
+  "polyglot-xslt-benign-utility-role": "benign_utility",
+  "polyglot-xslt-benign-utility-verdict": "benign",
+  "polyglot-xslt-benign-utility-attack": "none",
+  "polyglot-xslt-benign-utility-adapter": "local_parser",
+  "polyglot-xslt-benign-utility-host-profile": "standalone",
+  "polyglot-xslt-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-xslt-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-xslt-benign-utility-next-language": "powershell",
+  "polyglot-xslt-benign-utility-stage-count": "2",
+  "polyglot-xslt-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-xslt-benign-utility-campaign-id": "XSLT-33bd525c",
+  "polyglot-xslt-benign-utility-url": "https://xslt-33bd525ca3.example.invalid/stage",
+  "polyglot-xslt-benign-utility-file-path": "/tmp/huntress-xslt/.33bd525ca3f4f834.stage"
+ },
+ "answers_timed": {
+  "polyglot-xslt-2c0cc5-url-host": "xslt-33bd525ca3.example.invalid",
+  "polyglot-xslt-2c0cc5-path-leaf": ".33bd525ca3f4f834.stage",
+  "polyglot-xslt-2c0cc5-campaign-token": "33bd525c",
+  "polyglot-xslt-2c0cc5-next-language": "powershell"
+ }
+}

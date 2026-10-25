@@ -1,0 +1,9 @@
+{
+ "codec": "length-prefix",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-26",
+ "encoded": "000000054e6963652000000005776f726b20000000096465636f64696e6720000000057468697320000000087761726d7570212000000003546f2000000007736f6c76652c20000000077375626d6974200000000574686973200000000665786163742000000007616e737765722000000003746f2000000004746865200000000547616d6520000000084d61737465723a200000000e6d61706c652d6765636b6f2d3236",
+ "generator_cmd": "perl -e 'print pack(\"(N/a*)*\", $ENV{plain} =~ /\\S+\\s*/g)'| xxd -p | tr -d '\\n'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | perl -0777 -ne 'print unpack(\"(N/a*)*\", $_)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-gecko-26",
+ "expected": "match"
+}

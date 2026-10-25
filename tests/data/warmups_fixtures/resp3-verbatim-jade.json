@@ -1,0 +1,9 @@
+{
+ "codec": "resp",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-gecko-52",
+ "encoded": "=104\r\ntxt:Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-gecko-52\r\n",
+ "generator_cmd": "printf '=104\\r\\ntxt:%s\\r\\n' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-redis'); import hiredis\nd=sys.stdin.buffer.read()\nr=hiredis.Reader(); r.feed(d); v=r.gets()\nassert v is not False and not r.has_data(), 'not one complete RESP value'\nw=lambda v: b''.join(map(w,v)) if isinstance(v,list) else (v if isinstance(v,bytes) else b'')\nj=' ' if False else ''\nprint(j.join(x.decode() for x in v) if isinstance(v,list) and False else w(v).decode(), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-gecko-52",
+ "expected": "match"
+}

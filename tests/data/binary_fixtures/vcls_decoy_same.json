@@ -1,0 +1,16 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_decoy_same_a.bin",
+ "file_b": "vcls_decoy_same_b.bin",
+ "expected_facts": {
+  "cwe": "none",
+  "vulnerability_class": "none"
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_decoy_same_a.bin vcls_decoy_same_b.bin; cmp vcls_decoy_same_a.bin vcls_decoy_same_b.bin   # {\"added\": [], \"removed\": []}",
+ "decoy": true,
+ "note": "byte-identical ELF twins: nothing fixed -> none"
+}

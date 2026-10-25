@@ -1,0 +1,9 @@
+{
+ "codec": "tnetstring",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-gecko-52",
+ "encoded": "563:2:78#3:105#2:99#3:101#2:32#3:119#3:111#3:114#3:107#2:32#3:100#3:101#2:99#3:111#3:100#3:105#3:110#3:103#2:32#3:116#3:104#3:105#3:115#2:32#3:119#2:97#3:114#3:109#3:117#3:112#2:33#2:32#2:84#3:111#2:32#3:115#3:111#3:108#3:118#3:101#2:44#2:32#3:115#3:117#2:98#3:109#3:105#3:116#2:32#3:116#3:104#3:105#3:115#2:32#3:101#3:120#2:97#2:99#3:116#2:32#2:97#3:110#3:115#3:119#3:101#3:114#2:32#3:116#3:111#2:32#3:116#3:104#3:101#2:32#2:71#2:97#3:109#3:101#2:32#2:77#2:97#3:115#3:116#3:101#3:114#2:58#2:32#3:106#2:97#3:100#3:101#2:45#3:103#3:101#2:99#3:107#3:111#2:45#2:53#2:50#]",
+ "generator_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-tnet'); import tnetstring as T; plain=sys.argv[1]; sys.stdout.buffer.write(T.dumps([ord(c) for c in plain]))\" \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-tnet'); import tnetstring as T\ndef w(v):\n if isinstance(v,bytes): return v.decode()\n if isinstance(v,list): return ''.join(w(x) for x in v) if any(not isinstance(x,int) for x in v) else ''.join(map(chr,v))\n if isinstance(v,dict): return ''.join(w(v[k]) for k in sorted(v, key=int))\n return ''\nd=sys.stdin.buffer.read().strip(); v,r=T.pop(d)\nassert not r.strip(), 'trailing bytes'\nprint(w(v), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-gecko-52",
+ "expected": "match"
+}

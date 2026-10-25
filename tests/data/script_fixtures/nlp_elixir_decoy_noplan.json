@@ -1,0 +1,11 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "language": "elixir",
+ "role": "decoy",
+ "id_single": "polyglot-elixir-decoy-<field>",
+ "id_timed": "polyglot-elixir-843a67-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_elixir_decoy_noplan.exs | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "oracle_stdout": "status=ok;inert-analysis-fixture;no plan here"
+}

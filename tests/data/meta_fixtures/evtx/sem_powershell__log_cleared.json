@@ -1,0 +1,8 @@
+{
+ "field": "evtx.log_cleared",
+ "expected": "false",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_semantics.py.txt <outdir>  (stdlib EVTX writer, real BinXML template records via GENERATOR_evtx_binxml.py.txt -> sem_powershell.bin)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_evtx_semantics.py.txt tests/data/meta_fixtures/evtx/sem_powershell__log_cleared.bin log_cleared  (pyevtx-rs 0.13.1 = Rust evtx crate, records_json EventData/System)",
+ "decoy": false,
+ "member": "sem_powershell.evtx"
+}

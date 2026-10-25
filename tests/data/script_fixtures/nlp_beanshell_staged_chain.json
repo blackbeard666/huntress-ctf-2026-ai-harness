@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=beanshell|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=BEANSHELL-a5eebd7b|url=https://beanshell-a5eebd7b9e.example.invalid/stage|file_path=/tmp/huntress-beanshell/.a5eebd7b9eaca4c7.stage",
+ "decoy": false,
+ "language": "beanshell",
+ "role": "staged-chain",
+ "id_single": "polyglot-beanshell-staged-chain-<field>",
+ "id_timed": "polyglot-beanshell-fc06bd-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_beanshell_staged_chain.bsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-beanshell-staged-chain-language": "beanshell",
+  "polyglot-beanshell-staged-chain-role": "staged_chain",
+  "polyglot-beanshell-staged-chain-verdict": "suspicious",
+  "polyglot-beanshell-staged-chain-attack": "T1059",
+  "polyglot-beanshell-staged-chain-adapter": "operation_graph",
+  "polyglot-beanshell-staged-chain-host-profile": "standalone",
+  "polyglot-beanshell-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-beanshell-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-beanshell-staged-chain-next-language": "vbscript",
+  "polyglot-beanshell-staged-chain-stage-count": "3",
+  "polyglot-beanshell-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-beanshell-staged-chain-campaign-id": "BEANSHELL-a5eebd7b",
+  "polyglot-beanshell-staged-chain-url": "https://beanshell-a5eebd7b9e.example.invalid/stage",
+  "polyglot-beanshell-staged-chain-file-path": "/tmp/huntress-beanshell/.a5eebd7b9eaca4c7.stage"
+ },
+ "answers_timed": {
+  "polyglot-beanshell-fc06bd-url-host": "beanshell-a5eebd7b9e.example.invalid",
+  "polyglot-beanshell-fc06bd-path-leaf": ".a5eebd7b9eaca4c7.stage",
+  "polyglot-beanshell-fc06bd-campaign-token": "a5eebd7b",
+  "polyglot-beanshell-fc06bd-next-language": "vbscript"
+ }
+}

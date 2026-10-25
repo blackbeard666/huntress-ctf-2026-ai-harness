@@ -1,0 +1,9 @@
+{
+ "codec": "resp",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-17",
+ "encoded": "*100\n$1\nN\n$1\ni\n$1\nc\n$1\ne\n$1\n \n$1\nw\n$1\no\n$1\nr\n$1\nk\n$1\n \n$1\nd\n$1\ne\n$1\nc\n$1\no\n$1\nd\n$1\ni\n$1\nn\n$1\ng\n$1\n \n$1\nt\n$1\nh\n$1\ni\n$1\ns\n$1\n \n$1\nw\n$1\na\n$1\nr\n$1\nm\n$1\nu\n$1\np\n$1\n!\n$1\n \n$1\nT\n$1\no\n$1\n \n$1\ns\n$1\no\n$1\nl\n$1\nv\n$1\ne\n$1\n,\n$1\n \n$1\ns\n$1\nu\n$1\nb\n$1\nm\n$1\ni\n$1\nt\n$1\n \n$1\nt\n$1\nh\n$1\ni\n$1\ns\n$1\n \n$1\ne\n$1\nx\n$1\na\n$1\nc\n$1\nt\n$1\n \n$1\na\n$1\nn\n$1\ns\n$1\nw\n$1\ne\n$1\nr\n$1\n \n$1\nt\n$1\no\n$1\n \n$1\nt\n$1\nh\n$1\ne\n$1\n \n$1\nG\n$1\na\n$1\nm\n$1\ne\n$1\n \n$1\nM\n$1\na\n$1\ns\n$1\nt\n$1\ne\n$1\nr\n$1\n:\n$1\n \n$1\nj\n$1\na\n$1\nd\n$1\ne\n$1\n-\n$1\no\n$1\nt\n$1\nt\n$1\ne\n$1\nr\n$1\n-\n$1\n1\n$1\n7\n",
+ "generator_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-redis'); import redis; plain=sys.argv[1]; sys.stdout.buffer.write(b''.join(redis.Connection().pack_command(*list(plain))))\" \"$plain\" | sed 's/\\r$//'",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-redis'); import hiredis\nd=sys.stdin.buffer.read().replace(b'\\r\\n',b'\\n').replace(b'\\n',b'\\r\\n')   # LF -> CRLF for the strict C reader\nr=hiredis.Reader(); r.feed(d); v=r.gets()\nassert v is not False and not r.has_data(), 'not one complete RESP value'\nw=lambda v: b''.join(map(w,v)) if isinstance(v,list) else (v if isinstance(v,bytes) else b'')\nj=' ' if False else ''\nprint(j.join(x.decode() for x in v) if isinstance(v,list) and False else w(v).decode(), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-17",
+ "expected": "match"
+}

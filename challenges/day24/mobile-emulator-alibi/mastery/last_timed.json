@@ -1,0 +1,34 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "ca728e63-8b1f-4a15-be18-c1487b6efc31",
+  "window": null,
+  "elapsed": 3.09,
+  "in_window": 3.09,
+  "phases": {
+    "start": 0.0,
+    "download": 0.0,
+    "solve": 0.94,
+    "submit": 2.14
+  },
+  "routed": "local (Homebase unavailable)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "set2.answer": "ANS-9D2781ABEF9A36E2",
+    "set6.answer": "ANS-FF9FAF9C52158375",
+    "set3.answer": "ANS-085129BE4B2FBEF4",
+    "set4.answer": "ANS-84A1B36E8CBD1A38",
+    "set7.answer": "ANS-8E96A14E174C279E",
+    "set1.answer": "ANS-D0BF8F135A79F6EA",
+    "set8.answer": "ANS-4D8AABFBBB0BD2BD",
+    "set5.answer": "ANS-C2FBF5CE3E9D2879"
+  },
+  "attempts_remaining": 32,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 32,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 8
+}

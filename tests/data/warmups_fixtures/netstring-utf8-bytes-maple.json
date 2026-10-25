@@ -1,0 +1,9 @@
+{
+ "codec": "netstring-any",
+ "plain": "Café crème, naïve résumé — submit this exact answer to the Game Master: maple-gecko-26 ✓",
+ "encoded": "6:Café ,8:crème, ,7:naïve ,9:résumé ,4:— ,7:submit ,5:this ,6:exact ,7:answer ,3:to ,4:the ,5:Game ,8:Master: ,15:maple-gecko-26 ,3:✓,",
+ "generator_cmd": "LC_ALL=C bash -c 'ws=($1); n=${#ws[@]}; o=; for ((k=0;k<n;k++)); do w=${ws[k]}; ((k<n-1)) && w+=\" \"; o+=\"${#w}:$w,\"; done; printf %s \"$o\"' _ \"$plain\"   # bash under LC_ALL=C: ${#w} = UTF-8 BYTES; one frame per word + its space",
+ "oracle_cmd": "perl -0777 -ne 'my($o,$i)=(\"\",0);while($i<length){substr($_,$i)=~/^\\s*(\\d+):/ or last;$i+=length($&);$o.=substr($_,$i,$1);$i+=$1;$i++ if substr($_,$i,1) eq \",\"}print $o'",
+ "oracle_plain": "Café crème, naïve résumé — submit this exact answer to the Game Master: maple-gecko-26 ✓",
+ "expected": "match"
+}

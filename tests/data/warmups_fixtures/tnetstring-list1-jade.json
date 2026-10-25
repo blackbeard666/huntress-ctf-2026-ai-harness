@@ -1,0 +1,9 @@
+{
+ "codec": "tnetstring",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-17",
+ "encoded": "400:1:N,1:i,1:c,1:e,1: ,1:w,1:o,1:r,1:k,1: ,1:d,1:e,1:c,1:o,1:d,1:i,1:n,1:g,1: ,1:t,1:h,1:i,1:s,1: ,1:w,1:a,1:r,1:m,1:u,1:p,1:!,1: ,1:T,1:o,1: ,1:s,1:o,1:l,1:v,1:e,1:,,1: ,1:s,1:u,1:b,1:m,1:i,1:t,1: ,1:t,1:h,1:i,1:s,1: ,1:e,1:x,1:a,1:c,1:t,1: ,1:a,1:n,1:s,1:w,1:e,1:r,1: ,1:t,1:o,1: ,1:t,1:h,1:e,1: ,1:G,1:a,1:m,1:e,1: ,1:M,1:a,1:s,1:t,1:e,1:r,1::,1: ,1:j,1:a,1:d,1:e,1:-,1:o,1:t,1:t,1:e,1:r,1:-,1:1,1:7,]",
+ "generator_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-tnet'); import tnetstring as T; plain=sys.argv[1]; sys.stdout.buffer.write(T.dumps([c.encode() for c in plain]))\" \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-tnet'); import tnetstring as T\ndef w(v):\n if isinstance(v,bytes): return v.decode()\n if isinstance(v,list): return ''.join(w(x) for x in v) if any(not isinstance(x,int) for x in v) else ''.join(map(chr,v))\n if isinstance(v,dict): return ''.join(w(v[k]) for k in sorted(v, key=int))\n return ''\nd=sys.stdin.buffer.read().strip(); v,r=T.pop(d)\nassert not r.strip(), 'trailing bytes'\nprint(w(v), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-17",
+ "expected": "match"
+}

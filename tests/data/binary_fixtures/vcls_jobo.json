@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_jobo_a.bin",
+ "file_b": "vcls_jobo_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-193",
+  "cwe_number": "193",
+  "vulnerability_class": "off_by_one"
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT   # gcc -fno-inline C twins / javac --release 11 + jar twins",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_jobo_a.bin vcls_jobo_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"if_icmpge\"], \"removed\": [\"if_icmpgt\"]}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (Java: i <= n -> i < n); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

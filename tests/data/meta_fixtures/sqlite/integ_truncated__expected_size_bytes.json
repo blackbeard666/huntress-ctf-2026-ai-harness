@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.expected_size_bytes",
+ "expected": "12288",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_integrity.sh.txt <outdir>  (coreutils cp/head/dd + sqlite3 CLI 3.46.1 + Pillow) -> truncated.sqlite",
+ "oracle_cmd": "stat -c %s -> 8192; file -b -> 'database pages 3, file counter 9, version-valid-for 9'; PRAGMA page_size 4096 -> header claims 12288 > 8192; sqlite3 integrity_check -> 'database disk image is malformed (11)'",
+ "decoy": false,
+ "member": "database-truncated.sqlite"
+}

@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-15-fetch-quest",
+  "lane": "web",
+  "name": "🌐 Fetch Quest",
+  "ids": {
+    "single_solve": "web-exploitation-day-15-fetch-quest",
+    "time_trial": "web-exploitation-day-15-fetch-quest/time_trial",
+    "mastery": "web-exploitation-day-15-fetch-quest/mastery"
+  }
+}

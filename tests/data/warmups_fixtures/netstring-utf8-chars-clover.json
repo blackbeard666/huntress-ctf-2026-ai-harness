@@ -1,0 +1,9 @@
+{
+ "codec": "netstring-any",
+ "plain": "Café crème, naïve résumé — submit this exact answer to the Game Master: clover-ibis-63 ✓",
+ "encoded": "4:Café,4: crè,4:me, ,4:naïv,4:e ré,4:sumé,4: — s,4:ubmi,4:t th,4:is e,4:xact,4: ans,4:wer ,4:to t,4:he G,4:ame ,4:Mast,4:er: ,4:clov,4:er-i,4:bis-,4:63 ✓,",
+ "generator_cmd": "LC_ALL=C.UTF-8 bash -c 's=$1; o=; while [ -n \"$s\" ]; do c=${s:0:4}; s=${s:4}; o+=\"${#c}:$c,\"; done; printf %s \"$o\"' _ \"$plain\"   # bash under a UTF-8 locale: 4-CHARACTER chunks, len = characters",
+ "oracle_cmd": "perl -CSD -0777 -ne 'my($o,$i)=(\"\",0);while($i<length){substr($_,$i)=~/^\\s*(\\d+):/ or last;$i+=length($&);$o.=substr($_,$i,$1);$i+=$1;$i++ if substr($_,$i,1) eq \",\"}print $o'",
+ "oracle_plain": "Café crème, naïve résumé — submit this exact answer to the Game Master: clover-ibis-63 ✓",
+ "expected": "match"
+}

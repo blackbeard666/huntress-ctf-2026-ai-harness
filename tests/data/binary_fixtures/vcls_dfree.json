@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_dfree_a.bin",
+ "file_b": "vcls_dfree_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-415",
+  "cwe_number": "415",
+  "vulnerability_class": "double_free"
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT   # gcc -fno-inline C twins / javac --release 11 + jar twins",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_dfree_a.bin vcls_dfree_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [], \"removed\": [\"call\", \"call free\", \"cmp\", \"jle\", \"mov\"]}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (C: conditional free(p) + free(p) -> one free); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

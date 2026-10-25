@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=terraform_hcl|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=TERRAFORM_HCL-b64e11f5|url=https://terraform_hcl-b64e11f534.example.invalid/stage|file_path=/tmp/huntress-terraform_hcl/.b64e11f534dc0123.stage",
+ "decoy": false,
+ "language": "terraform_hcl",
+ "role": "benign-utility",
+ "id_single": "polyglot-terraform_hcl-benign-utility-<field>",
+ "id_timed": "polyglot-terraform_hcl-446e97-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_terraform_hcl_benign_utility.tf | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-terraform_hcl-benign-utility-language": "terraform_hcl",
+  "polyglot-terraform_hcl-benign-utility-role": "benign_utility",
+  "polyglot-terraform_hcl-benign-utility-verdict": "benign",
+  "polyglot-terraform_hcl-benign-utility-attack": "none",
+  "polyglot-terraform_hcl-benign-utility-adapter": "local_parser",
+  "polyglot-terraform_hcl-benign-utility-host-profile": "standalone",
+  "polyglot-terraform_hcl-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-terraform_hcl-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-terraform_hcl-benign-utility-next-language": "powershell",
+  "polyglot-terraform_hcl-benign-utility-stage-count": "2",
+  "polyglot-terraform_hcl-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-terraform_hcl-benign-utility-campaign-id": "TERRAFORM_HCL-b64e11f5",
+  "polyglot-terraform_hcl-benign-utility-url": "https://terraform_hcl-b64e11f534.example.invalid/stage",
+  "polyglot-terraform_hcl-benign-utility-file-path": "/tmp/huntress-terraform_hcl/.b64e11f534dc0123.stage"
+ },
+ "answers_timed": {
+  "polyglot-terraform_hcl-446e97-url-host": "terraform_hcl-b64e11f534.example.invalid",
+  "polyglot-terraform_hcl-446e97-path-leaf": ".b64e11f534dc0123.stage",
+  "polyglot-terraform_hcl-446e97-campaign-token": "b64e11f5",
+  "polyglot-terraform_hcl-446e97-next-language": "powershell"
+ }
+}

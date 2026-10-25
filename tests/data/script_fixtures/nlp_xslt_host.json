@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=xslt|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=msxsl_wmic_format|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=XSLT-10c0240c|url=https://xslt-10c0240c48.example.invalid/stage|file_path=/tmp/huntress-xslt/.10c0240c48563fd1.stage",
+ "decoy": false,
+ "language": "xslt",
+ "role": "host",
+ "id_single": "polyglot-xslt-host-<field>",
+ "id_timed": "polyglot-xslt-e3b444-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_xslt_host.xsl | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-xslt-host-language": "xslt",
+  "polyglot-xslt-host-role": "staged_chain",
+  "polyglot-xslt-host-verdict": "suspicious",
+  "polyglot-xslt-host-attack": "T1059",
+  "polyglot-xslt-host-adapter": "operation_graph",
+  "polyglot-xslt-host-host-profile": "msxsl_wmic_format",
+  "polyglot-xslt-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-xslt-host-stage-profile": "two_stage_download_execute",
+  "polyglot-xslt-host-next-language": "bash",
+  "polyglot-xslt-host-stage-count": "2",
+  "polyglot-xslt-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-xslt-host-campaign-id": "XSLT-10c0240c",
+  "polyglot-xslt-host-url": "https://xslt-10c0240c48.example.invalid/stage",
+  "polyglot-xslt-host-file-path": "/tmp/huntress-xslt/.10c0240c48563fd1.stage"
+ },
+ "answers_timed": {
+  "polyglot-xslt-e3b444-url-host": "xslt-10c0240c48.example.invalid",
+  "polyglot-xslt-e3b444-path-leaf": ".10c0240c48563fd1.stage",
+  "polyglot-xslt-e3b444-campaign-token": "10c0240c",
+  "polyglot-xslt-e3b444-next-language": "bash"
+ }
+}

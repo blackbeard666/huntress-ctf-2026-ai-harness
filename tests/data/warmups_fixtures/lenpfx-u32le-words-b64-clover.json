@@ -1,0 +1,9 @@
+{
+ "codec": "length-prefix",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-finch-63",
+ "encoded": "BQAAAE5pY2UgBQAAAHdvcmsgCQAAAGRlY29kaW5nIAUAAAB0aGlzIAgAAAB3YXJtdXAhIAMAAABUbyAHAAAAc29sdmUsIAcAAABzdWJtaXQgBQAAAHRoaXMgBgAAAGV4YWN0IAcAAABhbnN3ZXIgAwAAAHRvIAQAAAB0aGUgBQAAAEdhbWUgCAAAAE1hc3RlcjogDwAAAGNsb3Zlci1maW5jaC02Mw==",
+ "generator_cmd": "perl -e 'print pack(\"(V/a*)*\", $ENV{plain} =~ /\\S+\\s*/g)'| base64 -w0   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | perl -0777 -ne 'print unpack(\"(V/a*)*\", $_)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-finch-63",
+ "expected": "match"
+}

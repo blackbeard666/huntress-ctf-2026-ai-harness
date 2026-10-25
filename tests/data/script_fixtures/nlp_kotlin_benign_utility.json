@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=kotlin|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=KOTLIN-0d968df2|url=https://kotlin-0d968df2e6.example.invalid/stage|file_path=/tmp/huntress-kotlin/.0d968df2e64c1d1b.stage",
+ "decoy": false,
+ "language": "kotlin",
+ "role": "benign-utility",
+ "id_single": "polyglot-kotlin-benign-utility-<field>",
+ "id_timed": "polyglot-kotlin-ada07b-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_kotlin_benign_utility.kts | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-kotlin-benign-utility-language": "kotlin",
+  "polyglot-kotlin-benign-utility-role": "benign_utility",
+  "polyglot-kotlin-benign-utility-verdict": "benign",
+  "polyglot-kotlin-benign-utility-attack": "none",
+  "polyglot-kotlin-benign-utility-adapter": "local_parser",
+  "polyglot-kotlin-benign-utility-host-profile": "standalone",
+  "polyglot-kotlin-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-kotlin-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-kotlin-benign-utility-next-language": "powershell",
+  "polyglot-kotlin-benign-utility-stage-count": "2",
+  "polyglot-kotlin-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-kotlin-benign-utility-campaign-id": "KOTLIN-0d968df2",
+  "polyglot-kotlin-benign-utility-url": "https://kotlin-0d968df2e6.example.invalid/stage",
+  "polyglot-kotlin-benign-utility-file-path": "/tmp/huntress-kotlin/.0d968df2e64c1d1b.stage"
+ },
+ "answers_timed": {
+  "polyglot-kotlin-ada07b-url-host": "kotlin-0d968df2e6.example.invalid",
+  "polyglot-kotlin-ada07b-path-leaf": ".0d968df2e64c1d1b.stage",
+  "polyglot-kotlin-ada07b-campaign-token": "0d968df2",
+  "polyglot-kotlin-ada07b-next-language": "powershell"
+ }
+}

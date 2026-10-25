@@ -1,0 +1,11 @@
+{
+ "codec": "netstring-any",
+ "plain": null,
+ "encoded": "Standup moved: 3:30, then 4:15, and 1:1s at 2:00, see you.",
+ "generator_cmd": "hand-written prose containing clock times / '1:1s' (digits+colon+comma) -> not a netstring run",
+ "oracle_cmd": "perl -0777 -ne 'my($o,$i)=(\"\",0);while($i<length){substr($_,$i)=~/^\\s*(\\d+):/ or last;$i+=length($&);$o.=substr($_,$i,$1);$i+=$1;$i++ if substr($_,$i,1) eq \",\"}print $o'",
+ "oracle_plain": "",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "the perl reader is lenient (stops at the first non-frame, clamps an overrun substr); a decoy = its frames do not cover the WHOLE text / a declared len runs past the end"
+}

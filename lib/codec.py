@@ -246,6 +246,148 @@ def plan_answer(answer_id, plan, q=None):
         return None
 
 
+# Target per-file-hashed-contract (D23/D24 TT + Mastery): answer ids `<family>-<4-8 hex member stem>-<field>` over
+# `<stem>.<ext>` members (`jscript-9a6714-style`, `bash-advanced-ab2131-feature`, `set2.python-4c1097-handoff-id`).
+# pf_route splits an id into (family, member, field), checked against the archive's members; pf_answer reads a field
+# from a decoded plan / per-member analysis dict: composite `|`-joined labels (style / carrier / obfuscation), the
+# primary indicator by the precedence the QUESTION states, campaign-token, url-host, path-leaf, PS secondary /
+# tertiary keyed by scenario, anything else through plan_answer. None = cannot answer here. Never raises.
+PF_HEX = re.compile(r"[0-9a-f]{4,8}")
+PF_FIELD = re.compile(r"[a-z][a-z0-9-]*")
+PF_KIND = {"jscript": "js", "javascript": "js", "js": "js", "batch": "bat", "bat": "bat", "cmd": "bat",
+           "vbscript": "vbs", "vbs": "vbs", "python": "py", "py": "py", "powershell": "ps", "ps": "ps", "ps1": "ps"}
+# composite fields: the solver's analysis keys per kind, in the order the question lists the labels
+PF_COMPOSITE = {("js", "style"): (("function-style", "function_style"), ("invocation-style", "invocation_style"),
+                                  ("property-style", "property_style")),
+                ("bat", "style"): (("graph", "topology"), ("control",),
+                                   ("expansion_style", "expansion_stmt", "expansion")),
+                ("vbs", "style"): (("representation", "rep"), ("transform",), ("control",)),
+                ("py", "carrier"): (("carrier",), ("windows-chain", "windows_chain")),
+                ("py", "obfuscation"): (("syntax",), ("obfuscation",))}
+PF_INDICATOR_ORDER = ("url", "upload_url", "next_stage", "file_path", "schedule_path", "note_name", "recovery_note",
+                      "host_id")
+# question phrase (lower, [- ] -> _) -> plan keys, tried in order
+PF_PHRASE_KEYS = {"url": ("url",), "upload_url": ("upload_url",), "next_stage_file": ("next_stage", "next_stage_file"),
+                  "next_stage": ("next_stage",), "file_path": ("file_path",),
+                  "schedule_path": ("schedule_path",), "recovery_note_name": ("note_name", "recovery_note"),
+                  "recovery_note": ("recovery_note", "note_name"), "note_name": ("note_name",),
+                  "host_id": ("host_id",), "wallet_address": ("wallet",), "mutex_name": ("mutex",),
+                  "staged_file_name": ("file",), "user_agent": ("agent", "user_agent"),
+                  "encrypted_file_extension": ("extension",)}
+PF_PS_BY_SCENARIO = {"resource_hijacking": ("wallet", "mutex"), "synthetic_collection": ("file", "agent"),
+                     "synthetic_impact": ("note", "extension")}
+
+
+def _pf_split(aid):
+    """All (family, stem, field) readings of an id (set prefix dropped), rightmost hex token first."""
+    tail = str(aid or "").strip()
+    tail = re.sub(r"^set\d+\.", "", tail, flags=re.I)
+    toks = tail.split("-")
+    out = []
+    for i in range(len(toks) - 2, 0, -1):
+        field = "-".join(toks[i + 1:])
+        if PF_HEX.fullmatch(toks[i]) and PF_FIELD.fullmatch(field):
+            out.append(("-".join(toks[:i]), toks[i], field))
+    return out
+
+
+def pf_route(answer_id, question=None, members=()):
+    """`<family>-<stem>-<field>` -> (family, member, field), the member being the archive member whose stem the id
+    names (members = names/paths, or the question's `artifact` `zip -> member` when none given); None otherwise."""
+    try:
+        names = [str(m) for m in (members or ())]
+        art = str((question or {}).get("artifact") or "")
+        if art:
+            names.append(art.split("->")[-1].strip())
+        stems = {}
+        for n in names:
+            leaf = re.split(r"[\\/]", n.split("->")[-1].strip())[-1]
+            stems.setdefault(leaf.rsplit(".", 1)[0].lower() if "." in leaf else leaf.lower(), n.split("->")[-1].strip())
+        for fam, stem, field in _pf_split(answer_id):
+            if stem in stems:
+                return fam, stems[stem], field
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _pf_get(plan, *keys):
+    for k in keys:
+        for kk in (k, "ind:" + k, k.replace("-", "_"), "ind:" + k.replace("-", "_"), k.replace("_", "-")):
+            v = plan.get(kk)
+            if v not in (None, ""):
+                return v
+    return None
+
+
+def pf_indicator_order(question):
+    """Plan keys in the precedence the question states (`... using this order: URL, upload URL, next-stage file, ...`),
+    falling back to the D23 order when the question names none."""
+    text = str((question or {}).get("question") or "") if isinstance(question, dict) else str(question or "")
+    m = re.search(r"\b(?:order|precedence)\s*:\s*([^.]*(?:\.[a-z][^.]*)*)", text, re.I)
+    if not m:
+        return [(k,) for k in PF_INDICATOR_ORDER]
+    out = []
+    for ph in re.split(r",|\bthen\b|\bor\b|\band\b|>", m.group(1)):
+        n = re.sub(r"[^a-z0-9]+", "_", ph.strip().lower()).strip("_")
+        if not n:
+            continue
+        keys = PF_PHRASE_KEYS.get(n)
+        if keys is None:
+            keys = (n,) + ((n.rsplit("_", 1)[0],) if n.endswith(("_name", "_file", "_value")) else ())
+        out.append(tuple(keys))
+    return out or [(k,) for k in PF_INDICATOR_ORDER]
+
+
+def pf_answer(field, plan, question=None, kind=None):
+    """The value of per-file `field` from a decoded plan (dict / `k=v|..` text / JSON text) or a per-member analysis
+    dict; kind = js|bat|vbs|py|ps (or the id's family). None when the plan cannot answer it."""
+    try:
+        o = _plan_dict(plan)
+        if not o:
+            return None
+        field = str(field or "").lower()
+        kind = PF_KIND.get(str(kind or "").lower().split("-")[0], str(kind or "").lower())
+        q = question if isinstance(question, dict) else {"question": str(question or "")}
+        if field in ("campaign-token", "campaign_token"):
+            c = _pf_get(o, "campaign", "campaign_id")
+            return str(c).split("-", 1)[1] if c and "-" in str(c) else None
+        if field == "campaign":
+            return _pf_get(o, "campaign", "campaign_id")
+        if field == "steps":
+            v = _pf_get(o, "steps")
+            if isinstance(v, (list, tuple)):
+                v = ">".join(str(x) for x in v)
+            toks = [x.strip() for x in re.split(r"[,>]", str(v or "")) if x.strip()]
+            return ">".join(toks) or None
+        if field == "indicator":
+            for keys in pf_indicator_order(q):
+                v = _pf_get(o, *keys)
+                if v is not None:
+                    return str(v)
+            return None
+        if field == "url-host":
+            from urllib.parse import urlsplit
+            u = _pf_get(o, "url")
+            return urlsplit(str(u)).hostname if u else None
+        if field == "path-leaf":
+            p = _pf_get(o, "file_path")
+            return (re.split(r"[\\/]", str(p))[-1] or None) if p else None
+        if kind == "ps" and field in ("secondary", "tertiary"):
+            pair = PF_PS_BY_SCENARIO.get(str(o.get("scenario") or ""))
+            return _pf_get(o, pair[field == "tertiary"]) if pair else None
+        comp = PF_COMPOSITE.get((kind, field))
+        if comp:
+            vals = [_pf_get(o, *alts) for alts in comp]
+            return "|".join(str(v) for v in vals) if all(v is not None for v in vals) else None
+        v = _pf_get(o, field)
+        if v is not None:
+            return v if isinstance(v, str) else ">".join(map(str, v)) if isinstance(v, (list, tuple)) else str(v)
+        return plan_answer(field, o, q)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # ------------------------------------------------------------------------------------------------ reps
 
 def _rep_candidates(rep, material):
@@ -1209,7 +1351,8 @@ def _find_codecs_uncached(src, _depth=0):
         out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _cs_fold_codecs(src)                      # C# / VB / F# descriptor assembled at runtime
-    elif _depth < 2 and _CS_CUE.search((src or "")[:1 << 18]) and _CS_DESC_NAME.search((src or "")[:1 << 18]):
+    elif _depth < 2 and (_CS_CUE.search((src or "")[:1 << 18]) or _BSH_CUE.search((src or "")[:1 << 18])) and \
+            _CS_DESC_NAME.search((src or "")[:1 << 18]):
         # a `"a" + (char)0x76 + ..` descriptor reads as its literal pieces only: the folded full plan goes first
         x = [c for c in _cs_fold_codecs(src, 0.3) if any(c["plain"] != p and c["plain"].startswith(p)
                                                           for p in (o.get("plain") for o in out) if p)]
@@ -1218,7 +1361,9 @@ def _find_codecs_uncached(src, _depth=0):
         out = out + _gv_fold_codecs(src)                      # Groovy / Kotlin descriptor assembled at runtime
     elif _depth < 2 and _GV_CUE.search((src or "")[:1 << 18]) and _CS_DESC_NAME.search((src or "")[:1 << 18]):
         # a `new String(x1) + ..` / `[x1, x2].join()` descriptor reads as one plan-shaped piece only: full plan first
-        x = [c for c in _gv_fold_codecs(src, 0.3) if any(c["plain"] != p and c["plain"].startswith(p)
+        x = [c for c in _gv_fold_codecs(src, 0.3) if any(c["plain"] != p and (c["plain"].startswith(p) or (
+            # Kotlin raw `"""..${'$'}.."""`: the literal reading keeps the template, the fold resolves it to `$`
+            "${" in p and c["plain"] == re.sub(r"""\$\{\s*(?:'\$'|"\$")\s*\}""", "$", p)))
                                                           for p in (o.get("plain") for o in out) if p)]
         out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out) and (_DN_CARRIER.search((src or "")[:8 << 20]) or
@@ -12649,6 +12794,21 @@ _CS_CUE = re.compile(r"""string\.Concat|String\.Join|string\.Join|new\s+string\s
                      r"""String\.concat|\\u00[2-7][0-9a-fA-F]|\bchar\s+\d|\[\|\s*'|"{3}|StrReverse|\bNew\s+String\("""
                      r"""|\bnew\s+String\s*\(|\.append\s*\(|\bget(?:Mime|Url)?Decoder\s*\(|\bString\.(?:join|valueOf)\s*\(|parseHex\s*\(""")
 _CS_DESC_NAME = re.compile(r"descriptor", re.I)
+# BeanShell / loose Java (target kotlin-beanshell-literal-route): `.bsh` scripts with untyped `x = "..";` binders,
+# `new StringBuffer(x).reverse()`, `.replace(..)`, `source("..")` / `exec("..")`, and Java `\\uXXXX` escapes that javac /
+# bsh translate BEFORE lexing (`\\u0022` is a quote) -- unescaped, then rescanned by the same folder.
+_BSH_CUE = re.compile(r"""(?m)\bStringBuffer\b|\.reverse\s*\(\s*\)|\.replace\s*\(|\.substring\s*\(|\.concat\s*\(|"""
+                      r"""^[ \t]*(?:source|exec|eval)\s*\(|^[ \t]*[A-Za-z_]\w*[ \t]*\+=[ \t]*["\w]|(?<!\\)(?:\\\\)*\\u+00(?:22|27|2[bB]|3[bBdD]|28|29)""")
+_JV_UESC = re.compile(r"(?<!\\)((?:\\\\)*)\\u+([0-9a-fA-F]{4})")
+
+
+def _jv_unicode_pre(src):
+    """Java / BeanShell lexical translation: `\\uXXXX` (odd backslash run, 1+ `u`) -> the char, before lexing."""
+    if "\\u" not in src:
+        return src
+    return _JV_UESC.sub(lambda m: m.group(1) + chr(int(m.group(2), 16)), src)
+
+
 _CS_ESC = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "a": "\a", "b": "\b", "f": "\f", "v": "\v", "e": "\x1b",
            "\\": "\\", "'": "'", '"': '"'}
 _CS_TOK = re.compile(r"""(?P<ws>\s+)|(?P<cm>//[^\n]*|/\*.*?\*/|\(\*.*?\*\))|"""
@@ -13594,6 +13754,9 @@ def cs_fold(src, budget=0.5):
     try:
         src = src if isinstance(src, str) else bytes(src).decode("utf-8", "ignore")
         src = src[:1 << 18]
+        if re.search(r"(?<!\\)(?:\\\\)*\\u+00(?:22|27|2[bB]|3[bBdD]|28|29)", re.sub(r'"(?:[^"\\\n]|\\.)*"', '""', src)) \
+                and not re.search(r"(?m)^\s*(?:val|fun)\s+\w", src):
+            src = _jv_unicode_pre(src)       # Java / BeanShell: a `\u0022` OUTSIDE any literal is a quote before lexing
         vb = bool(re.search(r"(?im)^\s*(?:(?:Public|Private|Friend|Shared)\s+)*(?:Dim|Const|Imports|Module|Sub|Function)\s+\w", src)
                   and re.search(r"(?i)\bAs\s+(?:New\s+)?\w|\bEnd\s+(?:Sub|Module|Function|Class)\b|&\s*Chr", src))
         fs = not vb and bool(re.search(r"(?m)^\s*let\s+(?:mutable\s+)?\w", src))
@@ -13620,7 +13783,8 @@ def cs_fold(src, budget=0.5):
 
 def _cs_fold_codecs(src, budget=0.5):
     """find_codecs readings of runtime-assembled .NET descriptors (first plan wins)."""
-    if not isinstance(src, str) or not _CS_CUE.search(src[:1 << 18]) or not _CS_DESC_NAME.search(src[:1 << 18]):
+    if not isinstance(src, str) or not (_CS_CUE.search(src[:1 << 18]) or _BSH_CUE.search(src[:1 << 18])) or \
+            not _CS_DESC_NAME.search(src[:1 << 18]):
         return []
     end = time.time() + budget
     for name, s in cs_fold(src, budget * 0.6):

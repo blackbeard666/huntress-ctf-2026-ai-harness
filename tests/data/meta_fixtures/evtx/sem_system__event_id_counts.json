@@ -1,0 +1,8 @@
+{
+ "field": "evtx.event_id_counts",
+ "expected": "{\"104\":1,\"7036\":3,\"7045\":2}",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_evtx_semantics.py.txt <outdir>  (stdlib EVTX writer, real BinXML template records via GENERATOR_evtx_binxml.py.txt -> sem_system.bin)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_evtx_semantics.py.txt tests/data/meta_fixtures/evtx/sem_system__event_id_counts.bin event_id_counts  (pyevtx-rs 0.13.1 = Rust evtx crate, records_json EventData/System)",
+ "decoy": false,
+ "member": "sem_system.evtx"
+}

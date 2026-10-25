@@ -1,0 +1,8 @@
+{
+ "field": "appcompatcache.first_path",
+ "expected": "C:\\Users\\ana\\Downloads\\invoice_2026.exe",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> system_shim.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/appcompatcache/system_shim__first_path.bin  (regipy ShimCacheParser) -> ControlSet002 (Select\\\\Current=2) entries, cache order, [0].path",
+ "decoy": false,
+ "member": "SYSTEM"
+}

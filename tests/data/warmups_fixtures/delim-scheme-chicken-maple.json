@@ -1,0 +1,9 @@
+{
+ "codec": "delimited-fields",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-90",
+ "encoded": "(#\\N #\\i #\\c #\\e #\\space #\\w #\\o #\\r #\\k #\\space #\\d #\\e #\\c #\\o #\\d #\\i #\\n #\\g #\\space #\\t #\\h #\\i #\\s #\\space #\\w #\\a #\\r #\\m #\\u #\\p #\\! #\\space #\\T #\\o #\\space #\\s #\\o #\\l #\\v #\\e #\\, #\\space #\\s #\\u #\\b #\\m #\\i #\\t #\\space #\\t #\\h #\\i #\\s #\\space #\\e #\\x #\\a #\\c #\\t #\\space #\\a #\\n #\\s #\\w #\\e #\\r #\\space #\\t #\\o #\\space #\\t #\\h #\\e #\\space #\\G #\\a #\\m #\\e #\\space #\\M #\\a #\\s #\\t #\\e #\\r #\\: #\\space #\\m #\\a #\\p #\\l #\\e #\\- #\\b #\\a #\\d #\\g #\\e #\\r #\\- #\\9 #\\0)",
+ "generator_cmd": "R=tools/lisp/root; export LD_LIBRARY_PATH=$R/usr/lib/x86_64-linux-gnu:$R/usr/lib SBCL_HOME=$R/usr/lib/sbcl; python3 -I -c \"import json,sys; print(json.dumps(sys.argv[1]))\" \"$plain\" | $R/usr/bin/csi -q -e '(write (string->list (read)))'   # plain in as a string literal on stdin",
+ "oracle_cmd": "R=tools/lisp/root; export LD_LIBRARY_PATH=$R/usr/lib/x86_64-linux-gnu:$R/usr/lib SBCL_HOME=$R/usr/lib/sbcl; $R/usr/bin/sbcl --script <(echo '(princ (coerce (read) (quote string)))')",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-90",
+ "expected": "match"
+}

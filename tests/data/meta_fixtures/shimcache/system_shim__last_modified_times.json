@@ -1,0 +1,8 @@
+{
+ "field": "shimcache.last_modified_times",
+ "expected": "[\"2026-09-21T14:11:40Z\",\"2026-08-22T14:13:20Z\",\"2026-09-21T12:13:20Z\",\"2023-11-14T22:13:20Z\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> system_shim.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/shimcache/system_shim__last_modified_times.bin  (regipy ShimCacheParser) -> ControlSet002 (Select\\\\Current=2) entries, cache order, [last_mod_date] as YYYY-MM-DDTHH:MM:SSZ",
+ "decoy": false,
+ "member": "SYSTEM"
+}

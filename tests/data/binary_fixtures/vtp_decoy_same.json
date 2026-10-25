@@ -1,0 +1,18 @@
+{
+ "family": "jvm_trigger_proof",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "vtp_decoy_same_a.bin",
+ "jar_b": "vtp_decoy_same_b.bin",
+ "expected_facts": {
+  "trigger_found": "false",
+  "trigger_input": "none",
+  "vulnerable_outcome": "none",
+  "corrected_result": "none",
+  "exception_class": "none"
+ },
+ "generator_cmd": "bash vtp_gen.sh .   # javac twins whose head() is identical (only main's string differs)",
+ "oracle_cmd": "java VtpOracle.java vtp_decoy_same_a.bin vtp_decoy_same_b.bin SameVulnerable@SameCorrected.head   # -> trigger_found false",
+ "decoy": true
+}

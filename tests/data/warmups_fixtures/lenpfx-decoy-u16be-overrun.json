@@ -1,0 +1,11 @@
+{
+ "codec": "length-prefix",
+ "plain": null,
+ "encoded": "00054e696365200005776f726b2000096465636f64696e67200005746869732000087761726d757021200003546f200007736f6c76652c2000077375",
+ "generator_cmd": "perl -e 'print pack(\"(n/a*)*\", $ENV{plain} =~ /\\S+\\s*/g)' | head -c 60| xxd -p | tr -d '\\n'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | perl -0777 -ne 'print unpack(\"(n/a*)*\", $_)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, su",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "the perl/protobuf reader is lenient (garbage frames or a short read); a decoy = plain text under hex/b64 (owned by those decoders) or frames that do not cover the WHOLE stream"
+}

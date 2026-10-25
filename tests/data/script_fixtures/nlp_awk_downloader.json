@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=awk|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=AWK-96cf866e|url=https://awk-96cf866ef8.example.invalid/stage|file_path=/tmp/huntress-awk/.96cf866ef84c6d65.stage",
+ "decoy": false,
+ "language": "awk",
+ "role": "downloader",
+ "id_single": "polyglot-awk-downloader-<field>",
+ "id_timed": "polyglot-awk-0ad9bd-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_awk_downloader.awk | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "answers_single": {
+  "polyglot-awk-downloader-language": "awk",
+  "polyglot-awk-downloader-role": "downloader",
+  "polyglot-awk-downloader-verdict": "suspicious",
+  "polyglot-awk-downloader-attack": "T1105",
+  "polyglot-awk-downloader-adapter": "http_client",
+  "polyglot-awk-downloader-host-profile": "standalone",
+  "polyglot-awk-downloader-obfuscation-profile": "base64",
+  "polyglot-awk-downloader-stage-profile": "two_stage_download_execute",
+  "polyglot-awk-downloader-next-language": "jscript",
+  "polyglot-awk-downloader-stage-count": "2",
+  "polyglot-awk-downloader-steps": "acquire_remote,dispatch_process",
+  "polyglot-awk-downloader-campaign-id": "AWK-96cf866e",
+  "polyglot-awk-downloader-url": "https://awk-96cf866ef8.example.invalid/stage",
+  "polyglot-awk-downloader-file-path": "/tmp/huntress-awk/.96cf866ef84c6d65.stage"
+ },
+ "answers_timed": {
+  "polyglot-awk-0ad9bd-url-host": "awk-96cf866ef8.example.invalid",
+  "polyglot-awk-0ad9bd-path-leaf": ".96cf866ef84c6d65.stage",
+  "polyglot-awk-0ad9bd-campaign-token": "96cf866e",
+  "polyglot-awk-0ad9bd-next-language": "jscript"
+ }
+}

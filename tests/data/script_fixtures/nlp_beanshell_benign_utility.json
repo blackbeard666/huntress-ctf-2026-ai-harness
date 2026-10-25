@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=beanshell|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=BEANSHELL-ce98d996|url=https://beanshell-ce98d99651.example.invalid/stage|file_path=/tmp/huntress-beanshell/.ce98d99651805e31.stage",
+ "decoy": false,
+ "language": "beanshell",
+ "role": "benign-utility",
+ "id_single": "polyglot-beanshell-benign-utility-<field>",
+ "id_timed": "polyglot-beanshell-8785a7-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_beanshell_benign_utility.bsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HEX)-//' | xxd -r -p",
+ "answers_single": {
+  "polyglot-beanshell-benign-utility-language": "beanshell",
+  "polyglot-beanshell-benign-utility-role": "benign_utility",
+  "polyglot-beanshell-benign-utility-verdict": "benign",
+  "polyglot-beanshell-benign-utility-attack": "none",
+  "polyglot-beanshell-benign-utility-adapter": "local_parser",
+  "polyglot-beanshell-benign-utility-host-profile": "standalone",
+  "polyglot-beanshell-benign-utility-obfuscation-profile": "plain_hex",
+  "polyglot-beanshell-benign-utility-stage-profile": "single_descriptor",
+  "polyglot-beanshell-benign-utility-next-language": "powershell",
+  "polyglot-beanshell-benign-utility-stage-count": "2",
+  "polyglot-beanshell-benign-utility-steps": "decode_configuration,return_configuration",
+  "polyglot-beanshell-benign-utility-campaign-id": "BEANSHELL-ce98d996",
+  "polyglot-beanshell-benign-utility-url": "https://beanshell-ce98d99651.example.invalid/stage",
+  "polyglot-beanshell-benign-utility-file-path": "/tmp/huntress-beanshell/.ce98d99651805e31.stage"
+ },
+ "answers_timed": {
+  "polyglot-beanshell-8785a7-url-host": "beanshell-ce98d99651.example.invalid",
+  "polyglot-beanshell-8785a7-path-leaf": ".ce98d99651805e31.stage",
+  "polyglot-beanshell-8785a7-campaign-token": "ce98d996",
+  "polyglot-beanshell-8785a7-next-language": "powershell"
+ }
+}

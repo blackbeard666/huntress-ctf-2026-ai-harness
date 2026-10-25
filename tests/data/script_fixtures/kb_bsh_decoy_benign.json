@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "bsh",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/kb_gen.py  (kb_bsh_decoy_benign)",
+ "oracle_cmd": "(perl -0pe 's/\\n[ \\t]+/ /g' tests/data/script_fixtures/kb_bsh_decoy_benign.bsh | sed -E 's/^(head|descriptor_status) = /var \\1 = /; /^print/d'; echo 'System.out.print(descriptor_status);') | jshell -q - 2>/dev/null | tr -d ' \\n\\r|' | base64 -d  # benign banner, no v=3"
+}

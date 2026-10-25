@@ -1,0 +1,11 @@
+{
+ "codec": "string-builder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-tapir-80",
+ "encoded": "\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-tapir-80\"\n",
+ "generator_cmd": "printf %s \"$plain\" | jq -Rc '.'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | jq -j '.'   # env encoded=<encoded>",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-tapir-80",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "one plain JSON string literal: nothing is built (no evidence of the family)"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "delimited-fields",
+ "plain": null,
+ "encoded": "[78, 105, 99, 101, 32, 119, 111, 114, 107, 32, 100, 101, 99, 111, 100, 105, 110, 103, 32, 116, 104, 105, 115, 32, 119, 97, 114, 109, 117, 112, 33, 32, 84, 111, 32, 115, 111, 108, 118, 101, 44, 32, 115, 117, 98, 109, 105, 116, 32, 116, 104, 105, 115, 32, 101, 120, 97, 99, 116, 32, 97, 110, 115, 119, 101, 114, 32, 116, 111, 32, 116, 104, 101, 32, 71, 97, 109, 101, 32, 77, 97, 115, 116, 101, 114, 58, 32, 106, 97, 100, 101, 45, 108, 121, 110, 120, 45, 55, 50]",
+ "generator_cmd": "python3 -I -c \"import sys,yaml; sys.stdout.write(yaml.safe_dump([ord(c) for c in sys.argv[1]], default_flow_style=True, width=10**9).strip())\" \"$plain\"   # char CODES, ints not strings",
+ "oracle_cmd": "ruby -ryaml -e 'v = YAML.safe_load(STDIN.read); raise \"not a list of strings\" unless v.is_a?(Array) && v.all? { |x| x.is_a?(String) }; print v.join'",
+ "oracle_plain": "",
+ "oracle_note": "oracle rc=1: -e:1:in `<main>': not a list of strings (RuntimeError)",
+ "decoy": true,
+ "expected": "none"
+}

@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=rust|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=RUST-d5f6199a|url=https://rust-d5f6199a37.example.invalid/stage|file_path=/tmp/huntress-rust/.d5f6199a37ba280f.stage",
+ "decoy": false,
+ "language": "rust",
+ "role": "staged-chain",
+ "id_single": "polyglot-rust-staged-chain-<field>",
+ "id_timed": "polyglot-rust-88fdce-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_rust_staged_chain.rs | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-rust-staged-chain-language": "rust",
+  "polyglot-rust-staged-chain-role": "staged_chain",
+  "polyglot-rust-staged-chain-verdict": "suspicious",
+  "polyglot-rust-staged-chain-attack": "T1059",
+  "polyglot-rust-staged-chain-adapter": "operation_graph",
+  "polyglot-rust-staged-chain-host-profile": "standalone",
+  "polyglot-rust-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-rust-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-rust-staged-chain-next-language": "vbscript",
+  "polyglot-rust-staged-chain-stage-count": "3",
+  "polyglot-rust-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-rust-staged-chain-campaign-id": "RUST-d5f6199a",
+  "polyglot-rust-staged-chain-url": "https://rust-d5f6199a37.example.invalid/stage",
+  "polyglot-rust-staged-chain-file-path": "/tmp/huntress-rust/.d5f6199a37ba280f.stage"
+ },
+ "answers_timed": {
+  "polyglot-rust-88fdce-url-host": "rust-d5f6199a37.example.invalid",
+  "polyglot-rust-88fdce-path-leaf": ".d5f6199a37ba280f.stage",
+  "polyglot-rust-88fdce-campaign-token": "d5f6199a",
+  "polyglot-rust-88fdce-next-language": "vbscript"
+ }
+}

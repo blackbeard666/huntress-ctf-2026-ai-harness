@@ -1,0 +1,10 @@
+{
+ "codec": "asn1-tlv",
+ "plain": null,
+ "encoded": "MAYCAQECAQI=",
+ "generator_cmd": "python3 -I -c \"from asn1crypto import core; import base64; print(base64.b64encode(core.Sequence.load(bytes.fromhex('3006020101020102')).dump()).decode())\"  # SEQUENCE{INTEGER 1, INTEGER 2}: no string leaf",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -I -c 'import sys,subprocess\nr=subprocess.run(['\"'\"'openssl'\"'\"','\"'\"'asn1parse'\"'\"','\"'\"'-inform'\"'\"',sys.argv[1]],input=sys.stdin.buffer.read(),capture_output=True)\nassert r.returncode==0, r.stderr.decode()[:80]\no=[]\nfor ln in r.stdout.decode('\"'\"'latin-1'\"'\"').splitlines():\n  if '\"'\"'prim:'\"'\"' not in ln: continue\n  ty,_,v=ln.split('\"'\"'prim:'\"'\"',1)[1].partition('\"'\"':'\"'\"')\n  ty=ty.strip()\n  if ty in ('\"'\"'UTF8STRING'\"'\"','\"'\"'PRINTABLESTRING'\"'\"','\"'\"'IA5STRING'\"'\"','\"'\"'T61STRING'\"'\"','\"'\"'VISIBLESTRING'\"'\"'): o.append(v)\n  elif ty=='\"'\"'OCTET STRING'\"'\"' and v.startswith('\"'\"'[HEX DUMP]:'\"'\"'): o.append(bytes.fromhex(v[11:]).decode('\"'\"'latin-1'\"'\"'))\n  elif ty=='\"'\"'OCTET STRING'\"'\"': o.append(v)\nassert o, '\"'\"'no string leaves'\"'\"'\nprint('\"'\"''\"'\"'.join(o).encode('\"'\"'latin-1'\"'\"').decode(), end='\"'\"''\"'\"')' DER",
+ "oracle_plain": "<error: AssertionError: no string leaves>",
+ "decoy": true,
+ "expected": "none"
+}

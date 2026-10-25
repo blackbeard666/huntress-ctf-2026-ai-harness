@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "pdiff_bounds_a.bin",
+ "file_b": "pdiff_bounds_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-125",
+  "cwe_number": "125",
+  "vulnerability_class": "out_of_bounds_read"
+ },
+ "generator_cmd": "reused twin (see pdiff_gen.sh / json)",
+ "oracle_cmd": "python3 vcls_oracle.py pdiff_bounds_a.bin pdiff_bounds_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"arraylength\", \"iconst_m1\", \"iload_0\"], \"removed\": []}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (Java: TABLE[i] -> i < 0 || i >= TABLE.length guard); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

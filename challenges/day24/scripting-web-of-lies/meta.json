@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-24-jsp-webshell-source",
+  "lane": "script-analysis",
+  "name": "📜 Web of Lies",
+  "ids": {
+    "single_solve": "script-analysis-day-24-jsp-webshell-source",
+    "time_trial": "script-analysis-day-24-jsp-webshell-source/time_trial",
+    "mastery": "script-analysis-day-24-jsp-webshell-source/mastery"
+  }
+}

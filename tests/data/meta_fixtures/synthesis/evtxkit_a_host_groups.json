@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.host_groups",
+ "expected": "{\"DC01.corp.example.local\":[\"dc01_security.evtx\",\"dc01_security_copy.evtx\"],\"FS-02.corp.example.local\":[\"fs02_system.evtx\"],\"WS-07.corp.example.local\":[\"ws07_security.evtx\",\"ws07_security_export.evtx\"]}",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/synthesis/GENERATOR_evtx_multilog.py.txt $T -> evtxkit_a.zip (stdlib BinXML EVTX writer from tests/data/meta_fixtures/evtx/GENERATOR_evtx_binxml.py.txt: per-host logs + byte-identical duplicate + record-deleted (gapped) copy + truncated copy + report members; stdlib zipfile)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/ORACLE_evtx_multilog.py.txt evtxkit_a.zip (python-evtx 0.8.1 FileHeader/ChunkHeader/Record walk + Record.xml() <Computer>; key 'host_groups')",
+ "decoy": false
+}

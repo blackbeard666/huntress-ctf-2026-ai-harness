@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=kotlin|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=KOTLIN-46a64787|url=https://kotlin-46a64787f2.example.invalid/stage|file_path=/tmp/huntress-kotlin/.46a64787f2072292.stage",
+ "decoy": false,
+ "language": "kotlin",
+ "role": "staged-chain",
+ "id_single": "polyglot-kotlin-staged-chain-<field>",
+ "id_timed": "polyglot-kotlin-24e319-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_kotlin_staged_chain.kts | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-kotlin-staged-chain-language": "kotlin",
+  "polyglot-kotlin-staged-chain-role": "staged_chain",
+  "polyglot-kotlin-staged-chain-verdict": "suspicious",
+  "polyglot-kotlin-staged-chain-attack": "T1059",
+  "polyglot-kotlin-staged-chain-adapter": "operation_graph",
+  "polyglot-kotlin-staged-chain-host-profile": "standalone",
+  "polyglot-kotlin-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-kotlin-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-kotlin-staged-chain-next-language": "vbscript",
+  "polyglot-kotlin-staged-chain-stage-count": "3",
+  "polyglot-kotlin-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-kotlin-staged-chain-campaign-id": "KOTLIN-46a64787",
+  "polyglot-kotlin-staged-chain-url": "https://kotlin-46a64787f2.example.invalid/stage",
+  "polyglot-kotlin-staged-chain-file-path": "/tmp/huntress-kotlin/.46a64787f2072292.stage"
+ },
+ "answers_timed": {
+  "polyglot-kotlin-24e319-url-host": "kotlin-46a64787f2.example.invalid",
+  "polyglot-kotlin-24e319-path-leaf": ".46a64787f2072292.stage",
+  "polyglot-kotlin-24e319-campaign-token": "46a64787",
+  "polyglot-kotlin-24e319-next-language": "vbscript"
+ }
+}

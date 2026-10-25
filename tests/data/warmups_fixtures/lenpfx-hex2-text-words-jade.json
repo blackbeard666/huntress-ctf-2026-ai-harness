@@ -1,0 +1,9 @@
+{
+ "codec": "length-prefix",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-owl-19",
+ "encoded": "05Nice 05work 09decoding 05this 08warmup! 03To 07solve, 07submit 05this 06exact 07answer 03to 04the 05Game 08Master: 0bjade-owl-19",
+ "generator_cmd": "printf %s \"$plain\" | perl -ne 'printf \"%02x%s\", length($&), $& while /\\S+\\s*/g'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -0777 -ne 'while (/\\G([0-9a-f]{2})/gc) { my $n = hex $1; /\\G(.{$n})/gcs or die; print $1 }'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-owl-19",
+ "expected": "match"
+}

@@ -1,0 +1,4 @@
+# HUNTRESS_ANALYSIS_V1:B64-c3RhdHVzPW9rO2luZXJ0LWFuYWx5c2lzLWZpeHR1cmU7bm8gcGxhbiBoZXJl
+DESCRIPTOR_2A7D3BCB := c3RhdHVzPW9rO2luZXJ0LWFuYWx5c2lzLWZpeHR1cmU7bm8gcGxhbiBoZXJl
+all:
+	@echo inert-analysis-fixture

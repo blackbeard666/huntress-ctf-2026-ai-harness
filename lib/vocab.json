@@ -8,7 +8,16 @@
     "batch.util.Launcher",
     "util.app.service.Dispatcher",
     "batch.client.Loader",
-    "agent.Loader"
+    "agent.Loader",
+    "agent.util.core.ConsoleLJ",
+    "agent.Daemon",
+    "tools.app.agent.Entry",
+    "core.tools.server.Application",
+    "sync.core.agent.Entry",
+    "tools.Loader",
+    "client.agent.Runner",
+    "util.runtime.Loader",
+    "util.service.BootstrapXSG"
   ],
   "-control": [
     "direct",
@@ -88,7 +97,16 @@
     "batch.util.Launcher",
     "util.app.service.Dispatcher",
     "batch.client.Loader",
-    "agent.Loader"
+    "agent.Loader",
+    "agent.util.core.ConsoleLJ",
+    "agent.Daemon",
+    "tools.app.agent.Entry",
+    "core.tools.server.Application",
+    "sync.core.agent.Entry",
+    "tools.Loader",
+    "client.agent.Runner",
+    "util.runtime.Loader",
+    "util.service.BootstrapXSG"
   ],
   "control": [
     "direct",

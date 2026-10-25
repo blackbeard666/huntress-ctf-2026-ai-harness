@@ -1,0 +1,4 @@
+head = "=QnblNmclBHI3gDIldWYyVmdvNGIsQ"
+    + "WZslWYmBCMgwCZlN3chBHIzR3clRHIyQDI6s2bgQGbpVnY";
+descriptor_status = new StringBuffer(head).reverse().toString();
+print(descriptor_status);

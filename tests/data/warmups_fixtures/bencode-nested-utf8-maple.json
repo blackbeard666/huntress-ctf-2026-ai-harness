@@ -1,0 +1,9 @@
+{
+ "codec": "bencode",
+ "plain": "Café crème, naïve résumé — submit this exact answer to the Game Master: maple-yak-58 ✓",
+ "encoded": "d3:msgll6:Café i0eel8:crème, i1eel7:naïve i2eel9:résumé i3eel4:— i4eel7:submit i5eel5:this i6eel6:exact i7eel7:answer i8eel3:to i9eel4:the i10eel5:Game i11eel8:Master: i12eel13:maple-yak-58 i13eel3:✓i14eee1:ni17ee",
+ "generator_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-bencode'); import bencode as B; plain=sys.argv[1]; sys.stdout.buffer.write(B.encode({'msg': [[w, i] for i, w in enumerate(words incl. trailing space)], 'n': 17}))\" \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-bencode'); import bencode as B\ndef w(v):\n if isinstance(v,(str,bytes)): return v if isinstance(v,str) else v.decode()\n if isinstance(v,list): return ''.join(w(x) for x in v) if any(not isinstance(x,int) for x in v) else ''.join(map(chr,v))\n if isinstance(v,dict): return ''.join(w(v[k]) for k in sorted(v))\n return ''\nprint(w(B.decode(sys.stdin.buffer.read().strip())), end='')\"",
+ "oracle_plain": "Café crème, naïve résumé — submit this exact answer to the Game Master: maple-yak-58 ✓",
+ "expected": "match"
+}

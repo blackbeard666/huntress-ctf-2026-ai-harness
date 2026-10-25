@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=erlang|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ERLANG-0de74962|url=https://erlang-0de7496246.example.invalid/stage|file_path=/tmp/huntress-erlang/.0de74962466951a3.stage",
+ "decoy": false,
+ "language": "erlang",
+ "role": "downloader",
+ "id_single": "polyglot-erlang-downloader-<field>",
+ "id_timed": "polyglot-erlang-4c46c1-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_erlang_downloader.erl | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "answers_single": {
+  "polyglot-erlang-downloader-language": "erlang",
+  "polyglot-erlang-downloader-role": "downloader",
+  "polyglot-erlang-downloader-verdict": "suspicious",
+  "polyglot-erlang-downloader-attack": "T1105",
+  "polyglot-erlang-downloader-adapter": "http_client",
+  "polyglot-erlang-downloader-host-profile": "standalone",
+  "polyglot-erlang-downloader-obfuscation-profile": "base64",
+  "polyglot-erlang-downloader-stage-profile": "two_stage_download_execute",
+  "polyglot-erlang-downloader-next-language": "jscript",
+  "polyglot-erlang-downloader-stage-count": "2",
+  "polyglot-erlang-downloader-steps": "acquire_remote,dispatch_process",
+  "polyglot-erlang-downloader-campaign-id": "ERLANG-0de74962",
+  "polyglot-erlang-downloader-url": "https://erlang-0de7496246.example.invalid/stage",
+  "polyglot-erlang-downloader-file-path": "/tmp/huntress-erlang/.0de74962466951a3.stage"
+ },
+ "answers_timed": {
+  "polyglot-erlang-4c46c1-url-host": "erlang-0de7496246.example.invalid",
+  "polyglot-erlang-4c46c1-path-leaf": ".0de74962466951a3.stage",
+  "polyglot-erlang-4c46c1-campaign-token": "0de74962",
+  "polyglot-erlang-4c46c1-next-language": "jscript"
+ }
+}

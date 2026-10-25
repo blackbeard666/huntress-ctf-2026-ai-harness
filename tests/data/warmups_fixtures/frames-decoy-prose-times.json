@@ -1,0 +1,11 @@
+{
+ "codec": "frames-count",
+ "plain": null,
+ "encoded": "Standup at 3:30, lunch 12:15, 4*5 tables, 2:1 odds.",
+ "generator_cmd": "hand-written prose: clock times and a*b products",
+ "oracle_cmd": "perl -CSD -0777 -ne 'my $o=\"\";while(/(\\d+):(.)(?:,|$)/gs){$o.=$2 x $1}print $o'",
+ "oracle_plain": "",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "the lenient perl reader picks fragments out of prose; the WHOLE text is no frame run"
+}

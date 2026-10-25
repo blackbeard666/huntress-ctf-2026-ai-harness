@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": "ANS-2d82204e5abc2ec5",
+ "decoy": false,
+ "_why": "getAssets().open(attest_chain.pem) -> generateCertificates (3 PEM certs, leading comment) iterated; KeyStore.getInstance(AndroidKeyStore).load(null).getCertificateChain(attest_chain); generateCertificate(new ByteArrayInputStream(ch[0].getEncoded())); leaf fields as raw_attest + intermediate getSignature().length / getBasicConstraints / getNotBefore, SHA-256 of the root's getEncoded",
+ "generator_cmd": "python3 tests/data/android_fixtures/x5ctx_src/gen_x5.py asset_chain tests/data/android_fixtures/x5ctx_asset_chain.apk  # pyasn1 KeyDescription (ka_src) + cryptography x509 builder (RSA root/intermediate, EC leaf, 128-bit serial, 'Huntress, Inc.' / 'Arena+Lab' / emailAddress names) + apktool's aapt2 compile/link (res/raw, R ids) + javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "same generator, oracle stage: aapt2 dump resources (raw id -> res path), then java -Dctx.apk=<built apk> -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM with the REAL JDK CertificateFactory / X509Certificate / X500Principal.getName(RFC2253) over the APK bytes read by java.util.zip.ZipFile, AndroidKeyStore = a JDK KeyStoreSpi provider returning generateCertificates() of assets/<alias>.* -> 'ANS-2d82204e5abc2ec5'"
+}

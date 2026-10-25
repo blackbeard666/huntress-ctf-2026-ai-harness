@@ -1,0 +1,9 @@
+{
+ "codec": "delimited-fields",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-84",
+ "encoded": "['Nice ', 'work ', 'decoding ', 'this ', 'warmup! ', 'To ', 'solve, ', 'submit ',\n  'this ', 'exact ', 'answer ', 'to ', 'the ', 'Game ', 'Master: ', clover-heron-84]",
+ "generator_cmd": "python3 -I -c \"import sys,yaml,re; sys.stdout.write(yaml.safe_dump(re.findall(r'\\S+\\s*', sys.argv[1]), default_flow_style=True).strip())\" \"$plain\"",
+ "oracle_cmd": "ruby -ryaml -e 'v = YAML.safe_load(STDIN.read); raise \"not a list of strings\" unless v.is_a?(Array) && v.all? { |x| x.is_a?(String) }; print v.join'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-heron-84",
+ "expected": "match"
+}

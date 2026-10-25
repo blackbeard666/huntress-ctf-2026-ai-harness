@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_jpath_a.bin",
+ "file_b": "vcls_jpath_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-22",
+  "cwe_number": "22",
+  "vulnerability_class": "path_traversal"
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT   # gcc -fno-inline C twins / javac --release 11 + jar twins",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_jpath_a.bin vcls_jpath_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"astore_1\", \"athrow\", \"dup\", \"ifne\", \"invokespecial\", \"invokevirtual\", \"java/io/File.getCanonicalPath\", \"java/io/IOException.\\\"<init>\\\"\", \"java/lang/String.startsWith\", \"ldc\", \"new\"], \"removed\": []}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (Java: new File(base, name) -> getCanonicalPath().startsWith(base)); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

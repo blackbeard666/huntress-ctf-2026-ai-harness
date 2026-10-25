@@ -1,0 +1,16 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_decoy_text_a.bin",
+ "file_b": "vcls_decoy_text_b.bin",
+ "expected_facts": {
+  "cwe": null,
+  "vulnerability_class": null
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_decoy_text_a.bin vcls_decoy_text_b.bin; cmp vcls_decoy_text_a.bin vcls_decoy_text_b.bin   # {\"comparable\": false}",
+ "decoy": true,
+ "note": "A is a renamed text impostor (PK magic, not a zip): not comparable twins -> None"
+}

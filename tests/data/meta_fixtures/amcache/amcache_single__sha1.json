@@ -1,0 +1,8 @@
+{
+ "field": "amcache.sha1",
+ "expected": "c5e2d0a86f8ab0ab0e4a7aa0e61be0e2a1b0c3d4",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> amcache_single.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/amcache/amcache_single__sha1.bin  (regipy AmCachePlugin) -> entries[0].sha1, lowercased",
+ "decoy": false,
+ "member": "Amcache.hve"
+}

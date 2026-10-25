@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=rust|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=cargo_build_rs|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=RUST-f3af25be|url=https://rust-f3af25be4b.example.invalid/stage|file_path=/tmp/huntress-rust/.f3af25be4beb7f27.stage",
+ "decoy": false,
+ "language": "rust",
+ "role": "host",
+ "id_single": "polyglot-rust-host-<field>",
+ "id_timed": "polyglot-rust-261ebb-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_rust_host.rs | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-rust-host-language": "rust",
+  "polyglot-rust-host-role": "staged_chain",
+  "polyglot-rust-host-verdict": "suspicious",
+  "polyglot-rust-host-attack": "T1059",
+  "polyglot-rust-host-adapter": "operation_graph",
+  "polyglot-rust-host-host-profile": "cargo_build_rs",
+  "polyglot-rust-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-rust-host-stage-profile": "two_stage_download_execute",
+  "polyglot-rust-host-next-language": "bash",
+  "polyglot-rust-host-stage-count": "2",
+  "polyglot-rust-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-rust-host-campaign-id": "RUST-f3af25be",
+  "polyglot-rust-host-url": "https://rust-f3af25be4b.example.invalid/stage",
+  "polyglot-rust-host-file-path": "/tmp/huntress-rust/.f3af25be4beb7f27.stage"
+ },
+ "answers_timed": {
+  "polyglot-rust-261ebb-url-host": "rust-f3af25be4b.example.invalid",
+  "polyglot-rust-261ebb-path-leaf": ".f3af25be4beb7f27.stage",
+  "polyglot-rust-261ebb-campaign-token": "f3af25be",
+  "polyglot-rust-261ebb-next-language": "bash"
+ }
+}

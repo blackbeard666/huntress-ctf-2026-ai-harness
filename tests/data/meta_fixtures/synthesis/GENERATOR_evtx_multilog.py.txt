@@ -1,0 +1,108 @@
+# Multi-host EVTX bundle writer for the synthesis_evtx fixtures (run: python3 -I GENERATOR_evtx_multilog.py.txt <outdir>).
+# Reuses the stdlib BinXML EVTX writer tests/data/meta_fixtures/evtx/GENERATOR_evtx_binxml.py.txt (ChunkWriter,
+# event_template, subs_for) -- never lib.meta. Per kit: per-host logs, a byte-identical DUPLICATE, a SHORTENED copy
+# (records deleted -> EventRecordID gaps, rebuilt with valid CRCs), a TRUNCATED copy (file cut inside a record of
+# its last chunk, header still claims every chunk), and non-EVTX report members; zipped with stdlib zipfile.
+import io
+import os
+import runpy
+import struct
+import sys
+import zipfile
+import zlib
+
+G = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "evtx", "GENERATOR_evtx_binxml.py.txt"))
+
+
+def chunk_ids(rids, events):
+    cw = G["ChunkWriter"]()
+    last = 0
+    for rid, ev in zip(rids, events):
+        last = cw.record(rid, G["filetime"](ev["time"], ev.get("frac", 0)) + 1234, ev["tid_tmpl"], ev["tmpl_guid"],
+                         G["event_template"](ev["data_names"]), G["subs_for"](ev, rid))
+    return cw.finish(min(rids), max(rids), last)
+
+
+def log(chunks_rids_evs, minor=2, claim_chunks=None):
+    chunks = [chunk_ids(r, e) for r, e in chunks_rids_evs]
+    nxt = max(max(r) for r, _ in chunks_rids_evs) + 1
+    n = claim_chunks or len(chunks)
+    h = bytearray(4096)
+    struct.pack_into("<8sQQQIHHHH", h, 0, b"ElfFile\x00", 0, n - 1, nxt, 128, minor, 3, 4096, n)
+    struct.pack_into("<I", h, 124, zlib.crc32(bytes(h[:120])))
+    return bytes(h) + b"".join(chunks)
+
+
+def evs(base, host, start_min, n, step=7):
+    out = []
+    for i in range(n):
+        t = start_min + i * step
+        out.append(G["ev"](base, computer=host, event_id=4624 + (i % 3), time="2025-02-14T%02d:%02d:%02dZ" % (
+            8 + t // 60, t % 60, (i * 13) % 60), data=["svc%d" % i, "user%d" % i, str(2 + i % 2)]))
+    return out
+
+
+def cut_in_last_record(b):
+    """Cut the file inside the last record of its last chunk (the record's size crosses EOF)."""
+    off = 4096 + (len(b) - 4096) // 0x10000 * 0x10000 - 0x10000
+    last, = struct.unpack_from("<I", b, off + 0x2C)            # last event record offset
+    return b[:off + last + 40]
+
+
+def kit_a():
+    sec, sysb = G["SEC"], G["SCM"]
+    dc = "DC01.corp.example.local"
+    ws = "WS-07.corp.example.local"
+    fs = "FS-02.corp.example.local"
+    dc_e = evs(sec, dc, 0, 8)
+    dc_log = log([(list(range(100, 108)), dc_e)])
+    ws_e = evs(sec, ws, 30, 10, step=5)
+    ws_log = log([(list(range(500, 510)), ws_e)])
+    keep = [i for i in range(10) if i not in (3, 4, 7)]                # 503, 504, 507 deleted
+    ws_short = log([([500 + i for i in keep], [ws_e[i] for i in keep])])
+    fs_e = evs(sysb, fs, 90, 6, step=3)
+    fs_full = log([([1, 2, 3], fs_e[:3]), ([4, 5, 6], fs_e[3:])])
+    return {"dc01_security.evtx": dc_log, "dc01_security_copy.evtx": dc_log,
+            "ws07_security.evtx": ws_log, "ws07_security_export.evtx": ws_short,
+            "fs02_system.evtx": cut_in_last_record(fs_full),
+            "report.txt": b"Triage report: logs collected from three hosts.\n"}
+
+
+def kit_b():
+    sec = G["SEC"]
+    a, b_ = "HR-LAPTOP-3", "SQL01.lab.test"
+    h1 = log([(list(range(40, 52)), evs(sec, a, 200, 12, step=2))])
+    s1_e = evs(sec, b_, 10, 9, step=11)
+    s1 = log([(list(range(7000, 7009)), s1_e)])
+    keep = [0, 1, 2, 3, 5, 6, 7, 8]                                    # 7004 deleted
+    s_short = log([([7000 + i for i in keep], [s1_e[i] for i in keep])])
+    keep2 = [0, 1, 2, 3, 4, 5, 6, 8]                                   # 7007 deleted -- same count, tie by name
+    s_short2 = log([([7000 + i for i in keep2], [s1_e[i] for i in keep2]), ([7100], [s1_e[8]])])
+    # header claims 3 chunks, only 2 present -> truncated (record walk itself is clean)
+    h_trunc = log([(list(range(40, 46)), evs(sec, a, 200, 6, step=2)), (list(range(46, 52)), evs(sec, a, 212, 6, step=2))],
+                  claim_chunks=3)
+    return {"hr3/Security.evtx": h1, "hr3/Security (1).evtx": h1, "hr3/Security (2).evtx": h1,
+            "sql01/Security.evtx": s1, "sql01/Security_old.evtx": s_short, "sql01/Security_new.evtx": s_short2,
+            "hr3/Security_partial.evtx": h_trunc, "notes.md": b"# notes\n"}
+
+
+def kit_decoy():
+    return {"legacy/AppEvent.evtx": G["evt_legacy"](), "readme.txt": b"no event logs here\n",
+            "renamed.evtx": b"MZ" + b"\x00" * 200}
+
+
+def zipit(files):
+    bio = io.BytesIO()
+    with zipfile.ZipFile(bio, "w", zipfile.ZIP_DEFLATED) as z:
+        for n, b in files.items():
+            zi = zipfile.ZipInfo(n, (2025, 2, 14, 12, 0, 0))
+            zi.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(zi, b)
+    return bio.getvalue()
+
+
+if __name__ == "__main__":
+    out = sys.argv[1]
+    for name, kit in (("evtxkit_a.zip", kit_a), ("evtxkit_b.zip", kit_b), ("evtxkit_decoy.zip", kit_decoy)):
+        with open(os.path.join(out, name), "wb") as f:
+            f.write(zipit(kit()))

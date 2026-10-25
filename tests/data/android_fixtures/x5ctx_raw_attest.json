@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": "ANS-8743b219e9e73ac8",
+ "decoy": false,
+ "_why": "getResources().openRawResource(R.raw.attest) -> CertificateFactory.generateCertificate -> getExtensionValue(1.3.6.1.4.1.11129.2.1.17) signed bytes, getSerialNumber().longValue() (80-bit serial), getNotBefore/After().getTime(), subject/issuer getName() (escaped comma/plus, emailAddress OID=#hex), getPublicKey().getEncoded(), getEncoded().length, getVersion, getSigAlgName, getBasicConstraints mixed into a 64-bit hash",
+ "generator_cmd": "python3 tests/data/android_fixtures/x5ctx_src/gen_x5.py raw_attest tests/data/android_fixtures/x5ctx_raw_attest.apk  # pyasn1 KeyDescription (ka_src) + cryptography x509 builder (RSA root/intermediate, EC leaf, 128-bit serial, 'Huntress, Inc.' / 'Arena+Lab' / emailAddress names) + apktool's aapt2 compile/link (res/raw, R ids) + javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "same generator, oracle stage: aapt2 dump resources (raw id -> res path), then java -Dctx.apk=<built apk> -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM with the REAL JDK CertificateFactory / X509Certificate / X500Principal.getName(RFC2253) over the APK bytes read by java.util.zip.ZipFile -> 'ANS-8743b219e9e73ac8'"
+}

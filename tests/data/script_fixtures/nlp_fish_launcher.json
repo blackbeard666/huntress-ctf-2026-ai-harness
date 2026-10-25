@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=fish|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=FISH-e2c5f67b|url=https://fish-e2c5f67b5c.example.invalid/stage|file_path=/tmp/huntress-fish/.e2c5f67b5c3b0ed3.stage",
+ "decoy": false,
+ "language": "fish",
+ "role": "launcher",
+ "id_single": "polyglot-fish-launcher-<field>",
+ "id_timed": "polyglot-fish-7a0061-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_fish_launcher.fish | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-fish-launcher-language": "fish",
+  "polyglot-fish-launcher-role": "launcher",
+  "polyglot-fish-launcher-verdict": "suspicious",
+  "polyglot-fish-launcher-attack": "T1059",
+  "polyglot-fish-launcher-adapter": "process_builder",
+  "polyglot-fish-launcher-host-profile": "standalone",
+  "polyglot-fish-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-fish-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-fish-launcher-next-language": "batch",
+  "polyglot-fish-launcher-stage-count": "3",
+  "polyglot-fish-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-fish-launcher-campaign-id": "FISH-e2c5f67b",
+  "polyglot-fish-launcher-url": "https://fish-e2c5f67b5c.example.invalid/stage",
+  "polyglot-fish-launcher-file-path": "/tmp/huntress-fish/.e2c5f67b5c3b0ed3.stage"
+ },
+ "answers_timed": {
+  "polyglot-fish-7a0061-url-host": "fish-e2c5f67b5c.example.invalid",
+  "polyglot-fish-7a0061-path-leaf": ".e2c5f67b5c3b0ed3.stage",
+  "polyglot-fish-7a0061-campaign-token": "e2c5f67b",
+  "polyglot-fish-7a0061-next-language": "batch"
+ }
+}

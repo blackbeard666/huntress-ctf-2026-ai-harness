@@ -1,0 +1,8 @@
+{
+ "field": "regf.is_dirty",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/regf/GENERATOR_regf_integrity.py.txt <outdir>  (stdlib struct regf/HvLE/DIRT writer) -> decoy_carved_hbin.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/regf/ORACLE_regf_integrity.py.txt tests/data/meta_fixtures/regf/decoy_carved_hbin__regf_is_dirty.bin  -> {\"error\": \"not regf: ParseException()\"}; file -b -> 'zlib compressed data' (no regf base block)",
+ "decoy": true,
+ "member": "NTUSER.DAT"
+}

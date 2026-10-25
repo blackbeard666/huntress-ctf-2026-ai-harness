@@ -1,0 +1,9 @@
+{
+ "codec": "netstring-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-74",
+ "encoded": "005:Nice ,\n005:work ,\n009:decoding ,\n005:this ,\n008:warmup! ,\n003:To ,\n007:solve, ,\n007:submit ,\n005:this ,\n006:exact ,\n007:answer ,\n003:to ,\n004:the ,\n005:Game ,\n008:Master: ,\n012:jade-lynx-74",
+ "generator_cmd": "o=; ws=($plain); n=${#ws[@]}; for ((k=0;k<n;k++)); do w=${ws[k]}; if ((k<n-1)); then o+=$(printf \"%03d:%s,\" \"$(( ${#w} + 1 ))\" \"$w \"); o+=$'\\n'; else o+=$(printf \"%03d:%s\" \"${#w}\" \"$w\"); fi; done; printf %s \"$o\"   # bash: frame per word+space, 3-digit zero-padded len, newline between frames, NO final comma",
+ "oracle_cmd": "perl -0777 -ne 'my($o,$i)=(\"\",0);while($i<length){substr($_,$i)=~/^\\s*(\\d+):/ or last;$i+=length($&);$o.=substr($_,$i,$1);$i+=$1;$i++ if substr($_,$i,1) eq \",\"}print $o'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-74",
+ "expected": "match"
+}

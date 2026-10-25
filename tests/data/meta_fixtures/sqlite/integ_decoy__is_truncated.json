@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.is_truncated",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_integrity.sh.txt <outdir>  (coreutils cp/head/dd + sqlite3 CLI 3.46.1 + Pillow) -> decoy.sqlite",
+ "oracle_cmd": "file -b -> 'PNG image data, 4 x 4'; sqlite3 -readonly -> 'file is not a database (26)' (no 'SQLite format 3' magic)",
+ "decoy": true,
+ "member": "database-decoy.sqlite"
+}

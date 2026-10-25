@@ -1,0 +1,36 @@
+# Independent oracle for the evtx per-event content fields (run: .venv/bin/python -I ORACLE_evtx_semantics.py.txt
+# <file.bin> <field>). Reader = pyevtx-rs 0.13.1 (tools/pyevtxrs, the Rust `evtx` crate) records_json(); the field
+# logic uses collections.Counter / json.dumps(sort_keys=True) over int keys. Non-ElfFile or no matching data -> none.
+import collections
+import json
+import sys
+
+sys.path.insert(0, "tools/pyevtxrs")
+import evtx  # noqa: E402
+
+path, field = sys.argv[1], sys.argv[2]
+if open(path, "rb").read(8) != b"ElfFile\x00":
+    print("none")
+    sys.exit()
+E = [json.loads(r["data"])["Event"] for r in evtx.PyEvtxParser(path).records_json()]
+eid = lambda e: int(e["System"]["EventID"]["#text"] if isinstance(e["System"]["EventID"], dict)  # noqa: E731
+                    else e["System"]["EventID"])
+data = lambda ids, k: [e.get("EventData", {}).get(k) for e in E if eid(e) in ids]  # noqa: E731
+J = lambda v: json.dumps(v, separators=(",", ":"), ensure_ascii=False) if v else "none"  # noqa: E731
+srt = lambda vals: J(sorted({v for v in vals if v not in (None, "")}))  # noqa: E731
+ids = [eid(e) for e in E]
+out = {
+    "distinct_event_ids": lambda: J(sorted(set(ids))),
+    "event_id_counts": lambda: json.dumps(dict(collections.Counter(ids)), sort_keys=True, separators=(",", ":"))
+    if ids else "none",
+    "most_common_event_id": lambda: str(collections.Counter(ids).most_common(1)[0][0]) if ids else "none",
+    "computer_names": lambda: srt(e["System"]["Computer"] for e in E),
+    "logon_types": lambda: J(sorted({int(v) for v in data({4624}, "LogonType") if v not in (None, "")})),
+    "target_user_names": lambda: srt(data({4624, 4625}, "TargetUserName")),
+    "new_process_names": lambda: srt(data({4688}, "NewProcessName")),
+    "service_names": lambda: srt(data({7045}, "ServiceName")),
+    "service_image_paths": lambda: srt(data({7045}, "ImagePath")),
+    "script_block_text_first": lambda: next((v for v in data({4104}, "ScriptBlockText") if v), "none"),
+    "log_cleared": lambda: "true" if {1102, 104} & set(ids) else "false",
+}[field]()
+print(out)

@@ -1,0 +1,9 @@
+{
+ "codec": "delimited-fields",
+ "plain": "Nice work decoding this \"warmup\"! To solve, submit this exact answer to the Game Master: cobalt-otter-31",
+ "encoded": "N,i,c,e, ,w,o,r,k, ,d,e,c,o,d,i,n,g, ,t,h,i,s, ,\"\"\"\",w,a,r,m,u,p,\"\"\"\",!, ,T,o, ,s,o,l,v,e,\",\", ,s,u,b,m,i,t, ,t,h,i,s, ,e,x,a,c,t, ,a,n,s,w,e,r, ,t,o, ,t,h,e, ,G,a,m,e, ,M,a,s,t,e,r,:, ,c,o,b,a,l,t,-,o,t,t,e,r,-,3,1",
+ "generator_cmd": "ruby -rcsv -e 'print CSV.generate_line(ARGV[0].chars, row_sep: \"\")' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import csv,sys; print(''.join(f for r in csv.reader(sys.stdin, delimiter=',') for f in r), end='')\"",
+ "oracle_plain": "Nice work decoding this \"warmup\"! To solve, submit this exact answer to the Game Master: cobalt-otter-31",
+ "expected": "match"
+}

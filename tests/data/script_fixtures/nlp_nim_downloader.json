@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=nim|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=NIM-367632ac|url=https://nim-367632ac54.example.invalid/stage|file_path=/tmp/huntress-nim/.367632ac544e62ab.stage",
+ "decoy": false,
+ "language": "nim",
+ "role": "downloader",
+ "id_single": "polyglot-nim-downloader-<field>",
+ "id_timed": "polyglot-nim-e84760-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_nim_downloader.nim | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "answers_single": {
+  "polyglot-nim-downloader-language": "nim",
+  "polyglot-nim-downloader-role": "downloader",
+  "polyglot-nim-downloader-verdict": "suspicious",
+  "polyglot-nim-downloader-attack": "T1105",
+  "polyglot-nim-downloader-adapter": "http_client",
+  "polyglot-nim-downloader-host-profile": "standalone",
+  "polyglot-nim-downloader-obfuscation-profile": "base64",
+  "polyglot-nim-downloader-stage-profile": "two_stage_download_execute",
+  "polyglot-nim-downloader-next-language": "jscript",
+  "polyglot-nim-downloader-stage-count": "2",
+  "polyglot-nim-downloader-steps": "acquire_remote,dispatch_process",
+  "polyglot-nim-downloader-campaign-id": "NIM-367632ac",
+  "polyglot-nim-downloader-url": "https://nim-367632ac54.example.invalid/stage",
+  "polyglot-nim-downloader-file-path": "/tmp/huntress-nim/.367632ac544e62ab.stage"
+ },
+ "answers_timed": {
+  "polyglot-nim-e84760-url-host": "nim-367632ac54.example.invalid",
+  "polyglot-nim-e84760-path-leaf": ".367632ac544e62ab.stage",
+  "polyglot-nim-e84760-campaign-token": "367632ac",
+  "polyglot-nim-e84760-next-language": "jscript"
+ }
+}

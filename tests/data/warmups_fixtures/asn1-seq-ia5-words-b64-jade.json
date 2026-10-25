@@ -1,0 +1,9 @@
+{
+ "codec": "asn1-tlv",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-88",
+ "encoded": "MIGEFgVOaWNlIBYFd29yayAWCWRlY29kaW5nIBYFdGhpcyAWCHdhcm11cCEgFgNUbyAWB3NvbHZlLCAWB3N1Ym1pdCAWBXRoaXMgFgZleGFjdCAWB2Fuc3dlciAWA3RvIBYEdGhlIBYFR2FtZSAWCE1hc3RlcjogFg1qYWRlLWhlcm9uLTg4",
+ "generator_cmd": "python3 -I -c \"from asn1crypto import core; import sys; p=sys.argv[1]; import re; S=type('S',(core.SequenceOf,),{'_child_spec':core.IA5String}); sys.stdout.buffer.write(S(re.findall(r'\\S+\\s*',p)).dump())\" \"$plain\" | base64 -w0",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | python3 -I -c 'import sys,subprocess\nr=subprocess.run(['\"'\"'openssl'\"'\"','\"'\"'asn1parse'\"'\"','\"'\"'-inform'\"'\"',sys.argv[1]],input=sys.stdin.buffer.read(),capture_output=True)\nassert r.returncode==0, r.stderr.decode()[:80]\no=[]\nfor ln in r.stdout.decode('\"'\"'latin-1'\"'\"').splitlines():\n  if '\"'\"'prim:'\"'\"' not in ln: continue\n  ty,_,v=ln.split('\"'\"'prim:'\"'\"',1)[1].partition('\"'\"':'\"'\"')\n  ty=ty.strip()\n  if ty in ('\"'\"'UTF8STRING'\"'\"','\"'\"'PRINTABLESTRING'\"'\"','\"'\"'IA5STRING'\"'\"','\"'\"'T61STRING'\"'\"','\"'\"'VISIBLESTRING'\"'\"'): o.append(v)\n  elif ty=='\"'\"'OCTET STRING'\"'\"' and v.startswith('\"'\"'[HEX DUMP]:'\"'\"'): o.append(bytes.fromhex(v[11:]).decode('\"'\"'latin-1'\"'\"'))\n  elif ty=='\"'\"'OCTET STRING'\"'\"': o.append(v)\nassert o, '\"'\"'no string leaves'\"'\"'\nprint('\"'\"''\"'\"'.join(o).encode('\"'\"'latin-1'\"'\"').decode(), end='\"'\"''\"'\"')' DER",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-88",
+ "expected": "match"
+}

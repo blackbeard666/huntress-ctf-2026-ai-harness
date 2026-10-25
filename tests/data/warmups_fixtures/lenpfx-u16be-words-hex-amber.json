@@ -1,0 +1,9 @@
+{
+ "codec": "length-prefix",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-58",
+ "encoded": "00054e696365200005776f726b2000096465636f64696e67200005746869732000087761726d757021200003546f200007736f6c76652c2000077375626d6974200005746869732000066578616374200007616e73776572200003746f20000474686520000547616d652000084d61737465723a20000e616d6265722d6865726f6e2d3538",
+ "generator_cmd": "perl -e 'print pack(\"(n/a*)*\", $ENV{plain} =~ /\\S+\\s*/g)'| xxd -p | tr -d '\\n'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | xxd -r -p | perl -0777 -ne 'print unpack(\"(n/a*)*\", $_)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-heron-58",
+ "expected": "match"
+}

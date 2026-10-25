@@ -1,0 +1,9 @@
+{
+ "codec": "length-prefix",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-74",
+ "encoded": "BQBOaWNlIAUAd29yayAJAGRlY29kaW5nIAUAdGhpcyAIAHdhcm11cCEgAwBUbyAHAHNvbHZlLCAHAHN1Ym1pdCAFAHRoaXMgBgBleGFjdCAHAGFuc3dlciADAHRvIAQAdGhlIAUAR2FtZSAIAE1hc3RlcjogDABqYWRlLWx5bngtNzQ=",
+ "generator_cmd": "perl -e 'print pack(\"(v/a*)*\", $ENV{plain} =~ /\\S+\\s*/g)'| base64 -w0   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | perl -0777 -ne 'print unpack(\"(v/a*)*\", $_)'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-74",
+ "expected": "match"
+}

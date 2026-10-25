@@ -1,0 +1,8 @@
+{
+ "field": "usn_journal.renamed_pairs",
+ "expected": "[[\"report.docx\",\"report_old.docx\"]]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/usn/GENERATOR_usn_struct.py.txt <outdir>  (stdlib struct USN_RECORD_V2 writer, sparse zero prefix + page-tail zero padding -> usn_sparse_v2.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dissect .venv/bin/python -P tests/data/meta_fixtures/usn/ORACLE_usn_dissect.py.txt <outdir>/usn_sparse_v2.bin  (dissect.ntfs 3.16 UsnJrnl(fh).records(); field 'renamed_pairs')  (same bytes/oracle as usn/usn_sparse_v2__renamed_pairs; fmt alias usn_journal)",
+ "decoy": false,
+ "member": "$J"
+}

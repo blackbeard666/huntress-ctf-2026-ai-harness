@@ -1,0 +1,33 @@
+"""Independent oracle: dissect.ntfs 3.16 (Fox-IT) UsnJrnl(fh).records() (skips zero runs page-wise, V2 records only).
+Usage: PYTHONPATH=tools/pylib-dissect .venv/bin/python -P this <file.bin> [named_file]  -> JSON of every field."""
+import json
+import sys
+
+from dissect.ntfs.c_ntfs import c_ntfs
+from dissect.ntfs.usnjrnl import UsnJrnl
+
+R = list(UsnJrnl(open(sys.argv[1], "rb")).records())
+iso = lambda r: r.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+J = lambda v: json.dumps(v, separators=(",", ":")) if v else "none"  # noqa: E731
+acc = 0
+for r in R:
+    acc |= int(r.record.Reason)
+olds, pairs = {}, []
+for r in R:
+    k = (r.record.FileReferenceNumber.SegmentNumberLowPart, r.record.FileReferenceNumber.SegmentNumberHighPart)
+    if int(r.record.Reason) & 0x1000:
+        olds[k] = r.filename
+    if int(r.record.Reason) & 0x2000 and k in olds and [olds[k], r.filename] not in pairs:
+        pairs.append([olds[k], r.filename])
+out = {"record_count": len(R) if R else "none", "first_usn": R[0].record.Usn if R else "none",
+       "last_usn": R[-1].record.Usn if R else "none", "file_names": J(sorted({r.filename for r in R})),
+       "first_file_name": R[0].filename if R else "none",
+       "reason_flags_set": J(sorted("USN_REASON_" + m.name for m in c_ntfs.USN_REASON if acc & m.value)),
+       "deleted_file_names": J(sorted({r.filename for r in R if int(r.record.Reason) & 0x200})),
+       "renamed_pairs": J(pairs), "first_time_utc": iso(R[0]) if R else "none",
+       "last_time_utc": iso(R[-1]) if R else "none"}
+if len(sys.argv) > 2:
+    f = [r for r in R if r.filename == sys.argv[2]][0].record.FileReferenceNumber
+    v = f.SegmentNumberLowPart | f.SegmentNumberHighPart << 32 | f.SequenceNumber << 48
+    out.update(file_reference_number_hex="0x%016x" % v, mft_entry_number=v & (2**48 - 1), sequence_number=v >> 48)
+print(json.dumps(out, indent=1))

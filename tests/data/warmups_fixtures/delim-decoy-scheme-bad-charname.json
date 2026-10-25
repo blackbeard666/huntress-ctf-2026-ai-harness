@@ -1,0 +1,11 @@
+{
+ "codec": "delimited-fields",
+ "plain": null,
+ "encoded": "(#\\N #\\i #\\bogusname #\\c #\\e)",
+ "generator_cmd": "printf %s '(#\\N #\\i #\\bogusname #\\c #\\e)'   # unknown char name",
+ "oracle_cmd": "R=tools/lisp/root; export LD_LIBRARY_PATH=$R/usr/lib/x86_64-linux-gnu:$R/usr/lib SBCL_HOME=$R/usr/lib/sbcl; $R/usr/bin/csi -q -e '(display (list->string (read)))'",
+ "oracle_plain": "",
+ "oracle_note": "oracle rc=70: Error: unknown named character: \"bogusname\"",
+ "decoy": true,
+ "expected": "none"
+}

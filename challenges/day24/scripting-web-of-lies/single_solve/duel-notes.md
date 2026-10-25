@@ -1,0 +1,1 @@
+Duel worker: variant-mastery-7432c509 is the permanently-unverifiable D8 expired Mastery; solver fills 3075/3075 in 0.95 s. Single 0.65 s standalone (2.61 s was load). No solver change needed; full suite green except the unverifiable variant.

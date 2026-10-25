@@ -1,0 +1,70 @@
+# stdlib-only EVTX writer for the evtx_integrity fixtures (run: python3 -I GENERATOR_evtx_integrity.py.txt <outdir>).
+# Layout per the libevtx "Windows XML Event Log (EVTX)" spec: 4096-byte ElfFile header (flags @120, CRC32 of 0..119
+# @124), 64 KiB ElfChnk chunks (free-space offset @0x30, CRC32 of chunk[0x200:free] @0x34, CRC32 of 0..0x77 +
+# 0x80..0x1FF @0x7C), records at chunk+0x200 ("**\0\0", size, EventRecordID u64, written FILETIME u64, stub payload,
+# size copy). Payload is a BinXML stub: these fixtures exercise record headers / CRCs only.
+import datetime
+import struct
+import sys
+import zlib
+
+BASE = int((datetime.datetime(2026, 10, 20, 8, 0, 0) - datetime.datetime(1601, 1, 1)).total_seconds()) * 10**7
+
+
+def ft(sec):
+    return BASE + sec * 10**7 + 1234567          # a sub-second part the extractors must drop
+
+
+def chunk(recs, corrupt_data=False, bad_hdr_crc=False):
+    """recs: [(record id, seconds after BASE)]"""
+    body = b""
+    for rid, sec in recs:
+        pay = b"\x0f\x01\x01\x00" + b"\x00" * 20
+        size = 24 + len(pay) + 4
+        body += struct.pack("<IIQQ", 0x2A2A, size, rid, ft(sec)) + pay + struct.pack("<I", size)
+    ids = [r for r, _ in recs] or [0]
+    hdr = bytearray(512)
+    last_off = 0x200 + (len(body) - 56 if recs else 0)
+    struct.pack_into("<8sQQQQIIII", hdr, 0, b"ElfChnk\x00", min(ids), max(ids), min(ids), max(ids),
+                     128, last_off, 0x200 + len(body), zlib.crc32(body))
+    if corrupt_data:                                 # a record edited after the chunk CRC was written
+        body = body[:24] + b"\xff" + body[25:]
+    struct.pack_into("<I", hdr, 124, zlib.crc32(bytes(hdr[:120]) + bytes(hdr[128:512])) ^ (1 if bad_hdr_crc else 0))
+    c = bytes(hdr) + body
+    return c + b"\x00" * (0x10000 - len(c))
+
+
+def evtx(chunks, next_id, flags=0, bad_crc=False, minor=2):
+    h = bytearray(4096)
+    struct.pack_into("<8sQQQIHHHH", h, 0, b"ElfFile\x00", 0, len(chunks) - 1, next_id, 128, minor, 3, 4096, len(chunks))
+    struct.pack_into("<I", h, 120, flags)
+    struct.pack_into("<I", h, 124, zlib.crc32(bytes(h[:120])) ^ (0xDEAD if bad_crc else 0))
+    return bytes(h) + b"".join(chunks)
+
+
+def evt_legacy():
+    # Windows NT/XP .evt ELF_LOGFILE_HEADER ("LfLe") -- a classic-event-log impostor renamed .evtx.
+    h = struct.pack("<I4sIIIIIIIIII", 0x30, b"LfLe", 1, 1, 0x30, 0x30, 1, 1, 0x80000, 0, 0x80000, 0x30)
+    return h + b"\x00" * 0x200
+
+
+def cases():
+    # record 4 deleted, record 9 back-dated (written before 8); dirty header, CRCs recomputed by the "attacker"
+    gap = evtx([chunk([(1, 0), (2, 60), (3, 120), (5, 240), (6, 300)]),
+                chunk([(7, 360), (8, 420), (9, 400), (10, 480)])], next_id=11, flags=1)
+    # clean contiguous log + a second, empty ElfChnk
+    clean = evtx([chunk([(1, 0), (2, 30), (3, 60), (4, 90), (5, 3600)]), chunk([])], next_id=6, flags=0)
+    # duplicated record 22, record data edited after the CRC, header CRC wrong, full flag, header next id lags
+    tamper = evtx([chunk([(20, 0), (21, 10), (22, 20), (22, 20), (23, 30), (26, 50)], corrupt_data=True,
+                         bad_hdr_crc=True)], next_id=25, flags=2, bad_crc=True)
+    # header says 2 chunks; file cut inside record 7 of chunk 2
+    full = evtx([chunk([(1, 0), (2, 1), (3, 2), (4, 3)]), chunk([(5, 4), (6, 5), (7, 6), (8, 7)])], next_id=9)
+    trunc = full[:4096 + 0x10000 + 0x200 + 56 * 2 + 30]
+    return {"integ_gap_dirty.bin": gap, "integ_clean_empty_chunk.bin": clean, "integ_tampered.bin": tamper,
+            "integ_truncated.bin": trunc, "decoy_evt_legacy_integ.bin": evt_legacy()}
+
+
+if __name__ == "__main__":
+    for name, b in cases().items():
+        with open(sys.argv[1] + "/" + name, "wb") as f:
+            f.write(b)

@@ -1,0 +1,10 @@
+{
+ "codec": "string-builder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-26",
+ "encoded": "''.join(['N', 'i', 'c', 'e', ' ', 'w', 'o', 'r', 'k', ' ', 'd', 'e', 'c', 'o', 'd', 'i', 'n', 'g', ' ', 't', 'h', 'i', 's', ' ', 'w', 'a', 'r', 'm', 'u', 'p', '!', ' ', 'T', 'o', ' ', 's', 'o', 'l', 'v', 'e', ',', ' ', 's', 'u', 'b', 'm', 'i', 't', ' ', 't', 'h', 'i', 's', ' ', 'e', 'x', 'a', 'c', 't', ' ', 'a', 'n', 's', 'w', 'e', 'r', ' ', 't', 'o', ' ', 't', 'h', 'e', ' ', 'G', 'a', 'm', 'e', ' ', 'M', 'a', 's', 't', 'e', 'r', ':', ' ', 'c', 'l', 'o', 'v', 'e', 'r', '-', 'l', 'y', 'n', 'x', '-', '2', '6'])",
+ "generator_cmd": "python3 -I -c 'import os; print(\"\\x27\\x27.join(\" + repr(list(os.environ[\"plain\"])) + \")\", end=\"\")'   # env plain=<plain>",
+ "oracle_cmd": "python3 -I -c 'import os, ast; e = os.environ[\"encoded\"]; print(\"\".join(ast.literal_eval(e[e.index(\"(\"):])), end=\"\")'   # env encoded=<encoded>",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-26",
+ "decoy": false,
+ "expected": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-26"
+}

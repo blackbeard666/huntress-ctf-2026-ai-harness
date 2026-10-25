@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=tcl|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=expect_script|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=TCL-052c9d29|url=https://tcl-052c9d2903.example.invalid/stage|file_path=/tmp/huntress-tcl/.052c9d2903d742a1.stage",
+ "decoy": false,
+ "language": "tcl",
+ "role": "host",
+ "id_single": "polyglot-tcl-host-<field>",
+ "id_timed": "polyglot-tcl-1757f3-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_tcl_host.tcl | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-tcl-host-language": "tcl",
+  "polyglot-tcl-host-role": "staged_chain",
+  "polyglot-tcl-host-verdict": "suspicious",
+  "polyglot-tcl-host-attack": "T1059",
+  "polyglot-tcl-host-adapter": "operation_graph",
+  "polyglot-tcl-host-host-profile": "expect_script",
+  "polyglot-tcl-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-tcl-host-stage-profile": "two_stage_download_execute",
+  "polyglot-tcl-host-next-language": "bash",
+  "polyglot-tcl-host-stage-count": "2",
+  "polyglot-tcl-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-tcl-host-campaign-id": "TCL-052c9d29",
+  "polyglot-tcl-host-url": "https://tcl-052c9d2903.example.invalid/stage",
+  "polyglot-tcl-host-file-path": "/tmp/huntress-tcl/.052c9d2903d742a1.stage"
+ },
+ "answers_timed": {
+  "polyglot-tcl-1757f3-url-host": "tcl-052c9d2903.example.invalid",
+  "polyglot-tcl-1757f3-path-leaf": ".052c9d2903d742a1.stage",
+  "polyglot-tcl-1757f3-campaign-token": "052c9d29",
+  "polyglot-tcl-1757f3-next-language": "bash"
+ }
+}

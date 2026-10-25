@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=DOCKERFILE-56b5da82|url=https://dockerfile-56b5da828f.example.invalid/stage|file_path=/tmp/huntress-dockerfile/.56b5da828fccbdc8.stage",
+ "decoy": false,
+ "language": "dockerfile",
+ "role": "staged-chain",
+ "id_single": "polyglot-dockerfile-staged-chain-<field>",
+ "id_timed": "polyglot-dockerfile-d5891e-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_dockerfile_staged_chain.dockerfile | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-dockerfile-staged-chain-language": "dockerfile",
+  "polyglot-dockerfile-staged-chain-role": "staged_chain",
+  "polyglot-dockerfile-staged-chain-verdict": "suspicious",
+  "polyglot-dockerfile-staged-chain-attack": "T1059",
+  "polyglot-dockerfile-staged-chain-adapter": "operation_graph",
+  "polyglot-dockerfile-staged-chain-host-profile": "standalone",
+  "polyglot-dockerfile-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-dockerfile-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-dockerfile-staged-chain-next-language": "vbscript",
+  "polyglot-dockerfile-staged-chain-stage-count": "3",
+  "polyglot-dockerfile-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-dockerfile-staged-chain-campaign-id": "DOCKERFILE-56b5da82",
+  "polyglot-dockerfile-staged-chain-url": "https://dockerfile-56b5da828f.example.invalid/stage",
+  "polyglot-dockerfile-staged-chain-file-path": "/tmp/huntress-dockerfile/.56b5da828fccbdc8.stage"
+ },
+ "answers_timed": {
+  "polyglot-dockerfile-d5891e-url-host": "dockerfile-56b5da828f.example.invalid",
+  "polyglot-dockerfile-d5891e-path-leaf": ".56b5da828fccbdc8.stage",
+  "polyglot-dockerfile-d5891e-campaign-token": "56b5da82",
+  "polyglot-dockerfile-d5891e-next-language": "vbscript"
+ }
+}

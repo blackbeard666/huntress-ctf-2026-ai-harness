@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=erlang|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=escript|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ERLANG-18de7170|url=https://erlang-18de71708c.example.invalid/stage|file_path=/tmp/huntress-erlang/.18de71708c0b1e7e.stage",
+ "decoy": false,
+ "language": "erlang",
+ "role": "host",
+ "id_single": "polyglot-erlang-host-<field>",
+ "id_timed": "polyglot-erlang-0ad8a2-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_erlang_host.erl | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-erlang-host-language": "erlang",
+  "polyglot-erlang-host-role": "staged_chain",
+  "polyglot-erlang-host-verdict": "suspicious",
+  "polyglot-erlang-host-attack": "T1059",
+  "polyglot-erlang-host-adapter": "operation_graph",
+  "polyglot-erlang-host-host-profile": "escript",
+  "polyglot-erlang-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-erlang-host-stage-profile": "two_stage_download_execute",
+  "polyglot-erlang-host-next-language": "bash",
+  "polyglot-erlang-host-stage-count": "2",
+  "polyglot-erlang-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-erlang-host-campaign-id": "ERLANG-18de7170",
+  "polyglot-erlang-host-url": "https://erlang-18de71708c.example.invalid/stage",
+  "polyglot-erlang-host-file-path": "/tmp/huntress-erlang/.18de71708c0b1e7e.stage"
+ },
+ "answers_timed": {
+  "polyglot-erlang-0ad8a2-url-host": "erlang-18de71708c.example.invalid",
+  "polyglot-erlang-0ad8a2-path-leaf": ".18de71708c0b1e7e.stage",
+  "polyglot-erlang-0ad8a2-campaign-token": "18de7170",
+  "polyglot-erlang-0ad8a2-next-language": "bash"
+ }
+}

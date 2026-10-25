@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=zsh|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ZSH-b41bc460|url=https://zsh-b41bc460dd.example.invalid/stage|file_path=/tmp/huntress-zsh/.b41bc460dda4dcb7.stage",
+ "decoy": false,
+ "language": "zsh",
+ "role": "downloader",
+ "id_single": "polyglot-zsh-downloader-<field>",
+ "id_timed": "polyglot-zsh-a41819-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_zsh_downloader.zsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(B64)-//' | base64 -d",
+ "answers_single": {
+  "polyglot-zsh-downloader-language": "zsh",
+  "polyglot-zsh-downloader-role": "downloader",
+  "polyglot-zsh-downloader-verdict": "suspicious",
+  "polyglot-zsh-downloader-attack": "T1105",
+  "polyglot-zsh-downloader-adapter": "http_client",
+  "polyglot-zsh-downloader-host-profile": "standalone",
+  "polyglot-zsh-downloader-obfuscation-profile": "base64",
+  "polyglot-zsh-downloader-stage-profile": "two_stage_download_execute",
+  "polyglot-zsh-downloader-next-language": "jscript",
+  "polyglot-zsh-downloader-stage-count": "2",
+  "polyglot-zsh-downloader-steps": "acquire_remote,dispatch_process",
+  "polyglot-zsh-downloader-campaign-id": "ZSH-b41bc460",
+  "polyglot-zsh-downloader-url": "https://zsh-b41bc460dd.example.invalid/stage",
+  "polyglot-zsh-downloader-file-path": "/tmp/huntress-zsh/.b41bc460dda4dcb7.stage"
+ },
+ "answers_timed": {
+  "polyglot-zsh-a41819-url-host": "zsh-b41bc460dd.example.invalid",
+  "polyglot-zsh-a41819-path-leaf": ".b41bc460dda4dcb7.stage",
+  "polyglot-zsh-a41819-campaign-token": "b41bc460",
+  "polyglot-zsh-a41819-next-language": "jscript"
+ }
+}

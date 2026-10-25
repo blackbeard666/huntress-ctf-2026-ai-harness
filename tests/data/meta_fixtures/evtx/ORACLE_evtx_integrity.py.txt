@@ -1,0 +1,60 @@
+# Independent oracle for the evtx_integrity fixtures: python-evtx 0.8.1 (Evtx.Evtx FileHeader/ChunkHeader/Record) +
+# stdlib only, never lib.meta. Run: .venv/bin/python -I ORACLE_evtx_integrity.py.txt <file.bin>  -> JSON of every field.
+# The buffer is zero-padded to whole chunks so python-evtx can open a cut-off file; records are kept only when
+# Record.verify() (size copy) holds and they end before the TRUE file length.
+import datetime
+import json
+import sys
+
+from Evtx.Evtx import FileHeader
+
+raw = open(sys.argv[1], "rb").read()
+if raw[:8] != b"ElfFile\x00":
+    print(json.dumps({"_all": "none"}))
+    sys.exit()
+buf = raw + b"\x00" * (0x10000 * 4)
+fh = FileHeader(buf, 0)
+chunks, rows, per = [], [], []
+for ch in fh.chunks(include_inactive=True):
+    if ch._offset >= len(raw) or not ch.check_magic():
+        break
+    chunks.append(ch)
+    n = 0
+    for r in ch.records():
+        if r.magic() != 0x2A2A or not r.verify() or r._offset + r.size() > len(raw):
+            break
+        rows.append((r.record_num(), r.timestamp(), len(rows)))
+        n += 1
+    per.append(n)
+rows.sort(key=lambda t: (t[0], t[2]))
+ids = [t[0] for t in rows]
+u = sorted(set(ids))
+miss = sorted(set(range(u[0], u[-1] + 1)) - set(u)) if u else []
+ts = [t[1].replace(microsecond=0) for t in rows]
+iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+cut = len(raw) < 4096 + fh.chunk_count() * 0x10000
+for ch in chunks:
+    if ch._offset + ch.next_record_offset() > len(raw):
+        cut = True
+b = lambda v: "true" if v else "false"  # noqa: E731
+out = {
+    "record_ids": json.dumps(ids, separators=(",", ":")), "record_count": str(len(ids)),
+    "first_record_id": str(u[0]), "last_record_id": str(u[-1]),
+    "record_id_gap_count": str(len(miss)), "missing_record_count": str(len(miss)),
+    "missing_record_ids": json.dumps(miss, separators=(",", ":")),
+    "first_missing_record_id": str(miss[0]) if miss else "none", "is_contiguous": b(not miss),
+    "duplicate_record_ids": json.dumps(sorted({i for i in ids if ids.count(i) > 1}), separators=(",", ":")),
+    "header_next_record_id": str(fh.next_record_number()),
+    "header_next_record_id_matches": b(fh.next_record_number() == u[-1] + 1),
+    "header_chunk_count": str(fh.chunk_count()), "walked_chunk_count": str(len(chunks)),
+    "empty_chunk_count": str(per.count(0)), "chunk_record_count_list": json.dumps(per, separators=(",", ":")),
+    "header_is_dirty": b(fh.is_dirty()), "header_is_full": b(fh.is_full()),
+    "header_crc32_valid": b(fh.checksum() == fh.calculate_checksum()),
+    "chunk_header_crc_valid": b(all(c.header_checksum() == c.calculate_header_checksum() for c in chunks)),
+    "event_records_crc_valid": b(all(c._offset + c.next_record_offset() <= len(raw)
+                                     and c.data_checksum() == c.calculate_data_checksum() for c in chunks)),
+    "truncated": b(cut), "first_written_time_utc": iso(ts[0]), "last_written_time_utc": iso(ts[-1]),
+    "time_span_seconds": str(int((max(ts) - min(ts)).total_seconds())),
+    "time_out_of_order_count": str(sum(1 for a, c in zip(ts, ts[1:]) if c < a)),
+}
+print(json.dumps(out))

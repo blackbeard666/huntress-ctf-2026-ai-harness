@@ -1,0 +1,8 @@
+{
+ "field": "amcache.link_date_for_rclone_exe",
+ "expected": "01/01/1970 00:00:00",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> amcache_win10.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/amcache/amcache_win10__link_date_for_rclone_exe.bin  (regipy AmCachePlugin) -> entry name==rclone.exe .link_date",
+ "decoy": false,
+ "member": "Windows/AppCompat/Programs/Amcache.hve"
+}

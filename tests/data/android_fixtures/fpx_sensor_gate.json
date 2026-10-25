@@ -1,0 +1,8 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": "ANS-3ff17a2c22e099b1",
+ "decoy": false,
+ "_why": "SensorMap.mixSensorAccel(float[]): accelerometer means (add/div-float, int-to-float), sqrt magnitude (float-to-double, Math.sqrt), `score > 0.5f` + cmpl/cmpg-float/double on a computed NaN (inf*0), f2i/f2l/d2l saturation + NaN->0, Math.round(F/D) ties, floor/ceil/pow, Float.compare(-0f,0f) / (NaN,Inf), rem-float, neg-double, floatToIntBits / doubleToLongBits; folds into a long -> 'ANS-' + 16 hex via charAt",
+ "generator_cmd": "python3 tests/data/android_fixtures/fpx_src/gen_fpx.py sensor_gate tests/data/android_fixtures/fpx_sensor_gate.apk  # javac --release 8 SensorMap.java + dex2jar d2j-jar2dex.sh + zipfile",
+ "oracle_cmd": "same generator: java -cp <javac out> Probe runs SensorMap.mixSensorCode() on the host JVM (OpenJDK 25) -> prints 'ANS-3ff17a2c22e099b1'"
+}

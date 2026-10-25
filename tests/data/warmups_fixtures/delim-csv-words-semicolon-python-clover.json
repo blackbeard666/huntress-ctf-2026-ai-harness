@@ -1,0 +1,9 @@
+{
+ "codec": "delimited-fields",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-finch-12",
+ "encoded": "Nice ;work ;decoding ;this ;warmup! ;To ;solve, ;submit ;this ;exact ;answer ;to ;the ;Game ;Master: ;clover-finch-12\n",
+ "generator_cmd": "python3 -I -c \"import csv,sys,re; w=csv.writer(sys.stdout, delimiter=';', lineterminator='\\r\\n'); w.writerow(re.findall(r'\\S+\\s*', sys.argv[1]))\" \"$plain\"",
+ "oracle_cmd": "ruby -rcsv -e 'print CSV.parse(STDIN.read, col_sep: \";\").flatten.join'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-finch-12",
+ "expected": "match"
+}

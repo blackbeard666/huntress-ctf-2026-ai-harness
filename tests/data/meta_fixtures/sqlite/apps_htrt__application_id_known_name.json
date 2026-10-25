@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.application_id_known_name",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_apps.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> apps_htrt.db)",
+ "oracle_cmd": "file -b apps_htrt.db  (libmagic 5.46: 'SQLite 3.x database (<name>)' for a magic.txt-registered id; no parenthetical -> none) -> SQLite 3.x database, application id 1213485652, user version",
+ "decoy": false,
+ "member": "apps_htrt.db"
+}

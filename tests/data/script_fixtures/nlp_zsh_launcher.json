@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=zsh|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=ZSH-46f7f076|url=https://zsh-46f7f076a5.example.invalid/stage|file_path=/tmp/huntress-zsh/.46f7f076a569eb1f.stage",
+ "decoy": false,
+ "language": "zsh",
+ "role": "launcher",
+ "id_single": "polyglot-zsh-launcher-<field>",
+ "id_timed": "polyglot-zsh-3792dd-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_zsh_launcher.zsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-zsh-launcher-language": "zsh",
+  "polyglot-zsh-launcher-role": "launcher",
+  "polyglot-zsh-launcher-verdict": "suspicious",
+  "polyglot-zsh-launcher-attack": "T1059",
+  "polyglot-zsh-launcher-adapter": "process_builder",
+  "polyglot-zsh-launcher-host-profile": "standalone",
+  "polyglot-zsh-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-zsh-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-zsh-launcher-next-language": "batch",
+  "polyglot-zsh-launcher-stage-count": "3",
+  "polyglot-zsh-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-zsh-launcher-campaign-id": "ZSH-46f7f076",
+  "polyglot-zsh-launcher-url": "https://zsh-46f7f076a5.example.invalid/stage",
+  "polyglot-zsh-launcher-file-path": "/tmp/huntress-zsh/.46f7f076a569eb1f.stage"
+ },
+ "answers_timed": {
+  "polyglot-zsh-3792dd-url-host": "zsh-46f7f076a5.example.invalid",
+  "polyglot-zsh-3792dd-path-leaf": ".46f7f076a569eb1f.stage",
+  "polyglot-zsh-3792dd-campaign-token": "46f7f076",
+  "polyglot-zsh-3792dd-next-language": "batch"
+ }
+}

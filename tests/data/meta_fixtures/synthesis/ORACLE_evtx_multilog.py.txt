@@ -1,0 +1,64 @@
+# Independent oracle for the synthesis_evtx fixtures: stdlib zipfile + python-evtx 0.8.1 (Evtx.Evtx FileHeader /
+# ChunkHeader / Record.xml()), never lib.meta. Run: .venv/bin/python -I ORACLE_evtx_multilog.py.txt <kit.zip>
+# -> JSON {field: GM-spelled string}. Per .evtx member with the ElfFile magic (others ignored): records walked like
+# the ORACLE_evtx_integrity oracle (buffer zero-padded so a cut-off file opens; a record is kept only when verify()
+# holds and it ends before the true file length); Computer = <Computer> of the first record's rendered XML.
+import io
+import json
+import re
+import sys
+import zipfile
+
+from Evtx.Evtx import FileHeader
+
+z = zipfile.ZipFile(sys.argv[1])
+logs = {}
+for n in z.namelist():
+    raw = z.read(n)
+    if not n.lower().endswith(".evtx") or raw[:8] != b"ElfFile\x00":
+        continue
+    fh = FileHeader(raw + b"\x00" * 0x40000, 0)
+    rows, chunks, host = [], [], None
+    for ch in fh.chunks(include_inactive=True):
+        if ch._offset >= len(raw) or not ch.check_magic():
+            break
+        chunks.append(ch)
+        for r in ch.records():
+            if r.magic() != 0x2A2A or not r.verify() or r._offset + r.size() > len(raw):
+                break
+            if host is None:
+                m = re.search(r"<Computer>([^<]*)</Computer>", r.xml())
+                host = m.group(1) if m else None
+            rows.append((r.record_num(), r.timestamp()))
+    cut = len(raw) < 4096 + fh.chunk_count() * 0x10000 or any(c._offset + c.next_record_offset() > len(raw)
+                                                                for c in chunks)
+    ids = sorted(i for i, _ in rows)
+    gaps = bool(ids) and len(set(ids)) != ids[-1] - ids[0] + 1
+    first_t = min(rows)[1] if rows else None
+    logs[n] = {"seq": sorted(rows), "host": host, "cut": cut, "gaps": gaps, "n": len(rows), "t": first_t}
+J = lambda v: json.dumps(v, separators=(",", ":"))  # noqa: E731
+out = {}
+if not logs:
+    print(json.dumps({"_all": "none"}))
+    sys.exit()
+grp = {}
+for n, d in logs.items():
+    if d["n"]:
+        grp.setdefault(tuple(d["seq"]), []).append(n)
+dups = sorted(sorted(g) for g in grp.values() if len(g) > 1)
+out["duplicate_groups"] = J(dups) if dups else "none"
+out["duplicate_of"] = min(dups[0], key=lambda n: (len(n.rsplit("/", 1)[-1]), n)) if len(dups) == 1 else "none"
+tr = sorted(n for n, d in logs.items() if d["cut"])
+out["truncated_member"] = tr[0] if len(tr) == 1 else ("none" if not tr else J(tr))
+sh = sorted((d["n"], n) for n, d in logs.items() if d["gaps"])
+out["shortened_member"] = sh[0][1] if sh else "none"
+hg = {}
+for n, d in logs.items():
+    if d["host"]:
+        hg.setdefault(d["host"], []).append(n)
+out["host_groups"] = J({k: sorted(hg[k]) for k in sorted(hg)})
+out["record_count_order"] = J([n for _, n in sorted((d["n"], n) for n, d in logs.items())])
+dated = sorted((d["t"], n) for n, d in logs.items() if d["t"] is not None)
+out["earliest_member"] = dated[0][1]
+out["latest_member"] = sorted(dated, key=lambda t: (-t[0].timestamp(), t[1]))[0][1]
+print(json.dumps(out, indent=1))

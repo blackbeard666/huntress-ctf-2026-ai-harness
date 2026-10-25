@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=nim|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=nimble_task|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=NIM-3c659bfd|url=https://nim-3c659bfdbe.example.invalid/stage|file_path=/tmp/huntress-nim/.3c659bfdbef29b9d.stage",
+ "decoy": false,
+ "language": "nim",
+ "role": "host",
+ "id_single": "polyglot-nim-host-<field>",
+ "id_timed": "polyglot-nim-8e3a73-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_nim_host.nim | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-nim-host-language": "nim",
+  "polyglot-nim-host-role": "staged_chain",
+  "polyglot-nim-host-verdict": "suspicious",
+  "polyglot-nim-host-attack": "T1059",
+  "polyglot-nim-host-adapter": "operation_graph",
+  "polyglot-nim-host-host-profile": "nimble_task",
+  "polyglot-nim-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-nim-host-stage-profile": "two_stage_download_execute",
+  "polyglot-nim-host-next-language": "bash",
+  "polyglot-nim-host-stage-count": "2",
+  "polyglot-nim-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-nim-host-campaign-id": "NIM-3c659bfd",
+  "polyglot-nim-host-url": "https://nim-3c659bfdbe.example.invalid/stage",
+  "polyglot-nim-host-file-path": "/tmp/huntress-nim/.3c659bfdbef29b9d.stage"
+ },
+ "answers_timed": {
+  "polyglot-nim-8e3a73-url-host": "nim-3c659bfdbe.example.invalid",
+  "polyglot-nim-8e3a73-path-leaf": ".3c659bfdbef29b9d.stage",
+  "polyglot-nim-8e3a73-campaign-token": "3c659bfd",
+  "polyglot-nim-8e3a73-next-language": "bash"
+ }
+}

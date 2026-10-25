@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=nim|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=NIM-1d641f4b|url=https://nim-1d641f4bdc.example.invalid/stage|file_path=/tmp/huntress-nim/.1d641f4bdc971258.stage",
+ "decoy": false,
+ "language": "nim",
+ "role": "launcher",
+ "id_single": "polyglot-nim-launcher-<field>",
+ "id_timed": "polyglot-nim-dce15c-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_nim_launcher.nim | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-nim-launcher-language": "nim",
+  "polyglot-nim-launcher-role": "launcher",
+  "polyglot-nim-launcher-verdict": "suspicious",
+  "polyglot-nim-launcher-attack": "T1059",
+  "polyglot-nim-launcher-adapter": "process_builder",
+  "polyglot-nim-launcher-host-profile": "standalone",
+  "polyglot-nim-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-nim-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-nim-launcher-next-language": "batch",
+  "polyglot-nim-launcher-stage-count": "3",
+  "polyglot-nim-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-nim-launcher-campaign-id": "NIM-1d641f4b",
+  "polyglot-nim-launcher-url": "https://nim-1d641f4bdc.example.invalid/stage",
+  "polyglot-nim-launcher-file-path": "/tmp/huntress-nim/.1d641f4bdc971258.stage"
+ },
+ "answers_timed": {
+  "polyglot-nim-dce15c-url-host": "nim-1d641f4bdc.example.invalid",
+  "polyglot-nim-dce15c-path-leaf": ".1d641f4bdc971258.stage",
+  "polyglot-nim-dce15c-campaign-token": "1d641f4b",
+  "polyglot-nim-dce15c-next-language": "batch"
+ }
+}

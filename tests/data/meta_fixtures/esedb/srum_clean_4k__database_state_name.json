@@ -1,0 +1,8 @@
+{
+ "field": "esedb.database_state_name",
+ "expected": "clean_shutdown",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/ese/GENERATOR_ese_struct.py.txt <outdir>  (stdlib struct ESE DBFILEHDR writer; decoy = stdlib sqlite3 database) -> srum_clean_4k.bin",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/ese/ORACLE_ese_dissect.py.txt tests/data/meta_fixtures/esedb/srum_clean_4k__database_state_name.bin  (dissect.esedb 3.18 c_esedb.DBFILEHDR cstruct, column 4 of page_size_bytes|format_version_u32_hex|format_revision_u32_hex|database_state|database_state_name|file_type|page_count|is_dirty|header_shadow_match|creation_time_utc|last_attach_time_utc); cross-check `file -b` (libmagic 5.46): Extensible storage engine DataBase, version 0x620, checksum 0xa0fc360d, page size 4096, Windows version 10.0",
+ "decoy": false,
+ "member": "SRUDB.dat"
+}

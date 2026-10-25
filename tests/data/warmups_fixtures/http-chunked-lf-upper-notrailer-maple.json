@@ -1,0 +1,9 @@
+{
+ "codec": "http-chunked",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-73",
+ "encoded": "C\nNice work de\nC\ncoding this \nC\nwarmup! To s\nC\nolve, submit\nC\n this exact \nC\nanswer to th\nC\ne Game Maste\nC\nr: maple-ott\n5\ner-73\n0\n",
+ "generator_cmd": "perl -e 'printf \"%X\\n%s\\n\", length($1), $1 while $ARGV[0] =~ /(.{1,12})/gs; print \"0\\n\"' \"$plain\"   # perl writer: LF-only, uppercase hex, 12-byte chunks, '0' with no final blank line",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -0777 -ne 'my $o=\"\"; my $ok=0; while (s/\\A([0-9A-Fa-f]+)[^\\n]*\\n//) { my $n=hex $1; if (!$n) {$ok=1; last} last if length($_)<$n; $o.=substr($_,0,$n,\"\"); s/\\A\\r?\\n// or last; $ok=1 if $_ eq \"\" } print $ok ? $o : \"none\"'  # perl de-chunker (LF-tolerant)",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-73",
+ "expected": "match"
+}

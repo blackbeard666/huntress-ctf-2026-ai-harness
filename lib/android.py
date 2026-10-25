@@ -21,6 +21,7 @@ import io
 import itertools
 import json
 import lzma
+import math
 import re
 import struct
 import unicodedata
@@ -8735,6 +8736,259 @@ def _dxe_intr_numeric():
 
 
 _DXE_INTR = _dxe_intrinsics()
+
+
+# --- float / double with exact Java semantics (coverage atlas row 96: SensorMap / mixSensor*, `score > 0.5f`) --------
+# A register keeps the IEEE bit pattern as a signed int, like Dalvik (const/high16, const-wide/high16, fill-array-data
+# and encoded static values already load bits); every float op computes in double and rounds through struct '<f'
+# (exact for + - * / % of float32 operands), conversions saturate (NaN -> 0), cmpl / cmpg bias NaN to -1 / +1.
+_FX_F32_INF = 2.0 ** 128 - 2.0 ** 103  # |x| >= this rounds to +-Infinity in float32 (ties-to-even past FLT_MAX)
+
+
+def _fx_int(v):
+    if v.__class__ is not int:
+        raise _DxAbort
+    return v
+
+
+def _fx_f(v):
+    """float32 bits -> python float."""
+    return struct.unpack("<f", struct.pack("<I", _fx_int(v) & 0xFFFFFFFF))[0]
+
+
+def _fx_d(v):
+    """float64 bits -> python float."""
+    return struct.unpack("<d", struct.pack("<Q", _fx_int(v) & 0xFFFFFFFFFFFFFFFF))[0]
+
+
+def _fx_F(x):
+    """python float -> float32 bits (round to nearest even, overflow to Infinity, canonical NaN)."""
+    if x != x:
+        return 0x7FC00000
+    if abs(x) >= _FX_F32_INF:
+        x = math.copysign(math.inf, x)
+    return struct.unpack("<i", struct.pack("<f", x))[0]
+
+
+def _fx_D(x):
+    return 0x7FF8000000000000 if x != x else struct.unpack("<q", struct.pack("<d", x))[0]
+
+
+def _fx_i2f(v):
+    """int/long -> float32 bits, rounded once (float(long) would round to double first)."""
+    n = abs(v)
+    s = n.bit_length() - 24
+    if s > 0:
+        q, rem, h = n >> s, n & ((1 << s) - 1), 1 << (s - 1)
+        n = (q + (rem > h or rem == h and q & 1)) << s
+    return _fx_F(float(-n if v < 0 else n))
+
+
+def _fx_trunc(x, bits):
+    """f2i / d2l: NaN -> 0, saturate at the int/long bounds, else truncate toward zero."""
+    if x != x:
+        return 0
+    lo, hi = -(1 << (bits - 1)), (1 << (bits - 1)) - 1
+    return hi if x >= hi else lo if x <= lo else int(x)
+
+
+def _fx_arith(k, x, y):
+    """Java add / sub / mul / div / rem (k 0..4) on doubles: IEEE results where Python would raise."""
+    if k == 0:
+        return x + y
+    if k == 1:
+        return x - y
+    if k == 2:
+        return x * y
+    if k == 3:
+        if y == 0:
+            return math.nan if x != x or x == 0 else math.copysign(math.inf, x) * math.copysign(1.0, y)
+        return x / y
+    if k == 4:
+        if x != x or y != y or math.isinf(x) or y == 0:
+            return math.nan
+        return x if math.isinf(y) else math.fmod(x, y)
+    raise _DxAbort
+
+
+def _fx_binop(k, a, b, wide):
+    if wide:
+        return _fx_D(_fx_arith(k, _fx_d(a), _fx_d(b)))
+    return _fx_F(_fx_arith(k, _fx_f(a), _fx_f(b)))
+
+
+def _fx_unop(op, v):
+    """neg-float .. double-to-float (0x7F-0x8C minus the int/long ones): (value, wide result)."""
+    if op == 0x7F:
+        return _dxe_w32(v ^ 0x80000000), False
+    if op == 0x80:
+        return _dxe_w64(v ^ (1 << 63)), True
+    if op in (0x82, 0x85):
+        return _fx_i2f(v), False
+    if op in (0x83, 0x86):
+        return _fx_D(float(v)), True
+    if op in (0x87, 0x88):
+        return _fx_trunc(_fx_f(v), 32 if op == 0x87 else 64), op == 0x88
+    if op in (0x8A, 0x8B):
+        return _fx_trunc(_fx_d(v), 32 if op == 0x8A else 64), op == 0x8B
+    if op == 0x89:
+        return _fx_D(_fx_f(v)), True
+    if op == 0x8C:
+        return _fx_F(_fx_d(v)), False
+    raise _DxAbort
+
+
+def _fx_cmp(op, a, b):
+    """cmpl-float / cmpg-float / cmpl-double / cmpg-double (0x2D-0x30)."""
+    cv = _fx_d if op >= 0x2F else _fx_f
+    x, y = cv(a), cv(b)
+    if x != x or y != y:
+        return -1 if op in (0x2D, 0x2F) else 1
+    return (x > y) - (x < y)
+
+
+def _fx_minmax(x, y, mx):
+    if x != x or y != y:
+        return math.nan
+    if x == y == 0:  # Math.min(0.0, -0.0) = -0.0, Math.max(-0.0, 0.0) = 0.0
+        return x if (math.copysign(1.0, x) > 0) == mx else y
+    return max(x, y) if mx else min(x, y)
+
+
+def _fx_pow(x, y):
+    if y == 0:
+        return 1.0
+    if x != x or y != y or abs(x) == 1 and math.isinf(y):
+        return math.nan
+    odd = not math.isinf(y) and y == int(y) and int(y) & 1
+    if x == 0 and y < 0:
+        return -math.inf if odd and math.copysign(1.0, x) < 0 else math.inf
+    try:
+        return math.pow(x, y)
+    except OverflowError:
+        return -math.inf if x < 0 and odd else math.inf
+    except ValueError:
+        return math.nan
+
+
+def _fx_integral(x, fn):
+    """Math.floor / ceil / rint: NaN, +-Infinity and +-0.0 pass through; a zero result keeps the argument's sign."""
+    if x != x or math.isinf(x) or x == 0:
+        return x
+    return math.copysign(float(fn(x)), x)
+
+
+def _fx_round(x, bits):
+    """Math.round: floor(x + 1/2) computed exactly, NaN -> 0, saturating."""
+    if x != x or math.isinf(x):
+        return _fx_trunc(x, bits)
+    r = math.floor(x)
+    r += x - r >= 0.5
+    return max(-(1 << (bits - 1)), min((1 << (bits - 1)) - 1, r))
+
+
+def _fx_jstr(x, single):
+    """Float.toString / Double.toString: shortest round-trip digits, plain in [1e-3, 1e7), else d.dddE<n>."""
+    if x != x:
+        return "NaN"
+    if math.isinf(x):
+        return "Infinity" if x > 0 else "-Infinity"
+    if x == 0:
+        return "-0.0" if math.copysign(1.0, x) < 0 else "0.0"
+    for p in range(1, 18):
+        s = "%.*e" % (p - 1, x)
+        if (_fx_F(float(s)) == _fx_F(x)) if single else float(s) == x:
+            break
+    mant, e = s.lstrip("-").split("e")
+    e, dg = int(e), mant.replace(".", "").rstrip("0") or "0"
+    if 1e-3 <= abs(x) < 1e7:
+        out = dg[:e + 1].ljust(e + 1, "0") + "." + (dg[e + 1:] or "0") if e >= 0 else "0." + "0" * (-e - 1) + dg
+    else:
+        out = dg[0] + "." + (dg[1:] or "0") + "E" + str(e)
+    return ("-" if x < 0 else "") + out
+
+
+def _fx_parse(s, single):
+    """Float.parseFloat / Double.parseDouble (decimal forms; a hex float or junk aborts like NumberFormatException).
+    parseFloat rounds the exact decimal straight to float32 (decimal -> double -> float could double-round)."""
+    from fractions import Fraction
+    s = _dxe_str(s).strip("".join(map(chr, range(33))))
+    if s[-1:] in ("f", "F", "d", "D"):
+        s = s[:-1]
+    m = re.fullmatch(r"([+-]?)(?:(NaN)|(Infinity)|((?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?))", s)
+    if not m:
+        raise _DxAbort
+    if not m.group(4):
+        x = math.nan if m.group(2) else math.copysign(math.inf, -1.0 if m.group(1) == "-" else 1.0)
+        return _fx_F(x) if single else _fx_D(x)
+    if not single:
+        return _fx_D(float(s))
+    fr = abs(Fraction(m.group(4)))
+    try:
+        b = _fx_F(float(fr)) & 0x7FFFFFFF
+    except OverflowError:
+        b = 0x7F800000
+    best = None
+    for c in (b - 1, b, b + 1):
+        if 0 <= c <= 0x7F800000:
+            key = (abs((Fraction(_fx_f(c)) if c < 0x7F800000 else Fraction(2 ** 128)) - fr), c & 1)
+            best = min(best or (key, c), (key, c))
+    return _dxe_w32(best[1] | (0x80000000 if m.group(1) == "-" else 0))
+
+
+def _dxe_intr_float():
+    F, D, S, f, d = "Ljava/lang/Float;", "Ljava/lang/Double;", "Ljava/lang/String;", _fx_f, _fx_d
+    t = {}
+    t[F + "->floatToRawIntBits(F)I"] = t[F + "->intBitsToFloat(I)F"] = lambda a: _dxe_w32(_fx_int(a[0]))
+    t[F + "->floatToIntBits(F)I"] = lambda a: 0x7FC00000 if f(a[0]) != f(a[0]) else _dxe_w32(a[0])
+    t[D + "->doubleToRawLongBits(D)J"] = t[D + "->longBitsToDouble(J)D"] = lambda a: _dxe_w64(_fx_int(a[0]))
+    t[D + "->doubleToLongBits(D)J"] = lambda a: 0x7FF8000000000000 if d(a[0]) != d(a[0]) else _dxe_w64(a[0])
+    for box, P, cv, back, canon, w, single in ((F, "F", f, _fx_F, 0x7FC00000, _dxe_w32, True),
+                                              (D, "D", d, _fx_D, 0x7FF8000000000000, _dxe_w64, False)):
+        def cmp(a, cv=cv, canon=canon, w=w):  # Java's own: < / >, then the canonical bits (-0.0 < 0.0, NaN last)
+            x, y = cv(a[0]), cv(a[1])
+            if x < y or x > y:
+                return -1 if x < y else 1
+            bx, by = (canon if v != v else w(r) for v, r in ((x, a[0]), (y, a[1])))
+            return (bx > by) - (bx < by)
+        t[f"{box}->compare({P}{P})I"] = cmp
+        t[f"{box}->isNaN({P})Z"] = lambda a, cv=cv: int(cv(a[0]) != cv(a[0]))
+        t[f"{box}->isInfinite({P})Z"] = lambda a, cv=cv: int(math.isinf(cv(a[0])))
+        t[f"{box}->isFinite({P})Z"] = lambda a, cv=cv: int(math.isfinite(cv(a[0])))
+        t[f"{box}->sum({P}{P}){P}"] = lambda a, cv=cv, back=back: back(cv(a[0]) + cv(a[1]))
+        t[f"{box}->max({P}{P}){P}"] = lambda a, cv=cv, back=back: back(_fx_minmax(cv(a[0]), cv(a[1]), True))
+        t[f"{box}->min({P}{P}){P}"] = lambda a, cv=cv, back=back: back(_fx_minmax(cv(a[0]), cv(a[1]), False))
+        t[f"{box}->toString({P}){S}"] = t[f"{S}->valueOf({P}){S}"] = \
+            lambda a, cv=cv, single=single: _fx_jstr(cv(a[0]), single)
+        for sb in ("Ljava/lang/StringBuilder;", "Ljava/lang/StringBuffer;"):
+            t[f"{sb}->append({P}){sb}"] = \
+                lambda a, cv=cv, single=single: _dxe_sb_append((a[0], _fx_jstr(cv(a[1]), single)))
+        t[f"{box}->parse{'Float' if single else 'Double'}({S}){P}"] = lambda a, single=single: _fx_parse(a[0], single)
+    for m in ("Ljava/lang/Math;", "Ljava/lang/StrictMath;"):
+        t[f"{m}->abs(F)F"] = lambda a: _dxe_w32(_fx_int(a[0]) & 0x7FFFFFFF)
+        t[f"{m}->abs(D)D"] = lambda a: _fx_int(a[0]) & 0x7FFFFFFFFFFFFFFF
+        t[f"{m}->abs(I)I"] = lambda a: _dxe_w32(abs(_fx_int(a[0])))
+        t[f"{m}->abs(J)J"] = lambda a: _dxe_w64(abs(_fx_int(a[0])))
+        for P, cv, back in (("F", f, _fx_F), ("D", d, _fx_D)):
+            t[f"{m}->max({P}{P}){P}"] = lambda a, cv=cv, back=back: back(_fx_minmax(cv(a[0]), cv(a[1]), True))
+            t[f"{m}->min({P}{P}){P}"] = lambda a, cv=cv, back=back: back(_fx_minmax(cv(a[0]), cv(a[1]), False))
+            t[f"{m}->signum({P}){P}"] = lambda a, cv=cv, back=back: back(
+                (lambda x: x if x != x or x == 0 else math.copysign(1.0, x))(cv(a[0])))
+        for P in ("I", "J"):
+            t[f"{m}->max({P}{P}){P}"] = lambda a: max(_fx_int(a[0]), _fx_int(a[1]))
+            t[f"{m}->min({P}{P}){P}"] = lambda a: min(_fx_int(a[0]), _fx_int(a[1]))
+        t[f"{m}->sqrt(D)D"] = lambda a: _fx_D((lambda x: math.nan if x < 0 else math.sqrt(x))(d(a[0])))
+        t[f"{m}->floor(D)D"] = lambda a: _fx_D(_fx_integral(d(a[0]), math.floor))
+        t[f"{m}->ceil(D)D"] = lambda a: _fx_D(_fx_integral(d(a[0]), math.ceil))
+        t[f"{m}->rint(D)D"] = lambda a: _fx_D(_fx_integral(d(a[0]), round))
+        t[f"{m}->pow(DD)D"] = lambda a: _fx_D(_fx_pow(d(a[0]), d(a[1])))
+        t[f"{m}->round(F)I"] = lambda a: _fx_round(f(a[0]), 32)
+        t[f"{m}->round(D)J"] = lambda a: _fx_round(d(a[0]), 64)
+    return t
+
+
+for _k, _v in _dxe_intr_float().items():
+    _DXE_INTR.setdefault(_k, _v)
 _DXE_SFIELDS = {"Ljava/nio/charset/StandardCharsets;->UTF_8": "utf-8", "Ljava/nio/charset/StandardCharsets;->US_ASCII":
                 "us-ascii", "Ljava/nio/charset/StandardCharsets;->ISO_8859_1": "iso-8859-1",
                 **{f"Ljava/util/Locale;->{k}": "en-US" for k in ("US", "ROOT", "ENGLISH", "UK")}}
@@ -8911,6 +9165,9 @@ class _DxVM:
                         v = int.from_bytes(raw, "little", signed=True)
                     elif vt == 0x03:
                         v = int.from_bytes(raw, "little")
+                    elif vt in (0x10, 0x11):  # float / double: bytes are the high end of the bit pattern
+                        v = int.from_bytes(raw, "little") << 8 * ((4 if vt == 0x10 else 8) - len(raw))
+                        v = _dxe_w32(v) if vt == 0x10 else _dxe_w64(v)
                     elif vt == 0x17:
                         v = self.dx.s(int.from_bytes(raw, "little"))
                     elif vt == 0x1F:
@@ -9210,6 +9467,8 @@ class _DxVM:
                         continue
                 else:
                     raise _DxAbort
+            elif 0x2D <= op <= 0x30:
+                r[b1] = _fx_cmp(op, r[ins[p + 2]], r[ins[p + 3]])
             elif op == 0x31:
                 x, y = r[ins[p + 2]], r[ins[p + 3]]
                 if not isinstance(x, int) or not isinstance(y, int):
@@ -9323,7 +9582,9 @@ class _DxVM:
                 elif op == 0x8F:
                     r[A] = ((v + 0x8000) & 0xFFFF) - 0x8000
                 else:
-                    raise _DxAbort
+                    r[A], wide = _fx_unop(op, v)
+                    if wide:
+                        r[A + 1] = None
             elif 0x90 <= op <= 0xA5:
                 k, wide = (op - 0x90, False) if op <= 0x9A else (op - 0x9B, True)
                 r[b1] = _dxe_binop(k, r[ins[p + 2]], r[ins[p + 3]], wide)
@@ -9341,10 +9602,20 @@ class _DxVM:
             elif 0xD8 <= op <= 0xE2:
                 k, s, lit = op - 0xD8, r[ins[p + 2]], (ins[p + 3] ^ 0x80) - 0x80
                 r[b1] = _dxe_binop(1, lit, s, False) if k == 1 else _dxe_binop(k, s, lit, False)
+            elif 0xA6 <= op <= 0xAF:
+                wide = op >= 0xAB
+                r[b1] = _fx_binop(op - (0xAB if wide else 0xA6), r[ins[p + 2]], r[ins[p + 3]], wide)
+                if wide:
+                    r[b1 + 1] = None
+            elif 0xC6 <= op <= 0xCF:
+                wide = op >= 0xCB
+                r[A] = _fx_binop(op - (0xCB if wide else 0xC6), r[A], r[B], wide)
+                if wide:
+                    r[A + 1] = None
             elif 0xFA <= op <= 0xFD:
                 last = self.dyn(op, ins, p, r, depth)
             else:
-                raise _DxAbort  # float/double, odex ops
+                raise _DxAbort  # odex ops
             pc += w
 
 
@@ -9381,9 +9652,7 @@ class _DxeDeepVM(_DxVM):
         fn = None if self.natives is None or ref in self.dx.code or ref in _DXE_INTR else self.natives(ref)
         if fn is None:
             return super().invoke(ref, raw, depth)
-        if not raw or not isinstance(raw[0], int):
-            raise _DxAbort
-        v = fn(raw[0])
+        v = fn(raw)
         if v is None:
             raise _DxAbort
         return self.note(v)
@@ -9702,11 +9971,27 @@ def _dxp_run(vm, ref, raw, depth):
     return r[nreg]
 
 
-# --- JNI bridge: a static `native long f(long)` / `native int f(int)` run as its Java_* export under unicorn ----------
+# --- JNI bridge: an app `native` method (static or instance; int / long / boolean / String args; int-like, long or
+# String return) run as its Java_* export -- short or overloaded `__<sig>` JNI name, else a RegisterNatives table entry
+# -- under unicorn (coverage atlas rows 37, 96: D23 Mastery `NativeLibrarySecrets.nativeShare(long)` inside
+# Release.token()). JNIEnv* -> a function table whose slots trap: NewStringUTF records the C string (the jstring
+# return), GetStringUTFChars hands a String arg back as C bytes, FindClass / Get*MethodID return dummy handles, the
+# rest 0. R_*_RELATIVE applied; libc imports -> a small shim (strlen / mem* / str* / malloc / [s|sn]printf), others
+# return 0. x86_64, then arm64-v8a, armeabi-v7a (ARM / Thumb), x86. 200k insns per call; the artifact is never dlopened.
 _NLB_STEPS, _NLB_MAX_SO = 200_000, 8 << 20
-_NLB_ABI = {"EM_X86_64": ("UC_ARCH_X86", "UC_MODE_64", "UC_X86_REG_", ("RDI", "RSI", "RDX"), "RAX", "RSP"),
-            "EM_AARCH64": ("UC_ARCH_ARM64", "UC_MODE_ARM", "UC_ARM64_REG_", ("X0", "X1", "X2"), "X0", "SP")}
-_NLB_ABI_ORDER = ("x86_64", "arm64-v8a")
+_NLB_ABI = {"EM_X86_64": ("UC_ARCH_X86", "UC_MODE_64", "x86_const", "UC_X86_REG_", ("RDI", "RSI", "RDX", "RCX", "R8", "R9"),
+                          "RAX", "RSP", "RIP", 8, b"\xc3\xc3\xc3\xc3"),
+            "EM_AARCH64": ("UC_ARCH_ARM64", "UC_MODE_ARM", "arm64_const", "UC_ARM64_REG_",
+                           ("X0", "X1", "X2", "X3", "X4", "X5", "X6", "X7"), "X0", "SP", "PC", 8, b"\xc0\x03\x5f\xd6"),
+            "EM_ARM": ("UC_ARCH_ARM", "UC_MODE_ARM", "arm_const", "UC_ARM_REG_", ("R0", "R1", "R2", "R3"), "R0", "SP",
+                       "PC", 4, b"\x1e\xff\x2f\xe1"),
+            "EM_386": ("UC_ARCH_X86", "UC_MODE_32", "x86_const", "UC_X86_REG_", (), "EAX", "ESP", "EIP", 4,
+                       b"\xc3\xc3\xc3\xc3")}
+_NLB_ABI_ORDER = ("x86_64", "arm64-v8a", "armeabi-v7a", "x86")
+_NLB_REF = re.compile(r"L([^;]+);->([^(]+)\(((?:[ZBCSIJ]|Ljava/lang/String;)*)\)([ZBCSIJ]|Ljava/lang/String;)")
+_NLB_JNI_HANDLE = {6: 0x50000040, 21: 0x50000050, 31: 0x50000040, 33: 0x50000060, 113: 0x50000070}  # FindClass ...
+_NLB_JNI_SLOTS, _NLB_MAX_IMPORTS = 0x140, 0x200
+_NLB_FMT = re.compile(rb"%([-+ #0]*)(\d*|\*)(?:\.(\d*|\*))?(hh|h|ll|l|z|j|t|q)?([diouxXcsp%])")
 
 
 def _nlb_mangle(s):
@@ -9719,52 +10004,282 @@ def _nlb_mangle(s):
     return "".join(out)
 
 
-def _nlb_call(elf, va, arg, wide):
-    """Run the export at `va` with (env, jclass, arg) in the arch's argument registers; the return register or None."""
+def _nlb_relocs(elf):
+    """(relative [(off, addend | None)], imports [(off, sym name)]) from the .so's RELA / REL sections."""
+    rel_t = {"EM_X86_64": 8, "EM_AARCH64": 1027, "EM_ARM": 23, "EM_386": 8}[elf.arch]
+    sym_t = {"EM_X86_64": (6, 7, 1), "EM_AARCH64": (1025, 1026, 257), "EM_ARM": (21, 22, 2),
+             "EM_386": (6, 7, 1)}[elf.arch]
+    rel, imp = [], []
+    for _, typ, _, off, size, link in elf.secs:
+        if typ not in (4, 9):  # SHT_RELA, SHT_REL
+            continue
+        fmt = ("<QQq" if typ == 4 else "<QQ") if elf.is64 else ("<IIi" if typ == 4 else "<II")
+        n = struct.calcsize(fmt)
+        names = elf.syms.get(link, [])
+        for t in struct.iter_unpack(fmt, elf.b[off:off + min(size, n * 65536) // n * n]):
+            info = t[1]
+            rt, si = (info & 0xFFFFFFFF, info >> 32) if elf.is64 else (info & 0xFF, info >> 8)
+            if rt == rel_t:
+                rel.append((t[0], t[2] if len(t) > 2 else None))
+            elif rt in sym_t and si < len(names) and names[si][0] and not names[si][4]:
+                imp.append((t[0], names[si][0]))
+    return rel, imp
+
+
+def _nlb_call(elf, va, args, ret):
+    """Run the JNI function at `va` with `args` = [(kind, value)] (kind 'w' 32-bit word, 'q' 64-bit, 's' str) after
+    (env, jclass/jobject); `ret` = the Java return descriptor. The masked value / str, or None (fault, trap, budget)."""
     import unicorn as U
-    ua, um, rp, regs, ret, sp = _NLB_ABI[elf.arch]
+    ua, um, cm, rp, aregs, retr, spr, pcr, W, ret_insn = _NLB_ABI[elf.arch]
+    C = getattr(U, cm)
+    R = lambda n: getattr(C, rp + n)
+    thumb = elf.arch == "EM_ARM" and va & 1
     uc, page = U.Uc(getattr(U, ua), getattr(U, um)), 0x1000
     base, top = 0x10000000, 0
     for v, o, fs, ms in elf.segs:
-        lo, hi = (v & ~(page - 1)), (v + ms + page - 1) & ~(page - 1)
-        top = max(top, hi)
+        top = max(top, (v + ms + page - 1) & ~(page - 1))
     if not 0 < top <= 64 << 20:
         return None
     uc.mem_map(base, top, U.UC_PROT_ALL)
     for v, o, fs, ms in elf.segs:
         uc.mem_write(base + v, elf.b[o:o + fs])
+    mask = (1 << (8 * W)) - 1
+    pk = (lambda x: struct.pack("<Q", x & mask)) if W == 8 else (lambda x: struct.pack("<I", x & mask))
+    rel, imp = _nlb_relocs(elf)
+    for off, add in rel[:65536]:
+        if add is None:
+            add = int.from_bytes(elf.at(off, W).ljust(W, b"\0"), "little")
+        try:
+            uc.mem_write(base + off, pk(base + add))
+        except U.UcError:
+            pass
     stack, env, stop = 0x70000000, 0x60000000, 0x50000000
-    uc.mem_map(stack, 0x10000)
-    uc.mem_map(env, 0x10000)  # a zeroed JNIEnv: any call through it faults -> None
+    table, trap, heap0, tls = env + 0x100, env + 0x2000, env + 0x10000, env + 0xF8000
+    uc.mem_map(stack, 0x20000)
+    uc.mem_map(env, 0x100000)
     uc.mem_map(stop, page)
-    r = lambda n: getattr(U.x86_const if elf.arch == "EM_X86_64" else U.arm64_const, rp + n)
-    s = stack + 0x8000
-    uc.mem_write(env, struct.pack("<Q", env + 0x100))
+    uc.mem_write(env, pk(table))
+    uc.mem_write(table, b"".join(pk(trap + 4 * i) for i in range(_NLB_JNI_SLOTS)))
+    uc.mem_write(trap, ret_insn * (_NLB_JNI_SLOTS + _NLB_MAX_IMPORTS))
+    lib, heap = {}, [heap0]
+    for off, name in imp:
+        if name not in lib and len(lib) < _NLB_MAX_IMPORTS:
+            lib[name] = len(lib)
+        if name in lib:
+            try:  # a data import (stack guard, environ) reads the stub's bytes: constant, never written
+                uc.mem_write(base + off, pk(trap + 4 * (_NLB_JNI_SLOTS + lib[name])))
+            except U.UcError:
+                pass
+    libn = {v: k for k, v in lib.items()}
+    strs, hnd = {}, [0x51000000]
+
+    def new_str(b):
+        hnd[0] += 16
+        strs[hnd[0]] = bytes(b)
+        return hnd[0]
+
+    def alloc(n):
+        p = heap[0]
+        heap[0] = (p + max(int(n), 1) + 15) & ~15
+        if heap[0] > tls - 0x100:
+            raise _DxAbort
+        return p
+
+    def cstr(p, cap=4096):
+        out = bytearray()
+        while len(out) < cap:
+            c = bytes(uc.mem_read(p + len(out), 64))
+            k = c.find(b"\0")
+            out += c if k < 0 else c[:k]
+            if k >= 0:
+                break
+        return bytes(out[:cap])
+
+    def sp_word(i):  # the i-th stack word above the return address / at sp
+        sp = uc.reg_read(R(spr)) + (W if elf.arch in ("EM_X86_64", "EM_386") else 0)
+        return int.from_bytes(uc.mem_read(sp + W * i, W), "little")
+
+    def arg(i):  # i-th word-sized call argument at a trap
+        if i < len(aregs):
+            return uc.reg_read(R(aregs[i])) & mask
+        return sp_word(i - len(aregs))
+
+    def sprintf(fmt, k):
+        out, pos = bytearray(), 0
+        for m in _NLB_FMT.finditer(fmt):
+            out += fmt[pos:m.start()]
+            pos = m.end()
+            flags, width, prec, ln, cv = m.groups()
+            if cv == b"%":
+                out += b"%"
+                continue
+            if width == b"*":
+                width, k = str(_dxe_w32(arg(k))).encode(), k + 1
+            if prec == b"*":
+                prec, k = str(_dxe_w32(arg(k))).encode(), k + 1
+            if cv == b"s":
+                v = cstr(arg(k))
+                k += 1
+                if prec:
+                    v = v[:int(prec)]
+                out += v.rjust(int(width or 0)) if b"-" not in flags else v.ljust(int(width or 0))
+                continue
+            wide = ln in (b"ll", b"q", b"j") or (W == 8 and ln in (b"l", b"z", b"t")) or cv == b"p"
+            if wide and W == 4:
+                if elf.arch == "EM_ARM" and k % 2:
+                    k += 1
+                v, k = arg(k) | arg(k + 1) << 32, k + 2
+            else:
+                v, k = arg(k), k + 1
+            bits = 64 if wide else 32
+            v &= (1 << bits) - 1
+            if ln == b"hh":
+                v, bits = v & 0xFF, 8
+            elif ln == b"h":
+                v, bits = v & 0xFFFF, 16
+            if cv == b"c":
+                out += bytes([v & 0xFF])
+                continue
+            f = "%" + flags.decode() + width.decode() + ("." + prec.decode() if prec is not None else "")
+            if cv in b"di":
+                out += (f + "d").encode() % (v - (1 << bits) if v >> (bits - 1) else v)
+            else:
+                out += (f + ("x" if cv == b"p" else cv.decode())).encode() % v
+        return bytes(out + fmt[pos:])
+
+    def libc(name):
+        a = arg
+        if name in ("strlen", "__strlen_chk"):
+            return len(cstr(a(0), 1 << 16))
+        if name in ("memcpy", "memmove", "__memcpy_chk", "__memmove_chk"):
+            uc.mem_write(a(0), bytes(uc.mem_read(a(1), a(2) & 0xFFFFF)))
+            return a(0)
+        if name in ("memset", "__memset_chk"):
+            uc.mem_write(a(0), bytes([a(1) & 0xFF]) * (a(2) & 0xFFFFF))
+            return a(0)
+        if name in ("malloc", "_Znwm", "_Znam", "_Znwj", "_Znaj"):
+            return alloc(a(0) & 0xFFFFF)
+        if name == "calloc":
+            return alloc((a(0) * a(1)) & 0xFFFFF)
+        if name in ("strcpy", "__strcpy_chk", "stpcpy"):
+            s = cstr(a(1))
+            uc.mem_write(a(0), s + b"\0")
+            return a(0) + (len(s) if name == "stpcpy" else 0)
+        if name in ("strcat", "__strcat_chk"):
+            d = a(0)
+            uc.mem_write(d + len(cstr(d)), cstr(a(1)) + b"\0")
+            return d
+        if name in ("strncpy", "__strncpy_chk"):
+            n = a(2) & 0xFFFFF
+            uc.mem_write(a(0), cstr(a(1), n).ljust(n, b"\0"))
+            return a(0)
+        if name in ("strcmp", "strncmp", "memcmp"):
+            n = a(2) & 0xFFFFF if name != "strcmp" else 1 << 16
+            x, y = (bytes(uc.mem_read(a(0), n)), bytes(uc.mem_read(a(1), n))) if name == "memcmp" else \
+                (cstr(a(0), n), cstr(a(1), n))
+            return (x > y) - (x < y)
+        if name in ("sprintf", "snprintf", "__sprintf_chk", "__snprintf_chk"):
+            fi = {"sprintf": 1, "snprintf": 2, "__sprintf_chk": 3, "__snprintf_chk": 4}[name]
+            s = sprintf(cstr(a(fi)), fi + 1)
+            if name in ("snprintf", "__snprintf_chk"):
+                n = a(1) & 0xFFFFF
+                if n:
+                    uc.mem_write(a(0), s[:n - 1] + b"\0")
+            else:
+                uc.mem_write(a(0), s + b"\0")
+            return len(s)
+        if name in ("abort", "__stack_chk_fail", "exit", "_exit", "raise", "kill", "__assert2", "__assert_fail"):
+            raise _DxAbort
+        if name in ("free", "__cxa_finalize", "__cxa_atexit", "_ZdlPv", "_ZdaPv"):
+            return 0
+        if name in ("__stack_chk_guard", "environ", "__sF", "stderr", "stdout"):
+            return 0
+        return 0
+
+    def jni(i):
+        if i == 167:  # NewStringUTF(env, const char*)
+            return new_str(cstr(arg(1)))
+        if i in (164, 168):  # GetStringLength / GetStringUTFLength
+            return len(strs.get(arg(1), b""))
+        if i == 169:  # GetStringUTFChars(env, jstring, isCopy)
+            b = strs.get(arg(1))
+            if b is None:
+                return 0
+            p = alloc(len(b) + 1)
+            uc.mem_write(p, b + b"\0")
+            return p
+        if i == 4:  # GetVersion
+            return 0x10006
+        return _NLB_JNI_HANDLE.get(i, 0)
+
+    def on_trap(_uc, addr, _size, _ud):
+        i = (addr - trap) // 4
+        try:
+            v = jni(i) if i < _NLB_JNI_SLOTS else libc(libn.get(i - _NLB_JNI_SLOTS, ""))
+        except (_DxAbort, U.UcError):
+            _uc.emu_stop()
+            return
+        uc.reg_write(R(retr), v & mask)
+
+    uc.hook_add(U.UC_HOOK_CODE, on_trap, begin=trap, end=trap + 4 * (_NLB_JNI_SLOTS + _NLB_MAX_IMPORTS))
     if elf.arch == "EM_X86_64":
-        s -= 8
-        uc.mem_write(s, struct.pack("<Q", stop))
+        uc.reg_write(C.UC_X86_REG_FS_BASE, tls)
+    elif elf.arch == "EM_AARCH64":
+        uc.reg_write(C.UC_ARM64_REG_TPIDR_EL0, tls)
+    # the word list: env, jclass / jobject, then the Java args (ARM32: a long sits in an even register pair / slot)
+    words, this = [env, 0x50000010 if args and args[0][0] == "this" else 0x50000020], args[:1] == [("this", None)]
+    for kind, v in args[1:] if this else args:
+        if kind == "s":
+            words.append(new_str(v.encode("utf-8", "surrogatepass")))
+        elif kind == "q" and W == 4:
+            if elf.arch == "EM_ARM" and len(words) % 2:
+                words.append(0)
+            words += [v & 0xFFFFFFFF, (v >> 32) & 0xFFFFFFFF]
+        else:
+            words.append(v & (0xFFFFFFFF if kind == "w" else mask))
+    s = stack + 0x18000
+    spill = words[len(aregs):]
+    s -= W * len(spill) + 16
+    s &= ~15
+    uc.mem_write(s, b"".join(pk(w) for w in spill))
+    for n, w in zip(aregs, words):
+        uc.reg_write(R(n), w & mask)
+    if elf.arch in ("EM_X86_64", "EM_386"):
+        s -= W
+        uc.mem_write(s, pk(stop))
     else:
-        uc.reg_write(U.arm64_const.UC_ARM64_REG_LR, stop)
-    uc.reg_write(r(sp), s)
-    a = arg & (0xFFFFFFFFFFFFFFFF if wide else 0xFFFFFFFF)
-    for n, val in zip(regs, (env, 0, a)):
-        uc.reg_write(r(n), val)
-    uc.emu_start(base + va, stop, count=_NLB_STEPS)
-    if uc.reg_read(getattr(U.x86_const if elf.arch == "EM_X86_64" else U.arm64_const,
-                           "UC_X86_REG_RIP" if elf.arch == "EM_X86_64" else "UC_ARM64_REG_PC")) != stop:
+        uc.reg_write(C.UC_ARM64_REG_LR if elf.arch == "EM_AARCH64" else C.UC_ARM_REG_LR, stop)
+    uc.reg_write(R(spr), s)
+    uc.emu_start((base + va) | (1 if thumb else 0) if elf.arch == "EM_ARM" else base + va, stop, count=_NLB_STEPS)
+    if uc.reg_read(R(pcr)) & ~1 != stop:
         return None
-    v = uc.reg_read(r(ret))
-    return _dxe_w64(v) if wide else _dxe_w32(v)
+    lo = uc.reg_read(R(retr)) & mask
+    if ret == "Ljava/lang/String;":
+        b = strs.get(lo)
+        return None if b is None else b.decode("utf-8", "replace")
+    if ret == "J":
+        if W == 4:
+            hi = uc.reg_read(C.UC_X86_REG_EDX if elf.arch == "EM_386" else C.UC_ARM_REG_R1)
+            lo |= (hi & 0xFFFFFFFF) << 32
+        return _dxe_w64(lo)
+    lo &= 0xFFFFFFFF
+    return {"Z": lambda x: int(x & 0xFF != 0), "B": lambda x: ((x + 0x80) & 0xFF) - 0x80,
+            "S": lambda x: ((x + 0x8000) & 0xFFFF) - 0x8000, "C": lambda x: x & 0xFFFF}.get(ret, _dxe_w32)(lo)
 
 
 def _nlb_resolver(z):
-    """ref -> callable for static native (J)J / (I)I methods whose Java_<mangled> export sits in lib/<abi>/*.so; the
-    first ABI the bridge can run wins. None when the APK ships no runnable .so."""
+    """ref -> callable(raw registers) for app `native` methods whose Java_<mangled>[__<sig>] export (or a
+    RegisterNatives {name, sig, fn} entry) sits in lib/<abi>/*.so; the first ABI the bridge can run wins. None when
+    the APK ships no runnable .so. The callable returns None when it cannot answer (the VM aborts that chain)."""
     sos = {}
     for i in z.infolist():
         m = re.fullmatch(r"lib/([^/]+)/[^/]+\.so", i.filename)
         if m and m.group(1) in _NLB_ABI_ORDER and 0 < i.file_size <= _NLB_MAX_SO:
             sos.setdefault(m.group(1), []).append(i)
+    if not sos:
+        return None
+    dex = b"".join(z.read(i) for i in z.infolist() if re.fullmatch(r"classes\d*\.dex", i.filename)
+                   and i.file_size <= _DXE_MAX_DEX)
     elves = []
     for abi in _NLB_ABI_ORDER:
         for i in sos.get(abi, []):
@@ -9772,8 +10287,15 @@ def _nlb_resolver(z):
                 elf = _NsoElf(z.read(i))
             except Exception:  # noqa: BLE001 - truncated / impostor .so
                 continue
-            if elf.arch in _NLB_ABI and elf.is64:
-                elves.append((elf, {n: va for n, va, _ in _nso_exports(elf) if n.startswith("Java_")}))
+            if elf.arch not in _NLB_ABI or elf.e != "<" or elf.is64 != (elf.arch in ("EM_X86_64", "EM_AARCH64")):
+                continue
+            ex = {n: va for n, va, _ in _nso_exports(elf) if n.startswith("Java_")}
+            try:
+                reg = {} if ex else dict(reversed(_nso_registered(elf, dex)))
+            except Exception:  # noqa: BLE001
+                reg = {}
+            if ex or reg:
+                elves.append((elf, ex, reg))
     if not elves:
         return None
     cache = {}
@@ -9782,22 +10304,41 @@ def _nlb_resolver(z):
         if ref in cache:
             return cache[ref]
         cache[ref] = None
-        m = re.fullmatch(r"L([^;]+);->([^(]+)\(([JI])\)([JI])", ref)
-        if not m or m.group(3) != m.group(4):
+        m = _NLB_REF.fullmatch(ref)
+        if not m:
             return None
-        name = "Java_%s_%s" % (_nlb_mangle(m.group(1)), _nlb_mangle(m.group(2)))
-        for elf, ex in elves:
-            if name in ex:
-                wide = m.group(3) == "J"
+        short = "Java_%s_%s" % (_nlb_mangle(m.group(1)), _nlb_mangle(m.group(2)))
+        hit = next(((elf, ex[n]) for elf, ex, _ in elves for n in (short, short + "__" + _nlb_mangle(m.group(3)))
+                    if n in ex), None) or next(((elf, reg[m.group(2)]) for elf, _, reg in elves if m.group(2) in reg),
+                                               None)
+        if hit is None:
+            return None
+        ps, rt = _dxe_params(ref), m.group(4)
+        nslots = sum(2 if p == "J" else 1 for p in ps)
 
-                def fn(arg, elf=elf, va=ex[name], wide=wide):
-                    try:
-                        return _nlb_call(elf, va, arg, wide)
-                    except Exception:  # noqa: BLE001 - unmapped access / bad opcode: cannot answer
+        def fn(raw, elf=hit[0], va=hit[1]):
+            if len(raw) not in (nslots, nslots + 1):
+                return None
+            i, args = len(raw) - nslots, []
+            if i:
+                args.append(("this", None))
+            for p in ps:
+                v = raw[i]
+                if p == "Ljava/lang/String;":
+                    if not isinstance(v, str):
                         return None
-                cache[ref] = fn
-                break
-        return cache[ref]
+                    args.append(("s", v))
+                elif isinstance(v, int) and not isinstance(v, bool) or isinstance(v, bool):
+                    args.append(("q" if p == "J" else "w", int(v)))
+                else:
+                    return None
+                i += 2 if p == "J" else 1
+            try:
+                return _nlb_call(elf, va, args, rt)
+            except Exception:  # noqa: BLE001 - unmapped access / bad opcode / trap: cannot answer
+                return None
+        cache[ref] = fn
+        return fn
     return resolve
 
 
@@ -9806,7 +10347,7 @@ def dex_eval_scan(apk, deep=False):
     an array / xor / switch / int-to-char op) is evaluated by a tiny static interpreter -- const / move / arrays /
     fill-array-data / int+long arithmetic / if / goto / packed+sparse switch, in-dex calls and the <clinit>s it reads,
     plus String / StringBuilder / Integer.parseInt / Base64 intrinsics; String params get "", int params 0; an
-    unknown invoke or a float op aborts that method. Every string it builds or returns is regex'd. Covers string-
+    unknown invoke aborts that method; float / double ops follow exact Java semantics (_fx_*). Every string it builds or returns is regex'd. Covers string-
     encryption helpers and switch-flattened control flow without a device. [] when absent; never raises; ~0.8 s.
     deep=True (D23 `codec: analysis`, a puzzle with no data): only the String-returning methods, 2M steps each, return
     values first -- `Release.code(Context)` = a chain of 64-bit mixers fed by 4096-iteration probe solvers, far past
@@ -11863,6 +12404,7 @@ _CTX_JSON = ("Lorg/json/JSONObject;", "Lorg/json/JSONArray;")
 _CTX_JEX = ("Lorg/json/JSONException;",)
 _CTX_RNF = ("Landroid/content/res/Resources$NotFoundException;", "Ljava/lang/RuntimeException;")
 _CTX_PREF = ("Landroid/content/SharedPreferences;", "Landroid/content/SharedPreferences$Editor;")
+_CTX_BYTEORDER = {"Ljava/nio/ByteOrder;->LITTLE_ENDIAN": "LITTLE_ENDIAN", "Ljava/nio/ByteOrder;->BIG_ENDIAN": "BIG_ENDIAN"}
 # (kind, argument, stub answer) of the last context_chain_scan() call
 CONTEXT_STUB_HITS = []
 
@@ -11913,15 +12455,121 @@ def _ctx_jnum(v, w):
     return None
 
 
+# --- X.509 / attestation through CertificateFactory / KeyStore APIs (coverage atlas: analysis-keystore-cert-api-stubs,
+# rows 87, 93). A v2 chain reads a SHIPPED cert: getResources().openRawResource(R.raw.x) / getAssets().open("a.der" |
+# ".pem") / new ByteArrayInputStream(bytes) -> CertificateFactory.getInstance("X.509").generateCertificate(in) /
+# generateCertificates (DER, PEM blocks, concatenated, PKCS#7 .p7b) -> X509Certificate getEncoded / getExtensionValue
+# (the OCTET STRING-wrapped extnValue, e.g. 1.3.6.1.4.1.11129.2.1.17 KeyDescription) / getSerialNumber (BigInteger:
+# longValue truncates) / getNotBefore|NotAfter().getTime() / getSubject|IssuerX500Principal().getName() (RFC 2253) /
+# getPublicKey().getEncoded() (SPKI) / getSignature / getTBSCertificate / getSigAlgName|OID / getVersion /
+# getBasicConstraints / getKeyUsage; KeyStore.getInstance("AndroidKeyStore").load(null).getCertificateChain(alias) =
+# the certs of the shipped assets|res/raw entry named <alias>.* in order (null when none). Values come from asn1crypto
+# over the APK's own bytes; byte[] results are Java signed-byte arrays.
+_X5_TYPES = frozenset(("Ljava/security/cert/CertificateFactory;", "Ljava/security/cert/Certificate;",
+                       "Ljava/security/cert/X509Certificate;", "Ljava/security/KeyStore;",
+                       "Ljavax/security/auth/x500/X500Principal;", "Ljava/security/PublicKey;", "Ljava/security/Key;",
+                       "Ljava/util/Date;"))
+_X5_CEX = ("Ljava/security/cert/CertificateException;", "Ljava/security/GeneralSecurityException;")
+_X5_KEX = ("Ljava/security/KeyStoreException;", "Ljava/security/GeneralSecurityException;")
+_X5_PEM = re.compile(rb"-----BEGIN (?:X509 |TRUSTED )?CERTIFICATE-----\s*([A-Za-z0-9+/=\s]+?)-----END[^\n]*\n?")
+_X5_PEM7 = re.compile(rb"-----BEGIN PKCS7-----\s*([A-Za-z0-9+/=\s]+?)-----END[^\n]*")
+_X5_KW = {"2.5.4.3": "CN", "2.5.4.6": "C", "2.5.4.7": "L", "2.5.4.8": "ST", "2.5.4.10": "O", "2.5.4.11": "OU",
+          "2.5.4.9": "STREET", "0.9.2342.19200300.100.1.25": "DC", "0.9.2342.19200300.100.1.1": "UID"}
+_X5_SIGKEY = {"rsa": "RSA", "rsassa_pkcs1v15": "RSA", "ecdsa": "ECDSA", "dsa": "DSA", "ed25519": "Ed25519",
+              "rsassa_pss": "RSASSA-PSS"}
+
+
+def _x5_der_len(b, i=0):
+    """End offset of the DER SEQUENCE at b[i], or None."""
+    t = _ka_tlv(b, i, len(b)) if i < len(b) and b[i] == 0x30 else None
+    return t[4] if t else None
+
+
+def _x5_load(der):
+    """asn1crypto Certificate over one DER cert with its fields parsed (raises ValueError on a malformed cert)."""
+    from asn1crypto import x509 as _ax
+    try:
+        c = _ax.Certificate.load(der, strict=True)
+        c["tbs_certificate"]["serial_number"].native  # noqa: B018 - force the lazy parse of what the getters read
+        c["tbs_certificate"]["subject"].contents  # noqa: B018
+        c["tbs_certificate"]["subject_public_key_info"].dump()
+        c.not_valid_before  # noqa: B018
+    except Exception as e:  # noqa: BLE001 - any asn1crypto parse error = CertificateException
+        raise ValueError(e) from None
+    return c
+
+
+def _x5_read(b, pos, many):
+    """Java X509Factory over a stream's bytes from pos: [(der, ...)] certs and the new position; ValueError when none.
+    One cert for generateCertificate (DER or the next PEM block), every DER / PEM / PKCS#7 cert for generateCertificates."""
+    out, i = [], pos
+    while i < len(b) and (many or not out):
+        while i < len(b) and b[i] in b" \t\r\n":
+            i += 1
+        if i >= len(b):
+            break
+        if b[i] == 0x30:
+            e = _x5_der_len(b, i)
+            if e is None:
+                raise ValueError("truncated DER")
+            der = bytes(b[i:e])
+            if many and not out and e == len(b) and b"\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x07\x02" in der[:24]:
+                from asn1crypto import cms as _cms
+                try:
+                    sd = _cms.ContentInfo.load(der)["content"]
+                    return [c.chosen.dump() for c in sd["certificates"]], e
+                except Exception as x:  # noqa: BLE001 - not a SignedData
+                    raise ValueError(x) from None
+            out.append(der)
+            i = e
+            continue
+        m = _X5_PEM.search(b, i)
+        m7 = _X5_PEM7.search(b, i) if many and not out else None
+        if m7 and (not m or m7.start() < m.start()):
+            return _x5_read(base64.b64decode(re.sub(rb"\s", b"", m7.group(1))), 0, True)[0], m7.end()
+        if not m or (b[i:m.start()].strip() and not b[i:m.start()].isascii()):
+            break
+        out.append(base64.b64decode(re.sub(rb"\s", b"", m.group(1))))
+        i = m.end()
+    if not out:
+        raise ValueError("no certificate")
+    return out, i
+
+
+def _x5_rfc2253(name):
+    """X500Principal.getName() (RFC 2253): RDNs last-first, keyword=value with ,=+<>#;"\\ escaped, unknown types as
+    OID=#hex of the value's DER."""
+    rdns = []
+    for rdn in reversed(list(name.chosen)):
+        avas = []
+        for ava in rdn:
+            oid = ava["type"].dotted
+            kw = _X5_KW.get(oid)
+            v = ava["value"]
+            if kw is None:
+                avas.append(f"{oid}=#{v.dump().hex()}")
+                continue
+            s = v.native if isinstance(v.native, str) else str(v.native)
+            s = "".join("\\" + ch if ch in ',=+<>#;"\\' else ch for ch in s)
+            if s.startswith(" "):
+                s = "\\" + s
+            if s.endswith(" ") and not s.endswith("\\ "):
+                s = s[:-1] + "\\ "
+            avas.append(f"{kw}={s}")
+        rdns.append("+".join(avas))
+    return ",".join(rdns)
+
+
 class _CtxVM(_DxeDeepVM, _EnvVM):
     """_DxeDeepVM on the clean Pixel (_EnvVM) holding a Context whose assets / resources / package facts are the APK's."""
 
     def __init__(self, dx, deadline, facts, z, prefs):
         _EnvVM.__init__(self, dx, deadline)
         self.apk, self.z, self.prefs, self.tab = facts, z, prefs, None
+        self.statics.update(_CTX_BYTEORDER)
 
     def new_instance(self, t):
-        if t in _CTX_JSON:
+        if t in _CTX_JSON or t == "Ljava/io/ByteArrayInputStream;":
             return _DxObj(t)
         return super().new_instance(t)
 
@@ -11956,6 +12604,243 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
         o.f["J"] = v
         return o
 
+    def bbuf(self, cls, name, sig, o, a):  # noqa: C901 - java.nio.ByteBuffer's heap-buffer accessors
+        """ByteBuffer.wrap / allocate over a byte[] (shared, Java's position / limit / order), relative and absolute
+        get / put of byte .. long, array / position / remaining / flip / rewind; ByteOrder.nativeOrder (aarch64 LE)."""
+        if cls == "Ljava/nio/ByteOrder;" and o is None:
+            if name == "nativeOrder":
+                return "LITTLE_ENDIAN"
+            raise _DxAbort
+        if o is None or "bb" not in o.f:
+            if name == "wrap" and a and isinstance(a[0], list):
+                off, n = (a[1], a[2]) if len(a) >= 3 else (0, len(a[0]))
+                if not (isinstance(off, int) and isinstance(n, int) and 0 <= off and 0 <= n and off + n <= len(a[0])):
+                    raise _DxAbort
+                arr = a[0]
+            elif name in ("allocate", "allocateDirect") and a and isinstance(a[0], int) and 0 <= a[0] <= 1 << 20:
+                arr, off, n = _dxe_barr(bytes(a[0])), 0, a[0]
+            else:
+                raise _DxAbort
+            bb = _DxObj("Ljava/nio/ByteBuffer;")
+            bb.f.update(bb=arr, pos=off, lim=off + n, le=False)
+            return bb
+        f = o.f
+        arr, pos, lim = f["bb"], f["pos"], f["lim"]
+        bo = "little" if f["le"] else "big"
+        if name == "order":
+            if sig.startswith(")"):
+                return "LITTLE_ENDIAN" if f["le"] else "BIG_ENDIAN"
+            if not a or a[0] not in ("LITTLE_ENDIAN", "BIG_ENDIAN"):
+                raise _DxAbort
+            f["le"] = a[0] == "LITTLE_ENDIAN"
+            return o
+        simple = {"array": arr, "position": pos, "limit": lim, "capacity": len(arr), "remaining": lim - pos,
+                  "hasRemaining": int(lim > pos), "arrayOffset": 0, "hasArray": 1, "isDirect": 0, "isReadOnly": 0}
+        if name in simple and sig.startswith(")"):
+            return simple[name]
+        if name in ("rewind", "flip", "clear") and sig.startswith(")"):
+            f["lim"] = pos if name == "flip" else len(arr) if name == "clear" else lim
+            f["pos"] = 0
+            return o
+        if name in ("position", "limit") and a and isinstance(a[0], int):
+            if not 0 <= a[0] <= (lim if name == "position" else len(arr)):
+                raise _DxAbort
+            f["pos" if name == "position" else "lim"] = a[0]
+            f["pos"] = min(f["pos"], f["lim"])
+            return o
+        width = {"": 1, "Short": 2, "Char": 2, "Int": 4, "Long": 8}
+        kind = name[3:] if name[:3] in ("get", "put") else None
+        if kind not in width:
+            raise _DxAbort
+        w, args = width[kind], [x for x in a if x is not None]
+        if name == "get" and sig.startswith("[") or sig.startswith("Ljava/nio/"):
+            raise _DxAbort
+        if name == "put" and sig.startswith("[B"):  # bulk put(byte[] [, off, len])
+            src = args[0] if args and isinstance(args[0], list) else None
+            if src is None:
+                raise _DxAbort
+            s0, sn = (args[1], args[2]) if len(args) >= 3 else (0, len(src))
+            if not (0 <= s0 and 0 <= sn and s0 + sn <= len(src)) or pos + sn > lim:
+                raise _DxAbort
+            arr[pos:pos + sn] = [(x & 0xFF ^ 0x80) - 0x80 for x in src[s0:s0 + sn]]
+            f["pos"] = pos + sn
+            return o
+        absolute = sig.startswith("I)") if name.startswith("get") else sig[:2] in ("IB", "IS", "IC", "II", "IJ")
+        i = args.pop(0) if absolute else pos
+        if not isinstance(i, int) or i < 0 or i + w > lim:
+            raise _DxAbort
+        if not absolute:
+            f["pos"] = pos + w
+        if name.startswith("get"):
+            return int.from_bytes(bytes(x & 0xFF for x in arr[i:i + w]), bo, signed=kind != "Char")
+        if not args or not isinstance(args[0], int):
+            raise _DxAbort
+        arr[i:i + w] = [(x ^ 0x80) - 0x80 for x in (args[0] & ((1 << 8 * w) - 1)).to_bytes(w, bo)]
+        return o
+
+    def cert_obj(self, der):
+        try:
+            c = _x5_load(der)
+        except ValueError:
+            raise _DxThrow(*_X5_CEX) from None
+        x = _DxObj("Ljava/security/cert/X509Certificate;")
+        x.f.update(X=der, c=c)
+        return x
+
+    def shipped_chain(self, alias):
+        """Certs of the assets / res/raw entry whose file stem is `alias` (AndroidKeyStore's provisioned chain)."""
+        for n in sorted(self.z.NameToInfo):
+            if n.startswith(("assets/", "res/raw/")) and n.rsplit("/", 1)[-1].split(".", 1)[0] == alias \
+                    and self.z.getinfo(n).file_size <= _CTX_MAX_ASSET:
+                try:
+                    return n, _x5_read(self.z.read(n), 0, True)[0]
+                except ValueError:
+                    continue
+        return None, []
+
+    def x509(self, cls, name, sig, o, a):  # noqa: C901 - CertificateFactory / X509Certificate / KeyStore / Date models
+        f = o.f if o is not None else {}
+        if cls == "Ljava/security/cert/CertificateFactory;" and name == "getInstance" and o is None:
+            if not a or not isinstance(a[0], str) or a[0].upper().replace(".", "") != "X509":
+                raise _DxThrow(*_X5_CEX)
+            self.log_probe("CertificateFactory.getInstance", a[0], "X.509")
+            return _DxObj(cls)
+        if o is not None and o.t == "Ljava/security/cert/CertificateFactory;":
+            if name not in ("generateCertificate", "generateCertificates") or not a or not isinstance(a[0], _DxObj) \
+                    or "B" not in a[0].f:
+                raise _DxAbort
+            s = a[0]
+            try:
+                ders, s.f["pos"] = _x5_read(s.f["B"], s.f["pos"], name == "generateCertificates")
+            except (ValueError, binascii.Error):
+                raise _DxThrow(*_X5_CEX) from None
+            certs = [self.cert_obj(d) for d in ders[:64]]
+            self.log_probe("CertificateFactory." + name, f"{len(s.f['B'])} bytes", f"{len(certs)} cert(s)")
+            if name == "generateCertificate":
+                return certs[0]
+            lst = _DxObj("Ljava/util/Collection;")
+            lst.f["sl"] = certs
+            return lst
+        if cls == "Ljava/security/KeyStore;" and o is None:
+            if name == "getInstance" and a and a[0] == "AndroidKeyStore":
+                self.log_probe("KeyStore.getInstance", a[0], "AndroidKeyStore")
+                return _DxObj(cls)
+            if name == "getDefaultType":
+                return "BKS"
+            raise _DxThrow(*_X5_KEX)
+        if o is not None and o.t == "Ljava/security/KeyStore;":
+            if name == "load":
+                if any(x not in (None, 0) for x in a):  # load(null) / load(null, null): a const/4 0 register is null
+                    raise _DxAbort
+                f["ld"] = True
+                return None
+            if not f.get("ld"):
+                raise _DxThrow(*_X5_KEX)
+            if name in ("getCertificateChain", "getCertificate", "containsAlias", "isCertificateEntry") and a \
+                    and isinstance(a[0], str):
+                n, ders = self.shipped_chain(a[0])
+                self.log_probe("KeyStore." + name, a[0], f"{n}: {len(ders)} cert(s)" if n else "null")
+                if name == "containsAlias":
+                    return int(bool(ders))
+                if name == "isCertificateEntry":
+                    return 0
+                if not ders:
+                    return None
+                certs = [self.cert_obj(d) for d in ders[:16]]
+                if name == "getCertificate":
+                    return certs[0]
+                r = _DxArr(certs)
+                r.t = "Ljava/security/cert/Certificate;"
+                return r
+            raise _DxAbort
+        if o is not None and "X" in f:
+            c, der = f["c"], f["X"]
+            tbs = c["tbs_certificate"]
+            if name in ("getEncoded", "getTBSCertificate", "getSignature"):
+                return _dxe_barr(der if name == "getEncoded" else tbs.dump() if name == "getTBSCertificate"
+                                 else c["signature_value"].contents[1:])
+            if name == "getExtensionValue" and a and isinstance(a[0], str):
+                for e in tbs["extensions"] or ():
+                    if e["extn_id"].dotted == a[0]:
+                        v = e["extn_value"].contents
+                        ln = len(v)
+                        hdr = bytes([ln]) if ln < 0x80 else bytes([0x80 | (ln.bit_length() + 7) // 8]) + ln.to_bytes(
+                            (ln.bit_length() + 7) // 8, "big")
+                        self.log_probe("X509Certificate.getExtensionValue", a[0], f"{len(v)} bytes")
+                        return _dxe_barr(b"\x04" + hdr + v)
+                return self.log_probe("X509Certificate.getExtensionValue", a[0], None)
+            if name == "getSerialNumber":
+                return _dxe_bi(tbs["serial_number"].native)
+            if name in ("getNotBefore", "getNotAfter"):
+                dt = c.not_valid_before if name == "getNotBefore" else c.not_valid_after
+                d = _DxObj("Ljava/util/Date;")
+                d.f["ms"] = int(dt.timestamp() * 1000)
+                return d
+            if name in ("getSubjectX500Principal", "getIssuerX500Principal"):
+                p = _DxObj("Ljavax/security/auth/x500/X500Principal;")
+                p.f["N"] = tbs["subject" if name.startswith("getSubject") else "issuer"]
+                return p
+            if name == "getPublicKey":
+                k = _DxObj("Ljava/security/PublicKey;")
+                k.f["K"] = tbs["subject_public_key_info"]
+                return k
+            if name == "getVersion":
+                return tbs["version"].native and int(tbs["version"].native[1:]) or 1
+            if name == "getType":
+                return "X.509"
+            if name == "getSigAlgOID":
+                return c["signature_algorithm"]["algorithm"].dotted
+            if name == "getSigAlgName":
+                sa = c["signature_algorithm"]
+                ka = _X5_SIGKEY.get(sa.signature_algo)
+                if ka is None:
+                    raise _DxAbort
+                return ka if ka in ("Ed25519", "RSASSA-PSS") else f"{sa.hash_algo.upper()}with{ka}"
+            if name == "getBasicConstraints":
+                bc = c.basic_constraints_value
+                if bc is None or not bc["ca"].native:
+                    return -1
+                pl = bc["path_len_constraint"].native
+                return 0x7FFFFFFF if pl is None else pl
+            if name == "getKeyUsage":
+                ku = c.key_usage_value
+                if ku is None:
+                    return None
+                bits = ["digital_signature", "non_repudiation", "key_encipherment", "data_encipherment",
+                        "key_agreement", "key_cert_sign", "crl_sign", "encipher_only", "decipher_only"]
+                r = _DxArr(int(b in ku.native) for b in bits)
+                r.t = "Z"
+                return r
+            raise _DxAbort
+        if o is not None and "N" in f:
+            if name == "getName" and (not a or a[0] == "RFC2253"):
+                return _x5_rfc2253(f["N"])
+            if name == "getEncoded":
+                return _dxe_barr(f["N"].dump())
+            if name in ("toString", "hashCode", "equals"):
+                raise _DxAbort
+            raise _DxAbort
+        if o is not None and "K" in f:
+            k = f["K"]
+            if name == "getEncoded":
+                return _dxe_barr(k.dump())
+            if name == "getFormat":
+                return "X.509"
+            if name == "getAlgorithm":
+                return {"rsa": "RSA", "ec": "EC", "dsa": "DSA", "ed25519": "Ed25519"}.get(k.algorithm) or (
+                    _ for _ in ()).throw(_DxAbort)
+            raise _DxAbort
+        if o is not None and "ms" in f:
+            ms = f["ms"]
+            if name == "getTime":
+                return ms
+            b = a[0].f.get("ms") if a and isinstance(a[0], _DxObj) else None
+            if b is not None and name in ("before", "after", "compareTo", "equals"):
+                return {"before": int(ms < b), "after": int(ms > b), "equals": int(ms == b),
+                        "compareTo": (ms > b) - (ms < b)}[name]
+            raise _DxAbort
+        return _ENV_UNSET
+
     def ctx(self, ref, raw):  # noqa: C901 - one table of Context-backed models
         cls, rest = ref.split("->", 1)
         name, sig = rest.split("(", 1)
@@ -11965,6 +12850,25 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
         pkg = self.apk["pkg"]
         if t in _CTX_JSON or cls in _CTX_JSON:
             return self.json_call(cls, name, sig, o, a)
+        if t == "Ljava/nio/ByteBuffer;" or cls in ("Ljava/nio/ByteBuffer;", "Ljava/nio/ByteOrder;"):
+            return self.bbuf(cls, name, sig, o, a)
+        if (t in _X5_TYPES or cls in _X5_TYPES) and (o is None or o.t != "Ljava/util/Date;" or "ms" in o.f):
+            v = self.x509(cls, name, sig, o, a)
+            if v is not _ENV_UNSET:
+                return v
+        if cls == "Ljava/io/ByteArrayInputStream;" and name == "<init>" and o is not None and a \
+                and isinstance(a[0], list):
+            off, n = (a[1], a[2]) if len(a) >= 3 else (0, len(a[0]))
+            if not (isinstance(off, int) and isinstance(n, int) and 0 <= off and 0 <= n and off + n <= len(a[0])):
+                raise _DxAbort
+            o.f.update(B=_dxe_bytes(a[0][off:off + n]), pos=0)
+            return None
+        if t in ("Ljava/util/zip/ZipFile;", "Ljava/util/jar/JarFile;") and o.f.get("zip") and name == "getInputStream" \
+                and a and isinstance(a[0], _DxObj) and "zn" in a[0].f:  # the shipped entry bytes (own dex / asset)
+            i = self.z.NameToInfo.get(a[0].f["zn"])
+            if i is None or i.file_size > _CTX_MAX_ASSET:
+                raise _DxAbort
+            return self.stream("ZipFile.getInputStream", i.filename, self.z.read(i))
         if o is not None and "B" in o.f:  # an asset stream
             b, pos = o.f["B"], o.f["pos"]
             if name == "read" and sig.startswith(")"):
@@ -12049,6 +12953,13 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
                 raise _DxAbort
             return self.log_probe("Resources." + name, f"{a[0]:#x}", v)
         if t == "Landroid/content/res/Resources;" or cls == "Landroid/content/res/Resources;":
+            if name == "openRawResource" and a and isinstance(a[0], int):
+                v = self.res(a[0])
+                i = self.z.NameToInfo.get(v) if isinstance(v, str) else None
+                if i is None or i.file_size > _CTX_MAX_ASSET:
+                    self.log_probe("Resources.openRawResource", f"{a[0]:#x}", "NotFoundException")
+                    raise _DxThrow(*_CTX_RNF)
+                return self.stream("Resources.openRawResource", f"{a[0]:#x}", self.z.read(i))
             if name == "getIdentifier" and len(a) >= 2 and all(isinstance(x, str) or x is None for x in a[:3]):
                 n, ty = a[0], a[1]
                 m = re.fullmatch(r"(?:[\w.]+:)?(\w+)/(\w+)", n)
@@ -12214,7 +13125,8 @@ def context_chain_scan(apk):
     deep evaluator on a clean retail Pixel whose Context answers from the APK's own bytes: assets (AssetManager.open ->
     zip entry, InputStream read / available / readAllBytes, readers), org.json JSONObject / JSONArray accessors,
     resources.arsc strings by id / getIdentifier, package name, PackageInfo (signer cert, versionCode / versionName,
-    install times), ApplicationInfo.flags (manifest debuggable), SharedPreferences (defaults; put + apply read back),
+    install times), ApplicationInfo.flags (manifest debuggable), ZipFile(sourceDir).getInputStream (the shipped dex /
+    asset bytes), ByteBuffer wrap / getLong / order, SharedPreferences (defaults; put + apply read back),
     Settings.Secure ANDROID_ID (a fixed 16-hex id), System.getProperty (ART's values), plus clean_device_scan's root /
     emulator / hook / installer / tamper / Build / clock tables. Returned values first, then strings the run built.
     CONTEXT_STUB_HITS logs every stub answer. [] when absent; never raises; < 1.5 s."""

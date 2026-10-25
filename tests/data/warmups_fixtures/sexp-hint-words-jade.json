@@ -1,0 +1,9 @@
+{
+ "codec": "sexp",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lemur-82",
+ "encoded": "(3:msg[10:text/plain]5:Nice 5:work 9:decoding 5:this 8:warmup! 3:To 7:solve, 7:submit 5:this 6:exact 7:answer 3:to 4:the 5:Game 8:Master: 13:jade-lemur-82)",
+ "generator_cmd": "python3 -I -c \"import sys, json; plain=sys.argv[1]; print('(msg [text/plain] ' + ' '.join(json.dumps(w) for w in words incl. trailing space) + ')')\" \"$plain\" | tools/nettle-bin/usr/bin/sexp-conv -s canonical",
+ "oracle_cmd": "tools/nettle-bin/usr/bin/sexp-conv -s advanced -w 0 | python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-sexpdata'); import sexpdata as S\ndef w(v, nohead=True):\n if isinstance(v,list): return ''.join(w(x) for x in v[(1 if nohead and len(v)>1 and isinstance(v[0],S.Symbol) else 0):] if not isinstance(x,S.Brackets))\n return str(v)\nprint(w(S.loads(sys.stdin.read(), nil=None, true=None, false=None)), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lemur-82",
+ "expected": "match"
+}

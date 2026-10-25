@@ -1,0 +1,9 @@
+{
+ "codec": "length-prefix",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-35",
+ "encoded": "CgVOaWNlIAoFd29yayAKCWRlY29kaW5nIAoFdGhpcyAKCHdhcm11cCEgCgNUbyAKB3NvbHZlLCAKB3N1Ym1pdCAKBXRoaXMgCgZleGFjdCAKB2Fuc3dlciAKA3RvIAoEdGhlIAoFR2FtZSAKCE1hc3RlcjogCg9tYXBsZS1iYWRnZXItMzU=",
+ "generator_cmd": "/home/testpwn/huntress-2026/.venv/bin/python3 -c \"import os, sys; from google.protobuf import descriptor_pb2 as d, descriptor_pool as p, message_factory as m; f = d.FileDescriptorProto(name='w.proto', package='w'); t = f.message_type.add(name='W'); t.field.add(name='w', number=1, type=9, label=3); p.Default().Add(f); W = m.GetMessageClass(p.Default().FindMessageTypeByName('w.W')); import re; sys.stdout.buffer.write(W(w=re.findall(r'\\S+\\s*', os.environ['plain'])).SerializeToString())\"| base64 -w0   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | /home/testpwn/huntress-2026/.venv/bin/python3 -c \"import sys; from google.protobuf import descriptor_pb2 as d, descriptor_pool as p, message_factory as m; f = d.FileDescriptorProto(name='w.proto', package='w'); t = f.message_type.add(name='W'); t.field.add(name='w', number=1, type=9, label=3); p.Default().Add(f); W = m.GetMessageClass(p.Default().FindMessageTypeByName('w.W')); x = W(); x.ParseFromString(sys.stdin.buffer.read()); print(''.join(x.w), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-35",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "usnjrnl.record_count",
+ "expected": "none",
+ "generator_cmd": "cp tests/data/meta_fixtures/mft/timestomped_single__file_name.bin (an NTFS FILE record from GENERATOR_mft_struct.py.txt renamed as $J)",
+ "oracle_cmd": "head -c4 <bin> -> 'FILE' (MFT record magic, not a USN record); PYTHONPATH=tools/pylib-dissect .venv/bin/python -P tests/data/meta_fixtures/usn/ORACLE_usn_dissect.py.txt <bin> -> ValueError 'Unsupported USN_RECORD version' (no USN record)  (same bytes/oracle as usn/decoy_mft_record__record_count; fmt alias usnjrnl)",
+ "decoy": true,
+ "member": "$J"
+}

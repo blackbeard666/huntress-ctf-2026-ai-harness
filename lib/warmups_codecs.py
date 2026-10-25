@@ -68,6 +68,22 @@ def _toks(t):
     return [x for x in re.split(r"[\s,]+", t.strip()) if x]
 
 
+def netstr_dec(t):
+    """D24: concatenated netstrings `<len>:<data>,` (len in characters) -> the joined data; raises unless the WHOLE
+    text parses (a ',' data char is `1:,,`)."""
+    t, out, i = t.strip(), [], 0
+    while i < len(t):
+        m = re.compile(r"(\d+):").match(t, i)
+        j = m.end() if m else -1
+        if not m or t[j + int(m.group(1)):j + int(m.group(1)) + 1] != ",":
+            raise ValueError("not a netstring run")
+        out.append(t[j:j + int(m.group(1))])
+        i = j + int(m.group(1)) + 1
+    if not out:
+        raise ValueError("empty")
+    return "".join(out)
+
+
 def _gz9f(b):
     """gzip as the GM writes it (D21): zlib wbits 31 (mtime 0, OS 3), level 9 (XFL 2), memLevel 8, Z_FILTERED."""
     c = zlib.compressobj(9, zlib.DEFLATED, 31, 8, zlib.Z_FILTERED)
@@ -136,6 +152,9 @@ DAYS = [
     # d271467d line 23)
     (23, "ascii85-adobe", lambda s: base64.a85encode(_u(s), adobe=True).decode(),
      lambda t: _t(base64.a85decode(re.sub(r"\s+", "", t), adobe=True)), False),
+    # D24 "String Theory" ("Count carefully. The comma knows where to stop."): one netstring per character, `1:c,`
+    # concatenated, no separators (byte-exact on the Single, TT 6b420728 and 118/118 Mastery 39a9fb2c line 24)
+    (24, "netstring", lambda s: "".join(f"1:{c}," for c in s), netstr_dec, False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -8207,6 +8226,9 @@ def plaintext(blob, slug, deadline=None, hints=()):
     tc = textcomp_dec(text.strip())   # whole-input text compression (RLE '1N1i..'): a looser stage reads it as junk + slug
     if tc and _TPL in tc and tc.rstrip().endswith(slug):
         return tc.strip()
+    lp = lenpfx_dec(text.strip())   # length-prefix frames: the protobuf walk keeps one field, `0eNice ..` reads as text
+    if lp and _TPL in lp and slug in lp:
+        return lp.strip()
     try:
         d = decode.decode_chunk(text.strip())
     except Exception:  # noqa: BLE001
@@ -14541,6 +14563,165 @@ CANDIDATES += [(f"inflate-container-{f}", (lambda f: lambda s: container_enc(s, 
                for f in ("git-blob", "png-ztxt", "png-itxt", "http-chunked-gzip")]
 
 
+# HTTP/1.1 CHUNKED TRANSFER as a text framing (speculative, no day; coverage atlas target http-chunked-transfer,
+# "Count carefully" in base 16): `<hex size>[;ext[=val]]` CRLF, exactly size bytes (UTF-8; chars as a fallback), CRLF,
+# ... a 0 chunk ends (trailer headers / the final blank line optional, LF-only lines tolerated, a run that stops
+# cleanly at a chunk boundary without the 0 chunk is kept). Also the one-line form with literal `\r\n` / `\n` escapes
+# (a Mastery line), an HTTP message carrying it, every _dz_wrappers reading, and a gzip / zlib / raw deflate / br /
+# zstd body (inflate-container's _ic_* helpers). Inflate-container keeps the HTTP-message / bare compressed forms;
+# this adds the plain bare body. chunked_reads(t) -> [(form, text)]. Never raises.
+_HC_SIZE = {bytes: re.compile(rb"[ \t]*([0-9A-Fa-f]{1,16})[ \t]*(;[^\r\n]*)?\r?(?:\n|\Z)"),
+            str: re.compile(r"[ \t]*([0-9A-Fa-f]{1,16})[ \t]*(;[^\r\n]*)?\r?(?:\n|\Z)")}
+
+
+def _hc_dechunk(b):
+    """bytes (size = bytes) or str (size = characters) -> (payload, ended_by_0) for a WHOLE chunked body, else None."""
+    rx, crlf, lf = _HC_SIZE[type(b)], *(("\r\n", "\n") if isinstance(b, str) else (b"\r\n", b"\n"))
+    out, i, n, k = [], 0, len(b), 0
+    while True:
+        if i >= n or not b[i:].strip():
+            return (b[:0].join(out), False) if k >= 2 else None    # clean stop at a chunk boundary, no 0 chunk
+        m = rx.match(b, i)
+        if not m:
+            return None
+        size, i = int(m.group(1), 16), m.end()
+        if size == 0:
+            return (b[:0].join(out), True) if k else None          # trailers / final CRLF ignored
+        if i + size > n:
+            return None                                            # truncated mid-chunk
+        out.append(b[i:i + size])
+        i, k = i + size, k + 1
+        if b[i:i + 2] == crlf:
+            i += 2
+        elif b[i:i + 1] == lf:
+            i += 1
+        elif i < n:
+            return None                                            # size disagrees with the data
+
+
+def _hc_unescape(t):
+    """One-line text with literal \\r\\n / \\n escapes (and no real newline) -> the real-newline text, else None."""
+    if "\n" in t.strip() or not re.search(r"\\r\\n|\\n", t):
+        return None
+    return re.sub(r"\\r\\n|\\n|\\r", lambda m: {"\\r\\n": "\r\n", "\\n": "\n", "\\r": "\r"}[m.group()], t)
+
+
+def _hc_body(form, d):
+    """[(form, text)] for a de-chunked payload: printable text as-is, else one content coding undone."""
+    if isinstance(d, str):
+        return [(form, d)] if d.strip() and _txt(d.encode("utf-8")) is not None else []
+    s = _txt(d)
+    if s is not None and s.strip():
+        return [(form, s)]
+    z = _ic_inflate(d)
+    if z:
+        s = _txt(z[1])
+        return [(f"{form}-{z[0]}", s)] if s and s.strip() else []
+    for enc in ("br", "zstd"):
+        x = _ic_coding(d, enc)
+        s = _txt(x) if x else None
+        if s and s.strip():
+            return [(f"{form}-{enc}", s)]
+    return []
+
+
+def _hc_bytes(form, b):
+    """[(form, text)] for one candidate buffer (an HTTP message, else a bare chunked body: bytes, then chars)."""
+    if isinstance(b, bytes) and _IC_HTTP.match(b):
+        h = _ic_http(b)
+        return [(f"{form}-{h[0]}", s) for _f, s in _ic_text(*h)] if h and "chunked" in h[0] else []
+    if not _HC_SIZE[type(b)].match(b):
+        return []
+    r = _hc_dechunk(b)
+    if r:
+        return _hc_body(form + ("" if r[1] else "-no0"), r[0])
+    return []
+
+
+def chunked_reads(t):
+    """[(form, text)] for every reading of `t` as an HTTP/1.1 chunked body (raw / escaped one-line / wrapped)."""
+    out = []
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t)
+            out += _hc_bytes("raw", t)
+            try:
+                t = t.decode("utf-8")
+            except UnicodeDecodeError:
+                return out
+        if not isinstance(t, str) or not t.strip() or len(t) > 1 << 20:
+            return out
+        texts = [("text", t.lstrip(" \t"))]
+        u = _hc_unescape(t.strip())
+        if u is not None:
+            texts.append(("escaped", u))
+        for form, s in texts:
+            b = s.encode("utf-8")
+            r = _hc_bytes(form, b)
+            if not r and not s.isascii():
+                r = _hc_bytes(form + "-chars", s)
+            out += r
+        if not out:
+            for wrapper, b in _dz_wrappers(t):
+                if len(b) >= 5:
+                    out += _hc_bytes(wrapper, b)
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+    return list(dict.fromkeys(out))
+
+
+def chunked_dec(t):
+    """The slug-holding de-chunked text of `t` (else the first reading), else None."""
+    r = [_sr_pick(s) for _f, s in chunked_reads(t)]
+    return next((s for s in r if SLUG.search(s)), r[0] if r else None)
+
+
+def chunked_free(p):
+    """Speculative Mastery-line decoder: one line that is an escaped / wrapped chunked body -> its text."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for s in dict.fromkeys(_sr_pick(x).strip("\r\n") for _f, x in chunked_reads(p))
+                if s and s.isprintable()][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def chunked_enc(s, sizes=(16,), eol="\r\n", ext="", final=True, escaped=False, coding=None, upper=False):
+    """Plain -> an HTTP/1.1 chunked body: chunks cycling through `sizes` (0 = one chunk per word incl. its space),
+    hex size (`upper` digits) + `ext` chunk extension, `eol` line ends, the '0' chunk + blank line when `final`,
+    `escaped` = one line with literal \\r\\n, `coding` gzip / deflate = the compressed body base64'd."""
+    b = _u(s)
+    if coding:
+        b = gzip.compress(b, mtime=0) if coding == "gzip" else zlib.compress(b)
+    if sizes == (0,):
+        parts = re.findall(rb"\S+\s*", b)
+    else:
+        parts, i, k = [], 0, 0
+        while i < len(b):
+            parts.append(b[i:i + sizes[k % len(sizes)]])
+            i, k = i + sizes[k % len(sizes)], k + 1
+    e = eol.encode()
+    out = b"".join((b"%X" if upper else b"%x") % len(c) + ext.encode() + e + c + e for c in parts)
+    out += (b"0" + e + e) if final else b""
+    if coding:
+        return base64.b64encode(out).decode()
+    t = out.decode("utf-8")
+    return t.replace("\r", "\\r").replace("\n", "\\n") if escaped else t
+
+
+CANDIDATES += [
+    ("http-chunked-1char", lambda s: chunked_enc(s, (1,)), chunked_dec),
+    ("http-chunked-words", lambda s: chunked_enc(s, (0,)), chunked_dec),
+    ("http-chunked-16", lambda s: chunked_enc(s, (16,), upper=True), chunked_dec),
+    ("http-chunked-ext", lambda s: chunked_enc(s, (10,), ext=";name=value"), chunked_dec),
+    ("http-chunked-lf", lambda s: chunked_enc(s, (7,), eol="\n", final=False), chunked_dec),
+    ("http-chunked-escaped", lambda s: chunked_enc(s, (8,), escaped=True), chunked_dec),
+    ("http-chunked-gzip-b64", lambda s: chunked_enc(s, (32,), coding="gzip"), chunked_dec),
+]
+
+
 # ------------------------------------------------------------ text-level compression (keyless 'pressure' / 'squeeze')
 # Compression written out as TEXT, no binary bytes: run-length ('3a2b' count-first / 'a3b2' count-after, count always
 # >= 1 or omitted for a single char, a digit char optionally '\'-escaped), LZ77 '(offset,length,char)' tuples (offset =
@@ -15804,6 +15985,1835 @@ CANDIDATES += [("zalgo", zalgo_enc, zalgo_dec), ("zalgo-mini", lambda s: zalgo_e
                ("zalgo-spaces", lambda s: zalgo_enc(s, space=True), zalgo_dec)]
 
 
+# NETSTRING KNOBS (speculative, no day; D24 "String Theory" = 1-char frames, netstr_dec): `<len>:<payload>,` frames
+# with len > 1 / mixed lengths, len counted in UTF-8 BYTES (DJB spec) or in characters, leading zeros, whitespace or
+# newlines between frames, a missing final ',', nested netstrings, and frames whose payload is itself a strict chunk
+# codec (base64 / hex / ... per frame or over the joined payload). The WHOLE text must parse.
+_NS_LEN = {bytes: re.compile(rb"\s*([0-9]{1,7}):"), str: re.compile(r"\s*([0-9]{1,7}):")}
+
+
+def _ns_frames(b):
+    """bytes (len = UTF-8 bytes) or str (len = characters) -> [payload] when the WHOLE buffer is a netstring run
+    (optional whitespace between frames, the last frame may lack its ','), else None."""
+    rx, comma = _NS_LEN[type(b)], b"," if isinstance(b, bytes) else ","
+    out, i, n = [], 0, len(b)
+    while True:
+        while i < n and b[i:i + 1].isspace():
+            i += 1
+        if i >= n:
+            return out or None
+        m = rx.match(b, i)
+        if not m:
+            return None
+        j = m.end()
+        k = j + int(m.group(1))
+        if k > n:
+            return None
+        out.append(b[j:k])
+        if b[k:k + 1] == comma:
+            i = k + 1
+        elif not b[k:].strip():
+            return out          # missing final comma (only the last frame)
+        else:
+            return None
+
+
+def _ns_runs(t):
+    """[(unit, [payload str])] for every unit (UTF-8 bytes, characters) under which the whole text parses."""
+    runs = []
+    try:
+        fb = _ns_frames(t.encode("utf-8"))
+        if fb:
+            runs.append(("bytes", [x.decode("utf-8") for x in fb]))
+    except UnicodeDecodeError:  # a byte count that splits a multibyte char
+        pass
+    if not t.isascii():
+        fc = _ns_frames(t)
+        if fc and (not runs or fc != runs[0][1]):
+            runs.append(("chars", fc))
+    return runs
+
+
+def _ns_english(s):
+    return bool(s) and s.isprintable() and _texty(s) >= 0.85 and (
+        bool(_tc_piece(s)) or (" " in s.strip() and bool(re.search(r"[A-Za-z]{2}", s))))
+
+
+def netstr_any_reads(t, _depth=0):
+    """[(how, text)] readings of a whole-text netstring run, best first; [] when it is not one."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 200000 or not re.match(r"\s*\d", t):
+            return []
+        from lib import decode as _dc
+        reads = []
+        for unit, pay in _ns_runs(t.strip()):
+            joined = "".join(pay)
+            if not joined.strip():
+                continue
+            if _depth < 4:
+                if all(re.match(r"\s*\d+:", p) for p in pay):
+                    inner = [netstr_any_reads(p, _depth + 1) for p in pay]     # every payload a netstring run
+                    if all(inner):
+                        reads.append((f"nested-{unit}", "".join(r[0][1] for r in inner)))
+                ij = netstr_any_reads(joined, _depth + 1)                      # or the frames chop one inner stream
+                if ij:
+                    reads.append((f"nested-joined-{unit}", ij[0][1]))
+            reads.append((unit, joined))
+            if not _ns_english(joined):
+                # coded frames: a strict chunk codec per payload or over the joined payload, kept only if it reads
+                per = [_dc.decode_chunk(p, _nested=True) if p.strip() else p for p in pay]
+                if all(x is not None for x in per) and _ns_english("".join(per)):
+                    reads.append((f"{unit}-per-frame", "".join(per)))
+                whole = _dc.decode_chunk(joined, _nested=True)
+                if whole is not None and _ns_english(whole):
+                    reads.append((f"{unit}-joined", whole))
+        seen = set()
+        reads = [r for r in reads if not (r[1] in seen or seen.add(r[1]))]
+        return sorted(reads, key=lambda r: (not (SLUG.search(r[1]) and _TPL in r[1]), not _ns_english(r[1])))
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def netstr_any(t):
+    """Whole text = a netstring run (any knob above) -> its best reading, else None."""
+    r = netstr_any_reads(t)
+    return r[0][1] if r else None
+
+
+def netstr_any_free(p):
+    """Speculative Mastery-line decoder: a fragment that is a whole netstring run (len > 1, bytes or chars, nested,
+    coded frames) -> its readings, leading indent kept. D24's 1-char strict form stays netstr_dec's."""
+    try:
+        if not isinstance(p, str) or not re.match(r"\s*\d{1,7}:", p):
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + x for _h, x in netstr_any_reads(p) if x and x.isprintable()))[:3]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def netstr_enc(s, sizes=(1,), unit="chars", sep="", final=True, lz=0, inner=None):
+    """Plain -> netstring frames: payload chunks cycling through `sizes` (0 = one frame per word incl. its space),
+    len in chars or UTF-8 bytes, zero-padded to `lz` digits, `sep` between frames, optional final ',', `inner` per
+    frame payload codec."""
+    if sizes == (0,):
+        chunks = re.findall(r"\S+\s*", s)
+    else:
+        chunks, i, k = [], 0, 0
+        while i < len(s):
+            chunks.append(s[i:i + sizes[k % len(sizes)]])
+            i, k = i + sizes[k % len(sizes)], k + 1
+    out = []
+    for c in chunks:
+        c = inner(c) if inner else c
+        n = len(c.encode("utf-8")) if unit == "bytes" else len(c)
+        out.append(f"{n:0{lz}d}:{c},")
+    r = sep.join(out)
+    return r if final else r[:-1]
+
+
+CANDIDATES += [
+    ("netstring-whole", lambda s: netstr_enc(s, (len(s) or 1,)), netstr_any),
+    ("netstring-words", lambda s: netstr_enc(s, (0,)), netstr_any),
+    ("netstring-mixed", lambda s: netstr_enc(s, (3, 1, 4, 1, 5, 9, 2, 6)), netstr_any),
+    ("netstring-bytes", lambda s: netstr_enc(s, (4,), unit="bytes"), netstr_any),
+    ("netstring-newline", lambda s: netstr_enc(s, (5,), sep="\n"), netstr_any),
+    ("netstring-zeropad", lambda s: netstr_enc(s, (2,), lz=3), netstr_any),
+    ("netstring-nofinal", lambda s: netstr_enc(s, (6,), final=False), netstr_any),
+    ("netstring-nested", lambda s: netstr_enc(netstr_enc(s), (8,)), netstr_any),
+    ("netstring-b64-frames", lambda s: netstr_enc(s, (0,), inner=lambda c: base64.b64encode(_u(c)).decode()),
+     netstr_any),
+    ("netstring-hex-frames", lambda s: netstr_enc(s, (6,), inner=lambda c: _u(c).hex()), netstr_any),
+]
+
+
+# INDEXED / RUN-COUNT FRAMES (speculative, no day; "Count carefully" re-read): the number beside each payload is a
+# POSITION (frames shuffled: `17:a,3:b`, `a@17`, `[17]a`; sort by index, indices exactly 0..n-1 or 1..n) or a REPEAT
+# COUNT (run-length: `3:o,` = 'ooo', `o*3`). Netstring length and count read the same when every N = 1, so netstring
+# wins first; then index (a permutation of range(n)), then count (1-char payloads, some N > 1).
+_FR_SEPS = (", ", "; ", ",", ";", " | ", "|", "\n", " ", "")
+
+
+def _fr_index(t):
+    """[(form, sep, text)] for every frame form / separator under which the WHOLE text is a permutation of indices."""
+    out = []
+    for sep in _FR_SEPS:
+        s = re.escape(sep)
+        for form, rx, pre in (("colon", rf"(?:^|{s})(\d{{1,5}}):", True), ("bracket", rf"(?:^|{s})\[(\d{{1,5}})\]", True),
+                              ("at", rf"@(\d{{1,5}})(?:{s}|$)" if sep else r"@(\d{1,5})", False)):
+            if not sep and form == "colon":
+                continue          # `17:a3:b` has no frame boundary
+            parts = re.split(rx, t)
+            if pre:
+                if len(parts) < 5 or parts[0]:
+                    continue
+                idx, pay = parts[1::2], parts[2::2]
+            else:
+                if len(parts) < 5 or parts[-1]:
+                    continue
+                idx, pay = parts[1::2], parts[0:-1:2]
+            n = len(idx)
+            try:
+                ix = [int(x) for x in idx]
+            except ValueError:
+                continue
+            base = min(ix)
+            if base not in (0, 1) or sorted(ix) != list(range(base, base + n)) or not all(pay):
+                continue
+            if sep and pay[-1].endswith(sep) and pre:   # an optional trailing separator after the last frame
+                out.append((form, sep, "".join(p for _i, p in sorted(zip(ix, pay[:-1] + [pay[-1][:-len(sep)]])))))
+            out.append((form, sep, "".join(p for _i, p in sorted(zip(ix, pay)))))
+    return out
+
+
+def _fr_count(t):
+    """[(form, sep, text)]: run-count frames `N:c` (sep-joined, final sep optional) or `c*N` -> c repeated N."""
+    out = []
+    for sep in _FR_SEPS:
+        s = re.escape(sep)
+        for form, frame, cnt_first in (("colon", r"(\d{1,4}):(.)", True), ("star", r"(.)\*(\d{1,4})", False)):
+            if not sep and form == "colon" and not re.fullmatch(r"(?:\d{1,4}:.)+", t, re.S):
+                continue
+            m = re.fullmatch(rf"{frame}(?:{s}{frame})*(?:{s})?", t, re.S)
+            if not m:
+                continue
+            fr = re.findall(rf"{frame}(?:{s}|$)" if sep else frame, t, re.S)
+            pairs = [(int(a), b) if cnt_first else (int(b), a) for a, b in fr]
+            if len(pairs) < 2 or (cnt_first and not any(n > 1 for n, _c in pairs)) or any(n < 1 or n > 4096 for n, _c in pairs):
+                continue
+            txt = "".join(c * n for n, c in pairs)
+            if len(txt) <= 200000:
+                out.append((form, sep, txt))
+    return out
+
+
+def frames_reads(t):
+    """[(how, text)] readings of a whole-text indexed / run-count frame run, best first; [] when it is not one."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 200000:
+            return []
+        t = t.strip("\r\n")
+        reads = [(f"netstring-{h}", x) for h, x in netstr_any_reads(t)]
+        reads += [(f"index-{f}", x) for f, _s, x in _fr_index(t)]
+        reads += [(f"count-{f}", x) for f, _s, x in _fr_count(t)]
+        seen = set()
+        reads = [r for r in reads if r[1] and not (r[1] in seen or seen.add(r[1]))]
+        reads = [r for r in reads if r[1].isprintable() and (SLUG.search(r[1]) or _ns_english(r[1]))]
+        return sorted(reads, key=lambda r: (not (SLUG.search(r[1]) and _TPL in r[1]), not SLUG.search(r[1]),
+                                            not _ns_english(r[1])))
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def frames_dec(t):
+    """Whole text = netstring / shuffled index frames / run-count frames -> its best (slug-gated) reading, else None."""
+    r = frames_reads(t)
+    return r[0][1] if r else None
+
+
+def frames_free(p):
+    """Speculative Mastery-line decoder for a fragment that is a whole index-shuffled / run-count frame run."""
+    try:
+        if not isinstance(p, str) or not re.search(r"\d", p) or not re.search(r"\d+:|\[\d+\]|@\d+|\*\d+", p):
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + x for h, x in frames_reads(p.strip())
+                                  if not h.startswith("netstring")))[:3]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def frames_index_enc(s, form="colon", sep=",", base=0, seed=None):
+    """Plain -> one frame per character tagged with its position, frames shuffled (deterministic seed)."""
+    import random
+    fr = [(i + base, c) for i, c in enumerate(s)]
+    random.Random(len(s) if seed is None else seed).shuffle(fr)
+    fmt = {"colon": "{0}:{1}", "bracket": "[{0}]{1}", "at": "{1}@{0}"}[form]
+    return sep.join(fmt.format(i, c) for i, c in fr)
+
+
+def frames_count_enc(s, form="colon", sep=","):
+    """Plain -> run-count frames over runs of equal characters: `N:c` or `c*N`, sep-joined."""
+    fmt = "{0}:{1}" if form == "colon" else "{1}*{0}"
+    return sep.join(fmt.format(len(m.group(0)), m.group(1)) for m in re.finditer(r"(.)\1*", s, re.S))
+
+
+CANDIDATES += [
+    ("frames-index-colon", lambda s: frames_index_enc(s), frames_dec),
+    ("frames-index-colon-1based-semicolon", lambda s: frames_index_enc(s, sep=";", base=1), frames_dec),
+    ("frames-index-bracket", lambda s: frames_index_enc(s, "bracket", ""), frames_dec),
+    ("frames-index-at-space", lambda s: frames_index_enc(s, "at", " "), frames_dec),
+    ("frames-count-colon", lambda s: frames_count_enc(s), frames_dec),
+    ("frames-count-star", lambda s: frames_count_enc(s, "star"), frames_dec),
+]
+
+
+
+# TNETSTRINGS (speculative, no day; sibling spec of D24's netstrings, Zed Shaw's typed netstrings): `<len>:<data><tag>`
+# with tag ',' string (';' unicode in some forks), '#' int, '^' float, '!' bool, '~' null, ']' list, '}' dict; len in
+# UTF-8 bytes (spec) or characters. ']' / '}' payloads parse recursively; the WHOLE text must be 1+ tnetstrings.
+# Reading = the string leaves in order (dict values; int-keyed dicts sorted by key), else int leaves as char codes.
+_TN_LEN = {bytes: re.compile(rb"\s*([0-9]{1,9}):"), str: re.compile(r"\s*([0-9]{1,9}):")}
+
+
+def _tn_parse(b, i, depth=0):
+    """-> ((tag, value), end) for the tnetstring at b[i:]; raises ValueError on any malformation."""
+    m = _TN_LEN[type(b)].match(b, i)
+    if not m or depth > 32:
+        raise ValueError("not a tnetstring")
+    j = m.end()
+    k = j + int(m.group(1))
+    if k >= len(b):
+        raise ValueError("overrun")
+    tag, pay = b[k:k + 1], b[j:k]
+    tag = tag.decode("latin-1") if isinstance(tag, bytes) else tag
+    if tag in ",;":
+        val = pay.decode("utf-8") if isinstance(pay, bytes) else pay
+    elif tag == "#":
+        val = int(pay)
+    elif tag == "^":
+        val = pay.decode("ascii") if isinstance(pay, bytes) else pay
+        float(val)
+    elif tag == "!":
+        p = pay.decode("ascii") if isinstance(pay, bytes) else pay
+        if p not in ("true", "false"):
+            raise ValueError("bool")
+        val = p == "true"
+    elif tag == "~":
+        if len(pay):
+            raise ValueError("null")
+        val = None
+    elif tag in "]}":
+        val, q = [], 0
+        while q < len(pay):
+            node, q = _tn_parse(pay, q, depth + 1)
+            val.append(node)
+        if tag == "}":
+            if len(val) % 2:
+                raise ValueError("odd dict")
+            val = list(zip(val[0::2], val[1::2]))
+    else:
+        raise ValueError("tag")
+    return (tag, val), k + 1
+
+
+def _tn_top(b):
+    """Whole buffer -> [node] (whitespace allowed between top-level tnetstrings), else None."""
+    try:
+        out, i = [], 0
+        while True:
+            while i < len(b) and b[i:i + 1].isspace():
+                i += 1
+            if i >= len(b):
+                return out or None
+            node, i = _tn_parse(b, i)
+            out.append(node)
+    except (ValueError, UnicodeDecodeError, OverflowError, RecursionError):
+        return None
+
+
+def _tn_dict_order(pairs):
+    """Dict pairs in reading order: by int key when the keys are exactly 0..n-1 / 1..n, else insertion order."""
+    try:
+        ks = [int(k[1]) for k, _v in pairs]
+        if sorted(ks) == list(range(min(ks), min(ks) + len(ks))) and min(ks) in (0, 1):
+            return [p for _k, p in sorted(zip(ks, pairs))]
+    except (ValueError, TypeError):
+        pass
+    return pairs
+
+
+def _tn_leaves(node, keys=False):
+    """Flatten to [(tag, value)] leaves in order (dict values only unless keys=True)."""
+    tag, val = node
+    if tag == "]":
+        return [x for n in val for x in _tn_leaves(n, keys)]
+    if tag == "}":
+        return [x for k, v in _tn_dict_order(val) for x in ((_tn_leaves(k, keys) if keys else []) + _tn_leaves(v, keys))]
+    return [node]
+
+
+def tnet_reads(t, _depth=0, _cue=False):
+    """[(how, text)] readings of a whole-text tnetstring run, best first (slug / English-gated); [] when not one.
+    _cue: demand a non-',' tag (a ','-only run is a plain netstring run -- netstring-any's)."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 200000 or not re.match(r"\s*\d", t):
+            return []
+        t = t.strip()
+        tops = []
+        for unit, buf in (("bytes", t.encode("utf-8")), ("chars", t)):
+            if unit == "chars" and t.isascii():
+                continue
+            top = _tn_top(buf)
+            if top:
+                tops.append((unit, top))
+        reads = []
+        for unit, top in tops:
+            root = ("]", top)
+            if _cue and not re.search(r"[#^!~\]};]", "".join(n[0] for n in _tn_walk(root))):
+                continue
+            for keys in (False, True):
+                lv = [x for n in top for x in _tn_leaves(n, keys)]
+                strs = [v for g, v in lv if g in ",;"]
+                if strs:
+                    joined = "".join(strs)
+                    reads.append((f"{unit}-strings" + ("-keys" if keys else ""), joined))
+                    if not keys and _depth < 3 and re.match(r"\s*\d+:", joined):
+                        reads += [(f"{unit}-nested-{h}", x) for h, x in tnet_reads(joined, _depth + 1)]
+                    if not keys and not _ns_english(joined) and _depth < 3:
+                        from lib import decode as _dc
+                        whole = _dc.decode_chunk(joined, _nested=True)
+                        if whole is not None:
+                            reads.append((f"{unit}-strings-coded", whole))
+                if not keys and lv and all(g == "#" for g, _v in lv) and all(0 < v < 0x110000 for _g, v in lv):
+                    reads.append((f"{unit}-charcodes", "".join(chr(v) for _g, v in lv)))
+                if not keys and lv:
+                    reads.append((f"{unit}-scalars", "".join(
+                        v if g in ",;" else "" if g == "~" else str(v).lower() if g == "!" else str(v) for g, v in lv)))
+        seen = set()
+        reads = [r for r in reads if r[1] and r[1].isprintable() and not (r[1] in seen or seen.add(r[1]))
+                 and (SLUG.search(r[1]) or _ns_english(r[1]))]
+        return sorted(reads, key=lambda r: (not (SLUG.search(r[1]) and _TPL in r[1]), not SLUG.search(r[1]),
+                                            not _ns_english(r[1])))
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def _tn_walk(node):
+    yield node
+    tag, val = node
+    if tag == "]":
+        for n in val:
+            yield from _tn_walk(n)
+    elif tag == "}":
+        for k, v in val:
+            yield from _tn_walk(k)
+            yield from _tn_walk(v)
+
+
+def tnet_dec(t):
+    """Whole text = tnetstring(s) -> its best slug / English-gated reading, else None."""
+    r = tnet_reads(t)
+    return r[0][1] if r else None
+
+
+def tnet_free(p):
+    """Speculative Mastery-line decoder: a fragment that is a whole tnetstring run with at least one typed tag
+    (',' only = plain netstrings, left to netstring-any / D24), leading indent kept."""
+    try:
+        if not isinstance(p, str) or not re.match(r"\s*\d{1,9}:", p) or not re.search(r"[#^!~\]};]\s*$", p):
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + x for _h, x in tnet_reads(p, _cue=True)))[:3]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def tnet_dump(v):
+    """Python value -> tnetstring text (len in UTF-8 bytes): str ',', bool '!', int '#', float '^', None '~',
+    list ']', dict '}'."""
+    if isinstance(v, str):
+        tag, pay = ",", v
+    elif isinstance(v, bool):
+        tag, pay = "!", "true" if v else "false"
+    elif isinstance(v, int):
+        tag, pay = "#", str(v)
+    elif isinstance(v, float):
+        tag, pay = "^", repr(v)
+    elif v is None:
+        tag, pay = "~", ""
+    elif isinstance(v, (list, tuple)):
+        tag, pay = "]", "".join(tnet_dump(x) for x in v)
+    elif isinstance(v, dict):
+        tag, pay = "}", "".join(tnet_dump(str(k)) + tnet_dump(x) for k, x in v.items())
+    else:
+        raise TypeError(type(v))
+    return f"{len(pay.encode('utf-8'))}:{pay}{tag}"
+
+
+CANDIDATES += [
+    ("tnetstring-flat", lambda s: tnet_dump(s), tnet_dec),
+    ("tnetstring-list1", lambda s: tnet_dump(list(s)), tnet_dec),
+    ("tnetstring-dict-index", lambda s: tnet_dump({i: c for i, c in enumerate(s)}), tnet_dec),
+    ("tnetstring-nested-words", lambda s: tnet_dump([[w, None] for w in re.findall(r"\S+\s*", s)]), tnet_dec),
+    ("tnetstring-charcodes", lambda s: tnet_dump([ord(c) for c in s]), tnet_dec),
+]
+
+
+# BENCODE + RIVEST S-EXPRESSIONS (speculative, no day; netstrings' `<len>:<data>` atom with NO trailing ','):
+# bencode (BitTorrent) `4:spam` string, `i42e` int, `l..e` list, `d..e` dict (keys sorted byte-wise; reading order =
+# int-like keys numerically, else as written); Rivest SPKI canonical sexp `(3:abc5:hello)` with `[hint]` display
+# hints, plus the transport / advanced atoms `{b64 of canonical}`, `|b64|`, `#hex#` (optional decimal length prefix,
+# whitespace between elements). Nodes reuse the tnetstring shape: (',', text) / ('#', int) / (']', [n]) / ('}', pairs).
+_BC_LEN = {bytes: re.compile(rb"(0|[1-9][0-9]{0,8}):"), str: re.compile(r"(0|[1-9][0-9]{0,8}):")}
+_BC_INT = {bytes: re.compile(rb"i(0|-?[1-9][0-9]{0,30})e"), str: re.compile(r"i(0|-?[1-9][0-9]{0,30})e")}
+
+
+def _bx_text(pay):
+    return pay.decode("utf-8") if isinstance(pay, (bytes, bytearray)) else pay
+
+
+def _bc_parse(b, i, depth=0):
+    """-> (node, end) for the bencoded value at b[i:]; raises ValueError on any malformation."""
+    if depth > 64 or i >= len(b):
+        raise ValueError("not bencode")
+    c = b[i:i + 1]
+    c = c.decode("latin-1") if isinstance(c, bytes) else c
+    if c == "i":
+        m = _BC_INT[type(b)].match(b, i)
+        if not m:
+            raise ValueError("int")
+        return ("#", int(m.group(1))), m.end()
+    if c in "ld":
+        out, j = [], i + 1
+        while b[j:j + 1] not in (b"e", "e"):
+            if j >= len(b):
+                raise ValueError("unterminated")
+            node, j = _bc_parse(b, j, depth + 1)
+            out.append(node)
+        if c == "d":
+            if len(out) % 2 or any(k[0] != "," for k in out[0::2]):
+                raise ValueError("dict")
+            return ("}", list(zip(out[0::2], out[1::2]))), j + 1
+        return ("]", out), j + 1
+    m = _BC_LEN[type(b)].match(b, i)
+    if not m:
+        raise ValueError("not bencode")
+    k = m.end() + int(m.group(1))
+    if k > len(b):
+        raise ValueError("overrun")
+    return (",", _bx_text(b[m.end():k])), k
+
+
+def _bc_top(b):
+    """Whole buffer -> [node] (1+ bencoded values, whitespace allowed between), else None."""
+    try:
+        out, i = [], 0
+        while True:
+            while i < len(b) and b[i:i + 1].isspace():
+                i += 1
+            if i >= len(b):
+                return out or None
+            node, i = _bc_parse(b, i)
+            out.append(node)
+    except (ValueError, UnicodeDecodeError, OverflowError, RecursionError):
+        return None
+
+
+_SX_ATOM = re.compile(rb"([0-9]{0,9})(?::|(\|[A-Za-z0-9+/=\s]*\|)|(#[0-9A-Fa-f\s]*#)|(\{[A-Za-z0-9+/=\s]*\}))")
+
+
+def _sx_ws(b, i):
+    while i < len(b) and b[i:i + 1].isspace():
+        i += 1
+    return i
+
+
+def _sx_atom(b, i, depth):
+    """-> (bytes, end) for a verbatim `len:data`, `|b64|` or `#hex#` atom (or a `{transport}` node), else ValueError."""
+    m = _SX_ATOM.match(b, i)
+    if not m or not (m.group(1) or m.group(2) or m.group(3) or m.group(4)):
+        raise ValueError("atom")
+    if m.group(2) or m.group(3):
+        body = re.sub(rb"\s+", b"", m.group(0)[len(m.group(1)) + 1:-1])
+        val = base64.b64decode(body, validate=True) if m.group(2) else bytes.fromhex(body.decode())
+        if m.group(1) and int(m.group(1)) != len(val):
+            raise ValueError("atom length")
+        return val, m.end()
+    if m.group(4):
+        if m.group(1):
+            raise ValueError("transport")
+        inner = base64.b64decode(re.sub(rb"\s+", b"", m.group(4)[1:-1]), validate=True)
+        node, j = _sx_parse(inner, 0, depth + 1)
+        if _sx_ws(inner, j) != len(inner):
+            raise ValueError("transport tail")
+        return node, m.end()
+    k = m.end() + int(m.group(1))
+    if not m.group(1) or k > len(b):
+        raise ValueError("overrun")
+    return b[m.end():k], k
+
+
+def _sx_parse(b, i, depth=0):
+    """-> (node, end) for the sexp element at b[i:] (bytes; len = bytes); hints dropped; ValueError otherwise."""
+    if depth > 64:
+        raise ValueError("deep")
+    i = _sx_ws(b, i)
+    if b[i:i + 1] == b"(":
+        out, j = [], _sx_ws(b, i + 1)
+        while b[j:j + 1] != b")":
+            if j >= len(b):
+                raise ValueError("unterminated")
+            node, j = _sx_parse(b, j, depth + 1)
+            out.append(node)
+            j = _sx_ws(b, j)
+        return ("]", out), j + 1
+    if b[i:i + 1] == b"[":
+        _hint, j = _sx_atom(b, _sx_ws(b, i + 1), depth)
+        j = _sx_ws(b, j)
+        if isinstance(_hint, tuple) or b[j:j + 1] != b"]":
+            raise ValueError("hint")
+        val, j = _sx_atom(b, _sx_ws(b, j + 1), depth)
+        if isinstance(val, tuple):
+            raise ValueError("hinted transport")
+        return (",", val.decode("utf-8")), j
+    val, j = _sx_atom(b, i, depth)
+    return (val if isinstance(val, tuple) else (",", val.decode("utf-8"))), j
+
+
+def _sx_top(b):
+    """Whole buffer (bytes) -> [node] of 1+ s-expressions with at least one list / transport form, else None."""
+    try:
+        if not re.match(rb"\s*[(\[{]", b) and not re.search(rb"[|#]", b):
+            return None
+        out, i = [], _sx_ws(b, 0)
+        while i < len(b):
+            node, i = _sx_parse(b, i)
+            out.append(node)
+            i = _sx_ws(b, i)
+        return out or None
+    except (ValueError, UnicodeDecodeError, OverflowError, RecursionError, binascii.Error):
+        return None
+
+
+def _sx_nohead(node):
+    """String leaves skipping each multi-element list's head atom (`(msg ...)` type tags)."""
+    tag, val = node
+    if tag == "]":
+        start = 1 if len(val) > 1 and val[0][0] == "," else 0
+        return [x for n in val[start:] for x in _sx_nohead(n)]
+    return [node] if tag == "," else []
+
+
+def bencsexp_reads(t, _depth=0):
+    """[(how, text)] readings of a whole-text bencode / Rivest sexp run, best first (slug / English-gated)."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 200000:
+            return []
+        t = t.strip()
+        tops = []
+        for unit, buf in (("bytes", t.encode("utf-8")), ("chars", t)):
+            if unit == "chars" and t.isascii():
+                continue
+            top = _bc_top(buf)
+            if top:
+                tops.append((f"bencode-{unit}", top))
+        top = _sx_top(t.encode("utf-8"))
+        if top:
+            tops.append(("sexp", top))
+        reads = []
+        for unit, top in tops:
+            for keys in (False, True):
+                lv = [x for n in top for x in _tn_leaves(n, keys)]
+                strs = [v for g, v in lv if g == ","]
+                if strs:
+                    joined = "".join(strs)
+                    reads.append((f"{unit}-strings" + ("-keys" if keys else ""), joined))
+                    if not keys and _depth < 3 and re.match(r"\s*(?:\d+:|[(\[{dl])", joined) and joined != t:
+                        reads += [(f"{unit}-nested-{h}", x) for h, x in bencsexp_reads(joined, _depth + 1)]
+                    if not keys and not _ns_english(joined) and _depth < 3:
+                        from lib import decode as _dc
+                        whole = _dc.decode_chunk(joined, _nested=True)
+                        if whole is not None:
+                            reads.append((f"{unit}-strings-coded", whole))
+                if not keys and lv and all(g == "#" for g, _v in lv) and all(0 < v < 0x110000 for _g, v in lv):
+                    reads.append((f"{unit}-charcodes", "".join(chr(v) for _g, v in lv)))
+                if not keys and lv:
+                    reads.append((f"{unit}-scalars", "".join(str(v) for _g, v in lv)))
+            if unit == "sexp":
+                reads.append(("sexp-nohead", "".join(v for n in top for _g, v in _sx_nohead(n))))
+        seen = set()
+        reads = [r for r in reads if r[1] and r[1].isprintable() and not (r[1] in seen or seen.add(r[1]))
+                 and (SLUG.search(r[1]) or _ns_english(r[1]))]
+        return sorted(reads, key=lambda r: (not (SLUG.search(r[1]) and _TPL in r[1]),
+                                            not (SLUG.search(r[1]) and r[1].startswith(_TPL[:12])),
+                                            not SLUG.search(r[1]), not _ns_english(r[1])))
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def bencsexp_dec(t):
+    """Whole text = bencode / Rivest sexp -> its best slug / English-gated reading, else None."""
+    r = bencsexp_reads(t)
+    return r[0][1] if r else None
+
+
+def bencsexp_free(p):
+    """Speculative Mastery-line decoder: a fragment that is a whole bencode value run (list / dict / int-led, or a
+    length-led string run without netstring commas) or a Rivest sexp (`(`, `[`, `{` led), leading indent kept."""
+    try:
+        if not isinstance(p, str) or not re.match(r"\s*(?:[ld](?:\d|i-?\d|e)|i-?\d|\d{1,9}:|[(\[{])", p):
+            return []
+        if re.match(r"\s*\d{1,9}:", p) and re.search(r"[,#^!~\]};]\s*$", p):
+            return []   # `,`-terminated = netstrings / tnetstrings (netstring-any / D24 / tnetstring)
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + x for _h, x in bencsexp_reads(p)))[:3]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def benc_dump(v):
+    """Python value -> bencode text (len in UTF-8 bytes; dict keys sorted byte-wise per spec)."""
+    if isinstance(v, str):
+        return f"{len(v.encode('utf-8'))}:{v}"
+    if isinstance(v, int):
+        return f"i{v}e"
+    if isinstance(v, (list, tuple)):
+        return "l" + "".join(benc_dump(x) for x in v) + "e"
+    if isinstance(v, dict):
+        return "d" + "".join(benc_dump(k) + benc_dump(v[k]) for k in sorted(map(str, v), key=lambda k: k.encode())) + "e"
+    raise TypeError(type(v))
+
+
+def sexp_dump(v):
+    """Python str / nested list -> Rivest canonical sexp text (len in UTF-8 bytes)."""
+    if isinstance(v, str):
+        return f"{len(v.encode('utf-8'))}:{v}"
+    return "(" + "".join(sexp_dump(x) for x in v) + ")"
+
+
+CANDIDATES += [
+    ("bencode-list1", lambda s: benc_dump(list(s)), bencsexp_dec),
+    ("bencode-string", lambda s: benc_dump(s), bencsexp_dec),
+    ("bencode-dict-index", lambda s: benc_dump({f"{i:04d}": c for i, c in enumerate(s)}), bencsexp_dec),
+    ("bencode-charcodes", lambda s: benc_dump([ord(c) for c in s]), bencsexp_dec),
+    ("sexp-canonical", lambda s: sexp_dump(list(s)), bencsexp_dec),
+    ("sexp-words", lambda s: sexp_dump(["msg"] + re.findall(r"\S+\s*", s)), bencsexp_dec),
+    ("sexp-transport", lambda s: "{" + base64.b64encode(sexp_dump(list(s)).encode("utf-8")).decode() + "}",
+     bencsexp_dec),
+]
+
+# BINARY LENGTH-PREFIX FRAMES (speculative, no day; coverage atlas length-prefix-binary-tlv): after a hex / base64 /
+# base32 layer the bytes are a run of [len][payload] frames -- Pascal u8, u16/u32 BE/LE, LEB128 varint, TLV (1 type
+# byte + u8 / u16 BE/LE len), protobuf wire (varint tag of wire type 2 + varint len) -- or the TEXT itself is a run of
+# fixed-width length digits + payload (`0eNice work dec`: 2 / 4 hex digits, 2 / 3 decimal digits). The WHOLE stream
+# must parse; the payloads join (raw, or each / all through a strict chunk codec) into English. Bytes that already read
+# as printable text belong to plain hex / base64: a byte-frame reading of them needs the full crib.
+_LP_BYTE_KINDS = ("u8", "u16be", "u16le", "u32be", "u32le", "varint", "tlv8", "tlv16be", "tlv16le", "proto")
+_LP_TEXT_KINDS = (("hex2", 16, 2), ("hex4", 16, 4), ("dec2", 10, 2), ("dec3", 10, 3))
+
+
+def _lp_varint(b, p):
+    v, s = 0, 0
+    while p < len(b) and s < 35:
+        v |= (b[p] & 0x7F) << s
+        p, s = p + 1, s + 7
+        if not b[p - 1] & 0x80:
+            return v, p
+    return None, None
+
+
+def _lp_walk(b, kind):
+    """[payload bytes] when the WHOLE buffer is a run of `kind` frames (>= 1 non-empty payload), else None."""
+    out, p, n = [], 0, len(b)
+    while p < n:
+        if kind == "proto":
+            tag, p = _lp_varint(b, p)
+            if tag is None or tag & 7 != 2 or tag >> 3 == 0:
+                return None
+            ln, p = _lp_varint(b, p)
+            if ln is None:
+                return None
+        elif kind == "varint":
+            ln, p = _lp_varint(b, p)
+            if ln is None:
+                return None
+        else:
+            if kind.startswith("tlv"):
+                p += 1
+            w = 1 if kind in ("u8", "tlv8") else 2 if kind.endswith(("16be", "16le")) else 4
+            if p + w > n:
+                return None
+            ln = int.from_bytes(b[p:p + w], "little" if kind.endswith("le") else "big")
+            p += w
+        if p + ln > n:
+            return None
+        out.append(b[p:p + ln])
+        p += ln
+    return out if any(out) else None
+
+
+def _lp_text_walk(t, base, w):
+    """[payload str] when the whole text is a run of `w`-digit base-`base` lengths + that many chars, else None."""
+    out, p, n = [], 0, len(t)
+    dig = "0123456789abcdefABCDEF" if base == 16 else "0123456789"
+    while p < n:
+        h = t[p:p + w]
+        if len(h) != w or any(c not in dig for c in h):
+            return None
+        ln = int(h, base)
+        p += w
+        if p + ln > n:
+            return None
+        out.append(t[p:p + ln])
+        p += ln
+    return out if len(out) > 1 else None   # one frame = the text minus a 2-4 char head: no evidence
+
+
+def _lp_layers(t):
+    """[(layer, bytes)] of a hex / base64(url) / base32 line (each strict, whole-line)."""
+    out = []
+    b = _leb_bytes(t)
+    if b:
+        out.append(("hex", b))
+    s = re.sub(r"\s+", "", t)
+    if s and len(s) <= 80000 and re.fullmatch(r"[A-Za-z0-9+/_-]+={0,2}", s) and len(s.rstrip("=")) % 4 != 1:
+        try:
+            x = base64.b64decode(s.rstrip("=").replace("-", "+").replace("_", "/") + "=" * (-len(s.rstrip("=")) % 4),
+                                 validate=True)
+            if x and x != b:
+                out.append(("b64", x))
+        except (binascii.Error, ValueError):
+            pass
+    if s and re.fullmatch(r"[A-Z2-7]+=*", s.upper()) and len(s) % 8 in (0, 2, 4, 5, 7):
+        try:
+            out.append(("b32", base64.b32decode(s.upper().rstrip("=") + "=" * (-len(s.rstrip("=")) % 8))))
+        except (binascii.Error, ValueError):
+            pass
+    return out
+
+
+def _lp_join(pay, how, reads, _dc):
+    """Append (how, text) readings of joined str payloads: raw if it reads, else per-frame / joined chunk codec."""
+    joined = "".join(pay)
+    if _ns_english(joined) or _crib_piece(joined):
+        reads.append((how, joined))
+        return
+    if len(pay) <= 600:
+        per = [_dc.decode_chunk(x, _nested=True) if x.strip() else x for x in pay]
+        if all(x is not None for x in per) and _ns_english("".join(per)):
+            reads.append((f"{how}-per-frame", "".join(per)))
+    whole = _dc.decode_chunk(joined, _nested=True) if joined.strip() else None
+    if whole is not None and _ns_english(whole):
+        reads.append((f"{how}-joined", whole))
+
+
+def lenpfx_reads(t):
+    """[(how, text)] readings of a binary length-prefix frame run (under hex / b64 / b32) or a digit-length text frame
+    run, crib first; [] when it is not one. Never raises."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 120000:
+            return []
+        from lib import decode as _dc
+        t, reads = t.strip(), []
+        for layer, b in _lp_layers(t):
+            try:
+                owned = b.decode("utf-8").isprintable()   # plain hex / base64 of text: those decoders own it
+            except UnicodeDecodeError:
+                owned = False
+            got = []
+            for kind in _LP_BYTE_KINDS:
+                fr = _lp_walk(b, kind)
+                if not fr:
+                    continue
+                try:
+                    pay = [x.decode("utf-8") for x in fr]
+                except UnicodeDecodeError:
+                    continue
+                _lp_join(pay, f"{layer}-{kind}", got, _dc)
+            reads += [r for r in got if not owned or (SLUG.search(r[1]) and _TPL in r[1])]
+        for kind, base, w in _LP_TEXT_KINDS:
+            fr = _lp_text_walk(t, base, w)
+            if fr:
+                _lp_join(fr, f"text-{kind}", reads, _dc)
+        seen = set()
+        reads = [r for r in reads if r[1] != t and not (r[1] in seen or seen.add(r[1]))]
+        return sorted(reads, key=lambda r: (not (SLUG.search(r[1]) and _TPL in r[1]), not _crib_piece(r[1]),
+                                            not _ns_english(r[1]), -_texty(r[1])))
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def lenpfx_dec(t):
+    """Whole text = a length-prefix frame run (any knob above) -> its best reading, else None."""
+    r = lenpfx_reads(t)
+    return r[0][1] if r else None
+
+
+def lenpfx_free(p):
+    """Speculative Mastery-line decoder: a fragment that is a whole length-prefix frame run, leading indent kept."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + x for _h, x in lenpfx_reads(p) if x and x.isprintable()))[:3]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def lenpfx_enc(s, kind="u8", chunks="chars", fmt="hex", types=(1, 2)):
+    """Plain -> length-prefix frames: one frame per char / word (incl. its trailing space) / whole, under `kind`
+    (byte kinds above; tlv* cycle through `types`, proto = field 1) as hex / b64, or text kinds (hex2 ...) raw."""
+    parts = list(s) if chunks == "chars" else re.findall(r"\S+\s*", s) if chunks == "words" else [s]
+    tk = dict((k, (bs, w)) for k, bs, w in _LP_TEXT_KINDS)
+    if kind in tk:
+        bs, w = tk[kind]
+        return "".join((f"{len(c):0{w}x}" if bs == 16 else f"{len(c):0{w}d}") + c for c in parts)
+
+    def var(v):
+        o = bytearray()
+        while True:
+            o.append((v & 0x7F) | (0x80 if v > 0x7F else 0))
+            v >>= 7
+            if not v:
+                return bytes(o)
+    out = bytearray()
+    for i, c in enumerate(parts):
+        c = _u(c)
+        if kind == "proto":
+            out += b"\x0a" + var(len(c))
+        elif kind == "varint":
+            out += var(len(c))
+        else:
+            if kind.startswith("tlv"):
+                out.append(types[i % len(types)])
+            w = 1 if kind in ("u8", "tlv8") else 2 if kind.endswith(("16be", "16le")) else 4
+            out += len(c).to_bytes(w, "little" if kind.endswith("le") else "big")
+        out += c
+    return out.hex() if fmt == "hex" else base64.b64encode(bytes(out)).decode()
+
+
+CANDIDATES += [
+    ("lenpfx-u8-chars-hex", lambda s: lenpfx_enc(s, "u8"), lenpfx_dec),
+    ("lenpfx-u8-words-hex", lambda s: lenpfx_enc(s, "u8", "words"), lenpfx_dec),
+    ("lenpfx-pascal-b64", lambda s: lenpfx_enc(s, "u8", "whole", "b64"), lenpfx_dec),
+    ("lenpfx-u16be-words-hex", lambda s: lenpfx_enc(s, "u16be", "words"), lenpfx_dec),
+    ("lenpfx-u16le-words-hex", lambda s: lenpfx_enc(s, "u16le", "words"), lenpfx_dec),
+    ("lenpfx-u32be-words-b64", lambda s: lenpfx_enc(s, "u32be", "words", "b64"), lenpfx_dec),
+    ("lenpfx-u32le-words-hex", lambda s: lenpfx_enc(s, "u32le", "words"), lenpfx_dec),
+    ("lenpfx-varint-whole-hex", lambda s: lenpfx_enc(s, "varint", "whole"), lenpfx_dec),
+    ("lenpfx-proto-words-hex", lambda s: lenpfx_enc(s, "proto", "words"), lenpfx_dec),
+    ("lenpfx-proto-words-b64", lambda s: lenpfx_enc(s, "proto", "words", "b64"), lenpfx_dec),
+    ("lenpfx-tlv8-chars-hex", lambda s: lenpfx_enc(s, "tlv8"), lenpfx_dec),
+    ("lenpfx-tlv16be-words-hex", lambda s: lenpfx_enc(s, "tlv16be", "words"), lenpfx_dec),
+    ("lenpfx-hex2-words", lambda s: lenpfx_enc(s, "hex2", "words"), lenpfx_dec),
+    ("lenpfx-hex4-words", lambda s: lenpfx_enc(s, "hex4", "words"), lenpfx_dec),
+]
+
+
+
+# --- string-builder literals ("String" as code) -------------------------------------------------------------------
+# The blob is SOURCE that builds the sentence: "Ni" + "ce" (JS/Java/C#), Python implicit 'N' 'i', chr(78)+chr(105),
+# String.fromCharCode(78,105), [char]78+[char]105, new char[]{'N','i'}, ''.join([...]), ["N","i"] JSON, b'\x4e',
+# StringBuilder .append chains, `s = ..; s += ..`. Never eval: lib.codec._fs_eval folds literal-only nodes (an unknown
+# identifier / call -> None). A lone plain literal is not a builder (no evidence) -> None.
+_SB_CHARCAST = re.compile(r"\(\s*(?:char|wchar_t|Char|System\.Char)\s*\)\s*(0[xX][0-9a-fA-F]+|\d+)")
+_SB_FCC = re.compile(r"String\.fromCharCode\s*(?:\.apply\s*\(\s*(?:null|undefined|this|String)?\s*,|\(\s*\.\.\.)\s*"
+                     r"\[(?P<a>[\dxXa-fA-F,\s]*)\]\s*\)")
+_SB_CARR = re.compile(r"(?s)^(?:new\s+(?:String|string)\s*\()?\s*(?:new\s+)?(?:char|Char|wchar_t)\s*\[\s*\d*\s*\]\s*"
+                      r"(?:[A-Za-z_]\w*\s*\[\s*\d*\s*\]\s*)?=?\s*\{(?P<a>.*)\}\s*\)?$")
+_SB_HEAD = re.compile(r"^\s*(?:(?:var|let|const|final|static|auto|my|our|local|Dim|string|String|str|char\s*\*|"
+                      r"(?:std::)?string|StringBuilder|\[string\])\s+)*(?P<n>\$?[A-Za-z_]\w*)\s*(?:\[\s*\d*\s*\])?"
+                      r"(?::\s*[\w\[\]]+)?\s*(?P<op>\+=|\.=|&=|\.\.=|=(?!=))\s*(?P<v>.+?)\s*;?\s*$", re.S)
+_SB_OUT = re.compile(r"(?is)^\s*(?:print|println|puts|echo|console\.log|alert|document\.write|System\.out\.print(?:ln)?|"
+                     r"Console\.Write(?:Line)?|Write-(?:Host|Output)|WScript\.Echo|MsgBox|printf)\s*(?:\((?P<a>.*)\)|"
+                     r"(?P<b>[^()].*?))\s*;?\s*$")
+_SB_APPEND = re.compile(r"\.(?:append|Append|AppendLine|concat|push|write|Write|add|Add)\s*\(")
+_SB_STRUCT = re.compile(r"""(?ix)(?:chrw?\s*\(|\[char\]|fromCharCode|\(\s*char\s*\)|\.join\s*\(|-join|\bjoin\s*\(|
+                        char\s*\[\s*\d*\s*\]|\bbytes\s*\(|^\s*[bB]['"]|(?:["'`]|\))\s*(?:\+|&|\.\.?|,)\s*(?:["'`(]|chr|\[)|
+                        ["']\s+["']|\w\s*(?:\+|&)\s*["']|\.append|\+=|&=|\.=|\.\.=)""")
+
+
+def _sb_pre(e):
+    """Normalise the literal forms _fs_eval lacks; strip line continuations."""
+    e = re.sub(r"\s*(?:\\|\s_)\r?\n", " ", e)
+    e = _SB_CHARCAST.sub(lambda m: f"chr({m.group(1)})", e)
+    e = _SB_FCC.sub(lambda m: f"String.fromCharCode({m.group('a')})", e)
+    return e
+
+
+def _sb_val(e, env, cx):
+    """String value of one literal-only expression (+ char-array / JSON-list / bytes forms), or None."""
+    e = _sb_pre(e).strip().rstrip(";").strip()
+    if not e:
+        return None
+    m = _SB_CARR.match(e)
+    if m:
+        items = cx._fs_split(m.group("a"), cx._FS_COMMA)
+        items = [i for i in items if i.strip()]
+        if items and all(re.fullmatch(r"\s*(?:0[xX][0-9a-fA-F]+|\d+)\s*", i) for i in items):
+            return cx._fs_ints(",".join(items))
+        vals = [cx._fs_eval(i, env) for i in items]
+        return None if not items or None in vals else "".join(vals)
+    m = re.fullmatch(r"(?s)\[(?P<a>.*)\]", e)
+    if m:   # JSON / Python / JS list of string literals (["N","i"]): joined in order
+        items = [i for i in cx._fs_split(m.group("a"), cx._FS_COMMA) if i.strip()]
+        if len(items) >= 2 and all(cx._FS_LIT.fullmatch(i.strip()) for i in items):
+            vals = [cx._fs_eval(i, env) for i in items]
+            return None if None in vals else "".join(vals)
+        return None
+    m = re.fullmatch(r"(?s)(?:bytes|bytearray)\s*\(\s*\[(?P<a>[\dxXa-fA-F,\s]+)\]\s*\)(?:\.decode\s*\([^)]*\))?", e)
+    if m:
+        return cx._fs_ints(m.group("a"))
+    m = re.fullmatch(r"(?s)(?P<s>[rRuU]?[\"'][^\"']*[\"'])\.join\s*\(\s*\[?\s*chr\s*\(\s*(?P<v>[A-Za-z_]\w*)\s*\)\s*for\s+"
+                     r"(?P=v)\s+in\s+[\[(](?P<a>[\dxXa-fA-F,\s]+)[\])]\s*\]?\s*\)", e)
+    if m:
+        sep = cx._fs_eval(m.group("s"), env)
+        codes = [c for c in re.split(r"[\s,]+", m.group("a").strip()) if c]
+        chars = cx._fs_ints(",".join(codes))
+        return None if sep is None or chars is None else sep.join(chars)
+    v = cx._fs_eval(e, env)
+    if v is None and re.fullmatch(r"(?s)[bB][\"'].*[\"']", e):
+        v = cx._fs_eval(e[1:], env)
+    return v
+
+
+def _sb_appends(t, env, cx):
+    """StringBuilder / array-push chains: every `.append(x)` argument (+ a `new StringBuilder(x)` seed) in order."""
+    out, n = [], 0
+    m = re.search(r"new\s+StringBuilder\s*\(", t)
+    a = cx._fs_args(t, m.end()) if m else None
+    if a and a.strip():
+        seed = _sb_val(a, env, cx)
+        if seed is None:
+            return None
+        out.append(seed)
+    for m in _SB_APPEND.finditer(t):
+        a = cx._fs_args(t, m.end())
+        if not a or len(cx._fs_split(a, cx._FS_COMMA)) != 1:
+            return None
+        v = _sb_val(a, env, cx)
+        if v is None:
+            return None
+        out.append(v)
+        n += 1
+    return "".join(out) if n >= 2 else None
+
+
+def strbuild_dec(t):
+    """Whole text = source code that builds a string from literal pieces -> the built string, else None."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 60000 or not re.search(r"[\"'`\[{(]", t):
+            return None
+        from lib import codec as cx
+        t = t.strip()
+        if not _SB_STRUCT.search(t):
+            return None
+        got = None
+        if len(_SB_APPEND.findall(t)) >= 2:
+            got = _sb_appends(t, {}, cx)
+        if got is None:
+            got = _sb_val(t, {}, cx)
+        if got is None:
+            m = _SB_OUT.match(t) or _SB_HEAD.match(t)
+            if m:
+                got = _sb_val(m.group("a") if "a" in m.re.groupindex and m.group("a") is not None else
+                              m.group("b") if "b" in m.re.groupindex else m.group("v"), {}, cx)
+        if got is None:   # statements: x = ..; x += ..; print(x)
+            env, last, outv = {}, None, None
+            stmts = [s for s in cx._fs_split(_sb_pre(t), re.compile(r"\s*(?:;|\r?\n)\s*")) if s.strip()]
+            if len(stmts) < 2 or len(stmts) > 400:
+                return None
+            for s in stmts:
+                if re.fullmatch(r"(?i)\s*(?:using\s.*|import\s.*|#.*|//.*|(?:public\s+)?(?:static\s+)?(?:void|class)\b.*|"
+                                r"[{}]|(?:Dim|var|let|my|local)\s+\$?\w+|\$?\w+\s*=\s*new\s+StringBuilder\s*\(\s*\)|.*\bjoin\s*\(\s*\w+\s*\)|"
+                                r"\w+\.(?:ToString|toString)\s*\(\s*\)|)\s*", s):
+                    continue
+                m = _SB_OUT.match(s)
+                if m:
+                    a = m.group("a") if m.group("a") is not None else m.group("b")
+                    outv = _sb_val(a, env, cx)
+                    if outv is None:
+                        return None
+                    continue
+                m = _SB_HEAD.match(s)
+                if not m:
+                    return None
+                k, op = m.group("n").lstrip("$"), m.group("op")
+                v = _sb_val(m.group("v"), env, cx)
+                if v is None:
+                    return None
+                if op != "=":
+                    if k not in env:
+                        return None
+                    v = env[k] + v
+                env[k], last = v, k
+            got = outv if outv is not None else env.get(last)
+        if not got or got == t or not got.replace("\n", " ").replace("\t", " ").isprintable():
+            return None
+        return got
+    except Exception:   # noqa: BLE001
+        return None
+
+
+def strbuild_free(p):
+    """Speculative Mastery-line decoder: one line of literal-only string-building source, leading indent kept."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        v = strbuild_dec(p)
+        return [p[:len(p) - len(p.lstrip())] + v] if v and "\n" not in v else []
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def _sb_q(c, q='"'):
+    return q + (c.replace("\\", "\\\\").replace(q, "\\" + q)) + q
+
+
+def strbuild_enc(s, form="concat"):
+    """Plain -> one string-building source form (per char unless the form is word-wise)."""
+    w = re.findall(r"\S+\s*", s)
+    if form == "concat":
+        return " + ".join(_sb_q(x) for x in w)
+    if form == "implicit":
+        return " ".join(_sb_q(x, "'") for x in w)
+    if form == "fromcharcode":
+        return "String.fromCharCode(" + ",".join(str(ord(c)) for c in s) + ")"
+    if form == "chr":
+        return "+".join(f"chr({ord(c)})" for c in s)
+    if form == "pschar":
+        return "+".join(f"[char]{ord(c)}" for c in s)
+    if form == "chararray":
+        return "new char[]{" + ",".join(_sb_q(c, "'") for c in s) + "}"
+    if form == "pyjoin":
+        return "''.join([" + ", ".join(_sb_q(c, "'") for c in s) + "])"
+    if form == "jsonlist":
+        return json.dumps(list(s))
+    if form == "bytes":
+        return "b'" + "".join(f"\\x{b:02x}" for b in _u(s)) + "'"
+    if form == "append":
+        return "var sb = new StringBuilder();\n" + "".join(f"sb.append({_sb_q(x)});\n" for x in w) + "sb.toString();"
+    return None
+
+
+CANDIDATES += [(f"strbuild-{f}", (lambda f: lambda s: strbuild_enc(s, f))(f), strbuild_dec)
+               for f in ("concat", "implicit", "fromcharcode", "chr", "pschar", "chararray", "pyjoin", "jsonlist",
+                         "bytes", "append")]
+
+
+# RESP (speculative, no day; Redis serialization protocol, the length-prefixed "string protocol" sibling of D24's
+# netstrings): `*<n>` array, `$<len>` bulk string (len in UTF-8 bytes per spec, or chars), `+text` simple, `-err`,
+# `:int`; RESP3 `=<len>` verbatim (`txt:` / `mkd:` 3-char format + ':' stripped), `_` null, `#t`/`#f`, `,` double,
+# `(` bignum, `!` blob error, `%` map, `~` set, `>` push, `|` attribute (skipped). Lines end CRLF or bare LF (also the
+# docs' literal `\r\n` escapes on one line). Reading = string leaves joined (or space-joined when one per word), else
+# int leaves as char codes; the WHOLE text must be 1+ RESP values. Nodes reuse the tnetstring shape.
+_RESP_LINE = {bytes: re.compile(rb"([^\r\n]*)\r?\n"), str: re.compile(r"([^\r\n]*)\r?\n")}
+_RESP_NUM = re.compile(r"-1|0|[1-9][0-9]{0,8}")
+
+
+def _resp_eol(b, j):
+    """End of the CRLF / LF that must follow a length-prefixed payload at b[j:]; raises otherwise."""
+    for nl in ("\r\n", "\n"):
+        nl = nl.encode() if isinstance(b, bytes) else nl
+        if b[j:j + len(nl)] == nl:
+            return j + len(nl)
+    if j == len(b):     # a final payload with its terminator stripped (copy-paste / .strip())
+        return j
+    raise ValueError("bulk terminator")
+
+
+def _resp_parse(b, i, depth=0):
+    """-> (node, end) for the RESP value at b[i:]; node = (',', text) / ('#', int) / ('~', None) / (']', [n]) /
+    ('}', pairs) / ('|', None) attribute marker; raises ValueError on any malformation."""
+    if depth > 32 or i >= len(b):
+        raise ValueError("not RESP")
+    t = b[i:i + 1]
+    t = t.decode("latin-1") if isinstance(t, bytes) else t
+    m = _RESP_LINE[type(b)].match(b, i + 1)
+    if t not in "+-:$*=_#,(!%~>|" or not m:
+        raise ValueError("not RESP")
+    line = _bx_text(m.group(1))
+    j = m.end()
+    if t in "+-":
+        return (",", line), j
+    if t == ":":
+        if not re.fullmatch(r"[+-]?[0-9]{1,30}", line):
+            raise ValueError("int")
+        return ("#", int(line)), j
+    if t == "(":
+        if not re.fullmatch(r"-?[0-9]{1,400}", line):
+            raise ValueError("bignum")
+        return ("#", int(line)), j
+    if t == "_":
+        if line:
+            raise ValueError("null")
+        return ("~", None), j
+    if t == "#":
+        if line not in ("t", "f"):
+            raise ValueError("bool")
+        return ("!", line == "t"), j
+    if t == ",":
+        float(line)
+        return ("^", line), j
+    if not _RESP_NUM.fullmatch(line):
+        raise ValueError("length")
+    n = int(line)
+    if t in "$=!":
+        if n < 0:
+            if t != "$":
+                raise ValueError("length")
+            return ("~", None), j
+        if j + n > len(b):
+            raise ValueError("overrun")
+        pay = _bx_text(b[j:j + n])
+        if t == "=":
+            if not re.match(r"[a-z]{3}:", pay):
+                raise ValueError("verbatim format")
+            pay = pay[4:]
+        return (",", pay), _resp_eol(b, j + n)
+    if n < 0:
+        return ("~", None), j
+    items = []
+    for _ in range(n * (2 if t in "%|" else 1)):
+        node, j = _resp_parse(b, j, depth + 1)
+        items.append(node)
+    if t == "|":    # attribute: metadata ahead of the real reply -- parse and drop
+        return ("|", None), j
+    if t == "%":
+        return ("}", list(zip(items[0::2], items[1::2]))), j
+    return ("]", [x for x in items if x[0] != "|"]), j
+
+
+def _resp_top(b):
+    """Whole buffer -> [node] (1+ RESP values, whitespace between), else None."""
+    try:
+        out, i = [], 0
+        while True:
+            while i < len(b) and b[i:i + 1].isspace():
+                i += 1
+            if i >= len(b):
+                return [n for n in out if n[0] != "|"] or None
+            node, i = _resp_parse(b, i)
+            out.append(node)
+    except (ValueError, UnicodeDecodeError, OverflowError, RecursionError, IndexError):
+        return None
+
+
+def _resp_unescape(t):
+    """The docs' one-line form `*2\\r\\n$3\\r\\nfoo...` -> real line breaks (only when the text has no real ones)."""
+    if "\n" in t.strip() or not re.search(r"\\r\\n|\\n", t):
+        return None
+    return t.replace("\\r\\n", "\r\n").replace("\\n", "\n").replace("\\r", "\r")
+
+
+def resp_reads(t, _depth=0):
+    """[(how, text)] readings of a whole-text RESP run, best first (slug / English-gated); [] when not one."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or len(t) > 200000 or not re.match(r"\s*[-+:$*=_#,(!%~>|]", t):
+            return []
+        t = t.strip(" \t")
+        cands = [("", t)] + [("escaped-", u) for u in (_resp_unescape(t),) if u]
+        tops = []
+        for tag, txt in cands:
+            txt = txt.lstrip()
+            for unit, buf in (("bytes", txt.encode("utf-8")), ("chars", txt)):
+                if unit == "chars" and txt.isascii():
+                    continue
+                top = _resp_top(buf)
+                if top:
+                    tops.append((tag + unit, top))
+        reads = []
+        for unit, top in tops:
+            if len(top) == 1 and top[0][0] == "," and len(tops) and not re.match(r"\s*[$=]", t):
+                # one bare simple string `+text` / `-ERR text`: only a cue when it is the WHOLE text on one line
+                pass
+            for keys in (False, True):
+                lv = [x for n in top for x in _tn_leaves(n, keys)]
+                strs = [v for g, v in lv if g == ","]
+                if strs:
+                    joined = "".join(strs)
+                    reads.append((f"{unit}-strings" + ("-keys" if keys else ""), joined))
+                    if not keys and len(strs) > 1 and all(s and not re.search(r"\s", s) for s in strs) \
+                            and any(len(s) > 1 for s in strs):
+                        reads.append((f"{unit}-words", " ".join(strs)))
+                    if not keys and _depth < 3 and re.match(r"\s*[*$+=]", joined):
+                        reads += [(f"{unit}-nested-{h}", x) for h, x in resp_reads(joined, _depth + 1)]
+                    if not keys and not _ns_english(joined) and _depth < 3:
+                        from lib import decode as _dc
+                        whole = _dc.decode_chunk(joined, _nested=True)
+                        if whole is not None:
+                            reads.append((f"{unit}-strings-coded", whole))
+                if not keys and lv and all(g == "#" for g, _v in lv) and all(0 < v < 0x110000 for _g, v in lv):
+                    reads.append((f"{unit}-charcodes", "".join(chr(v) for _g, v in lv)))
+        seen = set()
+        reads = [r for r in reads if r[1] and r[1].isprintable() and not (r[1] in seen or seen.add(r[1]))
+                 and (SLUG.search(r[1]) or _ns_english(r[1]))]
+        return sorted(reads, key=lambda r: (not (SLUG.search(r[1]) and _TPL in r[1]), not SLUG.search(r[1]),
+                                            not _ns_english(r[1])))
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def resp_dec(t):
+    """Whole text = RESP value(s) -> its best slug / English-gated reading, else None."""
+    r = resp_reads(t)
+    return r[0][1] if r else None
+
+
+def resp_free(p):
+    """Speculative Mastery-line decoder: a one-line RESP fragment in the docs' escaped form (`*2\\r\\n$1\\r\\nN...`),
+    or a single `$<len>`/`=<len>` bulk with its body on the same line; leading indent kept."""
+    try:
+        if not isinstance(p, str) or not re.match(r"\s*[*$=%~>]-?\d{1,9}(\\r)?\\n", p):
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + x for _h, x in resp_reads(p)))[:3]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def resp_enc(s, form="chars", nl="\r\n", escaped=False):
+    """Plain -> RESP: chars/words/tokens = array of bulk strings (1 char / word without its space / word + space),
+    bulk = one `$` bulk, simple = `+text`, verbatim = RESP3 `=` txt:, codes = array of `:` ints."""
+    def bulk(x):
+        return f"${len(x.encode('utf-8'))}{nl}{x}{nl}"
+    if form == "bulk":
+        out = bulk(s)
+    elif form == "simple":
+        out = f"+{s}{nl}"
+    elif form == "verbatim":
+        out = f"={len(s.encode('utf-8')) + 4}{nl}txt:{s}{nl}"
+    elif form == "codes":
+        out = f"*{len(s)}{nl}" + "".join(f":{ord(c)}{nl}" for c in s)
+    else:
+        parts = list(s) if form == "chars" else s.split() if form == "words" else re.findall(r"\S+\s*", s)
+        out = f"*{len(parts)}{nl}" + "".join(bulk(x) for x in parts)
+    return out.replace("\r", "\\r").replace("\n", "\\n") if escaped else out
+
+
+CANDIDATES += [(f"resp-{f}{'-lf' if nl == chr(10) else ''}{'-escaped' if e else ''}",
+                (lambda f, nl, e: lambda s: resp_enc(s, f, nl, e))(f, nl, e), resp_dec)
+               for f, nl, e in (("chars", "\r\n", False), ("words", "\r\n", False), ("tokens", "\r\n", False),
+                                ("bulk", "\r\n", False), ("simple", "\r\n", False), ("verbatim", "\r\n", False),
+                                ("codes", "\r\n", False), ("chars", "\n", False), ("words", "\n", False),
+                                ("chars", "\r\n", True), ("words", "\r\n", True))]
+
+
+_ASN1_STR = {0x0C: "utf-8", 0x12: "latin-1", 0x13: "latin-1", 0x14: "latin-1", 0x16: "latin-1", 0x19: "latin-1",
+             0x1A: "latin-1", 0x1B: "latin-1", 0x1C: "utf-32-be", 0x1E: "utf-16-be", 0x04: None, 0x03: None}
+_ASN1_PEM = re.compile(r"-----BEGIN ([A-Z0-9 ]+)-----\s*([A-Za-z0-9+/=\s]+?)\s*-----END \1-----")
+
+
+def _asn1_tlv(b, p, depth, leaves):
+    """Parse one BER TLV at b[p:], appending (tag, content) string/opaque leaves in order -> end offset, else None.
+    Constructed (0x20) types recurse (definite or BER indefinite 0x80 ... 00 00); primitive non-string universal types
+    (INTEGER, OID, NULL, BOOLEAN, times ...) are skipped; primitive context/application tags are kept as opaque."""
+    n = len(b)
+    if p + 2 > n or depth > 40:
+        return None
+    t0 = b[p]
+    p += 1
+    num = t0 & 0x1F
+    if num == 0x1F:   # high tag number form
+        num = 0
+        for _ in range(4):
+            if p >= n:
+                return None
+            num = (num << 7) | (b[p] & 0x7F)
+            p += 1
+            if not b[p - 1] & 0x80:
+                break
+        else:
+            return None
+    if p >= n:
+        return None
+    l0 = b[p]
+    p += 1
+    cons, cls = t0 & 0x20, t0 & 0xC0
+    if l0 == 0x80:   # BER indefinite: constructed only, children until 00 00
+        if not cons:
+            return None
+        while True:
+            if p + 2 > n:
+                return None
+            if b[p] == 0 and b[p + 1] == 0:
+                return p + 2
+            p = _asn1_tlv(b, p, depth + 1, leaves)
+            if p is None:
+                return None
+    if l0 & 0x80:
+        k = l0 & 0x7F
+        if not 1 <= k <= 4 or p + k > n:
+            return None
+        ln = int.from_bytes(b[p:p + k], "big")
+        p += k
+    else:
+        ln = l0
+    end = p + ln
+    if end > n:
+        return None
+    if cons:
+        while p < end:
+            p = _asn1_tlv(b, p, depth + 1, leaves)
+            if p is None or p > end:
+                return None
+        return end
+    if t0 == 0 and ln == 0:
+        return None   # a stray EOC outside an indefinite run
+    if cls == 0 and num in _ASN1_STR:
+        leaves.append((num, b[p:end]))
+    elif cls == 0 and (num == 0 or num > 0x1E):
+        return None
+    elif cls:
+        leaves.append((-1, b[p:end]))
+    return end
+
+
+def _asn1_walk(b):
+    """[(tag, content)] when the WHOLE buffer is one or more complete TLVs whose first is constructed or a string
+    type and that hold >= 1 non-empty string leaf, else None."""
+    if not b or len(b) < 3 or not (b[0] & 0x20 or b[0] in _ASN1_STR):
+        return None
+    leaves, p = [], 0
+    while p < len(b):
+        p = _asn1_tlv(b, p, 0, leaves)
+        if p is None:
+            return None
+    return leaves if any(v for _t, v in leaves) else None
+
+
+def _asn1_text(tag, v, depth=0):
+    """A string leaf's text: its declared charset; OCTET/BIT/opaque = encapsulated DER (recursed) or UTF-8, else None."""
+    try:
+        if tag == 0x03:
+            if not v or v[0] > 7:
+                return None
+            v = v[1:]
+        if tag in (0x04, 0x03, -1):
+            sub = _asn1_walk(v) if depth < 4 and len(v) > 2 else None
+            if sub:
+                parts = [_asn1_text(t, x, depth + 1) for t, x in sub]
+                if all(x is not None for x in parts):
+                    return "".join(parts)
+            return v.decode("utf-8")
+        return v.decode(_ASN1_STR[tag])
+    except (UnicodeDecodeError, ValueError, KeyError):
+        return None
+
+
+def _asn1_layers(t):
+    """[(layer, bytes)] of a PEM block / hex / base64(url) / base32 line."""
+    m = _ASN1_PEM.search(t)
+    if m:
+        try:
+            return [("pem", base64.b64decode(re.sub(r"\s+", "", m.group(2)), validate=True))]
+        except (binascii.Error, ValueError):
+            return []
+    return _lp_layers(t)
+
+
+def asn1_reads(t):
+    """[(how, text)] readings of an ASN.1 DER/BER TLV tree (under PEM / hex / b64 / b32): its string leaves in order,
+    joined raw (or per-leaf / joined through the chunk codecs), crib first; [] when it is not one. Never raises."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 120000:
+            return []
+        from lib import decode as _dc
+        t, reads = t.strip(), []
+        for layer, b in _asn1_layers(t):
+            try:
+                owned = b.decode("utf-8").isprintable()   # plain hex / base64 of text: those decoders own it
+            except UnicodeDecodeError:
+                owned = False
+            lv = _asn1_walk(b)
+            if not lv:
+                continue
+            pay = [_asn1_text(tag, v) for tag, v in lv]
+            if any(x is None for x in pay):
+                continue
+            got = []
+            _lp_join(pay, f"{layer}-asn1", got, _dc)
+            if len(pay) > 1 and not got:
+                _lp_join([" ".join(pay)], f"{layer}-asn1-spaced", got, _dc)
+            reads += [r for r in got if not owned or (SLUG.search(r[1]) and _TPL in r[1])]
+        seen = set()
+        reads = [r for r in reads if r[1] != t and not (r[1] in seen or seen.add(r[1]))]
+        return sorted(reads, key=lambda r: (not (SLUG.search(r[1]) and _TPL in r[1]), not _crib_piece(r[1]),
+                                            not _ns_english(r[1]), -_texty(r[1])))
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def asn1_dec(t):
+    """Whole text = an ASN.1 DER/BER TLV tree -> its best reading, else None."""
+    r = asn1_reads(t)
+    return r[0][1] if r else None
+
+
+def asn1_free(p):
+    """Speculative Mastery-line decoder: a fragment that is a whole ASN.1 TLV tree, leading indent kept."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + x for _h, x in asn1_reads(p) if x and x.isprintable()))[:3]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def _asn1_len(n):
+    if n < 0x80:
+        return bytes([n])
+    k = (n.bit_length() + 7) // 8
+    return bytes([0x80 | k]) + n.to_bytes(k, "big")
+
+
+def asn1_enc(s, form="seq-chars", fmt="hex", tag=0x0C):
+    """Plain -> ASN.1: seq-chars / seq-words = DER SEQUENCE of one `tag` string per char / word (+ its space),
+    one = a single `tag` string (0x04 = OCTET STRING), ber-chars = BER indefinite SEQUENCE of chars; as hex / spaced
+    hex / b64 / PEM."""
+    def tlv(tg, v):
+        return bytes([tg]) + _asn1_len(len(v)) + v
+    if form == "one":
+        der = tlv(tag, s.encode("utf-8"))
+    else:
+        parts = list(s) if form in ("seq-chars", "ber-chars") else re.findall(r"\S+\s*", s)
+        body = b"".join(tlv(tag, x.encode("utf-8")) for x in parts)
+        der = b"\x30\x80" + body + b"\x00\x00" if form == "ber-chars" else tlv(0x30, body)
+    if fmt == "hex":
+        return der.hex()
+    if fmt == "hexsp":
+        return " ".join(f"{x:02x}" for x in der)
+    b64 = base64.b64encode(der).decode()
+    if fmt == "pem":
+        return "-----BEGIN DATA-----\n" + "\n".join(b64[i:i + 64] for i in range(0, len(b64), 64)) + "\n-----END DATA-----"
+    return b64
+
+
+CANDIDATES += [(f"asn1-{f}-{x}{'' if g == 0x0C else f'-{g:02x}'}",
+                (lambda f, x, g: lambda s: asn1_enc(s, f, x, g))(f, x, g), asn1_dec)
+               for f, x, g in (("seq-chars", "hex", 0x0C), ("seq-chars", "b64", 0x0C), ("seq-chars", "hexsp", 0x0C),
+                               ("seq-words", "hex", 0x0C), ("seq-words", "b64", 0x0C), ("seq-chars", "hex", 0x16),
+                               ("seq-words", "b64", 0x04), ("one", "hex", 0x04), ("one", "b64", 0x0C),
+                               ("one", "pem", 0x04), ("ber-chars", "hex", 0x0C), ("ber-chars", "b64", 0x0C))]
+
+# DELIMITED-FIELD FRAMING (speculative, no day; the delimiter-ESCAPING sibling of D24's netstrings: the payload holds
+# the delimiter, escaped instead of counted). One char or word per field: CSV `"N","i",""""` (RFC 4180 doubled quote,
+# QUOTE_ALL or QUOTE_MINIMAL `N,i,","`, `;` / `|` / tab delimiters, `\"` backslash quoting, blanks after the delimiter),
+# TSV whose bare fields carry `\t` `\n` `\\` escapes (PostgreSQL COPY / MySQL), Lisp char lists `(#\N #\i #\space)`
+# (Scheme / CL `#\Space` `#\ ` `#\x41` `#\U+0041` / Unicode names, `#(..)` vectors, Clojure `[\N \i \space]`), YAML flow
+# sequences `[N, i, ' ', '''']` (plain / 'single' with '' / "double" with backslash escapes). Fields join with '' (or ' '
+# for space-free words); a reading must parse the WHOLE text and read as English / a piece of the warmups sentence.
+_DF_NAMES = {"space": " ", "newline": "\n", "linefeed": "\n", "tab": "\t", "return": "\r", "nul": "\0", "null": "\0",
+             "alarm": "\a", "backspace": "\b", "delete": "\x7f", "rubout": "\x7f", "del": "\x7f", "escape": "\x1b",
+             "esc": "\x1b", "altmode": "\x1b", "page": "\f", "formfeed": "\f", "comma": ","}
+_DF_TSV = {"t": "\t", "n": "\n", "r": "\r", "\\": "\\", "0": "\0", "b": "\b", "f": "\f", "v": "\v", "N": None}
+_DF_YDQ = {"0": "\0", "a": "\a", "b": "\b", "t": "\t", "\t": "\t", "n": "\n", "v": "\v", "f": "\f", "r": "\r",
+           "e": "\x1b", " ": " ", '"': '"', "/": "/", "\\": "\\", "N": "\x85", "_": "\xa0", "L": " ", "P": " "}
+
+
+def _df_csv_split(t, sep, bs=False, sp=False, tsv=False):
+    """RFC 4180 fields of the whole `t` -> [(quoted, value)] (a line break ends a field like `sep`), else None.
+    bs: `\\"` / `\\\\` inside quotes instead of doubled quotes; sp: blanks around a field ignored; tsv: bare fields
+    unescape `\\t \\n \\\\`."""
+    f, i, n = [], 0, len(t)
+    while True:
+        j = i
+        while sp and j < n and t[j] == " ":
+            j += 1
+        if j < n and t[j] == '"':
+            k, buf = j + 1, []
+            while True:
+                if k >= n:
+                    return None
+                c = t[k]
+                if bs and c == "\\" and k + 1 < n:
+                    buf.append(t[k + 1])
+                    k += 2
+                elif c == '"' and not bs and t[k + 1:k + 2] == '"':
+                    buf.append('"')
+                    k += 2
+                elif c == '"':
+                    k += 1
+                    break
+                else:
+                    buf.append(c)
+                    k += 1
+            while sp and k < n and t[k] == " ":
+                k += 1
+            f.append((True, "".join(buf)))
+        else:
+            k = j
+            while k < n and t[k] != sep and t[k] not in "\r\n":
+                if t[k] == '"':
+                    return None             # a bare quote inside an unquoted field
+                k += 1
+            v = t[j:k].rstrip(" ") if sp else t[i:k]
+            if tsv:
+                parts = re.split(r"(\\.)", v)
+                if any(p[:1] == "\\" and _DF_TSV.get(p[1:]) is None for p in parts) or "\\" in parts[-1]:
+                    return None
+                v = "".join(_DF_TSV[p[1:]] if p[:1] == "\\" else p for p in parts)
+            f.append((False, v))
+        if k >= n:
+            return f
+        if t[k] == sep:
+            i = k + 1
+            continue
+        if t[k] not in "\r\n":
+            return None                     # junk after a closing quote
+        k += 2 if t[k:k + 2] == "\r\n" else 1
+        if not t[k:].strip("\r\n"):
+            return f                        # trailing record terminator
+        i = k
+
+
+def _df_csv(t):
+    """[(form, [field], strict)] for every CSV / TSV dialect under which the whole text is a field run of one char
+    (or one quoted / space-free word) per field; strict = bare multi-char fields (needs a template-piece reading)."""
+    out = []
+    for sep in _DF_SEPS:
+        if t.count(sep) < 2:
+            continue
+        for bs, sp, tsv in ((False, False, True), (False, False, False), (True, False, False), (False, True, False)):
+            if (tsv and sep != "\t") or (sp and sep == "\t") or (sep == "\t" and not tsv and out and "tsv" in out[-1][0]):
+                continue
+            if (bs and '\\"' not in t) or (tsv and "\\" not in t):
+                continue
+            f = _df_csv_split(t, sep, bs, sp, tsv)
+            if not f or len(f) < 3:
+                continue
+            if f[-1] == (False, "") and t.rstrip("\r\n").endswith(sep):
+                f = f[:-1]                  # trailing delimiter
+            if any(v == "" for _q, v in f):
+                continue
+            bare = [v for q, v in f if not q]
+            if any(len(v) > 1 and not re.fullmatch(r"\S+ ?", v) for v in bare):
+                continue
+            out.append((f"csv{'-bs' if bs else ''}{'-sp' if sp else ''}{'-tsv' if tsv else ''}-{ord(sep):02x}",
+                        [v for _q, v in f], any(len(v) > 1 for v in bare)))
+    return out
+
+
+_DF_SEPS = (",", "\t", ";", "|")
+_DF_LTOK = re.compile(r"(?s)(#\\|\\)(.)([A-Za-z0-9_+-]*)")
+
+
+def _df_char(c, rest, clj):
+    """One Lisp char literal body -> its char, else None."""
+    if not rest:
+        return c
+    name = c + rest
+    lo = name.lower()
+    if lo in _DF_NAMES:
+        return _DF_NAMES[lo]
+    m = re.fullmatch(r"(?i)(?:x|u\+?)([0-9a-f]{1,6})", name) if not clj else re.fullmatch(r"u([0-9a-fA-F]{4})", name)
+    if m and int(m.group(1), 16) < 0x110000:
+        return chr(int(m.group(1), 16))
+    m = re.fullmatch(r"o([0-7]{1,3})", name) if clj else None
+    if m:
+        return chr(int(m.group(1), 8))
+    try:
+        return unicodedata.lookup(name.replace("_", " "))
+    except (KeyError, ValueError):
+        return None
+
+
+def _df_lisp(t):
+    """[(form, [char])] when the whole text is a Lisp / Clojure list, vector or bare run of char literals."""
+    m = re.fullmatch(r"(?s)\s*['`]?(#?\(|\[)(.*)([)\]])\s*", t)
+    body, form = (m.group(2), "list") if m and (m.group(1)[-1] + m.group(3)) in ("()", "[]") else (t, "bare")
+    out, i, n, kinds = [], 0, len(body), set()
+    while True:
+        while i < n and (body[i].isspace() or body[i] == ","):
+            i += 1
+        if i >= n:
+            break
+        mt = _DF_LTOK.match(body, i)
+        if not mt:
+            return []
+        kinds.add(mt.group(1))
+        ch = _df_char(mt.group(2), mt.group(3), mt.group(1) == "\\")
+        i = mt.end()
+        if ch is None or (i < n and not (body[i].isspace() or body[i] in ",#\\")):
+            return []
+        out.append(ch)
+    if len(out) < 3 or len(kinds) != 1:
+        return []
+    return [(("scheme-" if "#\\" in kinds else "clojure-") + form, out)]
+
+
+def _df_yq(body, i, q):
+    """Quoted YAML scalar starting at body[i] == q -> (value, end) or None (line folding: break + indent = ' ')."""
+    k, buf, n = i + 1, [], len(body)
+    while k < n:
+        c = body[k]
+        if q == "'" and c == "'":
+            if body[k + 1:k + 2] == "'":
+                buf.append("'")
+                k += 2
+                continue
+            return "".join(buf), k + 1
+        if q == '"' and c == '"':
+            return "".join(buf), k + 1
+        if q == '"' and c == "\\":
+            e = body[k + 1:k + 2]
+            if e in _DF_YDQ:
+                buf.append(_DF_YDQ[e])
+                k += 2
+                continue
+            m = re.compile(r"x([0-9a-fA-F]{2})|u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})").match(body, k + 1)
+            if not m or int(m.group(0)[1:], 16) >= 0x110000:
+                return None
+            buf.append(chr(int(m.group(0)[1:], 16)))
+            k = m.end()
+            continue
+        if c in "\r\n":
+            m = re.compile(r"[ \t]*(?:\r?\n[ \t]*)+").match(body, k)
+            while buf and buf[-1] in " \t":
+                buf.pop()
+            nl = m.group(0).count("\n") - 1
+            buf.append("\n" * nl if nl else " ")
+            k = m.end()
+            continue
+        buf.append(c)
+        k += 1
+    return None
+
+
+def _df_yaml(t):
+    """[(form, [field])] when the whole text is a YAML flow sequence of scalars (>= 3)."""
+    s = t.strip()
+    if len(s) < 7 or s[0] != "[" or s[-1] != "]":
+        return []
+    body, out, i, quoted = s[1:-1], [], 0, False
+    n = len(body)
+    while True:
+        while i < n and body[i].isspace():
+            i += 1
+        if i >= n:
+            break
+        if body[i] in "'\"":
+            r = _df_yq(body, i, body[i])
+            if r is None:
+                return []
+            v, i = r
+            quoted = True
+        else:
+            m = re.compile(r"[^,\[\]{}]+").match(body, i)
+            if not m or body[i] in "#&*!|>%@`" or re.match(r"-\s|\?\s|:\s", body[i:i + 2] + " "):
+                return []
+            v, i = m.group(0).strip(), m.end()
+            if not v or ": " in v or " #" in v or re.fullmatch(r"(?i)[-+]?(?:\d[\d_]*(?:\.\d*)?(?:e[-+]?\d+)?|0x[0-9a-f]+|"
+                                                               r"0o[0-7]+|\.\d+|\.inf|\.nan|~|null)", v):
+                return []           # a YAML number / null is not a string field (char codes stay the char-code decoders')
+            v = re.sub(r"\s*\n\s*", " ", v)
+        out.append(v)
+        while i < n and body[i].isspace():
+            i += 1
+        if i < n:
+            if body[i] != ",":
+                return []
+            i += 1
+    if len(out) < 3:
+        return []
+    return [("yaml-flow" + ("" if quoted else "-plain"), out)]
+
+
+def _df_ok(s, strict=False):
+    if not s or not s.replace("\n", " ").replace("\t", " ").isprintable() or not re.search(r"[A-Za-z]{2}", s):
+        return False
+    s = s.replace("\n", " ").replace("\t", " ")
+    if strict:
+        return bool((SLUG.search(s) and _TPL in s) or _tc_piece(s))   # bare words: netstring / chunk frames split on ','
+    return _ns_english(s)
+
+
+def delim_reads(t):
+    """[(how, text)] readings of a whole-text delimited field run (CSV / TSV / Lisp chars / YAML flow), best first."""
+    try:
+        if isinstance(t, (bytes, bytearray)):
+            t = bytes(t).decode("utf-8")
+        if not isinstance(t, str) or not t.strip() or len(t) > 200000:
+            return []
+        from lib import decode as _dc
+        t = t.strip("\r\n")
+        runs = [(h, f, False) for h, f in _df_lisp(t) + _df_yaml(t)]
+        if not re.fullmatch(r"\s*\[.*\]\s*", t, re.S) or not runs:
+            runs += _df_csv(t)
+        reads = []
+        for how, fields, strict in runs:
+            joined = "".join(fields)
+            if _df_ok(joined, strict):
+                reads.append((how, joined))
+            if len(fields) >= 3 and all(len(x) > 1 and not re.search(r"\s", x) for x in fields):
+                sp = " ".join(fields)
+                if _df_ok(sp, strict):
+                    reads.append((how + "-spaced", sp))
+            if not strict and not _ns_english(joined) and len(joined) >= 4:
+                whole = _dc.decode_chunk(joined, _nested=True)      # fields carrying one strict chunk codec
+                if whole is not None and _df_ok(whole):
+                    reads.append((how + "-joined", whole))
+        seen = set()
+        reads = [r for r in reads if not (r[1] in seen or seen.add(r[1]))]
+        return sorted(reads, key=lambda r: (not (SLUG.search(r[1]) and _TPL in r[1]), not _ns_english(r[1])))
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def delim_dec(t):
+    """Whole text = a delimited one-char/word-per-field run -> its best reading, else None."""
+    r = delim_reads(t)
+    return r[0][1] if r else None
+
+
+def delim_free(p):
+    """Speculative Mastery-line decoder: a fragment that is a whole delimited field run, leading indent kept."""
+    try:
+        if not isinstance(p, str) or not p.strip() or not re.search(r"[\"',\t;|\[\\]", p):
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return list(dict.fromkeys(lead + x for _h, x in delim_reads(p) if x and x.isprintable()))[:3]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+def _df_yaml_scalar(c):
+    return c if re.fullmatch(r"[A-Za-z][A-Za-z]*", c) and c.lower() not in (
+        "y", "n", "yes", "no", "on", "off", "true", "false", "null") else "'" + c.replace("'", "''") + "'"
+
+
+def delim_enc(s, form="csv"):
+    """Plain -> one delimited-field form (one char per field; *-words = one word incl. its space per field)."""
+    w = re.findall(r"\S+\s*", s)
+    cq = lambda x: '"' + x.replace('"', '""') + '"'   # noqa: E731
+    if form == "csv":
+        return ",".join(cq(c) for c in s)
+    if form == "csv-min":
+        return ",".join(cq(c) if c in ',"\r\n' else c for c in s)
+    if form == "csv-words":
+        return ",".join(cq(x) for x in w)
+    if form == "csv-semi":
+        return ";".join(cq(c) for c in s)
+    if form == "csv-bs":
+        return ", ".join('"' + c.replace("\\", "\\\\").replace('"', '\\"') + '"' for c in s)
+    if form == "tsv":
+        return "\t".join({"\t": "\\t", "\n": "\\n", "\r": "\\r", "\\": "\\\\"}.get(c, c) for c in s)
+    if form == "scheme":
+        return "(" + " ".join("#\\" + {" ": "space", "\n": "newline", "\t": "tab"}.get(c, c) for c in s) + ")"
+    if form == "cl":
+        return "(" + " ".join("#\\" + {" ": "Space", "\n": "Newline", "\t": "Tab"}.get(c, c) for c in s) + ")"
+    if form == "clojure":
+        return "[" + " ".join("\\" + {" ": "space", "\n": "newline", "\t": "tab"}.get(c, c) for c in s) + "]"
+    if form == "yaml":
+        return "[" + ", ".join(_df_yaml_scalar(c) for c in s) + "]"
+    if form == "yaml-words":
+        return "[" + ", ".join(_df_yaml_scalar(x) for x in w) + "]"
+    return None
+
+
+CANDIDATES += [(f"delim-{f}", (lambda f: lambda s: delim_enc(s, f))(f), delim_dec)
+               for f in ("csv", "csv-min", "csv-words", "csv-semi", "csv-bs", "tsv", "scheme", "cl", "clojure", "yaml",
+                         "yaml-words")]
+
+
 SPECULATIVE_FREE = (
     ("rot47", lambda p: [rot47(p)]),
     ("rot8000", lambda p: [b for b in (rot8000_dec(p),) if b]),
@@ -15903,10 +17913,20 @@ SPECULATIVE_FREE = (
     ("saml-redirect", saml_redirect_free),
     ("pdf-filter-chain", pdf_chain_free),
     ("inflate-container", container_free),
+    ("http-chunked", chunked_free),
     ("text-compression", textcomp_free),
     ("yenc-binhex", retro_free),
     ("base85-any", b85_free),
     ("zalgo", zalgo_free),
+    ("netstring-any", netstr_any_free),
+    ("indexed-frames", frames_free),
+    ("tnetstring", tnet_free),
+    ("bencode-sexp", bencsexp_free),
+    ("length-prefix", lenpfx_free),
+    ("string-builder", strbuild_free),
+    ("resp", resp_free),
+    ("asn1-tlv", asn1_free),
+    ("delimited-fields", delim_free),
 )
 
 

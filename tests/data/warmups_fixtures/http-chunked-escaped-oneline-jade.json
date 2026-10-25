@@ -1,0 +1,9 @@
+{
+ "codec": "http-chunked",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-19",
+ "encoded": "8\\r\\nNice wor\\r\\n8\\r\\nk decodi\\r\\n8\\r\\nng this \\r\\n8\\r\\nwarmup! \\r\\n8\\r\\nTo solve\\r\\n8\\r\\n, submit\\r\\n8\\r\\n this ex\\r\\n8\\r\\nact answ\\r\\n8\\r\\ner to th\\r\\n8\\r\\ne Game M\\r\\n8\\r\\naster: j\\r\\n8\\r\\nade-lynx\\r\\n3\\r\\n-19\\r\\n0\\r\\n\\r\\n",
+ "generator_cmd": "/usr/bin/python3 -c 'import sys,h11; n=int(sys.argv[2]); c=h11.Connection(h11.CLIENT); o=c.send(h11.Request(method=\"POST\",target=\"/\",headers=[(\"Host\",\"x\"),(\"Transfer-Encoding\",\"chunked\")])); d=sys.argv[1].encode(); o+=b\"\".join(c.send(h11.Data(data=d[i:i+n])) for i in range(0,len(d),n)); sys.stdout.buffer.write(o+c.send(h11.EndOfMessage()))' \"$plain\" 8 | perl -0777 -pe 's/\\A.*?\\r\\n\\r\\n//s; s/\\r/\\\\r/g; s/\\n/\\\\n/g'   # h11 writer 8-byte chunks, CR/LF written as literal \\r \\n escapes (one line)",
+ "oracle_cmd": "printf %b \"$encoded\" | /home/testpwn/huntress-2026/.venv/bin/python3 -c 'import sys,dpkt\ntry: print(dpkt.http.Request(b\"POST / HTTP/1.1\\r\\nHost: x\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n\"+sys.stdin.buffer.read()).body.decode())\nexcept Exception: print(\"none\")'  # bash printf %b unescape + dpkt",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-19",
+ "expected": "match"
+}

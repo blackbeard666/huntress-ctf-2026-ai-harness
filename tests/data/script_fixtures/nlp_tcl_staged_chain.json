@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=tcl|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=TCL-ccfaf0cb|url=https://tcl-ccfaf0cb82.example.invalid/stage|file_path=/tmp/huntress-tcl/.ccfaf0cb82958c36.stage",
+ "decoy": false,
+ "language": "tcl",
+ "role": "staged-chain",
+ "id_single": "polyglot-tcl-staged-chain-<field>",
+ "id_timed": "polyglot-tcl-8226f9-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_tcl_staged_chain.tcl | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-tcl-staged-chain-language": "tcl",
+  "polyglot-tcl-staged-chain-role": "staged_chain",
+  "polyglot-tcl-staged-chain-verdict": "suspicious",
+  "polyglot-tcl-staged-chain-attack": "T1059",
+  "polyglot-tcl-staged-chain-adapter": "operation_graph",
+  "polyglot-tcl-staged-chain-host-profile": "standalone",
+  "polyglot-tcl-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-tcl-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-tcl-staged-chain-next-language": "vbscript",
+  "polyglot-tcl-staged-chain-stage-count": "3",
+  "polyglot-tcl-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-tcl-staged-chain-campaign-id": "TCL-ccfaf0cb",
+  "polyglot-tcl-staged-chain-url": "https://tcl-ccfaf0cb82.example.invalid/stage",
+  "polyglot-tcl-staged-chain-file-path": "/tmp/huntress-tcl/.ccfaf0cb82958c36.stage"
+ },
+ "answers_timed": {
+  "polyglot-tcl-8226f9-url-host": "tcl-ccfaf0cb82.example.invalid",
+  "polyglot-tcl-8226f9-path-leaf": ".ccfaf0cb82958c36.stage",
+  "polyglot-tcl-8226f9-campaign-token": "ccfaf0cb",
+  "polyglot-tcl-8226f9-next-language": "vbscript"
+ }
+}

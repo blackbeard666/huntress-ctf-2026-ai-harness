@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=swift|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=SWIFT-e49ede82|url=https://swift-e49ede828d.example.invalid/stage|file_path=/tmp/huntress-swift/.e49ede828d6ee75c.stage",
+ "decoy": false,
+ "language": "swift",
+ "role": "launcher",
+ "id_single": "polyglot-swift-launcher-<field>",
+ "id_timed": "polyglot-swift-568856-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_swift_launcher.swift | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(HB64)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-swift-launcher-language": "swift",
+  "polyglot-swift-launcher-role": "launcher",
+  "polyglot-swift-launcher-verdict": "suspicious",
+  "polyglot-swift-launcher-attack": "T1059",
+  "polyglot-swift-launcher-adapter": "process_builder",
+  "polyglot-swift-launcher-host-profile": "standalone",
+  "polyglot-swift-launcher-obfuscation-profile": "hex_base64",
+  "polyglot-swift-launcher-stage-profile": "three_stage_decode_write_launch",
+  "polyglot-swift-launcher-next-language": "batch",
+  "polyglot-swift-launcher-stage-count": "3",
+  "polyglot-swift-launcher-steps": "decode_embedded,write_file,dispatch_process",
+  "polyglot-swift-launcher-campaign-id": "SWIFT-e49ede82",
+  "polyglot-swift-launcher-url": "https://swift-e49ede828d.example.invalid/stage",
+  "polyglot-swift-launcher-file-path": "/tmp/huntress-swift/.e49ede828d6ee75c.stage"
+ },
+ "answers_timed": {
+  "polyglot-swift-568856-url-host": "swift-e49ede828d.example.invalid",
+  "polyglot-swift-568856-path-leaf": ".e49ede828d6ee75c.stage",
+  "polyglot-swift-568856-campaign-token": "e49ede82",
+  "polyglot-swift-568856-next-language": "batch"
+ }
+}

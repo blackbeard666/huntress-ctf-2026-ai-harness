@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=zsh|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=zshrc_hook|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ZSH-33a8987a|url=https://zsh-33a8987a7b.example.invalid/stage|file_path=/tmp/huntress-zsh/.33a8987a7bd99063.stage",
+ "decoy": false,
+ "language": "zsh",
+ "role": "host",
+ "id_single": "polyglot-zsh-host-<field>",
+ "id_timed": "polyglot-zsh-579bd1-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_zsh_host.zsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-zsh-host-language": "zsh",
+  "polyglot-zsh-host-role": "staged_chain",
+  "polyglot-zsh-host-verdict": "suspicious",
+  "polyglot-zsh-host-attack": "T1059",
+  "polyglot-zsh-host-adapter": "operation_graph",
+  "polyglot-zsh-host-host-profile": "zshrc_hook",
+  "polyglot-zsh-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-zsh-host-stage-profile": "two_stage_download_execute",
+  "polyglot-zsh-host-next-language": "bash",
+  "polyglot-zsh-host-stage-count": "2",
+  "polyglot-zsh-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-zsh-host-campaign-id": "ZSH-33a8987a",
+  "polyglot-zsh-host-url": "https://zsh-33a8987a7b.example.invalid/stage",
+  "polyglot-zsh-host-file-path": "/tmp/huntress-zsh/.33a8987a7bd99063.stage"
+ },
+ "answers_timed": {
+  "polyglot-zsh-579bd1-url-host": "zsh-33a8987a7b.example.invalid",
+  "polyglot-zsh-579bd1-path-leaf": ".33a8987a7bd99063.stage",
+  "polyglot-zsh-579bd1-campaign-token": "33a8987a",
+  "polyglot-zsh-579bd1-next-language": "bash"
+ }
+}

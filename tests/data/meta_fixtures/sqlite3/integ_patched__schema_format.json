@@ -1,0 +1,8 @@
+{
+ "field": "sqlite3.schema_format",
+ "expected": "5",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_integrity.sh.txt <outdir>  (coreutils cp/head/dd + sqlite3 CLI 3.46.1 + Pillow) -> patched.sqlite",
+ "oracle_cmd": "file -b -> 'maximum payload 65, ... schema 5, file counter 9, database pages 3, version-valid-for 9'; xxd -s 16 -l 8 -p -> 1000010100412020, xxd -s 44 -l 4 -p -> 00000005; sqlite3 -> 'file is not a database (26)'; stat -c %s -> 12288",
+ "decoy": false,
+ "member": "database-patched.sqlite"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "appcompatcache.entry_count",
+ "expected": "4",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/amcache/GENERATOR_amcache_shimcache.py.txt <outdir>  (stdlib struct regf writer: nk/lh/vk/db cells; raw Win10 10ts blob) -> system_shim.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/amcache/ORACLE_amcache_shimcache.py.txt tests/data/meta_fixtures/appcompatcache/system_shim__entry_count.bin  (regipy ShimCacheParser) -> ControlSet002 (Select\\\\Current=2) entries, cache order, len",
+ "decoy": false,
+ "member": "SYSTEM"
+}

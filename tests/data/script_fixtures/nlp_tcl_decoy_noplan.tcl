@@ -1,0 +1,3 @@
+# HUNTRESS_ANALYSIS_V1:B64-c3RhdHVzPW9rO2luZXJ0LWFuYWx5c2lzLWZpeHR1cmU7bm8gcGxhbiBoZXJl
+set DESCRIPTOR_431BC571 "c3RhdHVzPW9rO2luZXJ0LWFuYWx5c2lzLWZpeHR1cmU7bm8gcGxhbiBoZXJl"
+puts inert-analysis-fixture

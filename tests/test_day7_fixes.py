@@ -1287,3 +1287,33 @@ _m23 = _b6423.b32encode((_h23[:20] + "." + _h23[20:]).encode()).decode()   # enc
 assert _cx23.peel_plan("hex_frag_b32-" + _m23, "LYR") == "v=3|role=stager|campaign_id=c-1"
 assert _cx23.lyr_undo("LYR-hex_frag_b32-" + _m23) == "v=3|role=stager|campaign_id=c-1"
 print("ok  codec: D23 LYR-<layers> named chain peel")
+
+# Day 24 "String Theory": warmups line codec = one netstring `1:c,` per character (exact encoder; decode_chunk branch)
+_s24 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jaunty-compass-mosaic-76"
+_u24 = _wc.day_codec(24)[1](_s24)
+assert _u24.startswith("1:N,1:i,1:c,1:e,1: ,") and "1:,,1: ," in _u24 and _u24.endswith("1:7,1:6,")
+assert _wc.day_codec(24)[2](_u24) == _s24 and _wc.day_codec(24)[3] is False and _dc(_u24) == _s24
+print("ok  warmups_codecs: D24 netstring exact encoder + decode_chunk")
+
+# Day 24 "Event Horizon": evtx.record_count promoted from prebuilt evtx.record_value (verified D24) -- records walked
+# through every physical ElfChnk, NOT the header's next_record_id
+def _evtx24(n, nxt):
+    hdr = bytearray(4096)
+    _st17.pack_into("<8sQQQIHHHH", hdr, 0, b"ElfFile\0", 0, 0, nxt, 128, 1, 3, 4096, 1)
+    recs = b"".join(b"**\0\0" + _st17.pack("<IQ", 32, i + 1) + b"\0" * 12 + _st17.pack("<I", 32) for i in range(n))
+    chk = bytearray(b"ElfChnk\0" + b"\0" * (0x200 - 8))
+    _st17.pack_into("<I", chk, 48, 0x200 + len(recs))
+    return bytes(hdr + chk + recs) + b"\0" * (0x10000 - 0x200 - len(recs))
+assert _meta14.lookup("evtx", "record_count")[0].tier == _meta14.VERIFIED
+assert ("evtx", "record_count") not in _meta14._prebuilt_fields(_meta14.PREBUILT_DIR / "evtx.py")
+assert _meta14.answer("d24-evtx-001-evtx-record-count", {}, _evtx24(3, 99)) == ("3", _meta14.VERIFIED)
+assert _meta14.answer("d24-evtx-001-evtx-record-count", {}, _evtx24(0, 1))[0] == "0"
+print("ok  lib.meta: evtx.record_count verified D24 (physical chunk walk)")
+# D24: _prebuilt_fields reads only the `FIELDS = {...}` statement (full ast.parse of every prebuilt module was 0.5 s per
+# lane-solver process) -- same dict as the whole-module parse on every prebuilt module
+import ast as _ast24  # noqa: E402
+for _p24 in sorted(_meta14.PREBUILT_DIR.glob("*.py")):
+    _f24 = next((_ast24.literal_eval(n.value) for n in _ast24.parse(_p24.read_text()).body if isinstance(n, _ast24.Assign)
+                 and any(isinstance(t, _ast24.Name) and t.id == "FIELDS" for t in n.targets)), {})
+    assert _meta14._prebuilt_fields(_p24) == (_f24 if isinstance(_f24, dict) else {}), _p24.name
+print("ok  lib.meta: prebuilt FIELDS fast read == full parse")

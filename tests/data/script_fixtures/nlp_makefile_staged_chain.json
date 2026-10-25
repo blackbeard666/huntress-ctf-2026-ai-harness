@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=makefile|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=MAKEFILE-2b09fce2|url=https://makefile-2b09fce27f.example.invalid/stage|file_path=/tmp/huntress-makefile/.2b09fce27fd21abd.stage",
+ "decoy": false,
+ "language": "makefile",
+ "role": "staged-chain",
+ "id_single": "polyglot-makefile-staged-chain-<field>",
+ "id_timed": "polyglot-makefile-b32e06-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_makefile_staged_chain.mk | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(FRAG)-//' | tr -d . | xxd -r -p",
+ "answers_single": {
+  "polyglot-makefile-staged-chain-language": "makefile",
+  "polyglot-makefile-staged-chain-role": "staged_chain",
+  "polyglot-makefile-staged-chain-verdict": "suspicious",
+  "polyglot-makefile-staged-chain-attack": "T1059",
+  "polyglot-makefile-staged-chain-adapter": "operation_graph",
+  "polyglot-makefile-staged-chain-host-profile": "standalone",
+  "polyglot-makefile-staged-chain-obfuscation-profile": "fragmented_hex",
+  "polyglot-makefile-staged-chain-stage-profile": "cross_language_handoff",
+  "polyglot-makefile-staged-chain-next-language": "vbscript",
+  "polyglot-makefile-staged-chain-stage-count": "3",
+  "polyglot-makefile-staged-chain-steps": "profile_host,decode_configuration,dispatch_language",
+  "polyglot-makefile-staged-chain-campaign-id": "MAKEFILE-2b09fce2",
+  "polyglot-makefile-staged-chain-url": "https://makefile-2b09fce27f.example.invalid/stage",
+  "polyglot-makefile-staged-chain-file-path": "/tmp/huntress-makefile/.2b09fce27fd21abd.stage"
+ },
+ "answers_timed": {
+  "polyglot-makefile-b32e06-url-host": "makefile-2b09fce27f.example.invalid",
+  "polyglot-makefile-b32e06-path-leaf": ".2b09fce27fd21abd.stage",
+  "polyglot-makefile-b32e06-campaign-token": "2b09fce2",
+  "polyglot-makefile-b32e06-next-language": "vbscript"
+ }
+}

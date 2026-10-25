@@ -1,0 +1,9 @@
+{
+ "codec": "sexp",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-civet-90",
+ "encoded": "{KDY6YW5zd2VyKDQ6cGFydDU6TmljZSA1OndvcmsgOTpkZWNvZGluZyA1OnRoaXMgODp3YXJ\n tdXAhIDM6VG8gNzpzb2x2ZSwgNzpzdWJtaXQgKSg0OnBhcnQ1OnRoaXMgNjpleGFjdCA3Om\n Fuc3dlciAzOnRvIDQ6dGhlIDU6R2FtZSA4Ok1hc3RlcjogKSg0OnNsdWcxNDptYXBsZS1ja\n XZldC05MCkp}",
+ "generator_cmd": "python3 -I -c \"import sys, json; plain=sys.argv[1]; print((answer (part words0-7) (part words8..) (slug last)) incl. trailing spaces)\" \"$plain\" | tools/nettle-bin/usr/bin/sexp-conv -s transport",
+ "oracle_cmd": "tools/nettle-bin/usr/bin/sexp-conv -s advanced -w 0 | python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-sexpdata'); import sexpdata as S\ndef w(v, nohead=True):\n if isinstance(v,list): return ''.join(w(x) for x in v[(1 if nohead and len(v)>1 and isinstance(v[0],S.Symbol) else 0):] if not isinstance(x,S.Brackets))\n return str(v)\nprint(w(S.loads(sys.stdin.read(), nil=None, true=None, false=None)), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-civet-90",
+ "expected": "match"
+}

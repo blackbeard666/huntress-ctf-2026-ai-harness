@@ -1,0 +1,32 @@
+{
+ "expected_plain": "v=3|language=beanshell|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=jmeter_bsh_sampler|obfuscation_profile=layered_b64_hex|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=BEANSHELL-c5b7d0a1|url=https://beanshell-c5b7d0a176.example.invalid/stage|file_path=/tmp/huntress-beanshell/.c5b7d0a176b993fa.stage",
+ "decoy": false,
+ "language": "beanshell",
+ "role": "host",
+ "id_single": "polyglot-beanshell-host-<field>",
+ "id_timed": "polyglot-beanshell-cc1315-<field>",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/nlp_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/nlp_beanshell_host.bsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:(LYR-b64_hex)-//' | xxd -r -p | base64 -d",
+ "answers_single": {
+  "polyglot-beanshell-host-language": "beanshell",
+  "polyglot-beanshell-host-role": "staged_chain",
+  "polyglot-beanshell-host-verdict": "suspicious",
+  "polyglot-beanshell-host-attack": "T1059",
+  "polyglot-beanshell-host-adapter": "operation_graph",
+  "polyglot-beanshell-host-host-profile": "jmeter_bsh_sampler",
+  "polyglot-beanshell-host-obfuscation-profile": "layered_b64_hex",
+  "polyglot-beanshell-host-stage-profile": "two_stage_download_execute",
+  "polyglot-beanshell-host-next-language": "bash",
+  "polyglot-beanshell-host-stage-count": "2",
+  "polyglot-beanshell-host-steps": "acquire_remote,dispatch_process",
+  "polyglot-beanshell-host-campaign-id": "BEANSHELL-c5b7d0a1",
+  "polyglot-beanshell-host-url": "https://beanshell-c5b7d0a176.example.invalid/stage",
+  "polyglot-beanshell-host-file-path": "/tmp/huntress-beanshell/.c5b7d0a176b993fa.stage"
+ },
+ "answers_timed": {
+  "polyglot-beanshell-cc1315-url-host": "beanshell-c5b7d0a176.example.invalid",
+  "polyglot-beanshell-cc1315-path-leaf": ".c5b7d0a176b993fa.stage",
+  "polyglot-beanshell-cc1315-campaign-token": "c5b7d0a1",
+  "polyglot-beanshell-cc1315-next-language": "bash"
+ }
+}

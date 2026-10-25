@@ -1,0 +1,17 @@
+{
+ "family": "jvm_patch_diff",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "pdiff_decoy_a.bin",
+ "jar_b": "pdiff_decoy_b.bin",
+ "expected_result": null,
+ "expected_facts": {
+  "changed_methods": null,
+  "fix_kind": null
+ },
+ "generator_cmd": "bash pdiff_gen.sh OUT   # printf 'PK\\x03\\x04 not really a jar' (renamed text impostor) vs a real javac jar",
+ "oracle_cmd": "python3 pdiff_oracle.py pdiff_decoy_a.bin pdiff_decoy_b.bin x y   # zipfile.BadZipFile -> {\"_result\": null}; file pdiff_decoy_a.bin: data",
+ "decoy": true,
+ "note": "impostor 'jar' (zip magic, no central directory): jvm_patch_diff -> None, every field None"
+}

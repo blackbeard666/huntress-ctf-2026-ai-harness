@@ -1,0 +1,21 @@
+#!/bin/sh
+# Fixture generator for lib/meta/prebuilt/sqlite_apps.py -- the sqlite3 CLI (SQLite 3.46.1) is the WRITER; `zip` packs the kit.
+# usage: sh GENERATOR_sqlite_apps.sh.txt <outdir>
+set -e
+cd "$1"
+rm -f apps_*.db apps_kit.zip readme.txt
+# application ids: 'HTRT' (D23 flavor, 0x48545254), GeoPackage 'GPKG' (0x47504b47), Fossil checkout (0x0f055112)
+sqlite3 apps_htrt.db "PRAGMA application_id=1213485652; PRAGMA user_version=3; CREATE TABLE cases(id INTEGER PRIMARY KEY, title TEXT); CREATE TABLE artifacts(id INTEGER PRIMARY KEY, case_id INT, path TEXT);"
+sqlite3 apps_gpkg.db "PRAGMA application_id=1196444487; CREATE TABLE gpkg_contents(table_name TEXT PRIMARY KEY, data_type TEXT); CREATE TABLE gpkg_spatial_ref_sys(srs_id INTEGER PRIMARY KEY, srs_name TEXT);"
+sqlite3 apps_fossil.db "PRAGMA application_id=252006674; CREATE TABLE vvar(name TEXT PRIMARY KEY, value CLOB); CREATE TABLE vfile(id INTEGER PRIMARY KEY, pathname TEXT);"
+# Chrome History (meta key/value rows version=46, last_compatible_version=16), Chrome Cookies (meta version=21)
+sqlite3 apps_chrome_history.db "CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR); INSERT INTO meta VALUES('mmap_status','-1'),('version','46'),('last_compatible_version','16'); CREATE TABLE urls(id INTEGER PRIMARY KEY AUTOINCREMENT,url LONGVARCHAR,title LONGVARCHAR,visit_count INTEGER DEFAULT 0 NOT NULL,last_visit_time INTEGER NOT NULL); CREATE TABLE visits(id INTEGER PRIMARY KEY,url INTEGER NOT NULL,visit_time INTEGER NOT NULL); CREATE TABLE downloads(id INTEGER PRIMARY KEY,target_path LONGVARCHAR); CREATE TABLE keyword_search_terms(keyword_id INTEGER NOT NULL,url_id INTEGER NOT NULL,term LONGVARCHAR NOT NULL); INSERT INTO urls(url,title,visit_count,last_visit_time) VALUES('https://example.com/','Example',1,13370000000000000);"
+sqlite3 apps_chrome_cookies.db "CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR); INSERT INTO meta VALUES('version','21'),('last_compatible_version','21'); CREATE TABLE cookies(creation_utc INTEGER NOT NULL,host_key TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,encrypted_value BLOB NOT NULL);"
+sqlite3 apps_firefox_places.db "PRAGMA page_size=32768; PRAGMA user_version=74; CREATE TABLE moz_places(id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR); CREATE TABLE moz_historyvisits(id INTEGER PRIMARY KEY, place_id INTEGER, visit_date INTEGER); CREATE TABLE moz_bookmarks(id INTEGER PRIMARY KEY, fk INTEGER);"
+sqlite3 apps_activities.db "CREATE TABLE Activity(Id GUID PRIMARY KEY, AppId TEXT); CREATE TABLE ActivityOperation(OperationOrder INTEGER PRIMARY KEY, Id GUID); CREATE TABLE Activity_PackageId(ActivityId GUID, Platform TEXT); CREATE TABLE Metadata(Key TEXT PRIMARY KEY, Value TEXT);"
+sqlite3 apps_whatsapp.db "PRAGMA user_version=1; CREATE TABLE messages(_id INTEGER PRIMARY KEY AUTOINCREMENT, key_remote_jid TEXT NOT NULL, data TEXT); CREATE TABLE jid(_id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, server TEXT NOT NULL); CREATE TABLE chat_list(_id INTEGER PRIMARY KEY AUTOINCREMENT, key_remote_jid TEXT UNIQUE);"
+sqlite3 apps_imessage.db "CREATE TABLE message(ROWID INTEGER PRIMARY KEY AUTOINCREMENT, guid TEXT UNIQUE NOT NULL, text TEXT, handle_id INTEGER DEFAULT 0); CREATE TABLE handle(ROWID INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE, id TEXT NOT NULL); CREATE TABLE chat(ROWID INTEGER PRIMARY KEY AUTOINCREMENT, guid TEXT UNIQUE NOT NULL); CREATE TABLE attachment(ROWID INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT);"
+# decoy: a text note renamed .db (no "SQLite format 3\0" magic)
+printf 'not a database -- exported chat notes\n' > apps_decoy.db
+printf 'evidence kit: browser + phone databases\n' > readme.txt
+zip -X -q apps_kit.zip apps_chrome_history.db apps_chrome_cookies.db apps_firefox_places.db apps_whatsapp.db apps_imessage.db apps_htrt.db apps_decoy.db readme.txt

@@ -1,0 +1,11 @@
+{
+ "codec": "length-prefix",
+ "plain": null,
+ "encoded": "TWVldCBtZSBhdCB0aGUgb2xkIGxpZ2h0aG91c2UgYWZ0ZXIgdGhlIHN0b3JtIHBhc3NlcyB0b25pZ2h0Lg==",
+ "generator_cmd": "printf %s \"$plain\"| base64 -w0   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | perl -0777 -ne 'print unpack(\"(v/a*)*\", $_)'",
+ "oracle_plain": "et me at the old lighthouse after the storm passes tonight.",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "the perl/protobuf reader is lenient (garbage frames or a short read); a decoy = plain text under hex/b64 (owned by those decoders) or frames that do not cover the WHOLE stream"
+}

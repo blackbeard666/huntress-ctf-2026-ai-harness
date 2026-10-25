@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.page_size_raw_u16_hex",
+ "expected": "0x0001",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_integrity.sh.txt <outdir>  (coreutils cp/head/dd + sqlite3 CLI 3.46.1 + Pillow) -> big.sqlite",
+ "oracle_cmd": "stat -c %s -> 131072; file -b -> 'page size 65536, file counter 2, database pages 2, version-valid-for 2, SQLite version 3046001'; xxd -s 16 -l 2 -p -> 0001; sqlite3 integrity_check ok",
+ "decoy": false,
+ "member": "database-big.sqlite"
+}

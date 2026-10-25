@@ -1,0 +1,10 @@
+{
+ "codec": "string-builder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-koala-48",
+ "encoded": "new char[]{'N','i','c','e',' ','w','o','r','k',' ','d','e','c','o','d','i','n','g',' ','t','h','i','s',' ','w','a','r','m','u','p','!',' ','T','o',' ','s','o','l','v','e',',',' ','s','u','b','m','i','t',' ','t','h','i','s',' ','e','x','a','c','t',' ','a','n','s','w','e','r',' ','t','o',' ','t','h','e',' ','G','a','m','e',' ','M','a','s','t','e','r',':',' ','j','a','d','e','-','k','o','a','l','a','-','4','8'}",
+ "generator_cmd": "python3 -I -c 'import os; print(\"new char[]{\" + \",\".join(\"\\x27%s\\x27\" % (\"\\\\\\x27\" if c == \"\\x27\" else c) for c in os.environ[\"plain\"]) + \"}\", end=\"\")'   # env plain=<plain>",
+ "oracle_cmd": "d=$(mktemp -d); printf 'public class M{public static void main(String[] a){System.out.print(new String(%s));}}' \"$encoded\" > $d/M.java && javac -d $d $d/M.java && java -cp $d M   # env encoded=<encoded>",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-koala-48",
+ "decoy": false,
+ "expected": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-koala-48"
+}

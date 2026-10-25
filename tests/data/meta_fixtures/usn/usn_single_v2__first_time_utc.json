@@ -1,0 +1,8 @@
+{
+ "field": "usn.first_time_utc",
+ "expected": "2025-11-02T23:59:58Z",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/usn/GENERATOR_usn_struct.py.txt <outdir>  (stdlib struct USN_RECORD_V2 writer, sparse zero prefix + page-tail zero padding -> usn_single_v2.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dissect .venv/bin/python -P tests/data/meta_fixtures/usn/ORACLE_usn_dissect.py.txt <outdir>/usn_single_v2.bin  (dissect.ntfs 3.16 UsnJrnl(fh).records(); field 'first_time_utc')",
+ "decoy": false,
+ "member": "$J"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as raw_attest, but the shipped cert has NO attestation extension: getExtensionValue -> null -> the chain returns 'unattested' (no token)",
+ "generator_cmd": "python3 tests/data/android_fixtures/x5ctx_src/gen_x5.py decoy_noext tests/data/android_fixtures/x5ctx_decoy_noext.apk  # pyasn1 KeyDescription (ka_src) + cryptography x509 builder (RSA root/intermediate, EC leaf, 128-bit serial, 'Huntress, Inc.' / 'Arena+Lab' / emailAddress names) + apktool's aapt2 compile/link (res/raw, R ids) + javac --release 8 + dex2jar d2j-jar2dex + zipfile",
+ "oracle_cmd": "same generator, oracle stage: aapt2 dump resources (raw id -> res path), then java -Dctx.apk=<built apk> -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM with the REAL JDK CertificateFactory / X509Certificate / X500Principal.getName(RFC2253) over the APK bytes read by java.util.zip.ZipFile -> 'unattested'"
+}

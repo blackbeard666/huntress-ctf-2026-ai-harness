@@ -1,0 +1,4 @@
+# HUNTRESS_ANALYSIS_V1:B64-c3RhdHVzPW9rO2luZXJ0LWFuYWx5c2lzLWZpeHR1cmU7bm8gcGxhbiBoZXJl
+FROM scratch
+ARG DESCRIPTOR_59DE2959="c3RhdHVzPW9rO2luZXJ0LWFuYWx5c2lzLWZpeHR1cmU7bm8gcGxhbiBoZXJl"
+LABEL fixture="inert-analysis-fixture"

@@ -1,0 +1,9 @@
+{
+ "codec": "bencode",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-73",
+ "encoded": "101:Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-73",
+ "generator_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-bencode'); import bencode as B; plain=sys.argv[1]; sys.stdout.buffer.write(B.encode(plain))\" \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-bencode'); import bencode as B\ndef w(v):\n if isinstance(v,(str,bytes)): return v if isinstance(v,str) else v.decode()\n if isinstance(v,list): return ''.join(w(x) for x in v) if any(not isinstance(x,int) for x in v) else ''.join(map(chr,v))\n if isinstance(v,dict): return ''.join(w(v[k]) for k in sorted(v))\n return ''\nprint(w(B.decode(sys.stdin.buffer.read().strip())), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-marten-73",
+ "expected": "match"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "string-builder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wren-64",
+ "encoded": "[\"N\",\"i\",\"c\",\"e\",\" \",\"w\",\"o\",\"r\",\"k\",\" \",\"d\",\"e\",\"c\",\"o\",\"d\",\"i\",\"n\",\"g\",\" \",\"t\",\"h\",\"i\",\"s\",\" \",\"w\",\"a\",\"r\",\"m\",\"u\",\"p\",\"!\",\" \",\"T\",\"o\",\" \",\"s\",\"o\",\"l\",\"v\",\"e\",\",\",\" \",\"s\",\"u\",\"b\",\"m\",\"i\",\"t\",\" \",\"t\",\"h\",\"i\",\"s\",\" \",\"e\",\"x\",\"a\",\"c\",\"t\",\" \",\"a\",\"n\",\"s\",\"w\",\"e\",\"r\",\" \",\"t\",\"o\",\" \",\"t\",\"h\",\"e\",\" \",\"G\",\"a\",\"m\",\"e\",\" \",\"M\",\"a\",\"s\",\"t\",\"e\",\"r\",\":\",\" \",\"a\",\"m\",\"b\",\"e\",\"r\",\"-\",\"w\",\"r\",\"e\",\"n\",\"-\",\"6\",\"4\"]\n",
+ "generator_cmd": "printf %s \"$plain\" | jq -Rc 'split(\"\")'   # env plain=<plain>",
+ "oracle_cmd": "printf %s \"$encoded\" | jq -j 'join(\"\")'   # env encoded=<encoded>",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wren-64",
+ "decoy": false,
+ "expected": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wren-64"
+}

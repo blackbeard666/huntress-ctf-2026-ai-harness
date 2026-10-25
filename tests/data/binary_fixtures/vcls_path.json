@@ -1,0 +1,17 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls_path_a.bin",
+ "file_b": "vcls_path_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-22",
+  "cwe_number": "22",
+  "vulnerability_class": "path_traversal"
+ },
+ "generator_cmd": "bash vcls_gen.sh OUT   # gcc -fno-inline C twins / javac --release 11 + jar twins",
+ "oracle_cmd": "python3 vcls_oracle.py vcls_path_a.bin vcls_path_b.bin   # objdump -d -M intel / javap -c -p added/removed: {\"added\": [\"call\", \"call strstr\", \"je\", \"jmp\", \"lea\", \"mov\", \"test\"], \"removed\": []}",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (C: open(/srv/files/+s) -> strstr(s, \"..\") reject first); CWE spelling SPECULATIVE until a GM label is seen (D24 single solve = CWE-476)"
+}

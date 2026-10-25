@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "6b420728-f075-4ad3-b43d-13603b86266e",
+  "window": null,
+  "elapsed": 4.64,
+  "in_window": 4.64,
+  "phases": {
+    "start": 0.0,
+    "download": 0.0,
+    "solve": 1.85,
+    "submit": 2.79
+  },
+  "routed": "local (Homebase unavailable)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "zippy-banner-copper-75"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

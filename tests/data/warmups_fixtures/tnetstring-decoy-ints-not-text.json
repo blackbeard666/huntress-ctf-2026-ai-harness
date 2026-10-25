@@ -1,0 +1,11 @@
+{
+ "codec": "tnetstring",
+ "plain": null,
+ "encoded": "30:1:3#9:141592653#2:-7#3:2.5^0:~]",
+ "generator_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-tnet'); import tnetstring as T; plain=sys.argv[1]; sys.stdout.buffer.write(T.dumps([3, 141592653, -7, 2.5, None]))\" \"$plain\"   # valid tnetstring, but no string field / no text",
+ "oracle_cmd": "python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-tnet'); import tnetstring as T\ndef w(v):\n if isinstance(v,bytes): return v.decode()\n if isinstance(v,list): return ''.join(w(x) for x in v) if any(not isinstance(x,int) for x in v) else ''.join(map(chr,v))\n if isinstance(v,dict): return ''.join(w(v[k]) for k in sorted(v, key=int))\n return ''\nd=sys.stdin.buffer.read().strip(); v,r=T.pop(d)\nassert not r.strip(), 'trailing bytes'\nprint(w(v), end='')\"",
+ "oracle_plain": "",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "a valid tnetstring with no string leaves and non-charcode ints: the field is absent"
+}

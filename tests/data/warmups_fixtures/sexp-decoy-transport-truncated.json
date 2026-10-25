@@ -1,0 +1,11 @@
+{
+ "codec": "sexp",
+ "plain": null,
+ "encoded": "{KDE6TjE6aTE6YzE6ZTE6IDE6dzE6bzE6cjE6azE6IDE6ZDE6ZTE6YzE6bzE6ZDE6aTE6bjE6ZzE6IDE6dDE6aDE6aTE6czE6IDE6dzE6YTE6cjE6bTE6dTE6cDE6ITE6IDE6VDE6bzE6IDE6czE6bzE6bDE6djE6ZTE6LDE6IDE6czE6dTE6YjE6bTE6aTE6dDE6IDE6dDE6aDE6aTE6czE6IDE6ZTE6eDE6YTE6YzE6dDE6IDE6YTE6bjE6czE6dzE6ZTE6cjE6IDE6dDE6bzE6IDE6dDE6aDE6ZTE6IDE6RzE6YTE6bTE6ZTE6IDE6TTE6YTE6czE6dDE6ZTE6cjE6OjE6IDE6ajE6YTE6ZDE6ZTE6LTE6bDE6ZTE6bTE6dTE6cjE6LTE6ODE6Mg==}",
+ "generator_cmd": "python3 -I -c \"import sys, json; plain=sys.argv[1]; print('(' + ' '.join(json.dumps(c) for c in plain) + ')')\" \"$plain\" | tools/nettle-bin/usr/bin/sexp-conv -s canonical | head -c -1 | base64 -w0 | sed 's/.*/{&}/'",
+ "oracle_cmd": "tools/nettle-bin/usr/bin/sexp-conv -s advanced -w 0 | python3 -I -c \"import sys; sys.path.insert(0,'tools/pylib-sexpdata'); import sexpdata as S\ndef w(v, nohead=False):\n if isinstance(v,list): return ''.join(w(x) for x in v[(1 if nohead and len(v)>1 and isinstance(v[0],S.Symbol) else 0):] if not isinstance(x,S.Brackets))\n return str(v)\nprint(w(S.loads(sys.stdin.read(), nil=None, true=None, false=None)), end='')\"",
+ "oracle_plain": "<error: sexp-conv: Unexpected end of transport encoding.>",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "transport form whose canonical sexp lost its closing ')'"
+}

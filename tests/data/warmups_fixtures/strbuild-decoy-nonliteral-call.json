@@ -1,0 +1,11 @@
+{
+ "codec": "string-builder",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-quail-55",
+ "encoded": "decodeChunk(\"Nice \") + \"work \" + \"decoding \" + \"this \" + \"warmup! \" + \"To \" + \"solve, \" + \"submit \" + \"this \" + \"exact \" + \"answer \" + \"to \" + \"the \" + \"Game \" + \"Master: \" + \"jade-quail-55\"",
+ "generator_cmd": "tools/node/bin/node -e 'const w=process.env.plain.match(/\\S+\\s*/g); process.stdout.write(\"decodeChunk(\" + JSON.stringify(w[0]) + \") + \" + w.slice(1).map(x=>JSON.stringify(x)).join(\" + \"))'   # env plain=<plain>",
+ "oracle_cmd": "tools/node/bin/node -e 'try{process.stdout.write(String(eval(process.env.encoded)))}catch(e){process.stdout.write(\"ERR \"+e.name)}'   # env encoded=<encoded>",
+ "oracle_plain": "ERR ReferenceError",
+ "decoy": true,
+ "expected": "none",
+ "oracle_note": "a non-literal call piece (decodeChunk is undefined: node ReferenceError) -> never folded"
+}

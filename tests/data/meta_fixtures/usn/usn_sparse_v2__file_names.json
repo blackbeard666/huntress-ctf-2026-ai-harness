@@ -1,0 +1,8 @@
+{
+ "field": "usn.file_names",
+ "expected": "[\"evil.exe\",\"notes_00.txt\",\"notes_01.txt\",\"notes_02.txt\",\"notes_03.txt\",\"notes_04.txt\",\"notes_05.txt\",\"notes_06.txt\",\"notes_07.txt\",\"notes_08.txt\",\"report.docx\",\"report_old.docx\",\"stage.tmp\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/usn/GENERATOR_usn_struct.py.txt <outdir>  (stdlib struct USN_RECORD_V2 writer, sparse zero prefix + page-tail zero padding -> usn_sparse_v2.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dissect .venv/bin/python -P tests/data/meta_fixtures/usn/ORACLE_usn_dissect.py.txt <outdir>/usn_sparse_v2.bin  (dissect.ntfs 3.16 UsnJrnl(fh).records(); field 'file_names')",
+ "decoy": false,
+ "member": "$J"
+}
