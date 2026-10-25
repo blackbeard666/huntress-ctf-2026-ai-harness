@@ -1,0 +1,8 @@
+{
+ "field": "minidump.module_names",
+ "expected": "[\"C:\\\\Program Files\\\\Contoso\\\\agent.exe\",\"C:\\\\Windows\\\\System32\\\\ntdll.dll\",\"C:\\\\Windows\\\\System32\\\\KERNEL32.DLL\"]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> app_crash.dmp",
+ "oracle_cmd": ".venv/bin/python -I -c 'from minidump.minidumpfile import MinidumpFile as M; mf=M.parse_bytes(open(\"app_crash.dmp\",\"rb\").read()); print([m.name for m in mf.modules.modules])'  (skelsec minidump reader)",
+ "decoy": false,
+ "member": "app_crash.dmp"
+}

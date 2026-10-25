@@ -1,0 +1,3 @@
+CHANGELOG
+- removed the eval() and system() helpers from the admin page
+- python helper now uses subprocess.run instead of os.system("ls")

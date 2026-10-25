@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": null,
+ "encoded": "籗籲籬籮 粀籸类籴 籭籮籬籸籭籲籷籰 籽籱籲籼 粀籪类籶籾籹簪 籝籸 籼籸籵籿籮簵 籼籾籫籶籲籽 籽籱籲籼 籮粁籪籬籽 籪籷籼粀籮类 籽籸 籽籱籮 籐籪籶籮 籖籪籼籽籮类籃 籪籶籫籮类簶籯籪籵籬籸籷簶簽簻",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "rot8000-amber.json encoded (CyberChef ROT8000): spaces kept at ROT8000's offset -> must stay codec rot8000",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];k=ord(t[0])-ord('N');print(''.join(chr(ord(c)-k) for c in t)[:20])\" \"$encoded\"  # CyberChef ROT8000 decodes it (rot8000_cyberchef.mjs)"
+}

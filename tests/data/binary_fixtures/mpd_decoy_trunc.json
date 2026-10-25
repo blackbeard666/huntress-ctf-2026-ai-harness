@@ -1,0 +1,16 @@
+{
+ "family": "dotnet_patch_diff",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "dll_a": "mpd_decoy_trunc_a.bin",
+ "dll_b": "mpd_decoy_trunc_b.bin",
+ "expected_facts": {
+  "changed_methods": null,
+  "fix_kind": null
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/mpd_gen.py d03--sample.dll d22--sample.dll d23--sample.dll   # pefile RVA->offset + asserted same-length byte patches of the cached D03/D22/D23 sample dlls",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/mpd_oracle.py mpd_decoy_trunc_a.bin mpd_decoy_trunc_b.bin   # ilspycmd -il text diff + own counts, dnfile Module MVID",
+ "decoy": true,
+ "note": "lib.binary.dotnet_patch_diff_field(a, b, key). DECOY: B is the first 1024 bytes of the dll (no CLI metadata) -> dotnet_patch_diff None"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "script-letter-map",
+ "plain": null,
+ "encoded": "Привет, мир! Это обычный русский текст без всякого шифра, просто проза для проверки декодера: ёлка-12",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$encoded\"  # genuine Russian prose (no letter map of the warmups sentence)",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -x Cyrillic-Latin  # ICU reads 'Privet, mir! Ėto obyčnyj ...' != the warmups sentence",
+ "oracle_plain": "Privet, mir! Éto obyčnyj russkij tekst bez vsâkogo šifra, prosto proza dlâ proverki dekodera: ëlka-12"
+}

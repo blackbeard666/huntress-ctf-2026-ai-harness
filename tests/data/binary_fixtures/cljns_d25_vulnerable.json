@@ -1,0 +1,23 @@
+{
+ "kind": "clojure_facts",
+ "decoy": false,
+ "expected": {
+  "main_class": "day25.vulnerable000",
+  "has_clojure_runtime": "false",
+  "namespace": "day25.vulnerable000",
+  "vars": "[\"encoded-config\",\"parse-frame\",\"-main\"]",
+  "var_count": "3",
+  "fn_classes": "[\"day25/vulnerable000$parse_frame\",\"day25/vulnerable000$_main\"]",
+  "var_fn_classes": "{\"parse-frame\":\"day25/vulnerable000$parse_frame\",\"-main\":\"day25/vulnerable000$_main\"}",
+  "anon_fn_classes": "[\"day25/vulnerable000$fn__269\"]",
+  "ns_loader_class": "day25/vulnerable000$loading__6812__auto____267",
+  "init_class": "day25/vulnerable000__init",
+  "gen_class": "day25/vulnerable000",
+  "source_file": "vulnerable000.clj",
+  "primary_class": "day25/vulnerable000__init",
+  "references_clojure_runtime": "true"
+ },
+ "generator_cmd": "bash cljns_gen.sh   # clojure.main -e (compile 'acme.tool-kit) (Clojure 1.12.0, OpenJDK 21) + jar --create; D25 jar copied; decoy javac --release 17 + jar",
+ "oracle_cmd": "python3 cljns_oracle.py cljns_d25_vulnerable.bin   # unzip -Z1/-p + javap -c -p -v text (RT.var ldc pairs in __init0, load() new/bindRoot, SourceFile)",
+ "note": "cached D25 binary-out-of-bounds sample jar (Huntress Clojure factory: encoded-config / parse-frame / -main)"
+}

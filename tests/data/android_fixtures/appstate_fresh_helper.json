@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": "ANS-0c33700ab24a1046",
+ "decoy": false,
+ "_why": "fresh install, targetSdk 33: prefs defaults then commit read-back, SQLiteOpenHelper onCreate (CREATE + INSERT + bound INSERT), ContentValues insert rowid, rawQuery with selection arg + cursor loop, AndroidKeyStore containsAlias false / size 0, allowBackup=false + cleartext default off, NSC nested domain-config (api.arena.test yes, secure.arena.test no, cdn no)",
+ "generator_cmd": "python3 tests/data/android_fixtures/appstate_src/gen_appstate.py fresh tests/data/android_fixtures/appstate_fresh_helper.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 compile/link (--target-sdk-version 33, res/xml/nsc.xml) + zipfile + keytool RSA + apksigner sign",
+ "oracle_cmd": "same generator, oracle stage: aapt2 dump xmltree of the signed APK's AndroidManifest.xml (targetSdkVersion / allowBackup / usesCleartextTraffic / debuggable -> ApplicationInfo.flags) and res/xml/nsc.xml (cleartext policy per host, Android XmlConfigSource rules), then java -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM: SQL executed by the sqlite3 CLI (statements replayed into :memory:), java.security.KeyStore 'AndroidKeyStore' from a JCA provider over an empty KeyStoreSpi, HashMap SharedPreferences -> 'ANS-0c33700ab24a1046'"
+}

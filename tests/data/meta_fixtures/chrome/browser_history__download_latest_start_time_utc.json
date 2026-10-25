@@ -1,0 +1,8 @@
+{
+ "field": "chrome.download_latest_start_time_utc",
+ "expected": "2024-09-19T06:13:20Z",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_history.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_history.db \"select datetime(max(start_time)/1000000-11644473600,'unixepoch') from downloads\" -> 2024-09-19T06:13:20Z",
+ "decoy": false,
+ "member": "History"
+}

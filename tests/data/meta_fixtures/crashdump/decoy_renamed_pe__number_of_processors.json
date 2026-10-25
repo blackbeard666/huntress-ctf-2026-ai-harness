@@ -1,0 +1,8 @@
+{
+ "field": "crashdump.number_of_processors",
+ "expected": "none",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> renamed_pe.dmp",
+ "oracle_cmd": "file renamed_pe.dmp -> 'PE with unknown signature ...'",
+ "decoy": true,
+ "member": "renamed_pe.dmp"
+}

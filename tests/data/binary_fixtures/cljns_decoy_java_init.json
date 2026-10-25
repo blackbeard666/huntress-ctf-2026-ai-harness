@@ -1,0 +1,23 @@
+{
+ "kind": "clojure_facts",
+ "decoy": true,
+ "expected": {
+  "main_class": "Plain__init",
+  "has_clojure_runtime": "false",
+  "namespace": "none",
+  "vars": "none",
+  "var_count": "none",
+  "fn_classes": "none",
+  "var_fn_classes": "none",
+  "anon_fn_classes": "none",
+  "ns_loader_class": "none",
+  "init_class": "none",
+  "gen_class": "none",
+  "source_file": "none",
+  "primary_class": "none",
+  "references_clojure_runtime": "none"
+ },
+ "generator_cmd": "bash cljns_gen.sh   # clojure.main -e (compile 'acme.tool-kit) (Clojure 1.12.0, OpenJDK 21) + jar --create; D25 jar copied; decoy javac --release 17 + jar",
+ "oracle_cmd": "python3 cljns_oracle.py cljns_decoy_java_init.bin   # unzip -Z1/-p + javap -c -p -v text (RT.var ldc pairs in __init0, load() new/bindRoot, SourceFile)",
+ "note": "plain javac class NAMED Plain__init containing the text clojure/lang/RT: no __init0 / RT.var constants -> namespace none"
+}

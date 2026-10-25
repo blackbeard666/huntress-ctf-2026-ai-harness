@@ -1,0 +1,8 @@
+{
+ "field": "windows_registry.hive_version",
+ "expected": "1.3",
+ "generator_cmd": "GM-generated D25 'Hive Mind' hive (challenges/day25/metadata-hive-mind/solver/cases/auto-mastery-aea27efa/artifacts/evidence-05.zip -> hive-001.hiv), copied verbatim",
+ "oracle_cmd": ".venv/bin/python -P -c \"from regipy.registry import RegistryHive; import sys; h=RegistryHive(sys.argv[1]).header; print('%d.%d' % (h.major_version, h.minor_version))\" tests/data/meta_fixtures/windows_registry/d25_mastery05__windows_registry_hive_version.bin  (regipy 6.4.0)",
+ "decoy": false,
+ "member": "hive-001.hiv"
+}

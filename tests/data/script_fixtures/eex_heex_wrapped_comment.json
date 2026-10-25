@@ -1,0 +1,11 @@
+{
+ "expected_plain": "v=3|language=elixir|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=elixir_phoenix|obfuscation_profile=hex_base64|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ELIXIR-a41f0c|url=https://elixir-a41f0c77d2.example.invalid/stage|file_path=/tmp/huntress-elixir/.a41f0c77d2e81b39.stage",
+ "decoy": false,
+ "language": "elixir",
+ "role": "launcher",
+ "id_timed": "polyglot-elixir-<6hex>-<field>",
+ "carrier": "HEEx `~H\"\"\"` function component, `<%!-- HUNTRESS_ANALYSIS_V1:HB64-..` wrapped over bare indented lines up to `--%>`",
+ "oracle_cmd": "PATH=tools/erlang-dl/root/usr/lib/erlang/bin:tools/elixir/bin:$PATH elixir tests/data/script_fixtures/eex_oracle.exs comments tests/data/script_fixtures/eex_heex_wrapped_comment.ex | sed -n 's/.*HB64-//p' | xxd -r -p | base64 -d  (real Elixir parser finds the ~H sigil body, EEx.tokenize yields the comment token)",
+ "target": "eex-heex-template-carrier",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/eex_gen.py  (stdlib base64/binascii encode of the plan into Phoenix EEx/HEEx/mix.exs carrier syntax)"
+}

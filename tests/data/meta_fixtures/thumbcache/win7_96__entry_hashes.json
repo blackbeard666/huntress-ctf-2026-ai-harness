@@ -1,0 +1,8 @@
+{
+ "field": "thumbcache.entry_hashes",
+ "expected": "[\"0x8d4c1e5a7b3f2a10\",\"0x00a1b2c3d4e5f607\",\"0x0000000000000000\",\"0x7fffffff00000001\"]",
+ "generator_cmd": "python3 $TMPDIR/tcgen/gen.py OUT  (stdlib struct writer of the CMMM header/entry layout, PIL JPEG/PNG/BMP payloads; script recorded in lib/meta/prebuilt/thumbcache.py docstring layout)",
+ "oracle_cmd": "python3 -c \"import sys; sys.path.insert(0,'tools/pydeps_thumb'); from dissect.thumbcache.thumbcache_file import ThumbcacheFile; t=ThumbcacheFile(open(sys.argv[1],'rb')); ents=list(t.entries()); ...\" FILE  # dissect.thumbcache 3.x; field entry_hashes from header.Version/Type/Offset/Entries, len(entries), int.from_bytes(bytes.fromhex(e.hash),'little'), e.data[:2].hex(), e.identifier, e.extension; InvalidSignatureError -> none",
+ "decoy": false,
+ "member": "thumbcache_96.db"
+}

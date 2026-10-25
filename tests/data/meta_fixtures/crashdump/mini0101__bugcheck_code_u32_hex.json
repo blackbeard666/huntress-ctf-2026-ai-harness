@@ -1,0 +1,8 @@
+{
+ "field": "crashdump.bugcheck_code_u32_hex",
+ "expected": "0x0000007e",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> Mini0101.dmp",
+ "oracle_cmd": "od -A x -t x4 -j 0x28 -N 4 Mini0101.dmp -> 0000007e; file Mini0101.dmp -> 'MS Windows 32bit crash dump, ...'",
+ "decoy": false,
+ "member": "Mini0101.dmp"
+}

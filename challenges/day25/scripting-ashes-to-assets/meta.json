@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-25-phoenix-stage-chain",
+  "lane": "script-analysis",
+  "name": "📜 Ashes to Assets",
+  "ids": {
+    "single_solve": "script-analysis-day-25-phoenix-stage-chain",
+    "time_trial": "script-analysis-day-25-phoenix-stage-chain/time_trial",
+    "mastery": "script-analysis-day-25-phoenix-stage-chain/mastery"
+  }
+}

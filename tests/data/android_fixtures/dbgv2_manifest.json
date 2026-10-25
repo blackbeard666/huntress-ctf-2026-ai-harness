@@ -1,0 +1,8 @@
+{
+ "entry": "extract_answer",
+ "expected": "ANS-A5DD70B22D9D6FCE",
+ "decoy": false,
+ "_why": "the gate chain in an APK whose aapt2-linked manifest sets android:debuggable=\"true\" (D21 shape; `aapt dump badging` -> application-debuggable). The intended app flow is the non-debugged path: context_chain_scan runs the chain with FLAG_DEBUGGABLE clear first, then with the manifest's bit (that run lands on the flags-only trap ANS-9F636AE55BFA7AB2) -- extract_answer must return the clean value",
+ "generator_cmd": "python3 tests/data/android_fixtures/dbgv2_src/gen_dbgv2.py manifest tests/data/android_fixtures/dbgv2_manifest.apk  # javac --release 8 (app + android.os.Debug/SystemClock, android.content.Context/pm.ApplicationInfo stubs) -> dex2jar d2j-jar2dex.sh -> zipfile + aapt2 link (apktool's prebuilt aapt2 + android-framework.jar) for the debuggable manifest (+ assets/huntress_puzzle.json v2 codec analysis, no data)",
+ "oracle_cmd": "same generator: the host JVM (java -cp <javac out> <pkg>.Oracle) runs Release.code(new Context()) on CLEAN stubs (Debug false, ApplicationInfo.flags 0, real /proc/self/status TracerPid, SystemClock = System.nanoTime) -> 'oracle=ANS-A5DD70B22D9D6FCE'; `gen_dbgv2.py gate /dev/null --debugged` (DEBUGGED stubs) -> 'oracle=ANS-8A149F208776D9FC' (the trap state's honeypot); `aapt dump badging dbgv2_manifest.apk | grep application-debuggable`"
+}

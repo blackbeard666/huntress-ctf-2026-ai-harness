@@ -143,6 +143,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Spot the Difference"
   },
+  "binary-reverse-engineering-day-25-synthetic-vulnerability-root-cause": {
+    "day": 25,
+    "dir": "day25/binary-out-of-bounds",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Out of Bounds"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -287,6 +293,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Event Horizon"
   },
+  "metadata-forensics-day-25-hive-mind": {
+    "day": 25,
+    "dir": "day25/metadata-hive-mind",
+    "lane": "metadata-forensics",
+    "name": "🔎 Hive Mind"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -430,6 +442,12 @@
     "dir": "day24/mobile-emulator-alibi",
     "lane": "mobile-android",
     "name": "📱 Emulator Alibi"
+  },
+  "mobile-android-day-25-integrity-signals": {
+    "day": 25,
+    "dir": "day25/mobile-integrity-signals",
+    "lane": "mobile-android",
+    "name": "📱 Integrity Signals"
   },
   "read-the-rules": {
     "day": 1,
@@ -581,6 +599,12 @@
     "lane": "script-analysis",
     "name": "📜 Web of Lies"
   },
+  "script-analysis-day-25-phoenix-stage-chain": {
+    "day": 25,
+    "dir": "day25/scripting-ashes-to-assets",
+    "lane": "script-analysis",
+    "name": "📜 Ashes to Assets"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -725,6 +749,12 @@
     "lane": "warmups",
     "name": "👶 String Theory"
   },
+  "warmups-day-25": {
+    "day": 25,
+    "dir": "day25/warmups-you-have-a-point",
+    "lane": "warmups",
+    "name": "👶 You Have a Point"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -814,6 +844,24 @@
     "dir": "day24/web-fetch-quest",
     "lane": "web",
     "name": "🌐 Fetch Quest"
+  },
+  "web-exploitation-day-16-shell-company": {
+    "day": 25,
+    "dir": "day25/web-shell-company",
+    "lane": "web",
+    "name": "🌐 Shell Company"
+  },
+  "web-exploitation-day-17-reset-expectations": {
+    "day": 25,
+    "dir": "day25/web-reset-expectations",
+    "lane": "web",
+    "name": "🌐 Reset Expectations"
+  },
+  "web-exploitation-day-18-resolver-revolt": {
+    "day": 25,
+    "dir": "day25/web-resolver-revolt",
+    "lane": "web",
+    "name": "🌐 Resolver Revolt"
   },
   "welcome-robots": {
     "day": 1,

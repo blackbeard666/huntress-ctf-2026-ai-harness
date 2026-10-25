@@ -1,0 +1,8 @@
+{
+ "field": "shm.wal_index_version",
+ "expected": "3007000",
+ "generator_cmd": "python3 -c 'sqlite3: PRAGMA page_size=4096; journal_mode=WAL; wal_autocheckpoint=0; CREATE TABLE + 3 insert txns; copy app.db-wal/-shm while the connection is open' (stdlib sqlite3 = libsqlite3 3.53 writer)",
+ "oracle_cmd": "od -An -tu4 --endian=little -N4 app.db-shm -> 3007000 (WalIndexHdr.iVersion, native LE host; file -> 'SQLite Write-Ahead Log shared memory')",
+ "decoy": false,
+ "member": "app.db-shm"
+}

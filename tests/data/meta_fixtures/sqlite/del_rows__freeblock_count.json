@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.freeblock_count",
+ "expected": "2",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_deleted.sh.txt <outdir>  (sqlite3 CLI 3.46.1 + coreutils printf/dd) -> rows.sqlite",
+ "oracle_cmd": "sh tests/data/meta_fixtures/sqlite/ORACLE_sqlite_deleted.sh.txt <db>  (od/dd/strings -n 6/LC_ALL=C sort -u + sqlite3 dbstat/pragma): page 2 freeblock chain @891 size 38 -> @954 size 40 -> 0; page 1 none",
+ "decoy": false,
+ "member": "rows.sqlite"
+}

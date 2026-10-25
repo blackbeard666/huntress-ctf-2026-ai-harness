@@ -1,0 +1,8 @@
+{
+ "field": "chrome.cookie_encryption_version",
+ "expected": "v10",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_chrome_cookies.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_chrome_cookies.db \"select distinct substr(cast(encrypted_value as text),1,3) from cookies\" -> v10",
+ "decoy": false,
+ "member": "Cookies"
+}

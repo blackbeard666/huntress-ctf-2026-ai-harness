@@ -1,0 +1,27 @@
+{
+ "family": "dotnet_patch_diff",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "dll_a": "mpd_ovf_a.bin",
+ "dll_b": "mpd_ovf_b.bin",
+ "expected_facts": {
+  "changed_methods": "[\"Huntress.Binary.Day23.Program::Main\"]",
+  "changed_method_count": "1",
+  "changed_method": "Huntress.Binary.Day23.Program::Main",
+  "eh_clause_count_a": "0",
+  "eh_clause_count_b": "0",
+  "added_opcodes": "[\"add.ovf\"]",
+  "removed_opcodes": "[\"add\"]",
+  "null_guard_added": "false",
+  "bounds_check_added": "false",
+  "checked_arithmetic_added": "true",
+  "try_catch_added": "false",
+  "fix_kind": "checked_arithmetic",
+  "mvid_changed": "false"
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/mpd_gen.py d03--sample.dll d22--sample.dll d23--sample.dll   # pefile RVA->offset + asserted same-length byte patches of the cached D03/D22/D23 sample dlls",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/mpd_oracle.py mpd_ovf_a.bin mpd_ovf_b.bin   # ilspycmd -il text diff + own counts, dnfile Module MVID",
+ "decoy": false,
+ "note": "lib.binary.dotnet_patch_diff_field(a, b, key). D23 VB.NET Main: A `add` vs B `add.ovf` on the loop counter -> checked_arithmetic"
+}

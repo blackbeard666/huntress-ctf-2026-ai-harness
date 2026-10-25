@@ -1,0 +1,13 @@
+{
+ "codec": "invisible-tags",
+ "plain": null,
+ "encoded": "Home nations: \ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f \ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc73\udb40\udc63\udb40\udc74\udb40\udc7f \ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc77\udb40\udc6c\udb40\udc73\udb40\udc7f go!",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c 'f = lambda s: chr(0x1f3f4) + \"\".join(chr(0xe0000 + ord(c)) for c in s) + chr(0xe007f); print(\"Home nations: \" + f(\"gbeng\") + \" \" + f(\"gbsct\") + \" \" + f(\"gbwls\") + \" go!\", end=\"\")'  # RGI emoji tag sequences (England / Scotland / Wales flags)",
+ "generator_env": {},
+ "oracle_cmd": "python3 -I -c 'import sys, unicodedata as u, collections as c; print(dict(c.Counter(u.name(x, hex(ord(x))) for x in sys.argv[1] if ord(x) > 0xFDFF)))' \"$encoded\"  # stdlib: every non-BMP-letter char by name",
+ "oracle_plain": null,
+ "oracle_names": "{'WAVING BLACK FLAG': 3, 'TAG LATIN SMALL LETTER G': 4, 'TAG LATIN SMALL LETTER B': 3, 'TAG LATIN SMALL LETTER E': 1, 'TAG LATIN SMALL LETTER N': 1, 'CANCEL TAG': 3, 'TAG LATIN SMALL LETTER S': 2, 'TAG LATIN SMALL LETTER C': 1, 'TAG LATIN SMALL LETTER T': 1, 'TAG LATIN SMALL LETTER W': 1, 'TAG LATIN SMALL LETTER L': 1}",
+ "note": "subdivision flags = U+1F3F4 + tag letters + CANCEL TAG: emoji, not smuggled text"
+}

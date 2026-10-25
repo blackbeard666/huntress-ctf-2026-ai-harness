@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (989532 function calls (977337 primitive calls) in 1.422 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    215/1    0.008    0.000    1.183    1.183 {built-in method builtins.exec}
+      2/1    0.000    0.000    1.183    1.183 solve.py:1(<module>)
+      2/1    0.011    0.005    1.182    1.182 solve.py:1011(main)
+      2/1    0.003    0.002    1.172    1.172 solve.py:971(_solve_pairs)
+      300    0.005    0.000    0.974    0.003 solve.py:865(answer)
+      300    0.005    0.000    0.749    0.002 solve.py:256(group_members)
+      300    0.001    0.000    0.725    0.002 solve.py:167(resolve)
+    73/15    0.012    0.000    0.701    0.047 threading.py:323(wait)
+      408    0.001    0.000    0.692    0.002 _base.py:428(result)
+     34/1    0.009    0.000    0.639    0.639 thread.py:54(run)
+     1930    0.120    0.000    0.633    0.000 {method 'join' of 'bytes' objects}
+     34/1    0.002    0.000    0.632    0.632 solve.py:74(_aes_member)
+       80    0.000    0.000    0.533    0.007 solve.py:691(facts)
+   232/19    0.002    0.000    0.492    0.026 <frozen importlib._bootstrap>:1349(_find_and_load)
+   231/19    0.001    0.000    0.490    0.026 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   218/20    0.001    0.000    0.383    0.019 <frozen importlib._bootstrap>:911(_load_unlocked)
+   192/20    0.001    0.000    0.382    0.019 <frozen importlib._bootstrap_external>:993(exec_module)
+       30    0.000    0.000    0.365    0.012 solve.py:697(_facts)
+   496/37    0.001    0.000    0.349    0.009 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+    51/28    0.006    0.000    0.235    0.008 queue.py:154(get)
+        1    0.001    0.001    0.233    0.233 solve.py:112(sha)
+    68/55    0.185    0.003    0.181    0.003 {method 'decompress' of 'zlib.Decompress' objects}
+       19    0.002    0.000    0.181    0.010 solve.py:649(elf_facts)
+        2    0.000    0.000    0.162    0.081 solve.py:663(<lambda>)
+        2    0.000    0.000    0.162    0.081 solve.py:619(disassembly)

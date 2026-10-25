@@ -1,0 +1,10 @@
+{
+ "codec": "script-letter-map",
+ "plain": null,
+ "encoded": "ᚾᛁᚲᛖ ᚹᛟᚱᚲ ᛞᛖᚲᛟᛞᛁᚾᚷ ᛏᚺᛁᛊ ᚹᚨᚱᛗᚢᛈ! ᛏᛟ ᛊᛟᛚᚹᛖ, ᛊᚢᛒᛗᛁᛏ ᛏᚺᛁᛊ ᛖᛉᚨᚲᛏ ᚨᚾᛊᚹᛖᚱ ᛏᛟ ᛏᚺᛖ ᚷᚨᛗᛖ ᛗᚨᛊᛏᛖᚱ.",
+ "generator_cmd": "printf %s \"$plain\" | sed 'y/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/ᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᚲᚱᛊᛏᚢᚹᚹᛉᛃᛉᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᚲᚱᛊᛏᚢᚹᚹᛉᛃᛉ/'  # GNU sed y/// letter -> glyph table; the crib without a slug",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CSD -Mutf8 -pe 'tr/ᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᛚᛗᚾᛟᛈᚱᛊᛏᚢᚹᛉ/abcdefghijlmnoprstuvx/' | tr A-Z a-z  # perl tr/// inverse table (lowercased; a shared glyph reads as its first letter)",
+ "oracle_plain": "nice vorc decoding this varmup! to solve, submit this exact ansver to the game master.",
+ "expected": "none",
+ "decoy": true
+}

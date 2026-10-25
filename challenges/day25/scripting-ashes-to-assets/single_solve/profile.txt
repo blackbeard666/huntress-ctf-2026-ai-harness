@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (1795725 function calls (1762849 primitive calls) in 1.443 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    205/1    0.002    0.000    1.444    1.444 {built-in method builtins.exec}
+        1    0.000    0.000    1.444    1.444 solve.py:1(<module>)
+        1    0.002    0.002    1.224    1.224 solve.py:829(main)
+        1    0.015    0.015    0.689    0.689 solve.py:880(_solve_pairs)
+      180    0.435    0.002    0.435    0.002 {built-in method builtins.print}
+       41    0.000    0.000    0.394    0.010 codec.py:1244(find_codecs)
+       41    0.004    0.000    0.394    0.010 codec.py:1257(_find_codecs_uncached)
+       33    0.000    0.000    0.366    0.011 solve.py:377(_codec_hint)
+       24    0.001    0.000    0.332    0.014 solve.py:571(analyse_sh)
+   103/24    0.000    0.000    0.323    0.013 <frozen importlib._bootstrap_external>:993(exec_module)
+   134/19    0.001    0.000    0.322    0.017 <frozen importlib._bootstrap>:1349(_find_and_load)
+   134/19    0.000    0.000    0.321    0.017 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   293/40    0.000    0.000    0.320    0.008 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+   124/20    0.000    0.000    0.319    0.016 <frozen importlib._bootstrap>:911(_load_unlocked)
+        9    0.000    0.000    0.293    0.033 codec.py:13784(_cs_fold_codecs)
+  551/518    0.001    0.000    0.290    0.001 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+    31/17    0.000    0.000    0.288    0.017 {built-in method builtins.__import__}
+     9292    0.012    0.000    0.252    0.000 __init__.py:280(_compile)
+        8    0.008    0.001    0.251    0.031 codec.py:2686(peel_plan)
+     4029    0.058    0.000    0.239    0.000 codec.py:2380(_peel_children)
+      709    0.003    0.000    0.228    0.000 _compiler.py:745(compile)
+      553    0.000    0.000    0.212    0.000 __init__.py:226(compile)
+        1    0.001    0.001    0.137    0.137 codec.py:1(<module>)
+      709    0.002    0.000    0.124    0.000 _parser.py:969(parse)
+ 2306/709    0.008    0.000    0.121    0.000 _parser.py:452(_parse_sub)

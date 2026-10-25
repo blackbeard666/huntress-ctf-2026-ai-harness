@@ -1,0 +1,11 @@
+{
+ "expected_plain": "v=3|language=erlang|role=downloader|verdict=suspicious|attack=T1105|adapter=process_spawn|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ERLANG-c03d9e11|url=https://erlang-c03d9e11b7.example.invalid/stage|file_path=/tmp/huntress-erlang/.c03d9e11b7f04a6e.stage",
+ "decoy": false,
+ "language": "erlang",
+ "role": "downloader",
+ "id_single": "polyglot-erlang-downloader-<field>",
+ "id_timed": "polyglot-erlang-<6hex>-<field>",
+ "target": "beam-erlang-elixir-route",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/beam_gen.py  (stdlib base64/binascii encode of the plan into Erlang/Elixir descriptor syntax)",
+ "oracle_cmd": "PATH=tools/erlang-dl/root/usr/lib/erlang/bin:$PATH escript tests/data/script_fixtures/beam_oracle.escript tests/data/script_fixtures/beam_erl_module_define_b64.erl | tr -d ' \\\\n' | xxd -r -p | base64 -d  (real Erlang/OTP 27 epp + erl_eval of the descriptor_* body only)"
+}

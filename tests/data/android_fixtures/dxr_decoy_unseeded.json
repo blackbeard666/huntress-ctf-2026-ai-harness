@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": null,
+ "decoy": true,
+ "description": "DECOY: the random_mix mixer with an UNSEEDED new Random(): the JVM oracle prints a different token on every run, so the deep VM must report non-deterministic and yield nothing",
+ "generator_cmd": "python3 tests/data/android_fixtures/dxr_src/gen_dxr.py decoy_unseeded tests/data/android_fixtures/dxr_decoy_unseeded.zip  # javac --release 8 + dex2jar d2j-jar2dex + zipfile (APK wrapped in a one-set deep_eval_bench bundle)",
+ "oracle_cmd": "sh tests/data/android_fixtures/dxr_src/oracle.sh tests/data/android_fixtures/dxr_decoy_unseeded.zip  # d2j-dex2jar back to classes, RUN Rng.code() on the JVM (real java.util)"
+}

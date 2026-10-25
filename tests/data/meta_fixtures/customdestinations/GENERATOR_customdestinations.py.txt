@@ -1,0 +1,47 @@
+# Stage customDestinations-ms fixtures: LNKs via pylnk3 0.4.3 (independent writer), container packed per libyal
+# "Jump lists format" / plaso custom_destinations.yaml (hdr ver=2,ncat,unk; category type 0/1/2; CLSID+LNK entries;
+# footer abfbbfba per category). Usage: gen_custom.py OUTDIR
+import sys, os, struct, datetime
+sys.path.insert(0, os.environ["HCTF_ROOT"] + "/tools/pylib")
+import pylnk3
+from io import BytesIO
+
+CLSID = bytes.fromhex("0114020000000000c000000000000046")
+FOOT = b"\xab\xfb\xbf\xba"
+
+def lnk(path, args=None, wd=None, desc=None):
+    l = pylnk3.for_file(path, arguments=args, work_dir=wd, description=desc)
+    l.link_flags.HasLinkInfo = True
+    l._link_info = pylnk3.LinkInfo()
+    l.link_flags.ForceNoLinkInfo = False
+    l.specify_local_location(path, drive_type=pylnk3.DRIVE_FIXED, drive_serial=0x5EED1234, volume_label="OS")
+    l.creation_time = datetime.datetime(2026, 3, 4, 5, 6, 7)
+    b = BytesIO(); l.write(b); return b.getvalue()
+
+def ents(lnks):
+    return b"".join(CLSID + x for x in lnks)
+
+def custom(name, lnks):
+    return struct.pack("<IH", 0, len(name)) + name.encode("utf-16-le") + struct.pack("<I", len(lnks)) + ents(lnks) + FOOT
+
+def known(cid):
+    return struct.pack("<II", 1, cid) + FOOT
+
+def tasks(lnks):
+    return struct.pack("<II", 2, len(lnks)) + ents(lnks) + FOOT
+
+def cd(*cats):
+    return struct.pack("<III", 2, len(cats), 0) + b"".join(cats)
+
+out = sys.argv[1]; os.makedirs(out, exist_ok=True)
+mixed = cd(
+    custom("Pinned Tools", [lnk(r"C:\Tools\SysinternalsSuite\procexp64.exe", desc="Process Explorer"),
+                            lnk(r"C:\Users\analyst\Downloads\invoice_8812.pdf.exe", args="/silent")]),
+    known(2),
+    tasks([lnk(r"C:\Program Files\Mozilla Firefox\firefox.exe", args="-private-window"),
+           lnk(r"C:\Program Files\Mozilla Firefox\firefox.exe", args="-new-window")]),
+    custom("Alpha Projects", [lnk(r"D:\Projects\alpha\plan.docx", wd=r"D:\Projects\alpha")]),
+)
+open(f"{out}/mixed.bin", "wb").write(mixed)
+open(f"{out}/tasks.bin", "wb").write(cd(known(1), tasks([lnk(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", args="-nop -w hidden")])))
+open(f"{out}/decoy.bin", "wb").write(lnk(r"C:\Windows\notepad.exe"))  # a bare .lnk renamed to .customDestinations-ms

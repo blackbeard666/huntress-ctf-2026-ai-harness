@@ -1,0 +1,8 @@
+{
+ "field": "lmdb.map_size",
+ "expected": "67108864",
+ "generator_cmd": "python3 -c \"import lmdb; env=lmdb.open('envB', map_size=67108864); [one write txn per put of b'key%04d' for i in range(40)]\"",
+ "oracle_cmd": "python3 -c \"import lmdb; e=lmdb.open('envB', readonly=True, lock=False, map_size=0); print(e.info()['map_size'])\" -> 67108864",
+ "decoy": false,
+ "member": "data.mdb"
+}

@@ -17,7 +17,8 @@ Fields (names verbatim as listed / stored in the zip; lists and maps -> compact 
   host_groups = {Computer: [sorted names]} (keys sorted);
   record_count_order = names by walked record count ascending, ties by name ("descending" in the text reverses);
   earliest_member / latest_member = the log whose FIRST written time (record header FILETIME, lowest id) is the
-    earliest / latest, ties by name."""
+    earliest / latest, ties by name.
+A set with no ElfFile member but >= 1 regf hive hands host_groups / *_by_host / earliest / latest to synthesis_regf.py."""
 import re
 import struct
 
@@ -170,7 +171,12 @@ def evtx_synthesis_value(data, ctx):
             return "none"
         q = ctx.get("question")
         text = re.sub(r"Files:\s*\[.*?\]", "", str((q.get("question") if isinstance(q, dict) else q) or ""), flags=re.S)
-        v = synth_value_of(names, read, ctx.get("field") or "", text, ctx.get("member") or "")
+        field = ctx.get("field") or ""
+        if field.startswith(("host", "computer", "logs_by", "files_by", "earliest", "latest")):
+            from .synthesis_regf import any_regf, regf_synthesis_value
+            if not any(bytes((read(n) or b"")[:8]) == b"ElfFile\x00" for n in names) and any_regf(names, read):
+                return regf_synthesis_value(data, ctx)   # a hive set, no EVTX: the cross-hive synthesis
+        v = synth_value_of(names, read, field, text, ctx.get("member") or "")
         return v if (v != "none" or from_zip) else None
     except Exception:  # noqa: BLE001 - a decoy / damaged input must never raise past the extractor
         return None

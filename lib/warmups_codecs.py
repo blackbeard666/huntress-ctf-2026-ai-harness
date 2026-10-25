@@ -25,6 +25,7 @@ import collections
 import functools
 import gzip
 import html
+import html.entities
 import itertools
 import json
 import math
@@ -32,6 +33,7 @@ import quopri
 import os
 import re
 import string
+import struct
 import time
 import unicodedata
 import urllib.parse
@@ -82,6 +84,18 @@ def netstr_dec(t):
     if not out:
         raise ValueError("empty")
     return "".join(out)
+
+
+_UTOK = re.compile(r"(?:U\+|u\+|\\u|\\U|%u|0x)([0-9A-Fa-f]{2,8})")
+
+
+def uplus_dec(t):
+    """D25: code-point tokens `U+004E U+0069 ...` (also u+/\\u/\\U/%u/0x) separated by whitespace/`,;` -> the text;
+    raises unless the WHOLE text is tokens."""
+    t = t.strip()
+    if not t or not re.fullmatch(r"(?:%s[\s,;]*)+" % _UTOK.pattern, t):
+        raise ValueError("not a code-point run")
+    return "".join(chr(int(h, 16)) for h in _UTOK.findall(t))
 
 
 def _gz9f(b):
@@ -155,6 +169,9 @@ DAYS = [
     # D24 "String Theory" ("Count carefully. The comma knows where to stop."): one netstring per character, `1:c,`
     # concatenated, no separators (byte-exact on the Single, TT 6b420728 and 118/118 Mastery 39a9fb2c line 24)
     (24, "netstring", lambda s: "".join(f"1:{c}," for c in s), netstr_dec, False),
+    # D25 "You Have a Point": one Unicode code point per character, `U+XXXX` (uppercase hex, >= 4 digits), single
+    # spaces (byte-exact on the Single, TT 76bfa85f and 123/123 Mastery 0b1ae1d0 line 25)
+    (25, "uplus", lambda s: " ".join(f"U+{ord(c):04X}" for c in s), uplus_dec, False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -8127,6 +8144,9 @@ def infer(plain, blob, hints=()):
     zf = zw_fit(p, want)
     if zf:
         return zf
+    cps = cpshift_solve(want) if p.startswith(_CRIB) else None   # exact re-encodable K before glyph-bytes' generic read
+    if cps and cps[1] == p and cps[2](p) == want:
+        return cps[0], cps[2]
     for name, enc, dec in cands:
         if dec is not None and safe(dec, want) == p:
             if dec is crib_tok_dec:   # the demo alphabet can't re-encode: hand back the recovered map's encoder
@@ -8150,6 +8170,15 @@ def infer(plain, blob, hints=()):
             if dec is byterot_dec:
                 br = byterot_solve(want)
                 return br[0], br[2]
+            if dec is cpshift_dec:
+                cs_ = cpshift_solve(want)
+                return cs_[0], cs_[2]
+            if dec is delta_dec:
+                dl = delta_solve(want)
+                return dl[0], dl[2]
+            if dec is invis_dec:
+                iv = invis_solve(want)
+                return iv[0], iv[2]
             if dec is maptp_dec:
                 mt = maptp_solve(want)
                 return mt[0], mt[2]
@@ -8162,6 +8191,9 @@ def infer(plain, blob, hints=()):
             if dec is armor_dec:
                 ar = armor_solve(want)
                 return ar[0], ar[2]
+            if dec is scriptmap_dec:
+                sm = scriptmap_solve(want)
+                return sm[0], sm[2]
             if dec is openssl_dec:
                 os_ = openssl_solve(want)
                 return os_[0], os_[2] or (lambda s: None)
@@ -8229,6 +8261,9 @@ def plaintext(blob, slug, deadline=None, hints=()):
     lp = lenpfx_dec(text.strip())   # length-prefix frames: the protobuf walk keeps one field, `0eNice ..` reads as text
     if lp and _TPL in lp and slug in lp:
         return lp.strip()
+    nd = names_dec(text.strip())   # Unicode character names: strict whole-fragment, ms; the CANDIDATES sweep is seconds away
+    if nd and slug in nd:
+        return nd.strip()
     try:
         d = decode.decode_chunk(text.strip())
     except Exception:  # noqa: BLE001
@@ -8932,6 +8967,177 @@ CANDIDATES += [(f"u{8 * w}{'le' if o == 'little' else 'be'}-{fmt}",
                 (lambda w, o: lambda t: wint_dec(t, w, o))(w, o))
                for w in _WINT_W for o in ("little", "big") for fmt in _WINT_FMTS
                if f"u{8 * w}{'le' if o == 'little' else 'be'}-{fmt}" not in _have]
+del _have
+
+# ------------------------------------------------- float / fixed-point char codes ("You Have a Point")
+# One char code per number, carried as a floating / fixed point value: IEEE-754 bit patterns as hex tokens (float32
+# `0x429c0000` = 78.0 BE, `0x00009c42` LE; 16-hex doubles), decimals (`78.0`, `7.8e1`, C99 hex floats `0x1.38p+6`),
+# a common scale (`0.78` = code / 100, Q8.8 / x10 fixed point ints `19968` = 78 * 256), or the packed '<f' / '>d'
+# array itself as base64 / one hex run. Gate: every value lands on an integer code (after one common 10^k / 2^k scale)
+# and the text reads as text; plain byte-sized decimal codes (`78 105 99`) are the decimal codec, not this one.
+_FLT_TOK = re.compile(r"[\s,;]+")
+_FLT_SCALES = tuple(10.0 ** k for k in range(-6, 7)) + tuple(2.0 ** k for k in range(-16, 17) if k)
+
+
+def flt_enc(s, fmt="f32be-hex"):
+    """Text -> one float / fixed point number per code point in `fmt`: f32{be,le}-hex, f64{be,le}-hex, dec (78.0),
+    centi (0.78), sci (7.8e+01), hexfloat (0x1.38p+6), q8 / x10 (fixed point ints), b64-{f32le,f32be,f64le,f64be}."""
+    cs = [ord(c) for c in s]
+    if fmt.endswith("-hex") and fmt[:3] in ("f32", "f64"):
+        f = (">" if fmt[3:5] == "be" else "<") + ("f" if fmt[:3] == "f32" else "d")
+        return " ".join("0x" + struct.pack(f, c).hex() for c in cs)
+    if fmt.startswith("b64-"):
+        v = fmt[4:]
+        f = (">" if v[3:] == "be" else "<") + str(len(cs)) + ("f" if v[:3] == "f32" else "d")
+        return base64.b64encode(struct.pack(f, *cs)).decode()
+    if fmt == "dec":
+        return " ".join(f"{c:.1f}" for c in cs)
+    if fmt == "centi":
+        return " ".join(f"{c / 100:g}" for c in cs)
+    if fmt == "sci":
+        return " ".join(f"{c:.2e}" for c in cs)
+    if fmt == "hexfloat":
+        return " ".join(re.sub(r"\.?0*p", "p", float(c).hex()) for c in cs)   # C99 %a style: 0x1.38p+6
+    if fmt in ("q8", "x10"):
+        return " ".join(str(c * (256 if fmt == "q8" else 10)) for c in cs)
+    return None
+
+
+_FLT_FMTS = ("f32be-hex", "f32le-hex", "f64be-hex", "f64le-hex", "dec", "centi", "sci", "hexfloat", "q8", "x10",
+             "b64-f32le", "b64-f32be", "b64-f64le", "b64-f64be")
+
+
+def _flt_codes(vals, scale=1.0):
+    """vals * scale as integer code points, else None (a non-integral / non-finite / out-of-range value)."""
+    out = []
+    for v in vals:
+        if not math.isfinite(v):
+            return None
+        x = v * scale
+        r = round(x)
+        if abs(x - r) > 1e-6 * max(1.0, abs(r)) or not 9 <= r <= 0x10FFFF:
+            return None
+        out.append(r)
+    return out
+
+
+def _flt_text(cs):
+    try:
+        s = "".join(map(chr, cs))
+    except (ValueError, OverflowError):
+        return None
+    return s if all(c.isprintable() or c in "\n\t" for c in s) and _texty(s) >= 0.85 else None
+
+
+def _flt_packed(b, tag):
+    """Reads of raw bytes b as a packed float32 / float64 array, both byte orders."""
+    reads = []
+    for w, f in ((4, "f"), (8, "d")):
+        if len(b) < 3 * w or len(b) % w:
+            continue
+        for o, oc in (("le", "<"), ("be", ">")):
+            cs = _flt_codes(struct.unpack(f"{oc}{len(b) // w}{f}", b))
+            s = cs and _flt_text(cs)
+            if s:
+                reads.append((f"{tag}-f{8 * w}{o}", s))
+    return reads
+
+
+def _flt_scaled(vals, tag, ints=False):
+    """Reads of numbers vals under one common scale (1, 10^k, 2^k); fixed point ints need a real (>1) divisor."""
+    reads, seen = [], set()
+    for sc in _FLT_SCALES:
+        if ints and sc >= 1.0:
+            continue
+        cs = _flt_codes(vals, sc)
+        s = cs and _flt_text(cs)
+        if s and s not in seen:
+            seen.add(s)
+            reads.append((tag if sc == 1.0 else f"{tag}-x{sc:g}", s))
+    return reads
+
+
+def flt_reads(t):
+    """[(variant, text)] for a float / fixed-point char-code line, crib / most English read first."""
+    try:
+        if not isinstance(t, str):
+            return []
+        t = t.strip()
+        if not t or len(t) > 400000:
+            return []
+        m = re.fullmatch(r"[\[{(]\s*(.*?)\s*[\]})]", t, re.S)
+        if m:
+            t = m.group(1)
+        toks = [x for x in _FLT_TOK.split(t) if x]
+        reads = []
+        if len(toks) == 1 and len(t) >= 16:
+            x = toks[0]
+            if re.fullmatch(r"(?:[0-9a-fA-F]{2})+", x) and len(x) % 8 == 0:
+                reads = _flt_packed(bytes.fromhex(x), "hexrun")
+            elif re.fullmatch(r"[A-Za-z0-9+/_-]+={0,2}", x):
+                try:
+                    b = base64.b64decode(_b64pad(x.replace("-", "+").replace("_", "/")), validate=True)
+                except (binascii.Error, ValueError):
+                    b = b""
+                reads = _flt_packed(b, "b64")
+        elif len(toks) >= 3:
+            if all(re.fullmatch(r"(?:0[xX])?(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{16})", x) for x in toks):
+                hx = [x[2:] if x[:2] in ("0x", "0X") else x for x in toks]
+                if len({len(h) for h in hx}) == 1:
+                    w = len(hx[0]) // 2
+                    for o in ("be", "le"):
+                        f = (">" if o == "be" else "<") + ("f" if w == 4 else "d")
+                        vals = [struct.unpack(f, bytes.fromhex(h))[0] for h in hx]
+                        reads += [(f"f{8 * w}{o}-hex" + v[3:], s) for v, s in _flt_scaled(vals, "hex")]
+            elif all(re.fullmatch(r"\d{1,20}", x) for x in toks):
+                vals = [int(x) for x in toks]
+                if max(vals) > 255:   # byte-sized codes = the decimal codec, not fixed point
+                    reads = _flt_scaled([float(v) for v in vals], "fixed", ints=True)
+            else:
+                vals = []
+                for x in toks:
+                    x = x.rstrip("fFdD") if not x.lower().startswith(("0x", "-0x", "+0x")) else x
+                    if re.fullmatch(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?", x):
+                        vals.append(float(x))
+                    elif re.fullmatch(r"[+-]?0[xX][0-9a-fA-F]*\.?[0-9a-fA-F]*[pP][+-]?\d+", x):
+                        vals.append(float.fromhex(x))
+                    else:
+                        return []
+                if any(re.search(r"[.eEpP]", x) for x in toks):
+                    reads = _flt_scaled(vals, "dec")
+        if len(reads) > 1:
+            from lib.decode import _bigram
+            reads.sort(key=lambda r: (_crib_piece(r[1]), _bigram(r[1])), reverse=True)
+        return reads
+    except Exception:   # noqa: BLE001 -- a decoy never raises past the decoder
+        return []
+
+
+def flt_dec(t, variant=None):
+    """Undo flt_enc (any fmt) -> text, else None; `variant` (a flt_reads tag prefix, e.g. 'f32be') pins the read."""
+    for v, s in flt_reads(t):
+        if variant is None or v.startswith(variant) or v.endswith(variant):
+            return s
+    return None
+
+
+def flt_free(p):
+    """Speculative Mastery-line decoder: the float / fixed-point char-code readings of a line (best first)."""
+    try:
+        if not isinstance(p, str) or not p.strip():
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        return [lead + s for _v, s in flt_reads(p)][:2]
+    except Exception:   # noqa: BLE001
+        return []
+
+
+_FLT_PIN = {"f32be-hex": "f32be", "f32le-hex": "f32le", "f64be-hex": "f64be", "f64le-hex": "f64le",
+            "b64-f32le": "b64-f32le", "b64-f32be": "b64-f32be", "b64-f64le": "b64-f64le", "b64-f64be": "b64-f64be"}
+_have = {n for n, _e, _d in CANDIDATES}
+CANDIDATES += [(f"float-{fmt}", (lambda f: lambda s: flt_enc(s, f))(fmt),
+                (lambda v: lambda t: flt_dec(t, v))(_FLT_PIN.get(fmt)))
+               for fmt in _FLT_FMTS if f"float-{fmt}" not in _have]
 del _have
 
 # ------------------------------------------------- hexdump tool output (xxd / od / hexdump rows)
@@ -17814,6 +18020,1732 @@ CANDIDATES += [(f"delim-{f}", (lambda f: lambda s: delim_enc(s, f))(f), delim_de
                          "yaml-words")]
 
 
+
+# Unicode character NAMES, one per character ("every character has a name"): a `, ; | / tab newline`-separated list
+# (`LATIN CAPITAL LETTER N, LATIN SMALL LETTER I, SPACE, ..`, any case, aliases / abbreviations like `LF`, `NBSP`
+# allowed: unicodedata.lookup takes them), a run of Python/Perl `\N{NAME}` / `\N{U+4E}` escapes, `U+004E LATIN
+# CAPITAL LETTER N` lines (uniname / charnames style) or raw UnicodeData.txt lines (`004E;LATIN CAPITAL LETTER N;Lu;..`),
+# or names separated by single spaces only (segmented by the longest name that resolves). The WHOLE fragment must resolve.
+_UN_ESC = re.compile(r"\\N\{([^{}\n]{1,90})\}")
+_UN_CP = re.compile(r"(?i)^(?:U\+|0x)?([0-9a-f]{4,6})(?:\s*[;:\t=]\s*|\s+-?\s*|$)(.*)$")
+_UN_SPLIT = ("\n", ",", ";", "|", " / ", "\t")
+
+
+def _un_name(n):
+    """One character name (or alias / abbreviation, any case, `_` for space) -> its char(s), else None."""
+    n = n.strip().strip("\"'`{}<>[]").strip()
+    if not n or len(n) > 90 or not re.fullmatch(r"[A-Za-z0-9 _()+\-]+", n):
+        return None
+    for x in (n, n.replace("_", " "), re.sub(r"\s*\([^()]*\)$", "", n)):
+        x = re.sub(r"\s+", " ", x).strip()
+        if not x:
+            continue
+        m = re.fullmatch(r"(?i)U\+([0-9a-f]{1,6})", x)
+        if m:
+            v = int(m.group(1), 16)
+            return chr(v) if v < 0x110000 and not 0xD800 <= v < 0xE000 else None
+        try:
+            return unicodedata.lookup(x)
+        except (KeyError, ValueError):
+            pass
+    return None
+
+
+def _un_tok(t):
+    """One list token: `\\N{..}`, `U+XXXX NAME` / UnicodeData line (name and code must agree), or a bare name."""
+    t = t.strip()
+    m = _UN_ESC.fullmatch(t)
+    if m:
+        return _un_name(m.group(1))
+    m = _UN_CP.match(t)
+    if m and (t[:2].upper() in ("U+", "0X") or ";" in t or m.group(2).strip()) and not _un_name(t):
+        v = int(m.group(1), 16)
+        if v >= 0x110000 or 0xD800 <= v < 0xE000:
+            return None
+        rest = m.group(2).split(";")[0].strip() if ";" in m.group(2) and t.count(";") >= 2 else m.group(2).strip()
+        if not rest or rest.startswith("<"):   # `<control>` / `<CJK Ideograph..>`: the code point alone
+            return chr(v)
+        return chr(v) if _un_name(rest) == chr(v) else None
+    return _un_name(t)
+
+
+def _un_words(t):
+    """Space-only separated names -> chars (longest resolving name first, the whole run must segment), else None."""
+    w = t.split()
+    if not 2 <= len(w) <= 4000 or not all(re.fullmatch(r"[A-Za-z0-9\-]+", x) for x in w):
+        return None
+    n, best = len(w), {len(w): ""}
+    for i in range(n - 1, -1, -1):
+        for j in range(min(n, i + 12), i, -1):
+            if j in best:
+                c = _un_name(" ".join(w[i:j]))
+                if c:
+                    best[i] = c + best[j]
+                    break
+    return best.get(0)
+
+
+def _un_ok(s, k):
+    return s if s and k >= 3 and all(c.isprintable() or c in "\t\n\r" for c in s) else None
+
+
+def names_dec(t):
+    """Unicode character names -> text, None unless the WHOLE fragment (one pair of quotes allowed) resolves."""
+    try:
+        if not isinstance(t, str):
+            return None
+        t = t.strip()
+        if len(t) >= 2 and t[0] == t[-1] and t[0] in "\"'":
+            t = t[1:-1].strip()
+        if not t or len(t) > 400000 or not re.search(r"[A-Za-z]{3}", t):
+            return None
+        esc = list(_UN_ESC.finditer(t))
+        if esc:
+            gaps = [t[a.end():b.start()] for a, b in zip(esc, esc[1:])]
+            if t[:esc[0].start()].strip() or t[esc[-1].end():].strip() or any(g.strip(" \t\r\n,;") for g in gaps):
+                return None
+            cs = [_un_name(m.group(1)) for m in esc]
+            if None in cs:
+                return None
+            keep = not any(c.isspace() for c in cs) and any(gaps) and not all(gaps)
+            return _un_ok("".join(c + (" " if keep and i < len(gaps) and re.search(r"\s", gaps[i]) else "")
+                                  for i, c in enumerate(cs)), len(cs))
+        if "\\" in t:
+            return None
+        if re.match(r"(?i)U\+[0-9a-f]{4,6}\b", t) and "\n" not in t:   # `U+004E NAME U+0069 NAME ..` on one line
+            toks = re.split(r"(?i)[\s,;|]*(?=\bU\+[0-9a-f]{4,6}\b)", t)
+            toks = [x for x in toks if x.strip()]
+            cs = [_un_tok(x.strip(" ,;|")) for x in toks]
+            if len(toks) > 1 and None not in cs:
+                return _un_ok("".join(cs), len(cs))
+        for sep in _UN_SPLIT:
+            if sep not in t:
+                continue
+            toks = t.split(sep)
+            if sep == "\n" or not toks[-1].strip():
+                toks = [x for x in toks if x.strip()] if sep == "\n" else toks[:-1]
+            if sep == "\n":
+                out = []
+                for x in toks:   # one name / code line, or a line that is itself a list
+                    c = _un_tok(x)
+                    if c is None:
+                        sub = names_dec(x) if len(x.strip()) > 1 else None
+                        if sub is None:
+                            out = None
+                            break
+                        c = sub
+                    out.append(c)
+                if out is not None:
+                    return _un_ok("".join(out), len(t.split()) if len(out) < 3 else len(out))
+                continue
+            if sep == ";" and _UN_CP.match(t.strip()) and t.count(";") >= 2 and _un_tok(t):   # one UnicodeData line
+                continue
+            cs = [_un_tok(x) for x in toks]
+            if toks and None not in cs:
+                return _un_ok("".join(cs), len(cs))
+        return _un_ok(_un_words(t), len(t.split()) // 2)
+    except Exception:   # noqa: BLE001
+        return None
+
+
+def names_enc(s, form="comma"):
+    """Plain -> its Unicode character names (`comma` `newline` `space` `lower` `esc` `uplus` `unicodedata`)."""
+    ns = [unicodedata.name(c, None) for c in s]
+    if None in ns:
+        return None
+    if form == "esc":
+        return "".join(f"\\N{{{n}}}" for n in ns)
+    if form == "uplus":
+        return "\n".join(f"U+{ord(c):04X} {n}" for c, n in zip(s, ns))
+    if form == "unicodedata":
+        return "\n".join(f"{ord(c):04X};{n};{unicodedata.category(c)};{unicodedata.combining(c)};"
+                         f"{unicodedata.bidirectional(c)};;;;;N;;;;;" for c, n in zip(s, ns))
+    if form == "lower":
+        return ", ".join(ns).lower()
+    return {"comma": ", ", "newline": "\n", "space": " "}[form].join(ns)
+
+
+def names_free(p):
+    """Speculative Mastery-line decoder: a fragment that is wholly character names, leading indent kept."""
+    if not isinstance(p, str) or len(re.findall(r"[A-Za-z]{3,}", p)) < 2:
+        return []
+    d = names_dec(p)
+    return [p[:len(p) - len(p.lstrip())] + d] if d else []
+
+
+CANDIDATES += [(f"charnames-{f}", (lambda f: lambda s: names_enc(s, f))(f), names_dec)
+               for f in ("comma", "newline", "space", "lower", "esc", "uplus", "unicodedata")]
+
+
+# Code-point notation knobs on D25 `U+004E`: short / lowercase `u+4e`, `\u{4E}` (ES6/Rust/Swift), `\x{4E}` (Perl),
+# `\N{U+004E}` (Perl), `\U0001F600`, `\u004E`, `%u004E`, `&#x4E;` / `&#78;`, C-style `0x4E` / `0d78` / `0o116` /
+# `0b1001110`; radix from the prefix. Tokens adjacent or separated by whitespace , ; -- the WHOLE text must tokenise.
+# A digit is never the `0` of the next `0x`/`0d`/`0o`/`0b` prefix, so `0x4e0x69` splits. Unbraced `\xHH` / `0xHH`
+# runs that read as UTF-8 BYTES (a value >= 0x80, all <= 0xFF, valid UTF-8) are byte dumps: left to hex/char-code.
+_CPA_TOK = re.compile(
+    r"\\N\{[Uu]\+([0-9A-Fa-f]{1,6})\}|\\[ux]\{([0-9A-Fa-f]{1,6})\}|[Uu]\+([0-9A-Fa-f]{1,6})|\\U([0-9A-Fa-f]{8})"
+    r"|\\u([0-9A-Fa-f]{4})|%[uU]([0-9A-Fa-f]{4})|&#[xX]([0-9A-Fa-f]{1,6});?|&#([0-9]{1,7});?"
+    r"|\\x([0-9A-Fa-f]{2})|0[xX]((?:[0-9A-Fa-f](?![xX])){1,6})|0[dD]((?:[0-9](?![dD])){1,7})"
+    r"|0[oO]((?:[0-7](?![oO])){1,8})|0[bB]((?:[01](?![bB])){1,21})")
+_CPA_RADIX = (16, 16, 16, 16, 16, 16, 16, 10, 16, 16, 10, 8, 2)
+_CPA_BYTEY = (8, 9)     # groups of the unbraced \xHH / 0xHH forms (byte-dump shaped)
+_CPA_FULL = re.compile(r"(?:(?:" + _CPA_TOK.pattern + r")|[\s,;])+")
+
+
+def codepoints_any(t):
+    """Any code-point notation run (see above) -> text, None unless the WHOLE fragment (one pair of quotes allowed)
+    tokenises. Whitespace gaps are separators when every pair is gapped or a token encodes whitespace, else literal
+    word spaces (as ucp_dec). Never raises."""
+    try:
+        if not isinstance(t, str):
+            return None
+        t = t.strip()
+        if len(t) >= 2 and t[0] == t[-1] and t[0] in "\"'":
+            t = t[1:-1].strip()
+        if not t or len(t) > 200000 or not _CPA_FULL.fullmatch(t):
+            return None
+        toks = list(_CPA_TOK.finditer(t))
+        if len(toks) < 2:
+            return None
+        vals, bytey = [], True
+        for m in toks:
+            k = next(i for i, g in enumerate(m.groups()) if g)
+            vals.append(int(m.group(k + 1), _CPA_RADIX[k]))
+            bytey = bytey and k in _CPA_BYTEY
+        if bytey and max(vals) >= 0x80 and max(vals) <= 0xFF:
+            try:
+                bytes(vals).decode("utf-8")
+                return None
+            except UnicodeDecodeError:
+                pass
+        gaps = [t[a.end():b.start()] for a, b in zip(toks, toks[1:])]
+        keep = not any(v <= 0x10FFFF and chr(v).isspace() for v in vals) and any(gaps) and not all(gaps)
+        out = []
+        for i, v in enumerate(vals):
+            out.append(v)
+            if keep and i < len(gaps) and re.search(r"\s", gaps[i]):
+                out.append(32)
+        return _ucp_str(out)
+    except Exception:   # noqa: BLE001
+        return None
+
+
+_CPA_FMT = {"u+short": "U+{:X}", "u+lower": "u+{:04x}", "u+short-lower": "u+{:x}", "\\u{}": "\\u{{{:X}}}",
+            "\\x{}": "\\x{{{:x}}}", "\\N{U+}": "\\N{{U+{:04X}}}", "0x": "0x{:X}", "0d": "0d{:d}", "0o": "0o{:o}",
+            "0b": "0b{:b}", "&#x": "&#x{:X};", "&#": "&#{:d};"}
+
+
+def codepoints_enc(s, fmt="u+short", sep=" "):
+    return sep.join(_CPA_FMT[fmt].format(ord(c)) for c in s)
+
+
+def codepoints_free(p):
+    d = codepoints_any(p)
+    return [p[:len(p) - len(p.lstrip())] + d] if d else []
+
+
+CANDIDATES += [(f"cp-{f}" + ("" if sep == " " else "-adjacent"),
+                (lambda f, sep: lambda s: codepoints_enc(s, f, sep))(f, sep), codepoints_any)
+               for f in _CPA_FMT for sep in (" ", "") if not (sep == "" and f.startswith("&#"))]   # = D8 html&#n;
+
+
+# ------------------------------------------------- escape soup: every character in a randomly chosen notation
+# Time Trial / Mastery mutation of the D7 url%xx / D8 html&#n; / D9 \uXXXX / D25 U+XXXX codecs: each char (or each
+# word) in its own notation -- URL %xx (byte) / %uXXXX, HTML &#N; / &#xH; / &name;, \uXXXX, \UXXXXXXXX, \u{..},
+# \x{..}, \N{U+..}, \xNN (byte), \NNN octal (byte), U+XXXX, 0xNN / 0dNN / 0oNN / 0bNN. The WHOLE text must tokenise
+# (separator runs of whitespace or one , ; | between tokens); a DP picks the split with the fewest non-ASCII chars
+# (so `U+004E0x69` / `0x4e0d105` split right). Per-token radix; consecutive byte tokens are one UTF-8 run (latin-1
+# when invalid); \uXXXX / %uXXXX surrogate halves pair. Gaps follow ucp_dec's literal-space rule.
+_SOUP_KINDS = (   # (prefix regex, digit class, min, max, radix, suffix, unit) unit: c code point, b byte, u UTF-16
+    (r"&#[xX]", "0-9A-Fa-f", 1, 6, 16, ";?", "h"), (r"&#", "0-9", 1, 7, 10, ";?", "h"),
+    (r"\\N\{[Uu]\+", "0-9A-Fa-f", 1, 6, 16, r"\}", "c"), (r"\\[ux]\{", "0-9A-Fa-f", 1, 6, 16, r"\}", "c"),
+    (r"\\U", "0-9A-Fa-f", 8, 8, 16, "", "c"), (r"\\u", "0-9A-Fa-f", 4, 4, 16, "", "u"),
+    (r"%[uU]", "0-9A-Fa-f", 4, 4, 16, "", "u"), (r"%", "0-9A-Fa-f", 2, 2, 16, "", "b"),
+    (r"\\x", "0-9A-Fa-f", 2, 2, 16, "", "b"), (r"\\", "0-7", 3, 3, 8, "", "b"),
+    (r"[Uu]\+", "0-9A-Fa-f", 1, 6, 16, "", "c"), (r"0[xX]", "0-9A-Fa-f", 1, 6, 16, "", "c"),
+    (r"0[dD]", "0-9", 1, 7, 10, "", "c"), (r"0[oO]", "0-7", 1, 8, 8, "", "c"), (r"0[bB]", "01", 1, 21, 2, "", "c"))
+_SOUP_RX = [(re.compile(f"{p}([{d}]{{{lo},{hi}}})({s})"), lo, r, u) for p, d, lo, hi, r, s, u in _SOUP_KINDS]
+_SOUP_ENT = re.compile(r"&([A-Za-z][A-Za-z0-9]{1,31});")
+_SOUP_SEP = re.compile(r"\s*[,;|]\s*|\s+")
+
+
+def _soup_opts(t, i):
+    """[(end, unit, value)] for every escape token starting at t[i] (every digit count, longest first)."""
+    out = []
+    m = _SOUP_ENT.match(t, i)
+    if m:
+        v = html.entities.html5.get(m.group(1) + ";")
+        if v and len(v) == 1:
+            out.append((m.end(), "c", ord(v)))
+    for rx, lo, radix, unit in _SOUP_RX:
+        m = rx.match(t, i)
+        if not m:
+            continue
+        ds, a = m.group(1), m.start(1)
+        for n in range(len(ds), lo - 1, -1):
+            v = int(ds[:n], radix)
+            if v > 0x10FFFF:
+                continue
+            end = a + n
+            if n == len(ds) and m.group(2):
+                out.append((m.end(), unit, v))   # with the ';' terminator
+            out.append((end, unit, v))
+    return out
+
+
+def _soup_cost(unit, v):
+    return 0 if (32 <= v < 127 or v in (9, 10, 13)) else 1
+
+
+def escsoup_dec(t):
+    """Mixed escape notation (see above) -> text, None unless the WHOLE fragment (one pair of quotes allowed) splits into
+    >= 2 tokens + separators and reads printable. Never raises."""
+    try:
+        if not isinstance(t, str):
+            return None
+        t = t.strip()
+        if len(t) >= 2 and t[0] == t[-1] and t[0] in "\"'":
+            t = t[1:-1].strip()
+        n = len(t)
+        if not t or n > 60000 or t[0] not in "&%\\Uu0":
+            return None
+        inf = (1 << 30,)
+        best = [inf] * (n + 1)    # best[i] = (cost, -tokens, choice) for t[i:]
+        best[n] = (0, 0, None)
+        for i in range(n - 1, -1, -1):
+            cand = []
+            for end, unit, v in _soup_opts(t, i):
+                b = best[end]
+                if b is not inf and end > i:
+                    cand.append((b[0] + _soup_cost(unit, v), b[1] - 1, (end, unit, v)))
+            m = _SOUP_SEP.match(t, i)
+            if m and i and m.end() < n and best[m.end()] is not inf and best[m.end()][2] and \
+                    best[m.end()][2][1] != "s":
+                b = best[m.end()]
+                cand.append((b[0], b[1], (m.end(), "s", t[i:m.end()])))
+            if cand:
+                best[i] = min(cand, key=lambda c: (c[0], c[1]))
+        if best[0] is inf:
+            return None
+        toks, i = [], 0
+        while i < n:
+            end, unit, v = best[i][2]
+            toks.append((unit, v))
+            i = end
+        if sum(u != "s" for u, _v in toks) < 2:
+            return None
+        units, gaps, buf = [], [], []
+
+        def flush():
+            if buf:
+                raw = bytes(buf)
+                try:
+                    s = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    s = raw.decode("latin-1")
+                units.extend(map(ord, s))
+                buf.clear()
+        prev_tok = False
+        for unit, v in toks:
+            if unit == "s":
+                flush()
+                gaps.append((len(units), v))
+                prev_tok = False
+                continue
+            if prev_tok:
+                gaps.append((len(units) + len(buf), ""))
+            prev_tok = True
+            if unit == "b":
+                buf.append(v)
+                continue
+            flush()
+            if unit == "h":   # HTML numeric reference: html.unescape's own rules (cp1252 0x80-0x9F, NUL/invalid -> FFFD)
+                units.extend(map(ord, html.unescape(f"&#{v};")))
+            else:
+                units.append(v)
+        flush()
+        allgap = all(g for _p, g in gaps)
+        keep = gaps and not allgap and any(g for _p, g in gaps) and not any(
+            u <= 0x10FFFF and chr(u).isspace() for u in units)
+        if keep:
+            for pos, g in sorted(gaps, reverse=True):
+                if re.search(r"\s", g):
+                    units.insert(pos, 32)
+        return _ucp_str(units)
+    except Exception:   # noqa: BLE001
+        return None
+
+
+_SOUP_FMT = {"url": None, "%u": "%u{:04X}", "&#": "&#{:d};", "&#x": "&#x{:x};", "\\u": "\\u{:04x}",
+             "\\U": "\\U{:08X}", "\\u{}": "\\u{{{:X}}}", "\\x": None, "octal": None, "U+": "U+{:04X}", "0x": "0x{:02x}",
+             "&name;": None}
+
+
+def _soup_tok(c, fmt):
+    if fmt in ("url", "\\x", "octal"):
+        f = {"url": "%{:02X}", "\\x": "\\x{:02x}", "octal": "\\{:03o}"}[fmt]
+        return "".join(f.format(b) for b in c.encode("utf-8"))
+    if fmt == "&name;":
+        nm = html.entities.codepoint2name.get(ord(c))
+        return f"&{nm};" if nm else f"&#{ord(c)};"
+    if fmt == "%u" and ord(c) > 0xFFFF:
+        return ucp_enc(c, "%u{:04X}", utf16=True)
+    if fmt == "\\u" and ord(c) > 0xFFFF:
+        return ucp_enc(c, "\\u{:04x}", utf16=True)
+    return _SOUP_FMT[fmt].format(ord(c))
+
+
+def escsoup_enc(s, seed=0, per="char", sep="", fmts=None):
+    """Every char (per='char') or every word incl. its trailing space (per='word') in a seeded random notation."""
+    import random
+    rnd, fmts = random.Random(seed), list(fmts or _SOUP_FMT)
+    if per == "word":
+        parts = re.findall(r"\S+\s*|\s+", s)
+        return sep.join(sep.join(_soup_tok(c, f) for c in w) for w, f in ((w, rnd.choice(fmts)) for w in parts))
+    return sep.join(_soup_tok(c, rnd.choice(fmts)) for c in s)
+
+
+def escsoup_free(p):
+    d = escsoup_dec(p)
+    return [p[:len(p) - len(p.lstrip())] + d] if d else []
+
+
+CANDIDATES += [(f"escsoup-{per}" + ("-spaced" if sep else ""),
+                (lambda per, sep: lambda s: escsoup_enc(s, 0, per, sep))(per, sep), escsoup_dec)
+               for per in ("char", "word") for sep in ("", " ")]
+
+
+# ------------------------------------------------- code-point arithmetic: every code point + K (or XOR K)
+# "Caesar on code points": chr(ord(c) + K) over the whole text (K < 0 too) moves ASCII into another block -- CJK, PUA,
+# astral; Tags = +0xE0000 (U+E0020..E007E, optional U+E0001 LANGUAGE TAG / U+E007F CANCEL TAG wrapper), all-chars
+# fullwidth = +0xFEE0 (ICU's space -> U+3000 form and the per-case math / enclosed styles are unistyle's). XOR K on code
+# points likewise. Keyless from the crib: K = ord(t[0]) - ord('N') (or ^), verified over the whole crib. "-sp" = ASCII
+# spaces left alone; that form at ROT8000's ASCII offset IS ROT8000 and stays its codec. Also read through a U+ / \u{}
+# / &#x; token run (codepoints_any) of the shifted text.
+_CPS_OPS = {"add": (lambda o, k: o + k, lambda o, k: o - k), "xor": (lambda o, k: o ^ k, lambda o, k: o ^ k)}
+_CPS_R8K = _R8K_VALID[_R8K_HALF] - 33
+_CPS_CH = sorted(set(_CRIB) | set("abcdefghijklmnopqrstuvwxyz-0123456789"))
+_CPS_TAGS = ("\U000E0001", "\U000E007F")
+
+
+def cpshift(s, k, op="add", keep=False, decode=False):
+    """Every code point o -> o + k (op add; o - k when decode) or o ^ k; keep = ASCII spaces untouched. None when a
+    result leaves 0..U+10FFFF."""
+    f = _CPS_OPS[op][1 if decode else 0]
+    out = []
+    for c in s:
+        o = ord(c) if not (keep and c == " ") else None
+        if o is not None:
+            o = f(o, k)
+            if not 0 <= o <= 0x10FFFF:
+                return None
+        out.append(c if o is None else chr(o))
+    return "".join(out)
+
+
+def cpshift_enc(s, k, op="add", keep=False, fmt=None, sep=" ", wrap=("", "")):
+    x = wrap[0] + cpshift(s, k, op, keep) + wrap[1]
+    return codepoints_enc(x, fmt, sep) if fmt else x
+
+
+def _cps_unwrap(t):
+    pre = _CPS_TAGS[0] if t.startswith(_CPS_TAGS[0]) else ""
+    suf = _CPS_TAGS[1] if t.endswith(_CPS_TAGS[1]) and len(t) > len(pre) else ""
+    return pre, t[len(pre):len(t) - len(suf)], suf
+
+
+def cpshift_solve(blob, hints=()):
+    """(name, sentence, enc) when the blob is the warmups sentence with every code point + K / XOR K (raw, or as a
+    code-point token run), K from the crib's first char and verified over the whole crib, else None."""
+    try:
+        want = reader_text(blob).strip() if not isinstance(blob, str) else blob.strip()
+        if not want or len(want) > 200000:
+            return None
+        reads = [(None, want)]
+        u = codepoints_any(want)
+        if u:
+            reads.append(("u", u))
+        for fmt, t in reads:
+            pre, body, suf = _cps_unwrap(t)
+            if len(body) <= len(_CRIB):
+                continue
+            for op in _CPS_OPS:
+                k = ord(body[0]) - ord("N") if op == "add" else ord(body[0]) ^ ord("N")
+                if not k:
+                    continue
+                for keep in (False, True):
+                    if keep and op == "add" and k == _CPS_R8K:
+                        continue
+                    c = cpshift(_CRIB, k, op, keep)
+                    if c is None or not body.startswith(c):
+                        continue
+                    got = cpshift(body, k, op, keep, decode=True)
+                    if not (got and got.startswith(_CRIB) and SLUG.fullmatch(got[len(_CRIB):])):
+                        continue
+                    name = f"cp{op}{k:+#x}" + ("-sp" if keep else "") + ("-tagwrap" if pre or suf else "")
+                    fs = (None, " ")
+                    if fmt:
+                        fs = next(((f, sp) for f in _CPA_FMT for sp in (" ", "")
+                                   if codepoints_enc(t, f, sp) == want), ("u+short", " "))
+                        name += f"-{fs[0]}" + ("-adjacent" if fs[1] == "" else "")
+                    return name, got, (lambda k, op, keep, fs, w: lambda s: cpshift_enc(s, k, op, keep, fs[0], fs[1], w)
+                                       )(k, op, keep, fs, (pre, suf))
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def cpshift_dec(t):
+    r = cpshift_solve(t)
+    return r[1] if r else None
+
+
+def cpshift_free(p):
+    """Mastery free-text fragment under a code-point add / XOR (K from the first char against every sentence char):
+    each reading that decodes to printable ASCII forming a contiguous piece of the sentence (_ba_piece). The raw read
+    needs a non-printable-ASCII char (plain ASCII Caesar shapes stay the classical codecs')."""
+    out = []
+    try:
+        lead = p[:len(p) - len(p.lstrip())]
+        s = p.strip()
+        if not s or len(s) > 4000:
+            return []
+        reads = [s] if not all(32 <= ord(c) < 127 for c in s) else []
+        u = codepoints_any(s)
+        if u:
+            reads.append(u)
+        for t in reads:
+            body = _cps_unwrap(t)[1]
+            if len(body) < 6:
+                continue
+            o0 = ord(body[0])
+            for op in _CPS_OPS:
+                for k in sorted({o0 - ord(c) if op == "add" else o0 ^ ord(c) for c in _CPS_CH}):
+                    for keep in (False, True):
+                        if not k or (keep and (" " not in body or (op == "add" and k == _CPS_R8K))):
+                            continue
+                        x = cpshift(body, k, op, keep, decode=True)
+                        if x and x.isascii() and x.isprintable() and _ba_piece(x):
+                            out.append(lead + x)
+    except Exception:  # noqa: BLE001
+        return []
+    return list(dict.fromkeys(out))
+
+
+CANDIDATES.append(("cpshift", lambda s: None, cpshift_dec))
+
+
+# ------------------------------------------------- invisible Unicode smuggling ("ASCII smuggling" for LLM prompts)
+# Tags block: ASCII c -> U+E0000 + ord(c) (U+E0020..E007E), optionally wrapped in U+E0001 LANGUAGE TAG ... U+E007F
+# CANCEL TAG, after / between visible cover text or alone. Variation-selector byte smuggling (Paul Butler): UTF-8 byte
+# b -> VS1-16 U+FE00+b (b < 16) / VS17-256 U+E0100+b-16, the run following a visible carrier emoji. The cover / carrier
+# chars are ignored. Decoys: RGI emoji (a lone U+FE0E/FE0F presentation selector, keycaps) and subdivision flags
+# (U+1F3F4 + tag letters + U+E007F) carry no payload. Zero-width chars (zw_cands' family) are not read here.
+_INV_FLAG = "\U0001F3F4"
+
+
+def tags_enc(s, cover="", wrap=False):
+    body = "".join(chr(0xE0000 + ord(c)) for c in s)
+    body = "\U000E0001" + body + "\U000E007F" if wrap else body
+    return cover + body
+
+
+def vs_enc(s, carrier="\U0001F600", cover="", after=""):
+    return cover + carrier + "".join(chr(0xFE00 + b if b < 16 else 0xE0100 + b - 16) for b in _u(s)) + after
+
+
+def _inv_ok(x):
+    return len(x) >= 4 and all(c.isprintable() or c in "\t\r\n" for c in x)
+
+
+def tags_dec(t):
+    """The ASCII smuggled in Tags-block chars of t (cover text ignored), or None. Tag runs right after U+1F3F4 are
+    emoji subdivision flags, not payload."""
+    out, prev, flag = [], "", False
+    for c in t:
+        o = ord(c)
+        if 0xE0000 <= o <= 0xE007F:
+            flag = flag or prev == _INV_FLAG
+            if not flag and o not in (0xE0001, 0xE007F):
+                out.append(chr(o - 0xE0000))
+            flag = flag and o != 0xE007F
+        else:
+            flag = False
+        prev = c
+    x = "".join(out)
+    return x if _inv_ok(x) else None
+
+
+def vs_dec(t):
+    """The UTF-8 text smuggled in variation-selector runs of t (VS1-16 -> 0-15, VS17-256 -> 16-255), or None. A run
+    that is a lone U+FE0E / U+FE0F is an emoji presentation selector and is skipped."""
+    runs, cur = [], []
+    for c in t + " ":
+        o = ord(c)
+        if 0xFE00 <= o <= 0xFE0F:
+            cur.append(o - 0xFE00)
+        elif 0xE0100 <= o <= 0xE01EF:
+            cur.append(o - 0xE0100 + 16)
+        else:
+            if cur and not (len(cur) == 1 and cur[0] in (14, 15)):
+                runs.append(cur)
+            cur = []
+    try:
+        x = bytes(b for r in runs for b in r).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    return x if _inv_ok(x) else None
+
+
+def invis_cands(t):
+    """Tags then variation-selector readings of t; [] when neither carries printable text. Never raises."""
+    try:
+        t = reader_text(t)
+        if not isinstance(t, str) or len(t) > 200000 or not any(ord(c) > 0xFDFF for c in t):
+            return []
+        return [x for x in (tags_dec(t), vs_dec(t)) if x]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def invis_dec(t):
+    got = invis_cands(t)
+    return got[0] if got else None
+
+
+def invis_solve(blob):
+    """(name, text, enc) for a Tags / VS smuggled blob: enc re-creates the cover / carrier and tag wrapper seen."""
+    try:
+        t = reader_text(blob).strip()
+        x = tags_dec(t)
+        if x:
+            vis = "".join(c for c in t if not 0xE0000 <= ord(c) <= 0xE007F)
+            wrap = "\U000E0001" in t
+            for cover in (vis, ""):
+                if tags_enc(x, cover, wrap) == t:
+                    return "tags" + ("-wrap" if wrap else "") + ("-cover" if cover else ""), x, (
+                        lambda s, c=cover, w=wrap: tags_enc(s, c, w))
+            return "tags", x, (lambda s, w=wrap: tags_enc(s, "", w))
+        x = vs_dec(t)
+        if x:
+            vs = lambda c: 0xFE00 <= ord(c) <= 0xFE0F or 0xE0100 <= ord(c) <= 0xE01EF   # noqa: E731
+            i = next(i for i, c in enumerate(t) if vs(c) and i + 1 < len(t) and vs(t[i + 1]))   # payload run
+            j = next((j for j in range(i, len(t)) if not vs(t[j])), len(t))
+            kw = dict(carrier=t[i - 1] if i else "", cover=t[:max(i - 1, 0)], after=t[j:])
+            enc = (lambda s, kw=kw: vs_enc(s, **kw)) if vs_enc(x, **kw) == t else vs_enc
+            return "vs-smuggle", x, enc
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def invis_free(p):
+    lead = p[:len(p) - len(p.lstrip())]
+    return [lead + x for x in invis_cands(p)]
+
+
+CANDIDATES += [("tags", tags_enc, invis_dec),
+               ("tags-wrap", lambda s: tags_enc(s, wrap=True), invis_dec),
+               ("vs-smuggle", vs_enc, invis_dec)]
+
+
+# ------------------------------------------------- delta / chained code points ("Point to point" re-read)
+# An integer token list (signed decimal, 0x / U+ / bare hex, any , ; | whitespace separators, optional [..] wrapper)
+# whose values are mostly small and signed: the first value absolute, then each the difference (or XOR) against the
+# previous char -- or the reverse shape, a running sum / running XOR of the code points. Decoder ops: psum (running
+# sum = undo differences), pnsum (c_i = c_{i-1} - v_i), pxor (running XOR, c_i = v_i ^ c_{i-1}), adiff (adjacent
+# difference = undo a cumulative sum), axor (c_i = v_i ^ v_{i-1}); each optionally mod 256 (over UTF-8 bytes) or mod
+# 0x110000, tokens and/or output read back to front. Crib-gated: the whole decode must start 'Nice work'. Plain char
+# codes are never re-summed: no op is the identity, and the Mastery fragment reader needs most values outside 32..126.
+_DLT_TOK = re.compile(r"([+-]?)(0[xX]|[Uu]\+)?([0-9A-Fa-f]+)")
+_DLT_SPLIT = re.compile(r"[\s,;|]+")
+_DLT_OPS = ("psum", "pnsum", "pxor", "adiff", "axor")
+_DLT_MODS = (None, 256, 0x110000)
+_DLT_WRAP = {"[": "]", "(": ")", "{": "}"}
+
+
+def _dlt_decode(v, op):
+    out, acc = [], 0
+    for i, x in enumerate(v):
+        if op == "psum":
+            acc = acc + x
+        elif op == "pnsum":
+            acc = x if not i else acc - x
+        elif op == "pxor":
+            acc ^= x
+        elif op == "adiff":
+            acc = x - (v[i - 1] if i else 0)
+        else:
+            acc = x ^ (v[i - 1] if i else 0)
+        out.append(acc)
+    return out
+
+
+def _dlt_encode(c, op):
+    if op == "psum":
+        return [x - (c[i - 1] if i else 0) for i, x in enumerate(c)]
+    if op == "pnsum":
+        return [x if not i else c[i - 1] - x for i, x in enumerate(c)]
+    if op == "pxor":
+        return [x ^ (c[i - 1] if i else 0) for i, x in enumerate(c)]
+    out, acc = [], 0
+    for x in c:
+        acc = acc + x if op == "adiff" else acc ^ x
+        out.append(acc)
+    return out
+
+
+def _dlt_text(vals, mod):
+    if mod == 256:
+        vals = [x % 256 for x in vals]
+        try:
+            return bytes(vals).decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    if mod:
+        vals = [x % mod for x in vals]
+    if any(not 0 <= x <= 0x10FFFF or 0xD800 <= x <= 0xDFFF for x in vals):
+        return None
+    return "".join(map(chr, vals))
+
+
+def delta_enc(s, op="psum", mod=None, radix=10, prefix="", upper=False, width=0, plus=False, sep=" ",
+              wrap=("", ""), revtok=False, revout=False):
+    """Plain -> its delta / chained token list (the exact inverse of the decoder op; see the section comment)."""
+    s = s[::-1] if revout else s
+    c = list(s.encode("utf-8")) if mod == 256 else [ord(ch) for ch in s]
+    v = _dlt_encode(c, op)
+    if mod:
+        v = [x % mod for x in v]
+    v = v[::-1] if revtok else v
+    toks = []
+    for x in v:
+        d = (f"{abs(x):0{width}x}" if radix == 16 else f"{abs(x):0{width}d}")
+        toks.append(("-" if x < 0 else "+" if plus and x > 0 else "") + prefix + (d.upper() if upper else d))
+    return wrap[0] + sep.join(toks) + wrap[1]
+
+
+def _dlt_parse(t):
+    """[(radix, ints, fmt kwargs)] readings of a whole-fragment integer token list, [] when it isn't one."""
+    t = t.strip()
+    if len(t) >= 2 and t[0] == t[-1] and t[0] in "\"'":
+        t = t[1:-1].strip()
+    if not t or len(t) > 100000:
+        return []
+    w0 = w1 = ""
+    if t[0] in _DLT_WRAP and t[-1] == _DLT_WRAP[t[0]]:
+        inner = t[1:-1]
+        w0 = t[0] + inner[:len(inner) - len(inner.lstrip())]
+        w1 = inner[len(inner.rstrip()):] + t[-1]
+        t = inner.strip()
+    seps = _DLT_SPLIT.findall(t)
+    raw = _DLT_SPLIT.split(t)
+    ms = [_DLT_TOK.fullmatch(x) for x in raw]
+    if len(ms) < 4 or None in ms:
+        return []
+    pfx = {m.group(2) or "" for m in ms}
+    if len(pfx) > 1:
+        return []
+    pfx = pfx.pop()
+    digs = [m.group(3) for m in ms]
+    alldec = all(d.isdigit() for d in digs)
+    radices = [16] if pfx else ([10, 16] if alldec else [16])
+    width = min(map(len, digs)) if any(d[0] == "0" and len(d) > 1 for d in digs) else 0
+    kw = dict(prefix=pfx, upper=any(ch in "ABCDEF" for d in digs for ch in d), width=width,
+              plus=any(m.group(1) == "+" for m in ms), sep=seps[0] if len(set(seps)) == 1 else " ", wrap=(w0, w1))
+    return [(r, [int(m.group(1) + m.group(3), r) for m in ms], dict(kw, radix=r)) for r in radices]
+
+
+def _dlt_reads(v):
+    """Every (op, mod, revtok, revout, text) decode of the int list v (printable text only)."""
+    for revtok in (False, True):
+        w = v[::-1] if revtok else v
+        for op in _DLT_OPS:
+            vals = _dlt_decode(w, op)
+            for mod in (_DLT_MODS if max(map(abs, v)) < 256 else (None, 0x110000, 256)):
+                x = _dlt_text(vals, mod)
+                if not x or not x.isprintable():
+                    continue
+                for revout in (False, True):
+                    yield op, mod, revtok, revout, x[::-1] if revout else x
+
+
+def delta_solve(blob, hints=()):
+    """(name, sentence, enc) when the blob is a delta / chained token list of a text starting 'Nice work', else None."""
+    try:
+        want = reader_text(blob).strip() if not isinstance(blob, str) else blob.strip()
+        for radix, v, kw in _dlt_parse(want):
+            for op, mod, revtok, revout, x in _dlt_reads(v):
+                if not x.startswith(_CRIB[:9]):
+                    continue
+                name = (f"delta-{op}" + ({256: "-mod256", 0x110000: "-mod110000"}.get(mod, "")) + ("-revtok" if revtok else "")
+                        + ("-revout" if revout else "") + ("-hex" if radix == 16 else "-dec"))
+                kw2 = dict(kw, op=op, mod=mod, revtok=revtok, revout=revout)
+                return name, x, (lambda kw2: lambda s: delta_enc(s, **kw2))(kw2)
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def delta_dec(t):
+    r = delta_solve(t)
+    return r[1] if r else None
+
+
+def delta_free(p):
+    """Mastery fragment under a delta / chained token list: every reading that is printable ASCII and a contiguous
+    piece of the sentence (_ba_piece). Needs most values after the first outside 32..126 (plain char codes stay the
+    decimal / hex codecs')."""
+    out = []
+    try:
+        if not isinstance(p, str):
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        for _radix, v, _kw in _dlt_parse(p):
+            if sum(not 32 <= x <= 126 for x in v[1:]) * 2 < len(v) - 1:
+                continue
+            for _op, _mod, _rt, _ro, x in _dlt_reads(v):
+                if x.isascii() and _ba_piece(x):
+                    out.append(lead + x)
+    except Exception:  # noqa: BLE001
+        return []
+    return list(dict.fromkeys(out))
+
+
+# ------------------------------------------------- UTF-8 mojibake / multibyte byte escapes ("Encoding confusion")
+# Sibling of D19-D20 / D25: the UTF-8 bytes of the sentence (often fullwidth-styled, or with smart quotes) re-read as
+# cp1252 / latin-1 (`ï¼®ï½‰`, `â€œ`), possibly 2-3 times over (double-encoded `ÃƒÂ¯Ã‚Â¼`), or written as byte escapes
+# of the multibyte sequences (`\xef\xbc\xae`, `%EF%BC%AE`). Repair = encode under the page, decode UTF-8 STRICT, up to
+# 3 rounds; cp1252 is the WHATWG/"sloppy" page (0x81 0x8D 0x8F 0x90 0x9D -> U+0081.. C1 controls, as browsers / Node's
+# TextDecoder write them), latin-1 is the other try (they differ only on 0x80-0x9F). Then NFKC: fullwidth -> ASCII.
+# Gate: something changed, a real multibyte sequence was decoded, the result is printable. Stdlib only (no ftfy).
+_MOJI_C1252 = {}
+for _b in range(256):
+    try:
+        _MOJI_C1252[bytes([_b]).decode("cp1252")] = _b
+    except UnicodeDecodeError:
+        _MOJI_C1252[chr(_b)] = _b
+_MOJI_C1252_DEC = {v: c for c, v in _MOJI_C1252.items()}
+_MOJI_PAGES = ("cp1252", "latin-1")
+
+
+def _moji_bytes(t, page):
+    """Text -> the bytes it was read from under `page` (cp1252 = sloppy WHATWG table), None if a char is off-page."""
+    if page == "latin-1":
+        return t.encode("latin-1") if all(ord(c) < 256 for c in t) else None
+    try:
+        return bytes(_MOJI_C1252[c] for c in t)
+    except KeyError:
+        return None
+
+
+def mojibake_enc(s, page="cp1252", n=1, style=None):
+    """Plain -> its UTF-8 bytes re-read `n` times under `page` (style: unistyle_enc it first, e.g. "fullwidth")."""
+    if style:
+        s = unistyle_enc(s, style)
+    for _ in range(n):
+        b = s.encode("utf-8")
+        s = "".join(_MOJI_C1252_DEC[x] for x in b) if page == "cp1252" else b.decode("latin-1")
+    return s
+
+
+def _moji_round(t):
+    """One repair round: the strict UTF-8 reading of t's bytes under the first page that has a multibyte sequence."""
+    if t.isascii():
+        return None
+    for page in _MOJI_PAGES:
+        b = _moji_bytes(t, page)
+        if b is None or max(b) < 0xC2:
+            continue
+        try:
+            u = b.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if u != t:
+            return u
+    return None
+
+
+def _moji_runs(t):
+    """Run-wise repair when the whole line is not one page (mojibake runs beside genuine non-Latin text)."""
+    hit = [False]
+
+    def fix(m):
+        u = _moji_round(m[0])
+        if u is None:
+            return m[0]
+        hit[0] = True
+        return u
+    out = re.sub("[\u0080-ÿŒœŠšŸŽžƒˆ˜–—‘-„"
+                 "†-•…‰‹›€™]{2,}", fix, t)
+    return out if hit[0] else None
+
+
+def _moji_esc(t):
+    """`\\xHH` / `%HH` runs holding a byte >= 0x80 -> their strict UTF-8 text (other chars kept), else None."""
+    hit = [False]
+
+    def fix(m):
+        b = bytes(int(h, 16) for h in re.findall(r"[0-9a-fA-F]{2}", m[0]))
+        if max(b) < 0x80:
+            return m[0]
+        try:
+            u = b.decode("utf-8")
+        except UnicodeDecodeError:
+            raise ValueError from None
+        hit[0] = True
+        return u
+    try:
+        out = re.sub(r"(?:\\\\?x[0-9a-fA-F]{2})+", fix, t)
+        if "%" in out:
+            pct = re.sub(r"(?:%[0-9a-fA-F]{2})+", fix, out)
+            if hit[0] and pct != out and not re.search(r"\s", out) and "+" in pct:
+                pct = pct.replace("+", " ")   # form-encoded (quote_plus): '+' = space
+            out = pct
+    except ValueError:
+        return None
+    return out if hit[0] else None
+
+
+def _moji_ok(x):
+    return bool(x) and all(c.isprintable() or c in "\t\r\n" for c in x)
+
+
+def mojibake_reads(t):
+    """[text] every repaired reading of t (byte escapes first, then up to 3 mojibake rounds), NFKC-normalized."""
+    if not isinstance(t, str):
+        return []
+    t = t.strip()
+    if not t or len(t) > 100000:
+        return []
+    out = []
+    starts = [t]
+    e = _moji_esc(t)
+    if e is not None:
+        starts.insert(0, e)
+        out.append(e)
+    for s in starts:
+        cur = s
+        for _ in range(3):
+            u = _moji_round(cur)
+            if u is None:
+                u = _moji_runs(cur)
+            if u is None:
+                break
+            cur = u
+            out.append(cur)
+    res = []
+    for x in reversed(out):   # most-repaired first
+        n = unicodedata.normalize("NFKC", x)
+        if _moji_ok(n) and n not in res:
+            res.append(n)
+    return res
+
+
+def mojibake_dec(t):
+    """Mojibake / UTF-8 byte-escaped text -> repaired NFKC text, None unless a multibyte UTF-8 read changed it."""
+    try:
+        r = mojibake_reads(_t(t))
+    except Exception:  # noqa: BLE001
+        return None
+    return r[0] if r else None
+
+
+def mojibake_free(p):
+    """Mastery line under mojibake / multibyte byte escapes: every repaired reading (+ smart quotes folded to ASCII)."""
+    try:
+        if not isinstance(p, str):
+            return []
+        lead = p[:len(p) - len(p.lstrip())]
+        outs = []
+        for x in mojibake_reads(p):
+            outs.append(x)
+            f = x.translate(_MOJI_QUOTES)
+            if f != x:
+                outs.append(f)
+        return [lead + x for x in dict.fromkeys(outs)]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+_MOJI_QUOTES = str.maketrans({"‘": "'", "’": "'", "‚": "'", "“": '"', "”": '"',
+                              "„": '"', "–": "-", "—": "-"})
+CANDIDATES += [(f"mojibake-{page}" + (f"x{n}" if n > 1 else "") + (f"({st})" if st else ""),
+                (lambda pg, k, y: lambda s: mojibake_enc(s, pg, k, y))(page, n, st), mojibake_dec)
+               for st in ("fullwidth",) for page in _MOJI_PAGES for n in (1, 2, 3)]
+CANDIDATES += [(f"utf8-{name}(fullwidth)", (lambda f: lambda s: "".join(
+    f.format(x) for x in unistyle_enc(s, "fullwidth").encode("utf-8")))(fmt), mojibake_dec)
+    for name, fmt in (("xesc", "\\x{:02x}"), ("XESC", "\\x{:02X}"), ("pct", "%{:02X}"), ("pct-lower", "%{:02x}"))]
+
+
+# keyless crib-gated decoder (infer returns the solved shape's encoder; these entries' encoders are common shapes)
+CANDIDATES += [("delta-psum-dec", lambda s: delta_enc(s), delta_dec),
+               ("delta-psum-dec-comma", lambda s: delta_enc(s, sep=", "), delta_dec),
+               ("delta-psum-mod256-hex", lambda s: delta_enc(s, mod=256, radix=16, width=2), delta_dec),
+               ("delta-pxor-hex", lambda s: delta_enc(s, op="pxor", radix=16, prefix="0x", width=2), delta_dec),
+               ("delta-adiff-dec", lambda s: delta_enc(s, op="adiff"), delta_dec)]
+
+
+# ------------------------------------------------- letter maps into another SCRIPT ("every character has a place")
+# Each Latin letter -> one glyph of a non-Latin script (Elder Futhark runes, Greek / Cyrillic keyboard-or-transliteration
+# letters, Ogham, Tifinagh, Old Italic, Gothic, or an arbitrary glyph alphabet: Deseret / Shavian / symbols), word
+# lengths kept, ASCII digits / punctuation kept, the space kept or written as one separator (Ogham U+1680, runic ᛫).
+# Solve = the fixed 87-char crib fixes letter -> glyph for its 21 letters (a FUNCTION: runes fold c/k/q onto ᚲ, so a
+# glyph may stand for several letters); the slug's glyphs read through a standard table the crib agrees with, else
+# the crib's inverse + the 5 unseen letters (f j q y z) on unseen glyphs, picked by the slug word list (generator words
+# first). Glyph case folds (Greek / Cyrillic / Deseret), Greek final sigma = sigma. Gate: crib aligned exactly, >= 12
+# distinct non-ASCII glyphs, the tail reads as a slug.
+def _sm_tab(pairs):
+    p = pairs.split()
+    return dict(zip(p[0::2], p[1::2]))
+
+
+_SM_TABLES = {
+    "futhark": _sm_tab("a ᚨ b ᛒ c ᚲ d ᛞ e ᛖ f ᚠ g ᚷ h ᚺ i ᛁ j ᛃ k ᚲ l ᛚ m ᛗ n ᚾ o ᛟ p ᛈ q ᚲ r ᚱ s ᛊ t ᛏ u ᚢ "
+                       "v ᚹ w ᚹ x ᛉ y ᛃ z ᛉ"),
+    "greek": _sm_tab("a α b β c κ d δ e ε f φ g γ h η i ι j ξ k κ l λ m μ n ν o ο p π q θ r ρ s σ t τ u υ v β "
+                     "w ω x χ y ψ z ζ"),
+    "greek-keyboard": _sm_tab("a α b β c ψ d δ e ε f φ g γ h η i ι j ξ k κ l λ m μ n ν o ο p π q ; r ρ s σ t τ "
+                              "u θ v ω w ς x χ y υ z ζ"),
+    "cyrillic": _sm_tab("a а b б c ц d д e е f ф g г h х i и j й k к l л m м n н o о p п q я r р s с t т u у v в "
+                        "w щ x ж y ы z з"),
+    "cyrillic-yawert": _sm_tab("a а b б c ц d д e е f ф g г h ч i и j й k к l л m м n н o о p п q я r р s с t т "
+                               "u у v ж w в x ь y ы z з"),
+    "ogham": _sm_tab("a ᚐ b ᚁ c ᚉ d ᚇ e ᚓ f ᚃ g ᚌ h ᚆ i ᚔ j ᚔ k ᚉ l ᚂ m ᚋ n ᚅ o ᚑ p ᚚ q ᚊ r ᚏ s ᚄ t ᚈ u ᚒ "
+                     "v ᚃ w ᚃ x ᚕ y ᚔ z ᚎ"),
+    "tifinagh": _sm_tab("a ⴰ b ⴱ c ⵛ d ⴷ e ⴻ f ⴼ g ⴳ h ⵀ i ⵉ j ⵊ k ⴽ l ⵍ m ⵎ n ⵏ o ⵧ p ⵒ q ⵇ r ⵔ s ⵙ t ⵜ u ⵓ "
+                        "v ⵠ w ⵡ x ⵅ y ⵢ z ⵣ"),
+    "old-italic": _sm_tab("a 𐌀 b 𐌁 c 𐌂 d 𐌃 e 𐌄 f 𐌚 g 𐌂 h 𐌇 i 𐌉 j 𐌉 k 𐌊 l 𐌋 m 𐌌 n 𐌍 o 𐌏 p 𐌐 q 𐌒 r 𐌓 "
+                          "s 𐌔 t 𐌕 u 𐌖 v 𐌅 w 𐌅 x 𐌗 y 𐌖 z 𐌆"),
+    "gothic": _sm_tab("a 𐌰 b 𐌱 c 𐌺 d 𐌳 e 𐌴 f 𐍆 g 𐌲 h 𐌷 i 𐌹 j 𐌾 k 𐌺 l 𐌻 m 𐌼 n 𐌽 o 𐍉 p 𐍀 q 𐌵 r 𐍂 s 𐍃 "
+                      "t 𐍄 u 𐌿 v 𐍅 w 𐍅 x 𐍇 y 𐍅 z 𐌶"),
+}
+_SM_INV = {n: {g: {k for k, v in tab.items() if v == g} for g in tab.values()} for n, tab in _SM_TABLES.items()}
+_SM_BYLEN = {}
+_SM_SEPS = " \u1680\u16eb\u16ec\u16ed\u00b7\u2027\u2e31\u3000"
+
+
+def _sm_fold(c):
+    return "σ" if c == "ς" else c.lower()
+
+
+def _sm_align(crib, t, need=12):
+    """(enc {letter: folded glyph}, raw {letter: glyph as written}, sep) when t[:len(crib)] is crib under one letter ->
+    glyph function (non-letters kept, space -> one separator), else None."""
+    enc, raw, sep = {}, {}, None
+    if len(t) < len(crib):
+        return None
+    for p, c in zip(crib, t):
+        if p.isalpha():
+            if c.isascii() or c.isspace() or c in _SM_SEPS:
+                return None
+            g = _sm_fold(c)
+            if enc.setdefault(p.lower(), g) != g:
+                return None
+            raw.setdefault(p, c)
+        elif p == " ":
+            if c != " " and not c.isspace() and c not in _SM_SEPS:
+                return None
+            if sep is None:
+                sep = c
+            elif sep != c:
+                return None
+        elif p != c:
+            return None
+    if len(set(enc.values())) < min(need, len(enc)) or sum(c.isalpha() for c in crib) < 10:
+        return None
+    return enc, raw, sep or " "
+
+
+def _sm_tail(enc, tail, sep, prefix=False):
+    """[(slug text, {letter: glyph} additions)] best-first readings of the slug glyphs: a crib-consistent standard
+    table's inverse, else the crib inverse + unseen letters on unseen glyphs (1:1 when the crib map is). prefix: the
+    last word may be cut (Mastery fragment)."""
+    from lib import slug as S
+    tail = tail.replace(sep, " ") if sep != " " else tail
+    if any(c.isascii() and c.isalpha() for c in tail):
+        return None
+    glyph = lambda c: not c.isascii() and not c.isspace()   # noqa: E731
+    if not any(glyph(c) for c in tail):
+        return [(tail, {})]
+    inv = {}
+    for k, v in enc.items():
+        inv.setdefault(v, set()).add(k)
+    inj = all(len(s) == 1 for s in inv.values())
+    free = set(_LC) - set(enc)
+    tabs = [n for n, tab in _SM_TABLES.items() if all(_sm_fold(tab[k]) == v for k, v in enc.items())]
+    if tabs:
+        ti = {_sm_fold(g): s for g, s in _SM_INV[tabs[0]].items()}
+        cand = lambda g: ti.get(g, set())   # noqa: E731
+    else:
+        cand = lambda g: (inv[g] | (set() if inj else free)) if g in inv else free   # noqa: E731
+    vocab = S.vocab()
+    if not _SM_BYLEN:
+        if _SUBST_POOL[0] is None:
+            _SUBST_POOL[0] = sorted(vocab) + sorted(w for w in S.english()
+                                                    if w not in vocab and w.isascii() and w.isalpha())
+        for w in _SUBST_POOL[0]:
+            _SM_BYLEN.setdefault(len(w), []).append(w)
+    spans = [(m.start(), m.end()) for m in re.finditer(r"[^\x00-\x7f\s]+", tail)]
+    cut = prefix and spans and spans[-1][1] == len(tail.rstrip())
+    fits = []
+    for k, (a, b) in enumerate(spans):
+        gs = [_sm_fold(c) for c in tail[a:b]]
+        cs = [cand(g) for g in gs]
+        if not all(cs):
+            return None
+        last = cut and k == len(spans) - 1
+        f = [w for n in (sorted(x for x in _SM_BYLEN if x >= len(gs)) if last else (len(gs),))
+             for w in _SM_BYLEN.get(n, ()) if all(x in c for x, c in zip(w, cs))]
+        if not f:
+            return None
+        fits.append((gs, f[:400]))
+    out, budget = [], [20000]
+
+    def walk(k, add, back, sc, words):
+        budget[0] -= 1
+        if budget[0] < 0 or len(out) >= 6:
+            return
+        if k == len(fits):
+            out.append((sc, words, dict(add)))
+            return
+        gs, f = fits[k]
+        for w in f:
+            a2, b2, ok = dict(add), dict(back), True
+            for x, g in zip(w, gs):
+                if x in enc or tabs:
+                    continue
+                if a2.setdefault(x, g) != g or (inj and b2.setdefault(g, x) != x):
+                    ok = False
+                    break
+            if ok:
+                walk(k + 1, a2, b2, sc + (w in vocab), words + [w[:len(gs)]])
+    walk(0, {}, {}, 0, [])
+    if not out:
+        return None
+    res = []
+    for sc, words, add in sorted(out, key=lambda o: -o[0]):
+        txt, pos = "", 0
+        for (a, b), w in zip(spans, words):
+            txt += tail[pos:a] + w
+            pos = b
+        res.append((txt + tail[pos:], add))
+    return res
+
+
+def _sm_encoder(enc, raw, sep):
+    def e(s):
+        o = []
+        for ch in s:
+            if ch == " ":
+                o.append(sep)
+            elif ch in raw:
+                o.append(raw[ch])
+            elif ch.isascii() and ch.isalpha() and ch.lower() in enc:
+                g = enc[ch.lower()]
+                o.append(g.upper() if ch.isupper() else g)
+            else:
+                o.append(ch)
+        return "".join(o)
+    return e
+
+
+def scriptmap_solve(blob):
+    """(name, sentence, enc) when the blob is the warmups sentence under a letter -> glyph map into another script
+    (crib-learned, slug glyphs via a standard table or the slug word list), else None. Never raises."""
+    try:
+        t = _t(blob).strip()
+        wrap = t[:1] == "\u169b" and t[-1:] == "\u169c"   # Ogham feather marks around the text
+        t = t.strip("\u169b\u169c").strip()
+        if t.isascii() or len(t) <= len(_CRIB) or len(t) > 400:
+            return None
+        al = _sm_align(_CRIB, t)
+        if not al:
+            return None
+        enc, raw, sep = al
+        rd = _sm_tail(enc, t[len(_CRIB):], sep)
+        for tail, add in rd or ():
+            if SLUG.fullmatch(tail):
+                tabs = [n for n, tab in _SM_TABLES.items() if all(_sm_fold(tab[k]) == v for k, v in enc.items())]
+                full = dict(enc, **add)
+                if tabs:
+                    full = dict({k: v for k, v in _SM_TABLES[tabs[0]].items()}, **enc)
+                name = "script-" + (tabs[0] if tabs else "map")
+                e = _sm_encoder(full, raw, sep)
+                return name, _CRIB + tail, (lambda s: "\u169b" + e(s) + "\u169c") if wrap else e
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def scriptmap_dec(t):
+    r = scriptmap_solve(t)
+    return r[1] if r else None
+
+
+def scriptmap_free(p, k=3):
+    """Mastery fragment under a letter -> glyph script map: the crib fitted at every offset (>= 10 letters, >= 8
+    glyphs) -> decoded fragments (slug words via the word list, the last may be cut). Never raises."""
+    out = []
+    try:
+        if not isinstance(p, str) or p.isascii() or len(p) > 400:
+            return out
+        lead = p[:len(p) - len(p.lstrip())]
+        q = p.strip()
+        for off in range(len(_CRIB)):
+            crib = _CRIB[off:]
+            n = min(len(crib), len(q))
+            if sum(c.isalpha() for c in crib[:n]) < 10:
+                break
+            al = _sm_align(crib[:n], q, need=8)
+            if not al:
+                continue
+            got = crib[:n]
+            if len(q) > n:
+                rd = _sm_tail(al[0], q[n:], al[2], prefix=True)
+                if not rd:
+                    continue
+                got += rd[0][0]
+            if lead + got not in out:
+                out.append(lead + got)
+            if len(out) >= k:
+                break
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
+CANDIDATES += [(f"script-{n}", (lambda tab: lambda s: "".join(
+    (tab[c.lower()].upper() if c.isupper() else tab[c.lower()]) if c.isascii() and c.lower() in tab else c
+    for c in s))(tab), scriptmap_dec) for n, tab in _SM_TABLES.items()]
+CANDIDATES.append(("script-map", lambda s: None, scriptmap_dec))
+
+
+# ---- ASCII-art text: FIGlet banners (standard / banner / big) and 5x7 dot-matrix (HD44780-style LCD font) ----------
+# FIGlet: glyph tables vendored from the standard FIGlet 2.2 fonts (ASCII 32-126, endmarks stripped; hardblank kept):
+# name -> (hardblank, height, full_layout, b85(zlib(glyph rows: \x1f between rows, \n between glyphs))). The renderer
+# mirrors figlet/pyfiglet's horizontal smushing + width-80 wrap at the last blank, so the encoder reproduces
+# `pyfiglet.figlet_format(s, font)` byte for byte and the decoder re-derives the text glyph by glyph (greedy with
+# backtracking on the smushed prefix, every block verified by re-rendering).
+_FIG_FONTS = {
+    "standard": ("$", 6, 24463,
+        "c-oy<Np9;f4Bh7v=AuATpolI|^cY<cP!FQRe{pycDJw(2lQ@PY&X0plZwICCg{aa&jT%n1pRV=epnmA8tY7=0-1_MsS$U)QXFFxDeC1Z{y!uyJ_glA{+_G!k*o3T$>fga)@Tq#MllQ+uRdnH6iA4>faww(g)>l>AqPP3*BBcFKB$rxX2sl^Q@7ifU$o6*5g~j@7{U-YA_qw!NxExU{^Frs=RK(jjfwRdyT<>`9{P;pu&Eozs<MO%dYCcr`M7(fhGJ}g)$|8)*^cVKqjo^8>efl{#`7$VQil$|r*dT}UltXz+=%4bOD1wLFM=?@lk)mu@HFsHf+>-!lHNR<;k`5a5iR1xiUv-{hg+)QIrK|*HWic>N!FJPGT+8m350kOc#N%OkFt41|h|Ln5q^Df9r0@fY1ZXSxmHZv9ySkYhk45XKAwq-@DZ><;6dg;W6sG&KHZcvGKOudk%4j;_>bx3|JhRe_^6X>FrJO-0kUv0s%4L?y<Wh$6=35Uo9|QPJBdUg{$_d{n6pgQ_Tz?(Oox)MC&N8*wVBq;R(ywUUaAtDt2sgeK&f$U`>NKW}X6ijcomy%9T~z?zmw1~~w1`-;dzVuP5FtQX?V_wl`Abtnq$bE~qYc8(c6p}^^=FYqW6x@iE?PYrHEF?#RRnJt-amo_$7*#wO@~UaR7K5$CP|_F>0NW7(an5cTL6Pw;a)voJn*yr)KqCwrW6;bN24B7azOSQ!yIA|^6(pHiT~LnHrR7`)93<QJiH()X4O+!^hL01OI1++`IY)V%h&At<gI01tdqbFu}^(i>uBh#rN&B|T%&hzpA#{uaPA+0Lt>KoWLBBmiQ(Ys+`tDj2I^kIxiw)I4~ieO`1>A{!+ZF4=8TDP899L(vYh)~cmsZL54i0NtNFyUt}`SuOn8b1r44ekIek6Te$sn7`^8C^l=(Ud4-VBH9YPnoPDFj4E9a;%%k(n3&+XKGrl?V@UC`(}ZJCy<6EqBdPj%Z!Ax62_Ng3PFZM@eU2~B_Sl?4~Q{-LjCm0i0GhNSIm48QnjWunnzio<G3H&MB(5bD|5O_Ioy+z2&wL$K*L7u#f8ZX)X}M}P244)Dv<>?2ty^0(Ab{u*&BKbJ+6Nt&}3*e^IgfLBine}YyN9VzbuNNa$sP_$!b@4X@CUhe1v?So>g_54gV2_tPJj~p_Sl)0zQ@NHOKJHpF0=6no=(%Nr1&=tx$zu7~uKMH6I`0AfI@cFxfZPqw^FL=^JmjLBAeb3h>;tlNrrD+=|o7Xn;?ae=vKfHP"),
+    "banner": ("$", 8, 64,
+        "c-pO5S#sqd4E%qWh^qSC|BRDhtc?bQJx;|aV1(3K5JbN6{gLhKBLIF${}%iW{yw>1`uEmrGy1HrNS|qxET~VLh~9ToxSnmFr<7m&tj%b0L8<ngj!GIu9(DTO-=S;SG#BHdvM3t3IU9DSugW5(hm)@(FP=-cNgG9$FIi3{BkybdzIf+7G)}6%R9i>Y?0S=?qoXEi>#5CQvzJzN-!XqNynXBW#Bs;rnorT;IDXQ6Yi&I~ezKmAuj^6HiUadEhpXC;#1}HI&@~tp>;#Z_?Y`L81hvO#7ZRUd(-eWG3nJz@o{Id0YD(fgu8S!ZWic*e{^;M$H9C=x>C5<`s&AC9;%}7N%g5~dMqitOBm9K!biDsF*$0>T!sWu4W@VB?S)R%HWu0$6n<bbqrTDp0K=K5)Hfr{7JLX8GNT>FSJM27@r8oo8$ozep1&gEQc$`w}c-&{{s(gj~BPaRx6+gB=?eJS!b(+7|2<?%~^_2z?eJ}R!DRrce7L!)j_A*prPu!=J(YUXjQOpk<rgy1`>nGRVHJl?qtGEe2Ul*_A953SNP2PCp_anv50eF$u!0H>pL0mqlt30M4`$v_k#rd;1E6p8GF<bd?MoBwa&-m>mSnZNe_!aFjsfSDFmRY>rvRB%4&OkhOj`gb3z@2fDPml8WkySgKd(0{phuibxkC1cp3+hJtLvMVryf-iq;qEW|W|NK*bRSBk!Z2Ov^c1i`9zIJ30{-KYJPTsOCyEg>=`e)<z$cozj!&}J3Lg%_1}Nk6*E{)5{uS;&C~+*W9@)$FlFTt)5es|z`sOZ|AZ7e0A9pc%>tz>@Yd&(~?+@c<?y#rwAevHQ0rW(ko!w;+K7vreXL&C<Yxi;Y%uc20?&eP(@VOltd;eQ5I^AMMe2oj9;Tv{#D-N_?&=O)2-|l}Pu0{IW)jzRL33+hLi|z&%xdrJDH?~(DFaDIMn&L?X@ejg}T^R"),
+    "big": ("$", 8, 24463,
+        "c-oy=TaN1>4E^sW@JFP{NLAUusLQxtNS=kT_zQl3c{Z80H{p`tw~q}2hl9!Q0f68jLToOWE+>9FNFTb;d-=^Xy^-htrEh+6z~lzy_Q)5cU!KB5KK+Pgp3VQ_W<E=jeubPRUFaiCrRC}7)7m6nNEAXA7Qj2AGRl=jLL@!YGEWcEo!-dzJjnMflt*9e(TMP9q(T%u&$Q}WC?rXI$c8=f4e*oZl62^UcN2}oA7{34Bw3F3QvE@~v*fJ%cukyw6S_!d3hB$nnq9M+&gg~0&xiEb)5-w9@I_XN$nQjw;t4M%9elEO@YYMN^;exUQK7D{ewTL+OQ5y88!nygdjFIW(uY{mC-T$E>*!Zp;M?U3sEYu$@dXlJOFfZY$Dt&?)m$wDWH(Z1&FLTq^4#;B@^#6hu#L!ElTE(qO;y5YVq(GQI)=Pn2`Gh>o5Bp?NBr>3fU}WX<AgDyj)Z%O8IY$<_)PLkT@NC8WGYtDD{_IPRO3yi17GT?Q#9WC#l|AAjp5KxDb!1_4AIiX=NK<4#T(e}m*m>eNvobBXNhR^yF9H4a;)=Z@!pWnoK>7t%>O5S8J#%L3hp&^XqWv9L|EHdpgwc7oZs*+QdyfgSmqV9d8M(NjSZ8$Y7rD`5Gp|`TE7Yqry>J+jr9s$ST}TKI>Eh;eO_H+P&M|<JXH9qR-e`Bf(KA>OtK70T*eD|r=AiCM9)JpqK@>vu=Z%d0}-quY=zj0u^5YRjrm4;sPrtt=v-{&+eO?hda{-RXpavQ`+@KvU~TmMWIwLt3tKTtwwBED#Si{yy8#7u9n_AYm2BwCP^TiqW`r=vI;KUhX9k|!331OQZ4fZ_L}`F>_fzx0b$04JH6LA#i{i7?bcu~a_9|<Y8nJtJFK!HK83;0Xf#OL3B^6e7M^iYi<kKg+PxBKibnx1H@qb&s2HWn*2cYr=jgSs2Kj-JEG6&nE7_j_=N2Xb_-4g7E7+Vx?>%~0p|LkYP+A>p#(Fz|psCiw;p{`Yx=9NnDea&g>kJ9gW^n7|=J->nH$anUC;jfI9<3C~bmj1;Hh~$E5Bg74QR27Q!SOte7^9_H}N4j9%uN;&8ifkj+xLb>r#=+#K_!eEKS8<GbL|svQ5Y+f{`#`N8T04eYt>cwH(Ec{<aw8vP%&*Ywk5?$O9vzDg)b9I%L|E_pVc04npUs%Q@2n~JT=}UjJ$4^d_b;U%du{eX(DtbYy%f6?x#FUq)iNz!Qoy*S&qfXig3f*?M|nNg5N)H_>?+;tJmZ=_R7bCS;WWDJk6Oy((yzLO>Q46LeY20EvF^hVmg(XpU8<a}086BewC#(4d--)AG@duk<(q;j>6Hy^Z1dZmj5IcCJD#4})PD$nvHLU*HaqBTK7Eu&+lyDz{gmeC?{R5b<w&^H=M`$#`BnE0h4CW4o!xuOF>Nfzw3GtV^Vy+f0GjN~>*IxdMAN8@=Vi~U{@hmZusQ#j1fCoE9dBt`vMuGw`FHCd#6pwly*VF!rWBUv2{-Juz^}p2$W_>z^N_i}?0JqJ<9mC!BB$A=<nM6ABFb=1Q%FG=m>NS<Kj0%Z1b+R8j^Xbe{{bVJ?d$"),
+}
+# 5x7 dot matrix: the classic HD44780-style LCD font (luma.core LCD_FONT / avrfreaks 5x7), 0x20-0x7E, 5 column bytes per
+# char, bit 0 = top row.
+_DM_COLS = bytes.fromhex(
+    "000000000000005f00000003000300147f147f14242a7f2a12231308646236495522500005030000001c2241000041221c00"
+    "14083e081408083e080800503000000808080808006060000020100804023e5149453e00427f400042615149462141454b31"
+    "1814127f1027454545393c4a49493001710905033649494936064949291e0036360000005636000008142241001414141414"
+    "00412214080201510906324979413e7e1111117e7f494949363e414141227f4141221c7f494949417f090909013e4149497a"
+    "7f0808087f00417f41002040413f017f081422417f404040407f020c027f7f0408107f3e4141413e7f090909063e4151215e"
+    "7f09192946464949493101017f01013f4040403f1f2040201f3f4038403f631408146307087008076151494543007f414100"
+    "02040810200041417f0004020102044040404040000102040020545454787f484444383844444420384444487f3854545418"
+    "087e0901020c5252523e7f0804047800447d40002040443d007f1028440000417f40007c041804787c080404783844444438"
+    "7c14141408081414187c7c080404084854545420043f4440203c4040207c1c2040201c3c4030403c44281028440c5050503c"
+    "4464544c44000836410000007f000000413608001008081008")
+
+
+@functools.lru_cache(maxsize=None)
+def _fig_font(name):
+    hb, h, full, blob = _FIG_FONTS[name]
+    rows = zlib.decompress(base64.b85decode(blob)).decode("latin-1").split("\n")
+    chars = {chr(32 + i): g.split("\x1f") for i, g in enumerate(rows)}
+    chars = {c: g for c, g in chars.items() if c == " " or "".join(g)}
+    return hb, h, full, chars
+
+
+def _fig_smush(l, r, mode, hb, pw, cw):
+    """figlet smushchar(): the merged sub-character, or None."""
+    if l == " ":
+        return r
+    if r == " ":
+        return l
+    if pw < 2 or cw < 2 or not mode & 128:
+        return None
+    if not mode & 63:
+        return r if l == hb else l if r == hb else r
+    if mode & 32 and l == hb and r == hb:
+        return l
+    if l == hb or r == hb:
+        return None
+    if mode & 1 and l == r:
+        return l
+    rules = ()
+    if mode & 2:
+        rules += (("_", "|/\\[]{}()<>"),)
+    if mode & 4:
+        rules += (("|", "/\\[]{}()<>"), ("\\/", "[]{}()<>"), ("[]", "{}()<>"), ("{}", "()<>"), ("()", "<>"))
+    for a, b in rules:
+        if l in a and r in b:
+            return r
+        if r in a and l in b:
+            return l
+    if mode & 8 and (l + r in ("[]", "{}", "()") or r + l in ("[]", "{}", "()")):
+        return "|"
+    if mode & 16:
+        if l == "/" and r == "\\":
+            return "|"
+        if l == "\\" and r == "/":
+            return "Y"
+        if l == ">" and r == "<":
+            return "X"
+    return None
+
+
+def _fig_add(buf, pw, g, font):
+    """Append glyph rows g to buffer rows buf (figlet horizontal layout) -> (new rows, total width)."""
+    hb, h, mode, _c = font
+    cw = len(max(g, key=len)) if g else 0
+    amt = 0
+    if mode & 192:
+        amt = cw
+        for L, R in zip(buf, g):
+            lb = max(len(L.rstrip(" ")) - 1, 0)
+            c1 = L[lb] if lb < len(L) else ""
+            if lb >= len(L):
+                lb = 0
+            cb = len(R) - len(R.lstrip(" "))
+            c2 = R[cb] if cb < len(R) else ""
+            a = cb + len(L) - 1 - lb
+            if c1 in ("", " ") or (c2 and _fig_smush(c1, c2, mode, hb, pw, cw) is not None):
+                a += 1
+            amt = min(amt, a)
+    out = []
+    for L, R in zip(buf, g):
+        L = list(L)
+        for i in range(amt):
+            k = len(L) - amt + i
+            if 0 <= k < len(L):
+                L[k] = _fig_smush(L[k], R[i], mode, hb, pw, cw)
+        out.append("".join(L) + R[amt:])
+    return out, cw
+
+
+def figlet_enc(s, font="standard", width=80):
+    """pyfiglet.figlet_format(s, font, width) (left-justified, hardblanks -> spaces); width=0: no wrap."""
+    try:
+        f = _fig_font(font)
+    except Exception:  # noqa: BLE001
+        return None
+    hb, h, mode, chars = f
+    blocks, buf, pw, marks, i = [], [""] * h, 0, [], 0
+    while i < len(s):
+        c = s[i]
+        g = chars.get(c)
+        if g is None:
+            i += 1
+            continue
+        if c == " ":
+            marks.append((list(buf), i))
+        new, cw = _fig_add(buf, pw, g, f)
+        if width and len(new[0]) >= width and buf[0]:
+            if marks:
+                saved, i = marks.pop()
+                blocks.append(saved)
+            else:
+                blocks.append(buf)
+                i -= 1
+            buf, pw, marks = [""] * h, 0, []
+            i += 1
+            continue
+        buf, pw = new, cw
+        i += 1
+    if buf[0]:
+        blocks.append(buf)
+    return "".join("\n".join(b) + "\n" for b in blocks).replace(hb, " ")
+
+
+def _fig_block(rows, f, budget, wild0=False):
+    """Text whose (unwrapped) rendering is exactly rows (hardblanks shown as spaces), else None. Depth-first over
+    glyphs on a sliding window of the buffer tail (only the last glyph-width columns can still change). wild0: row 0
+    is not compared (a caller's .strip() may have eaten its indent; the caller re-checks it)."""
+    hb, h, mode, chars = f
+    want = [r.rstrip(" ") for r in rows]
+    if not any(want) or len(rows) != h:
+        return None
+    wmax = max(len(x) for x in want)
+    pad = [x.ljust(wmax + 64) for x in want]
+    if wild0:
+        pad[0] = None
+    cmp = [r for r in range(h) if pad[r] is not None]
+    win = max(len(max(g, key=len)) for g in chars.values()) + 2
+    items = []
+    for c, g in chars.items():
+        cw = len(max(g, key=len)) if g else 0
+        items.append((c, g, cw, [(len(R) - len(R.lstrip(" ")), R.lstrip(" ")[:1]) for R in g]))
+    steps = [0]
+    drop = 1 if mode & 128 else 0   # smushing may still rewrite each row's last visible char; kerning never does
+    dead = set()
+
+    def add(off, tail, edge, pw, g, cw, prof):
+        amt = 0
+        if mode & 192:
+            amt = cw
+            for (ln, lb, c1), (cb, c2) in zip(edge, prof):
+                a = cb + ln - 1 - lb
+                if c1 in ("", " ") or (c2 and _fig_smush(c1, c2, mode, hb, pw, cw) is not None):
+                    a += 1
+                if a < amt:
+                    amt = a
+        for r, (L, R) in enumerate(zip(tail, g)):   # the appended part R[amt:] never changes again (but its last mark)
+            q = R[amt:].replace(hb, " ").rstrip(" ")
+            q = q[:len(q) - drop]
+            if q and pad[r] is not None and pad[r][off + len(L):off + len(L) + len(q)] != q:
+                return None
+        out = []
+        for L, R in zip(tail, g):
+            if amt:
+                n = len(L)
+                L = list(L)
+                for i in range(amt):
+                    k = n - amt + i
+                    if 0 <= k:
+                        L[k] = _fig_smush(L[k], R[i], mode, hb, pw, cw)
+                L = "".join(L)
+            out.append(L + R[amt:])
+        return out
+
+    def dfs(off, tail, pw, text):
+        steps[0] += 1
+        if steps[0] > budget:
+            return None
+        if text and all(pad[r][off:].rstrip(" ") == tail[r].replace(hb, " ").rstrip(" ") for r in cmp):
+            return text
+        cands = []
+        edge = []
+        for L in tail:
+            lb = max(len(L.rstrip(" ")) - 1, 0)
+            c1 = L[lb] if lb < len(L) else ""
+            edge.append((len(L), 0 if lb >= len(L) else lb, c1))
+        for c, g, cw, prof in items:
+            new = add(off, tail, edge, pw, g, cw, prof)
+            if new is None:
+                continue
+            if c != " " and len(new[0]) <= len(tail[0]):
+                continue
+            vis = [x.replace(hb, " ") for x in new]
+            if off + len(vis[0]) > wmax + 64:
+                continue
+            good = True
+            for r in cmp:
+                p = vis[r].rstrip(" ")
+                p = p[:len(p) - drop]
+                if pad[r][off:off + len(p)] != p:
+                    good = False
+                    break
+            if not good:
+                continue
+            k = max(len(new[0]) - win, 0)
+            if k and any(pad[r][off:off + k] != vis[r][:k] for r in cmp):
+                continue
+            cands.append((-sum(len(x.rstrip(" ")) for x in vis), c == " ", c, k, new, cw))
+        cands.sort(key=lambda x: x[:2])
+        for _w, _s, c, k, new, cw in cands[:6]:
+            if c == " " and text.endswith(" "):
+                continue
+            key = (off + k, tuple(x[k:] for x in new), cw, c == " ")
+            if key in dead:
+                continue
+            r = dfs(off + k, list(key[1]), cw, text + c)
+            if r is not None:
+                return r
+            dead.add(key)
+        return None
+
+    return dfs(0, [""] * h, 0, "")
+
+
+_FIG_SENT = re.compile(re.escape(SENTENCE.format(slug="\x00")).replace("\x00", SLUG.pattern))
+
+
+def figlet_reads(t):
+    try:
+        t = _t(t) if not isinstance(t, str) else t
+    except Exception:  # noqa: BLE001
+        return []
+    return list(_figlet_reads(t)) if isinstance(t, str) else []
+
+
+@functools.lru_cache(maxsize=32)
+def _figlet_reads(t):
+    """[(font, text)] for a FIGlet banner in a vendored font: the rows cut into font-height blocks (width-80 wrap),
+    each block decoded glyph by glyph, then the blocks joined (' ' at a blank wrap) and re-rendered to check. Never raises."""
+    out = []
+    try:
+        lines = t.replace("\r\n", "\n").split("\n")
+        while lines and not lines[-1].strip():
+            lines.pop()
+        while lines and not lines[0].strip() and len(lines) > 1:
+            lines.pop(0)
+        if len(lines) < 4 or len(t) > 60000 or not all(x.isascii() and x.isprintable() for x in lines):
+            return out
+        ind = min([len(x) - len(x.lstrip(" ")) for x in lines[1:] if x.strip()] or [0])
+        views = [lines] + ([[x[ind:] for x in lines]] if ind else [])   # figlet.js / toilet: a left margin column
+        for name, ls0 in itertools.product(_FIG_FONTS, views):
+            if out and out[-1][0] == name:
+                continue
+            f = _fig_font(name)
+            h = f[1]
+            ls = list(ls0)
+            while len(ls) % h:
+                ls.append("")
+            pieces = []
+            for k in range(0, len(ls), h):   # row 0 checked after: blob.strip() may have eaten its indent
+                p = _fig_block(ls[k:k + h], f, 4000, wild0=not k)
+                if p is None or (not k and (figlet_enc(p, name, 0) or " ").split("\n")[0].strip(" ")
+                                 != ls[0].strip(" ")):
+                    break
+                pieces.append(p)
+            else:
+                text = pieces[0] if pieces else None
+                for p in pieces[1:]:
+                    text += " " + p
+                if not text:
+                    continue
+                if len(pieces) > 1:   # wrap at a blank (dropped) or mid-word: keep the joins that re-render the blocks
+                    seps = []
+                    for j, p in enumerate(pieces[1:], 1):
+                        want = "\n".join(x.rstrip() for x in ls[(j - 1) * h:(j + 1) * h])
+                        ok = [sep for sep in (" ", "") if "\n".join(x.rstrip() for x in (figlet_enc(
+                            pieces[j - 1] + sep + p, name) or "").split("\n")[:2 * h]) == want]
+                        seps.append(ok or [" "])
+                    best = None
+                    for combo in itertools.islice(itertools.product(*seps), 256):
+                        cand = pieces[0] + "".join(sp + p for sp, p in zip(combo, pieces[1:]))
+                        score = (2 if _FIG_SENT.fullmatch(cand) else 1 if SLUG.search(cand) else 0)
+                        if best is None or score > best[0]:
+                            best = (score, cand)
+                    text = best[1]
+                out.append((name, text.strip(" ")))
+    except Exception:  # noqa: BLE001
+        return tuple(out)
+    return tuple(out)
+
+
+def figlet_dec(t, font=None):
+    for n, s in figlet_reads(t):
+        if font in (None, n):
+            return s
+    return None
+
+
+@functools.lru_cache(maxsize=None)
+def _dm_tables():
+    """{7 row ints (5 bits, MSB = left column): char}."""
+    tab = {}
+    for i in range(95):
+        cols = _DM_COLS[5 * i:5 * i + 5]
+        rows = tuple(sum(((cols[c] >> r) & 1) << (4 - c) for c in range(5)) for r in range(7))
+        tab.setdefault(rows, chr(32 + i))
+    return tab
+
+
+def _dm_rows(c):
+    i = ord(c) - 32
+    if not 0 <= i < 95:
+        return None
+    cols = _DM_COLS[5 * i:5 * i + 5]
+    return [sum(((cols[k] >> r) & 1) << (4 - k) for k in range(5)) for r in range(7)]
+
+
+def dotmatrix_enc(s, form="blocks", on="#", off="."):
+    """5x7 dot-matrix rendering: blocks = 7 rows of 5 per char, a blank line between chars; banner = one 7-row strip,
+    1 off-column between glyphs; hexrows = 7 row bytes per char; hexcols = 5 column bytes per char (bit 0 = top)."""
+    gl = [_dm_rows(c) for c in s]
+    if any(g is None for g in gl):
+        return None
+    bit = lambda v, k: on if v >> (4 - k) & 1 else off
+    if form == "blocks":
+        return "\n\n".join("\n".join("".join(bit(v, k) for k in range(5)) for v in g) for g in gl)
+    if form == "banner":
+        return "\n".join(off.join("".join(bit(g[r], k) for k in range(5)) for g in gl) for r in range(7))
+    if form == "hexrows":
+        return " ".join(" ".join(f"{v:02x}" for v in g) for g in gl)
+    if form == "hexcols":
+        return " ".join(_DM_COLS[5 * (ord(c) - 32):5 * (ord(c) - 32) + 5].hex(" ") for c in s)
+    return None
+
+
+_DM_ON = "#*X@O1█■●x+o"
+_DM_OFF = ". -_0░□○"
+
+
+def _dm_glyphs_text(glyphs):
+    tab = _dm_tables()
+    out = []
+    for g in glyphs:
+        c = tab.get(tuple(g))
+        if c is None:
+            return None
+        out.append(c)
+    return "".join(out)
+
+
+def _dm_nums(t):
+    """Text from 5x7 numeric glyph tokens (hex / 0x.. / binary / decimal): 7 row values (5-bit, right- or left-aligned,
+    either bit order, optional 8th zero row) or 5 column bytes (bit 0 or bit 6 = top) per char."""
+    toks = re.findall(r"(?:0x)?[0-9a-fA-F]+", t)
+    if len(toks) < 5 or len(toks) > 20000:
+        return None
+    if re.sub(r"(?:0x)?[0-9a-fA-F]+|[\s,;:\[\]{}()|/-]", "", t):
+        return None
+    vals = []
+    for radix in ((2,) if all(set(x) <= set("01") and len(x) >= 5 for x in toks) else ()) + (16, 10):
+        try:
+            vals.append([int(x, radix) for x in toks])
+        except ValueError:
+            continue
+    rev5 = lambda v: int(f"{v:05b}"[::-1], 2)
+    for vs in vals:
+        if max(vs) > 255:
+            continue
+        for n in (7, 8):   # row-major
+            if len(vs) % n:
+                continue
+            gs = [vs[i:i + n] for i in range(0, len(vs), n)]
+            if n == 8 and any(g[7] for g in gs):
+                continue
+            for fix in (lambda v: v, lambda v: v >> 3, rev5, lambda v: rev5(v >> 3) if v & 7 == 0 else 99):
+                g2 = [[fix(v) for v in g[:7]] for g in gs]
+                if any(v > 31 for g in g2 for v in g):
+                    continue
+                r = _dm_glyphs_text(g2)
+                if r:
+                    return r
+        for n in (5, 8):   # column-major
+            if len(vs) % n:
+                continue
+            gs = [vs[i:i + n] for i in range(0, len(vs), n)]
+            if n == 8 and any(any(g[5:]) for g in gs):
+                continue
+            for top in (0, 6, 1, 7):
+                g2 = []
+                for g in gs:
+                    cols = g[:5]
+                    if top in (6, 7):
+                        cols = [int(f"{c:08b}"[::-1], 2) >> (1 if top == 6 else 0) for c in cols]
+                    elif top == 1:
+                        cols = [c >> 1 for c in cols]
+                    if any(c > 127 for c in cols):
+                        break
+                    g2.append([sum(((cols[k] >> r) & 1) << (4 - k) for k in range(5)) for r in range(7)])
+                else:
+                    r = _dm_glyphs_text(g2)
+                    if r:
+                        return r
+    return None
+
+
+def _dm_art(t):
+    """Text from a 5x7 dot-matrix drawn in two symbols: per-char 7-row blocks (5 wide) or 7/8-row strips (glyph pitch
+    5-8, strips stacked with optional separator lines)."""
+    lines = t.replace("\r\n", "\n").split("\n")
+    while lines and not lines[-1].strip():
+        lines.pop()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if len(lines) < 7:
+        return None
+    syms = set("".join(lines)) - {" "}
+    if not syms or len(syms) > 2:
+        return None
+    ons = [c for c in syms if c not in _DM_OFF] or [c for c in syms if c in _DM_ON]
+    if len(ons) != 1:
+        return None
+    on = ons[0]
+    bits = [[1 if c == on else 0 for c in x] for x in lines]
+    for sep in (1, 0, 2):   # per-char blocks
+        if max(len(b) for b in bits) > 5:
+            break
+        step = 7 + sep
+        if (len(bits) + sep) % step:
+            continue
+        gs = []
+        for k in range(0, len(bits), step):
+            blk = bits[k:k + 7]
+            if any(any(x) for x in bits[k + 7:k + step]):
+                break
+            gs.append([sum(v << (4 - i) for i, v in enumerate((b + [0] * 5)[:5])) for b in blk])
+        else:
+            r = _dm_glyphs_text(gs)
+            if r:
+                return r
+    for h in (7, 8):
+        for sep in (0, 1, 2):
+            step = h + sep
+            if (len(bits) + sep) % step:
+                continue
+            strips = []
+            for k in range(0, len(bits), step):
+                blk = bits[k:k + h]
+                if any(any(x) for x in bits[k + h:k + step]):
+                    break
+                if h == 8:
+                    if any(blk[7]):
+                        if any(blk[0]):
+                            break
+                        blk = blk[1:]
+                    else:
+                        blk = blk[:7]
+                strips.append(blk)
+            else:
+                for pitch in (6, 8, 5, 7):
+                    out = []
+                    for blk in strips:
+                        w = max(len(b) for b in blk)
+                        n = (w + pitch - 1) // pitch
+                        if n == 0:
+                            out = None
+                            break
+                        rows = [b + [0] * (n * pitch - len(b)) for b in blk]
+                        if any(any(r[j * pitch + 5:(j + 1) * pitch]) for r in rows for j in range(n)):
+                            out = None
+                            break
+                        gs = [[sum(r[j * pitch + i] << (4 - i) for i in range(5)) for r in rows] for j in range(n)]
+                        s = _dm_glyphs_text(gs)
+                        if s is None:
+                            out = None
+                            break
+                        out.append(s.rstrip(" ") if len(strips) > 1 else s)
+                    if out:
+                        return " ".join(out) if len(out) > 1 else out[0]
+    return None
+
+
+def dotmatrix_dec(t):
+    """The text under a 5x7 dot-matrix rendering (two-symbol art or numeric glyph rows), else None. Never raises."""
+    try:
+        t = _t(t) if not isinstance(t, str) else t
+        if len(t) > 200000:
+            return None
+        r = _dm_nums(t) if "\n" not in t.strip() or not set(t) - set("0123456789abcdefABCDEFx \t\r\n,;:[]{}()|/-") else None
+        return r if r is not None else _dm_art(t)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def asciiart_free(p):
+    """Mastery fragment as 5x7 numeric glyph tokens (one line) -> [text]. Never raises."""
+    try:
+        r = _dm_nums(p) if isinstance(p, str) and "\n" not in p.strip() else None
+        return [r] if r and r.isprintable() else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+CANDIDATES += [(f"figlet-{f}", (lambda f: lambda s: figlet_enc(s, f))(f), (lambda f: lambda t: figlet_dec(t, f))(f))
+               for f in _FIG_FONTS]
+CANDIDATES += [(f"figlet-{f}-nowrap", (lambda f: lambda s: figlet_enc(s, f, 0))(f),
+                (lambda f: lambda t: figlet_dec(t, f))(f)) for f in _FIG_FONTS]
+CANDIDATES += [(f"dotmatrix5x7-{f}", (lambda f: lambda s: dotmatrix_enc(s, f))(f), dotmatrix_dec)
+               for f in ("blocks", "banner", "hexrows", "hexcols")]
+
+
 SPECULATIVE_FREE = (
     ("rot47", lambda p: [rot47(p)]),
     ("rot8000", lambda p: [b for b in (rot8000_dec(p),) if b]),
@@ -17863,6 +19795,7 @@ SPECULATIVE_FREE = (
     ("cuswap", cuswap_free),
     ("cubin", cubin_free),
     ("inner-bytes", inner_free),
+    ("invisible-tags-vs", invis_free),
     ("zerowidth", zw_cands),
     ("whitespace", ws_cands),
     ("twosym", twosym_free),
@@ -17887,6 +19820,7 @@ SPECULATIVE_FREE = (
     ("middle-endian", pdp_free),
     ("nibswap-hex", nibswap_free),
     ("wide-int", wint_free),
+    ("float-charcodes", flt_free),
     ("leb128", leb_free),
     ("hexdump", hexdump_free),
     ("gsm7", gsm7_free),
@@ -17927,6 +19861,14 @@ SPECULATIVE_FREE = (
     ("resp", resp_free),
     ("asn1-tlv", asn1_free),
     ("delimited-fields", delim_free),
+    ("charnames", names_free),
+    ("codepoint-any", codepoints_free),
+    ("escape-soup", escsoup_free),
+    ("cpshift", cpshift_free),
+    ("delta-chain", delta_free),
+    ("mojibake", mojibake_free),
+    ("script-letter-map", scriptmap_free),
+    ("ascii-art-dotmatrix", asciiart_free),
 )
 
 

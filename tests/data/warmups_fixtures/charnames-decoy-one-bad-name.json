@@ -1,0 +1,11 @@
+{
+ "codec": "charnames",
+ "plain": null,
+ "encoded": "LATIN CAPITAL LETTER N, LATIN SMALL LETTER I, LATIN SMALL LETTER CEE, SPACE",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'LATIN CAPITAL LETTER N, LATIN SMALL LETTER I, LATIN SMALL LETTER CEE, SPACE'   # hand-written name list with one non-existent name (LATIN SMALL LETTER CEE)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys, unicodedata as u; print(\"\".join(u.lookup(x) for x in sys.stdin.read().split(\", \")), end=\"\")'",
+ "oracle_plain": "",
+ "oracle_note": "oracle rc=1: KeyError: \"undefined character name 'LATIN SMALL LETTER CEE'\""
+}

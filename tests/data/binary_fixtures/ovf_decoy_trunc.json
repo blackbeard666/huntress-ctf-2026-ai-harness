@@ -1,0 +1,28 @@
+{
+ "family": "overflow_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "vulnerable_function": "none",
+  "unsafe_call": "none",
+  "frame_size": "none",
+  "buffer_offset": "none",
+  "distance_to_return": "none",
+  "read_length": "none",
+  "canary": "none",
+  "distance_to_canary": "none",
+  "nx": "none",
+  "pie": "none",
+  "relro": "none",
+  "binary_canary": "none",
+  "ret_overwrite_length": "none",
+  "cyclic_offset": "none",
+  "crash_length": "none",
+  "vulnerable": "none"
+ },
+ "generator_cmd": "bash ovf_gen.sh   # head -c 300 ovf_read_ssp.bin (ELF header only, sections cut)",
+ "oracle_cmd": "readelf -lW ovf_decoy_trunc.bin; objdump -d ovf_decoy_trunc.bin   # truncated: no program/section data -> every field none",
+ "oracle_output": "Elf file type is DYN (Shared object file)\nEntry point 0x10a0\nThere are 14 program headers, starting at offset 64\nreadelf: Error: Reading 1984 bytes extends past end of file for section headers\nreadelf: Error: Too many program headers - 0xe - the file is not that big\nreadelf: Error: Too many program ",
+ "decoy": true
+}

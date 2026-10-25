@@ -1,0 +1,8 @@
+{
+ "field": "chrome.download_tab_urls",
+ "expected": "[\"https://cdn.evil.test/get\",\"https://mail.example.com/inbox\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_history.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_history.db \"select distinct tab_url from downloads order by tab_url\" list -> [\"https://cdn.evil.test/get\",\"https://mail.example.com/inbox\"]",
+ "decoy": false,
+ "member": "History"
+}

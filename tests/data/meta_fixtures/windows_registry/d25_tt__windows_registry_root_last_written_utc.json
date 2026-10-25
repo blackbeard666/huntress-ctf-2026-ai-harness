@@ -1,0 +1,8 @@
+{
+ "field": "windows_registry.root_last_written_utc",
+ "expected": "2025-12-18T10:31:31Z",
+ "generator_cmd": "GM-generated D25 'Hive Mind' hive (challenges/day25/metadata-hive-mind/solver/cases/auto-time_trial-78d61d8c/artifacts/evidence.zip -> hive-001.hiv), copied verbatim",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P -c \"from Registry import Registry; import sys; r=Registry.Registry(sys.argv[1]); print(r.root().timestamp().strftime('%Y-%m-%dT%H:%M:%SZ'))\" tests/data/meta_fixtures/windows_registry/d25_tt__windows_registry_root_last_written_utc.bin  (python-registry 1.3.1)",
+ "decoy": false,
+ "member": "hive-001.hiv"
+}

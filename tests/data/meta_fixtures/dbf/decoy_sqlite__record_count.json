@@ -1,0 +1,8 @@
+{
+ "field": "dbf.record_count",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"import sqlite3; c=sqlite3.connect('x.db'); c.execute('create table t(a)')\" renamed ledger.dbf",
+ "oracle_cmd": "python3 -c \"import dbfread; dbfread.DBF('ledger.dbf')\" -> raises (not a DBF: no 0x0D-terminated descriptor table); file(1) -> SQLite 3.x database",
+ "decoy": true,
+ "member": "ledger.dbf"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.root_names_by_member",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/synthesis/GENERATOR_regf_hivekit.py.txt $T -> hivekit_decoy.zip (stdlib regf cell writer adapted from regf/GENERATOR_regf_keys.py.txt: renamed hives, root Marker/Ordinal values or ControlSet001 ComputerName, one planted hive; stdlib zipfile)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/ORACLE_regf_hivekit.py.txt hivekit_decoy.zip root_names_by_member (regipy 6.4.0 RegistryHive header/root/get_key + the atlas-row rules)",
+ "decoy": true
+}

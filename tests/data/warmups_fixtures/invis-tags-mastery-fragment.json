@@ -1,0 +1,14 @@
+{
+ "codec": "invisible-tags (Mastery line fragment)",
+ "plain": "this warmup! To so",
+ "encoded": "\udb40\udc74\udb40\udc68\udb40\udc69\udb40\udc73\udb40\udc20\udb40\udc77\udb40\udc61\udb40\udc72\udb40\udc6d\udb40\udc75\udb40\udc70\udb40\udc21\udb40\udc20\udb40\udc54\udb40\udc6f\udb40\udc20\udb40\udc73\udb40\udc6f",
+ "generator_cmd": "perl -CSA -e 'my ($cov, $p, $w) = @ARGV; my $t = join q(), map { chr(0xE0000 + ord) } split //, $p; $t = chr(0xE0001) . $t . chr(0xE007F) if $w; print $cov . $t' \"$cover\" \"$plain\" \"$wrap\"",
+ "generator_env": {
+  "cover": "",
+  "plain": "this warmup! To so",
+  "wrap": ""
+ },
+ "oracle_cmd": "python3 -I -c \"import sys; print(''.join(chr(ord(c) - 0xE0000) for c in sys.argv[1] if 0xE0020 <= ord(c) <= 0xE007E), end='')\" \"$encoded\"",
+ "oracle_plain": "this warmup! To so",
+ "expected": "match"
+}

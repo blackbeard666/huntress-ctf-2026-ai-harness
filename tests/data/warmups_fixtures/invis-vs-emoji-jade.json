@@ -1,0 +1,16 @@
+{
+ "codec": "invisible-vs",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-88",
+ "encoded": "\ud83d\ude00\udb40\udd3e\udb40\udd59\udb40\udd53\udb40\udd55\udb40\udd10\udb40\udd67\udb40\udd5f\udb40\udd62\udb40\udd5b\udb40\udd10\udb40\udd54\udb40\udd55\udb40\udd53\udb40\udd5f\udb40\udd54\udb40\udd59\udb40\udd5e\udb40\udd57\udb40\udd10\udb40\udd64\udb40\udd58\udb40\udd59\udb40\udd63\udb40\udd10\udb40\udd67\udb40\udd51\udb40\udd62\udb40\udd5d\udb40\udd65\udb40\udd60\udb40\udd11\udb40\udd10\udb40\udd44\udb40\udd5f\udb40\udd10\udb40\udd63\udb40\udd5f\udb40\udd5c\udb40\udd66\udb40\udd55\udb40\udd1c\udb40\udd10\udb40\udd63\udb40\udd65\udb40\udd52\udb40\udd5d\udb40\udd59\udb40\udd64\udb40\udd10\udb40\udd64\udb40\udd58\udb40\udd59\udb40\udd63\udb40\udd10\udb40\udd55\udb40\udd68\udb40\udd51\udb40\udd53\udb40\udd64\udb40\udd10\udb40\udd51\udb40\udd5e\udb40\udd63\udb40\udd67\udb40\udd55\udb40\udd62\udb40\udd10\udb40\udd64\udb40\udd5f\udb40\udd10\udb40\udd64\udb40\udd58\udb40\udd55\udb40\udd10\udb40\udd37\udb40\udd51\udb40\udd5d\udb40\udd55\udb40\udd10\udb40\udd3d\udb40\udd51\udb40\udd63\udb40\udd64\udb40\udd55\udb40\udd62\udb40\udd2a\udb40\udd10\udb40\udd5a\udb40\udd51\udb40\udd54\udb40\udd55\udb40\udd1d\udb40\udd5f\udb40\udd64\udb40\udd64\udb40\udd55\udb40\udd62\udb40\udd1d\udb40\udd28\udb40\udd28",
+ "generator_cmd": "perl -CSA -MEncode -e 'my ($cov, $car, $after, $p) = @ARGV; my $v = join q(), map { $_ < 16 ? chr(0xFE00 + $_) : chr(0xE0100 + $_ - 16) } unpack(q(C*), encode(q(UTF-8), $p)); print $cov . $car . $v . $after' \"$cover\" \"$carrier\" \"$after\" \"$plain\"",
+ "generator_env": {
+  "cover": "",
+  "carrier": "\ud83d\ude00",
+  "after": "",
+  "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-88"
+ },
+ "oracle_cmd": "python3 -I -c \"import re, sys; r = max(re.findall('[\\ufe00-\\ufe0f\\U000e0100-\\U000e01ef]+', sys.argv[1]), key=len); print(bytes([ord(x) - 0xFE00 if ord(x) < 0xFE10 else ord(x) - 0xE0100 + 16 for x in r]).decode('utf-8'), end='')\" \"$encoded\"  # longest VS run = the payload",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-88",
+ "expected": "match",
+ "note": "Paul Butler emoji smuggling: VS1-256 bytes after one carrier emoji"
+}

@@ -1,0 +1,17 @@
+{
+ "kind": "jvm_facts",
+ "decoy": true,
+ "member": null,
+ "question": "In delivery 1: evidence.zip, Use all d26-- members in ZIP central-directory order; the Day 26 unit is Beacon.java. For Day 7 use the manifest Main-Class classfile; for Day 26 use the primary classfile named by that unit. Submit its classfile method-table count in base 10.",
+ "expected": {
+  "primary_classfile": "none",
+  "primary_method_count": "none",
+  "primary_methods": "none",
+  "hcfg_found": "false",
+  "config_campaign": "none",
+  "xor_key_hex": "none"
+ },
+ "generator_cmd": "bash jvmunit_gen.sh   # javac --release 11 (OpenJDK 21) + jar --create; HCFG record by python3 stdlib struct/zlib.crc32/base64",
+ "oracle_cmd": "python3 jvmunit_oracle.py jvm_unit_decoy_other_class.bin Beacon.java   # javap -v -p (via jvm_oracle.py) + javap constant-pool Utf8 lines -> stdlib base64/crc32",
+ "note": "DECOY: a bare class (Courier) the unit does not name -> primary_* none, no HCFG"
+}

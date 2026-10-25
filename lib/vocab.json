@@ -17,7 +17,17 @@
     "tools.Loader",
     "client.agent.Runner",
     "util.runtime.Loader",
-    "util.service.BootstrapXSG"
+    "util.service.BootstrapXSG",
+    "service.client.Loader",
+    "service.Main",
+    "batch.amber.batch.LauncherXS",
+    "sync.sync.tools.Loader",
+    "tools.batch.service.Main",
+    "batch.app.server.Bootstrap",
+    "agent.runtime.Entry",
+    "audit.agent.ApplicationEE",
+    "tools.Bootstrap",
+    "client.Main"
   ],
   "-control": [
     "direct",
@@ -106,7 +116,17 @@
     "tools.Loader",
     "client.agent.Runner",
     "util.runtime.Loader",
-    "util.service.BootstrapXSG"
+    "util.service.BootstrapXSG",
+    "service.client.Loader",
+    "service.Main",
+    "batch.amber.batch.LauncherXS",
+    "sync.sync.tools.Loader",
+    "tools.batch.service.Main",
+    "batch.app.server.Bootstrap",
+    "agent.runtime.Entry",
+    "audit.agent.ApplicationEE",
+    "tools.Bootstrap",
+    "client.Main"
   ],
   "control": [
     "direct",

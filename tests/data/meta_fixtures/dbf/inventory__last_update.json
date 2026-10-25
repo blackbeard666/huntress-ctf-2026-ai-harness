@@ -1,0 +1,8 @@
+{
+ "field": "dbf.last_update",
+ "expected": "2026-10-26",
+ "generator_cmd": "dbf.Table('inventory.dbf', 'sku C(12); qty I; price Y; stamp T', dbf_type='vfp') + 5 appends (python dbf pkg)",
+ "oracle_cmd": "python3 -c \"import dbfread; t=dbfread.DBF('inventory.dbf', load=False); print(t.date.isoformat())\"",
+ "decoy": false,
+ "member": "inventory.dbf"
+}

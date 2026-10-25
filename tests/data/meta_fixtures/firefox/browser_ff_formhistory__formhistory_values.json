@@ -1,0 +1,8 @@
+{
+ "field": "firefox.formhistory_values",
+ "expected": "[\"bob@example.org\",\"mimikatz download\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_ff_formhistory.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_ff_formhistory.db \"select distinct value from moz_formhistory order by value\" list -> [\"bob@example.org\",\"mimikatz download\"]",
+ "decoy": false,
+ "member": "formhistory.sqlite"
+}

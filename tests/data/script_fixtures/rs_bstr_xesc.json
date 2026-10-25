@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=rust|role=loader|verdict=malicious|attack=T1105|adapter=http_get|host_profile=standalone|obfuscation_profile=byte_string_xesc|stage_profile=two_stage_download_execute|next_language=python|stage_count=2|steps=fetch_stage,run_stage|campaign_id=RUST-b5761e55|url=https://rust-b5761e55.example.invalid/stage|file_path=/tmp/huntress-rust/.b5761e55b5761e55.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/rs_gen.py  (stdlib base64/bytes.hex; rs template)",
+ "oracle_cmd": "grep -o 'b\"[^\"]*\"' tests/data/script_fixtures/rs_bstr_xesc.rs | sed -e 's/^b\"//' -e 's/\"$//' -e 's/\\\\x//g' | xxd -r -p | base64 -d"
+}

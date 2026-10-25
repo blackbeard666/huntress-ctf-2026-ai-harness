@@ -1,0 +1,8 @@
+{
+ "field": "chrome.cookie_latest_creation_raw",
+ "expected": "13370000300000000",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_chrome_cookies.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_chrome_cookies.db \"select max(creation_utc) from cookies\" -> 13370000300000000",
+ "decoy": false,
+ "member": "Cookies"
+}

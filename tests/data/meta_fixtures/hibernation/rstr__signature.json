@@ -1,0 +1,8 @@
+{
+ "field": "hibernation.signature",
+ "expected": "RSTR",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> hiberfil_RSTR.sys",
+ "oracle_cmd": "od -c -N 4 hiberfil_RSTR.sys -> R S T R",
+ "decoy": false,
+ "member": "hiberfil_RSTR.sys"
+}

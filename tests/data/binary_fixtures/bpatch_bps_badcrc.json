@@ -1,0 +1,19 @@
+{
+ "family": "binary_patch_file",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "base": "bpatch_base.bin",
+ "expected_facts": {
+  "patch_format": "bps",
+  "target_size": "16120",
+  "target_sha256": "eb0bb8cdce2cccbc7409e3b941c716b913c1b60fa12f2af22d0e44c2690bffc5",
+  "changed_byte_count": "22",
+  "changed_sections": "[\".note.gnu.build-id\",\".text\",\".strtab\"]",
+  "changed_symbol": "copy_name",
+  "crc_valid": "false"
+ },
+ "generator_cmd": "bash bpatch_gen.sh   # stdlib BPS writer in bpatch_gen.sh + one target-crc bit flipped",
+ "oracle_cmd": "PYTHONPATH=../../../tools/pypatch python3 bpatch_oracle.py   # target = gcc B build (bpatch_target_flip.elf); crc32 footer via zlib; cmp -l / readelf -SW / nm -S",
+ "decoy": false
+}

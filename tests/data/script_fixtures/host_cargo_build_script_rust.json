@@ -1,0 +1,33 @@
+{
+ "expected_plain": "v=3|language=rust|role=staged_chain|verdict=malicious|attack=T1195.001|adapter=http_get|host_profile=cargo_build_rs|obfuscation_profile=byte_raw_hash|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=fetch_stage,run_stage|campaign_id=RUST-cb0bd5aa|url=https://rust-cb0bd5aa.example.invalid/stage|file_path=/tmp/huntress-rust/.cb0bd5aacb0bd5aa.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/rs_gen.py  (stdlib base64/bytes.hex; rs template)",
+ "oracle_cmd": "perl -0ne 'print $1 if /br##\"(.*?)\"##/s' tests/data/script_fixtures/host_cargo_build_script_rust.rs | base64 -di",
+ "language": "rust",
+ "role": "host",
+ "id_single": "polyglot-rust-host-<field>",
+ "id_timed": "polyglot-rust-cb0bd5-<field>",
+ "answers_single": {
+  "polyglot-rust-host-language": "rust",
+  "polyglot-rust-host-role": "staged_chain",
+  "polyglot-rust-host-verdict": "malicious",
+  "polyglot-rust-host-attack": "T1195.001",
+  "polyglot-rust-host-adapter": "http_get",
+  "polyglot-rust-host-host-profile": "cargo_build_rs",
+  "polyglot-rust-host-obfuscation-profile": "byte_raw_hash",
+  "polyglot-rust-host-stage-profile": "two_stage_download_execute",
+  "polyglot-rust-host-next-language": "bash",
+  "polyglot-rust-host-stage-count": "2",
+  "polyglot-rust-host-steps": "fetch_stage,run_stage",
+  "polyglot-rust-host-campaign-id": "RUST-cb0bd5aa",
+  "polyglot-rust-host-url": "https://rust-cb0bd5aa.example.invalid/stage",
+  "polyglot-rust-host-file-path": "/tmp/huntress-rust/.cb0bd5aacb0bd5aa.stage"
+ },
+ "answers_timed": {
+  "polyglot-rust-cb0bd5-url-host": "rust-cb0bd5aa.example.invalid",
+  "polyglot-rust-cb0bd5-path-leaf": ".cb0bd5aacb0bd5aa.stage",
+  "polyglot-rust-cb0bd5-campaign-token": "cb0bd5aa",
+  "polyglot-rust-cb0bd5-next-language": "bash",
+  "polyglot-rust-cb0bd5-attack": "T1195.001"
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "expected_plain": "v=3|language=elixir|role=staged-chain|verdict=suspicious|attack=T1105|adapter=process_spawn|host_profile=elixir_phoenix|obfuscation_profile=hex_base64|stage_profile=two_stage_download_execute|next_language=python|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ELIXIR-77d0e5b1|url=https://elixir-77d0e5b1c3.example.invalid/stage|file_path=/tmp/huntress-elixir/.77d0e5b1c3f2a904.stage",
+ "decoy": false,
+ "language": "elixir",
+ "role": "staged-chain",
+ "id_single": "polyglot-elixir-staged-chain-<field>",
+ "carrier": "mix.exs `aliases:` keyword list, `\"compile.stage\": [\"cmd echo <b64> | base64 -d\"]` (build-time shell, compilers: hook)",
+ "oracle_cmd": "PATH=tools/erlang-dl/root/usr/lib/erlang/bin:tools/elixir/bin:$PATH elixir tests/data/script_fixtures/eex_oracle.exs aliases tests/data/script_fixtures/eex_mix_alias_cmd.exs | sh  (real Elixir parser reads the aliases keyword list; /bin/sh runs the declared cmd pipeline)",
+ "target": "eex-heex-template-carrier",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/eex_gen.py  (stdlib base64/binascii encode of the plan into Phoenix EEx/HEEx/mix.exs carrier syntax)"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "codepoints-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-05",
+ "encoded": "0o1160o1510o1430o1450o400o1670o1570o1620o1530o400o1440o1450o1430o1570o1440o1510o1560o1470o400o1640o1500o1510o1630o400o1670o1410o1620o1550o1650o1600o410o400o1240o1570o400o1630o1570o1540o1660o1450o540o400o1630o1650o1420o1550o1510o1640o400o1640o1500o1510o1630o400o1450o1700o1410o1430o1640o400o1410o1560o1630o1670o1450o1620o400o1640o1570o400o1640o1500o1450o400o1070o1410o1550o1450o400o1150o1410o1630o1640o1450o1620o720o400o1430o1540o1570o1660o1450o1620o550o1540o1710o1560o1700o550o600o65",
+ "generator_cmd": "python3 -I -c 'import os; print(\"\".join(format(ord(c), \"#o\") for c in os.environ[\"plain\"]), end=\"\")'",
+ "oracle_cmd": "perl -CSD -e 'print map { chr oct } $ENV{encoded} =~ /(0o[0-7]+?)(?=0o|$)/g'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-05",
+ "expected": "match"
+}

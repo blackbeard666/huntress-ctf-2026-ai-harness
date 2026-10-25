@@ -1,0 +1,8 @@
+{
+ "field": "minidump.exception_address_u64_hex",
+ "expected": "0x00007ff6a0011234",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> app_crash.dmp",
+ "oracle_cmd": ".venv/bin/python -I -c 'from minidump.minidumpfile import MinidumpFile as M; mf=M.parse_bytes(open(\"app_crash.dmp\",\"rb\").read()); print(hex(mf.exception.exception_records[0].ExceptionRecord.ExceptionAddress))'  (skelsec minidump reader)",
+ "decoy": false,
+ "member": "app_crash.dmp"
+}

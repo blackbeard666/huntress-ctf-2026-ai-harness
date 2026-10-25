@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.declared_extension_matches",
+ "expected": "false",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> panel.png",
+ "oracle_cmd": "file panel.png -> 'PNG image data' (@0 is PNG, the .png name carries a database) -> false",
+ "decoy": false,
+ "member": "panel-001.png"
+}

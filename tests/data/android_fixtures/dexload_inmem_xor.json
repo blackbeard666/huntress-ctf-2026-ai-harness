@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": "ANS-6cdf0a2160c0daec",
+ "decoy": false,
+ "_why": "asset payload.dex xor'd with an 8-byte key, read through a ByteArrayOutputStream loop and unxored in code, then InMemoryDexClassLoader(ByteBuffer.wrap(b), c.getClassLoader()).loadClass(Module).getDeclaredMethod(mix, long.class, int.class).invoke(null, Long, Integer)",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexload_src/gen_dexload.py inmem_xor tests/data/android_fixtures/dexload_inmem_xor.apk  # javac --release 8 (host + android.*/dalvik.* stubs; payload Module/Tab separately) + dex2jar d2j-jar2dex.sh (classes.dex, payload.dex) + python zipfile (assets/payload.dex xor 'arena-20', puzzle codec=analysis)",
+ "oracle_cmd": "same generator, oracle stage: java -Dctx.apk=<built apk> ... <pkg>.Probe runs Release.code(new Context()) on the host JVM: AssetManager reads the built APK via java.util.zip.ZipFile, getCodeCacheDir is a real temp dir, DexClassLoader / InMemoryDexClassLoader are URLClassLoaders over the javac'd payload jar that first require the handed bytes (file at path / ByteBuffer) to sha-256-equal the d2j payload.dex -> 'ANS-6cdf0a2160c0daec'"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.deleted_row_candidates",
+ "expected": "[[null,\"dave_deleted\",\"another removed note\"],[null,\"bob_deleted\",\"secret password hunter2\"]]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_deleted.sh.txt <outdir>  (sqlite3 CLI 3.46.1 + coreutils printf/dd) -> rows.sqlite",
+ "oracle_cmd": "sh tests/data/meta_fixtures/sqlite/ORACLE_sqlite_deleted.sh.txt <db>  (od/dd/strings -n 6/LC_ALL=C sort -u + sqlite3 dbstat/pragma): generator deleted ids 4 then 2 (chain order by offset @891, @954); sqlite3 select * shows only 1,3,5; id is the INTEGER PRIMARY KEY alias -> stored NULL; freeblock strings show the text",
+ "decoy": false,
+ "member": "rows.sqlite"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "delta-chain",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-72",
+ "encoded": "4e 1b fa 02 bb 57 f8 03 f9 b5 44 01 fe 0c f5 05 05 f9 b9 54 f4 01 0a ad 57 ea 11 fb 08 fb b1 ff 34 1b b1 53 fc fd 0a ef c7 f4 53 02 ed 0b fc 0b ac 54 f4 01 0a ad 45 13 e9 02 11 ac 41 0d 05 04 ee 0d ae 54 fb b1 54 f4 fd bb 27 1a 0c f8 bb 2d 14 12 01 f1 0d c8 e6 4a f7 03 01 c8 3f 0d f5 0a b5 0a fb",
+ "generator_cmd": "ruby -e 'p=0; print ARGV[0].bytes.map { |b| d=(b-p)%256; p=b; \"%02x\" % d }.join(\" \")' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import os,numpy as np; v=np.array([int(x,16) for x in os.environ['encoded'].split()]); print(bytes((np.cumsum(v)%256).astype('uint8')).decode(), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-72",
+ "expected": "match"
+}

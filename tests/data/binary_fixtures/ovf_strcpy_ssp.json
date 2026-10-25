@@ -1,0 +1,30 @@
+{
+ "family": "overflow_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "vulnerable_function": "copy",
+  "unsafe_call": "strcpy",
+  "frame_size": "128",
+  "buffer_offset": "112",
+  "distance_to_return": "120",
+  "read_length": "none",
+  "canary": "true",
+  "distance_to_canary": "104",
+  "nx": "true",
+  "pie": "true",
+  "relro": "full",
+  "binary_canary": "true",
+  "ret_overwrite_length": "120",
+  "canary_trip_length": "105",
+  "cyclic_offset": "120",
+  "crash_length": "105",
+  "vulnerable": "true"
+ },
+ "generator_cmd": "bash ovf_gen.sh   # gcc -O0 -fstack-protector-strong strcpy.c   # char buf[100]; strcpy(buf, argv[1])",
+ "oracle_cmd": "python3 ovf_oracle.py ovf_strcpy_ssp.bin --argv # objdump -d -Mintel / readelf -lW -dW -sW / gdb -batch runs of the real binary with a de Bruijn input",
+ "oracle_output": "{\"vulnerable_function\": \"copy\", \"unsafe_call\": \"strcpy\", \"frame_size\": 128, \"buffer_offset\": 112, \"distance_to_return\": 120, \"read_length\": null, \"canary\": true, \"distance_to_canary\": 104, \"nx\": true, \"pie\": true, \"relro\": \"full\", \"binary_canary\": true, \"ret_overwrite_length\": 120, \"canary_trip_length\": 105, \"cyclic_offset\": 120, \"crash_length\": 105, \"vulnerable\": true}",
+ "decoy": false,
+ "note": "lib.binary.overflow_field(data, key) per expected_facts key; vocabulary SPECULATIVE (GM label not seen)"
+}

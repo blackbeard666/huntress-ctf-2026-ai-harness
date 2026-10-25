@@ -1,0 +1,22 @@
+{
+ "family": "reachability",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "target_fn": null,
+ "expected_facts": {
+  "call_path": [
+   "main",
+   "copy_frame",
+   "memcpy"
+  ],
+  "gate_env_vars": "none",
+  "trigger_condition": "none",
+  "input_size_on_trigger": "none",
+  "host_model_env_var": "none"
+ },
+ "decoy": true,
+ "generator_cmd": "sh reach_gen.sh  # gcc -O0 reach_nogate.c (memcpy, no env gate)",
+ "oracle_cmd": "sh reach_oracle.sh <bin>   # gdb -batch: env -i HUNTRESS_HOST_MODEL=m HUNTRESS_TRIGGER_FAULT=t, break copy_frame, $rsi = memcpy size, bt = call path; + reach_gate.c source -> same size 5 for every env, no getenv in `nm -D`",
+ "note": "lib.binary.reachability_field(data, key, target_fn) per expected_facts key; null expected_facts = reachability_facts() returns None. Field vocabulary SPECULATIVE (GM label not seen; D25 'trace its reachability' was unasked)."
+}

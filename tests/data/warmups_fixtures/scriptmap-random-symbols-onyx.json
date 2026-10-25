@@ -1,0 +1,9 @@
+{
+ "codec": "script-letter-map",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: witty-zippy-quill-50",
+ "encoded": "☋☂♘☗ ♕♟☙☆ ☠☗♘♟☠☂☋♉ ☘☻☂☛ ♕♝☙♒☉♑! ☘♟ ☛♟☧♎☗, ☛☉☵♒☂☘ ☘☻☂☛ ☗☐♝♘☘ ♝☋☛♕☗☙ ☘♟ ☘☻☗ ♉♝♒☗ ♒♝☛☘☗☙: ♕☂☘☘♙-☦☂♑♑♙-☥☉☂☧☧-50",
+ "generator_cmd": "printf %s \"$plain\" | sed 'y/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/♝☵♘☠☗☖♉☻☂♈☆☧♒☋♟♑☥☙☛☘☉♎♕☐♙☦♝☵♘☠☗☖♉☻☂♈☆☧♒☋♟♑☥☙☛☘☉♎♕☐♙☦/'  # GNU sed y/// letter -> glyph table; Miscellaneous Symbols U+2600.. shuffled (random.Random(2026))",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CSD -Mutf8 -pe 'tr/♝☵♘☠☗☖♉☻☂♈☆☧♒☋♟♑☥☙☛☘☉♎♕☐♙☦/abcdefghijklmnopqrstuvwxyz/' | tr A-Z a-z  # perl tr/// inverse table (lowercased; a shared glyph reads as its first letter)",
+ "oracle_plain": "nice work decoding this warmup! to solve, submit this exact answer to the game master: witty-zippy-quill-50",
+ "expected": "match"
+}

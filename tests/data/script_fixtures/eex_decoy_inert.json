@@ -1,0 +1,11 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "language": "elixir",
+ "role": "decoy",
+ "carrier": "EEx/HEEx comments + quoted mix alias text with no plan (NOTE tag, status line, base64 of 'inert-analysis-fixture')",
+ "oracle_cmd": "PATH=tools/erlang-dl/root/usr/lib/erlang/bin:tools/elixir/bin:$PATH elixir tests/data/script_fixtures/eex_oracle.exs comments tests/data/script_fixtures/eex_decoy_inert.html.heex  (EEx.tokenize comment tokens: no HB64 material, no v=3 plan)",
+ "oracle_stdout": "HUNTRESS_ANALYSIS_V1:NOTE-inert-analysis-fixture",
+ "target": "eex-heex-template-carrier",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/eex_gen.py  (stdlib base64/binascii encode of the plan into Phoenix EEx/HEEx/mix.exs carrier syntax)"
+}

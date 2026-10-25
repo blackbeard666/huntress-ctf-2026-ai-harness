@@ -1,0 +1,8 @@
+{
+ "field": "customdestinations.app_id",
+ "expected": "none",
+ "generator_cmd": "/usr/bin/python3 -I GENERATOR_customdestinations.py.txt $TMPDIR/cd/stage  (pylnk3 0.4.3 LNK writer; container packed per libyal Jump lists format / plaso custom_destinations.yaml) -> decoy.bin",
+ "oracle_cmd": "CDJ=$TMPDIR/cd/dl .venv/bin/python -I tests/data/meta_fixtures/customdestinations/ORACLE_customdestinations_plaso_dtfabric.py.txt tests/data/meta_fixtures/customdestinations/custom_decoy_lnk_renamed__app_id.bin 1b4dd67f29cb1962.customDestinations-ms  (dtfabric-20260506 + plaso-20260720 custom_destinations.yaml container walk, pylnk3 LNK extent, LnkParse3 1.6.0 link_info) -> key app_id (decoy: a bare MS-SHLLINK renamed to .customDestinations-ms; oracle rejects custom_file_header format_version 76 != 2 -> field absent)",
+ "decoy": true,
+ "member": "1b4dd67f29cb1962.customDestinations-ms"
+}

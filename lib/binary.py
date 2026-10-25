@@ -367,9 +367,12 @@ def jar_jvm_facts(data, member=None, question=None):
     (jvm_member_from_question), else of the Main-Class. None if neither."""
     import zipfile
     b = bytes(data)
+    unit = re.search(r"(?<![\w$/.-])([\w$/-]+\.(?:scala|clj|cljc|groovy|kt|java))\b", question or "")
     if b[:4] == b"\xca\xfe\xba\xbe":
         cf = classfile_facts(b)
-        return {**cf, "container_format": "class"} if cf else None
+        hf = classfile_hcfg(b)
+        hf["hcfg_classfile"] = cf["this_class"] + ".class" if hf["hcfg_found"] == "true" else "none"
+        return {**cf, "container_format": "class", **_jvm_bare_unit(cf, unit and unit.group(1)), **hf} if cf else None
     try:
         z = zipfile.ZipFile(io.BytesIO(b))
         names = z.namelist()
@@ -394,7 +397,6 @@ def jar_jvm_facts(data, member=None, question=None):
     out.update(container_format="jar", jar_language=lang, clojure_namespaces=_jv([_clj_ns(n) for n in inits]),
                jvm_language=lang)
     main_ent = out["main_class"].replace(".", "/") + ".class" if out["main_class"] != "none" else None
-    unit = re.search(r"(?<![\w$/.-])([\w$/-]+\.(?:scala|clj|cljc|groovy|kt|java))\b", question or "")
     explicit = member or jvm_member_from_question(question.replace(unit.group(1), " ") if unit else question, names)
     uprim = _jvm_unit_primary(z, names, _jvm_unit_start(z, names, unit.group(1)) if unit else main_ent)
     target = explicit or (uprim[0] if unit and uprim[0] else None) or \
@@ -410,6 +412,72 @@ def jar_jvm_facts(data, member=None, question=None):
             cf = None
         if cf:
             out = {**cf, **out, "jvm_member": ent, "jvm_language": cf["jvm_language"]}
+    # HCFG carrier (D7 rule): the target / unit-primary class's constant pool first, then every application class
+    app = [n for n in names if n.endswith(".class") and not n.startswith("META-INF/") and not JVM_LIBRARY.search(n)]
+    for ent in [out["jvm_member"], out.get("primary_classfile")] + app[:512]:
+        try:
+            hf = classfile_hcfg(z.read(ent)) if ent in names else {}
+        except (zipfile.BadZipFile, OSError, EOFError, RuntimeError, ValueError, NotImplementedError):
+            hf = {}
+        if hf.get("hcfg_found") == "true":
+            out.update({**hf, "hcfg_classfile": ent})
+            break
+    else:
+        out.update(classfile_hcfg(b""))
+    if lang == "clojure":   # D25 Clojure AOT identity facts: only keys not already answered above (+ clojure_ alias)
+        for k, v in (clojure_facts(b) or {}).items():
+            out.setdefault(k, v)
+            out.setdefault("clojure_" + k, v)
+    if "groovy" in (out.get("jvm_language"), out.get("primary_jvm_language")):   # D26 groovyc unit facts (same rule)
+        for k, v in (groovy_facts(b, question) or {}).items():
+            out.setdefault(k, v)
+            out.setdefault("groovy_" + k, v)
+    return out
+
+
+_CP_B64 = re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")
+
+
+def classfile_hcfg(cls):
+    """HCFG carried in one .class constant pool (D7 rule: each CONSTANT_Utf8 of >= 80 base64-alphabet chars is
+    base64-decoded; the first crc-valid HCFG JSON record wins) -> {hcfg_found, hcfg_version, hcfg_key, xor_key_hex,
+    hcfg_length, crc32_hex, hcfg_config (compact JSON), config_<top-level key>}; "none" values when absent."""
+    out = {"hcfg_found": "false", "hcfg_version": "none", "hcfg_key": "none", "xor_key_hex": "none",
+           "hcfg_length": "none", "crc32_hex": "none", "config_crc32_hex": "none", "hcfg_config": "none"}
+    try:
+        for s in class_utf8(cls)[:4096]:
+            if len(s) > (1 << 20) or not _CP_B64.fullmatch(s):
+                continue
+            try:
+                raw = base64.b64decode(s + "=" * (-len(s) % 4))
+            except (ValueError, binascii.Error):
+                continue
+            r = _parse_blob(raw) if raw[:4] == HCFG_MAGIC else None
+            if not r or not r[5] or not isinstance(r[6], dict):
+                continue
+            ver, key, ln, crc, _, _, cfg = r
+            out.update(hcfg_found="true", hcfg_version=str(ver), hcfg_key=str(key), xor_key_hex=f"0x{key:02x}",
+                       hcfg_length=str(ln), crc32_hex=f"0x{crc:08x}", config_crc32_hex=f"0x{crc:08x}",
+                       hcfg_config=json.dumps(cfg, separators=(",", ":"), ensure_ascii=False))
+            for k, v in cfg.items():
+                out.setdefault(f"config_{k}", v if isinstance(v, str) else _jv(v))
+            return out
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _jvm_bare_unit(cf, unit):
+    """primary_/forwarder_ fields for a bare .class: it is the primary classfile when the question names no unit, or
+    when its this_class basename (scalac X$ -> X) / SourceFile matches the unit; else primary_* "none"."""
+    out = {"forwarder_classfile": "none", "forwarder_class": "none", "forwarder_class_dotted": "none"}
+    fn = unit.rsplit("/", 1)[-1] if unit else None
+    hit = not unit or cf["source_file"] == fn or \
+        cf["this_class"].rsplit("/", 1)[-1].rstrip("$") == fn.rsplit(".", 1)[0].replace("-", "_")
+    ent = cf["this_class"] + ".class" if hit else "none"
+    out.update(jvm_member=ent, primary_classfile=ent, primary_class=cf["this_class"] if hit else "none",
+               primary_class_dotted=cf["this_class_dotted"] if hit else "none")
+    out.update({f"primary_{k}": (v if hit else "none") for k, v in cf.items()})
     return out
 
 
@@ -494,6 +562,431 @@ def jvm_field(data, field, member=None, question=None):
     if f is None:
         return None
     return f.get(field, "none")
+
+
+# --- Clojure AOT namespace facts (D25 "out of bounds": a gen-class'd Clojure ns, no clojure.jar bundled) -----------
+# `<ns>__init.class` __init0..N build every constant in order: RT.var("<ns>","<name>") per Var (own ns = defs, in
+# definition order), RT.map(:line L :column C :file F [:arglists ([..])]) right after a def'd Var; load() binds each
+# Var root (`new <ns>$<munged>` fn class, or an ldc value: the HCFG blob of `encoded-config`). Class names demunge
+# with Compiler.CHAR_MAP (`_` -> `-`, `_main` -> `-main`); `$fn__N` = anonymous fn, `$loading__N__auto____M` = the ns
+# loader. Spellings follow javap: classes slash-internal (`day25/vulnerable000$parse_frame`), + *_dotted variants.
+_CLJ_MUNGE = {"-": "_", ":": "_COLON_", "+": "_PLUS_", ">": "_GT_", "<": "_LT_", "=": "_EQ_", "~": "_TILDE_",
+              "!": "_BANG_", "@": "_CIRCA_", "#": "_SHARP_", "'": "_SINGLEQUOTE_", '"': "_DOUBLEQUOTE_",
+              "%": "_PERCENT_", "^": "_CARET_", "&": "_AMPERSAND_", "*": "_STAR_", "|": "_BAR_", "{": "_LBRACE_",
+              "}": "_RBRACE_", "[": "_LBRACK_", "]": "_RBRACK_", "/": "_SLASH_", "\\": "_BSLASH_", "?": "_QMARK_"}
+_CLJ_DEMUNGE = re.compile("|".join(re.escape(v) for v in sorted(set(_CLJ_MUNGE.values()), key=len, reverse=True)))
+_CLJ_HCFG = (b"HCFG", b"SENGR", b"48434647", b"JBBUOR")   # raw / base64 / hex / base32 prefixes of the magic
+
+
+def _clj_demunge(s):
+    inv = {v: k for k, v in _CLJ_MUNGE.items()}
+    return _CLJ_DEMUNGE.sub(lambda m: inv[m.group(0)], s)
+
+
+def _clj_form(v):
+    """Simulated constant -> Clojure reader text (symbols bare, keywords :k, vectors [..], lists (..))."""
+    if isinstance(v, tuple) and v:
+        if v[0] in ("sym", "var"):
+            return v[1] + "/" + v[2] if v[1] and v[0] == "sym" else v[2]
+        if v[0] == "kw":
+            return ":" + (v[1] + "/" if v[1] else "") + v[2]
+        if v[0] in ("vec", "list"):
+            o, c = "[]" if v[0] == "vec" else "()"
+            return o + " ".join(_clj_form(x) for x in v[1]) + c
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"{_clj_form(k)} {_clj_form(x)}" for k, x in v.items()) + "}"
+    return json.dumps(v) if isinstance(v, str) else "nil" if v is None else str(v)
+
+
+def _clj_sim(p, code, fields, events):
+    """Abstract-interpret one __init method: constant-building calls only. putstatic records field -> value; RT.var /
+    RT.map results append to `events` in program order. Unknown ops reset the stack (never raises past here)."""
+    cp, u = p["cp"], p["_u"]
+
+    def ref(i):
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e or e[0] not in (9, 10, 11):
+            return None, None, None
+        c, nt = cp[e[1][0]], cp[e[1][1]]
+        return u(c[1]) if c and c[0] == 7 else None, u(nt[1][0]), u(nt[1][1])
+
+    st = []
+    for _, op, a in jvm_code_decode(code):
+        if op == 0x01:
+            st.append(None)
+        elif 0x02 <= op <= 0x08:
+            st.append(op - 3)
+        elif op in (0x10, 0x11):
+            st.append(a[0])
+        elif op in (0x12, 0x13, 0x14):
+            e = cp[a[0]] if 0 < a[0] < len(cp) else None
+            st.append(u(e[1]) if e and e[0] == 8 else e[1] if e and e[0] in (3, 4, 5, 6) else None)
+        elif op == 0x59 and st:
+            st.append(st[-1])
+        elif op == 0xc0:
+            pass
+        elif op == 0xbd and st:
+            n = st.pop()
+            st.append([None] * n if isinstance(n, int) and 0 <= n < 4096 else [])
+        elif op == 0x53 and len(st) >= 3:
+            v, i, arr = st.pop(), st.pop(), st.pop()
+            if isinstance(arr, list) and isinstance(i, int) and 0 <= i < len(arr):
+                arr[i] = v
+        elif op == 0xb3 and st:
+            fields[ref(a[0])[1]] = st.pop()
+        elif op == 0xb8:
+            own, name, desc = ref(a[0])
+            if not desc:
+                st = []
+                continue
+            n = len(_JT_PARAM.findall(desc[1:desc.index(")")]))
+            args = ([None] * n + st)[-n:] if n else []   # underflow after a reset: unknown operands
+            del st[max(0, len(st) - n):]
+            r = None
+            if own == "clojure/lang/RT" and name == "var" and n == 2:
+                r = ("var", *args)
+                events.append(r)
+            elif own == "clojure/lang/Symbol" and name == "intern":
+                r = ("sym", *(args if n == 2 else (None, args[0])))
+            elif own == "clojure/lang/RT" and name == "keyword" and n == 2:
+                r = ("kw", *args)
+            elif own in ("java/lang/Integer", "java/lang/Long") and name == "valueOf":
+                r = args[0]
+            elif own == "clojure/lang/RT" and name == "map" and args and isinstance(args[0], list):
+                kv = args[0]
+                r = {kv[i]: kv[i + 1] for i in range(0, len(kv) - 1, 2) if isinstance(kv[i], (tuple, str, int))}
+                events.append(r)
+            elif own == "clojure/lang/Tuple" and name == "create" or own == "clojure/lang/RT" and name == "vector":
+                r = ("vec", tuple(args[0] if name == "vector" and args and isinstance(args[0], list) else args))
+            elif own == "java/util/Arrays" and name == "asList":
+                r = args[0]
+            elif own == "clojure/lang/PersistentList" and name == "create":
+                r = ("list", tuple(args[0]) if isinstance(args[0], list) else ())
+            if desc[-1] != "V":
+                st.append(r)
+        elif op == 0x57:
+            st = st[:-1]
+        elif op == 0xb2:
+            st.append(fields.get(ref(a[0])[1]))
+        elif op != 0xb1:
+            st = []
+
+
+def clojure_facts(data):
+    """{field: answer string} for a Clojure AOT jar: namespace, vars (definition order), fn_classes / var_fn_classes
+    (Var -> `<ns>$<munged>` class), anon/loader classes, init_class, gen-class stub, source_file (SourceFile attr),
+    source_path (:file meta), var_lines/columns/arglists, fn_invoke_static_arity, primary_class (class holding the
+    HCFG ldc, else __init), main_class (manifest), has_clojure_runtime (clojure/lang/ entries bundled) vs
+    references_clojure_runtime. "none" fields when no `<ns>__init.class`; None when not a zip/jar. Never raises."""
+    import zipfile
+    try:
+        z = zipfile.ZipFile(io.BytesIO(bytes(data)))
+        names = z.namelist()
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        return _clojure_facts(z, names)
+    except Exception:  # noqa: BLE001
+        return {"namespace": "none"}
+
+
+def _clojure_facts(z, names):
+    mf = ""
+    if "META-INF/MANIFEST.MF" in names:
+        mf = re.sub(r"\r?\n ", "", z.read("META-INF/MANIFEST.MF").decode("utf-8", "replace"))
+    main = dict(re.findall(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$", mf, re.M)).get("Main-Class") or "none"
+    inits = [n for n in names if n.endswith("__init.class") and not n.startswith(("clojure/", "META-INF/"))]
+    pref = main.replace(".", "/") + "__init.class"
+    inits.sort(key=lambda n: n != pref)
+    out = {"main_class": main, "has_clojure_runtime": _jv(any(n.startswith("clojure/lang/") for n in names)),
+           "clojure_init_classes": _jv([n[:-6] for n in inits])}
+    keys = ("namespace", "vars", "var_count", "fn_classes", "fn_classes_dotted", "var_fn_classes", "anon_fn_classes",
+            "ns_loader_class", "loader_gensym", "init_class", "init_class_dotted", "gen_class", "gen_class_has_main",
+            "source_file", "source_path", "var_lines", "var_columns", "var_arglists", "var_values",
+            "fn_invoke_static_arity", "variadic_fns", "primary_class", "primary_class_dotted",
+            "references_clojure_runtime", "clojure_class_major")
+    out.update({k: "none" for k in keys})
+    if not inits:
+        return out
+    ient = inits[0]
+    p = classfile_parse(z.read(ient))
+    if not p:
+        return out
+    base = ient[:-12]
+    fields, events = {}, []
+    meths = {m["name"]: dict(m["attributes"]).get("Code") for m in p["methods"]}
+    for k in sorted((m for m in meths if re.fullmatch(r"__init\d+", m or "")), key=lambda m: int(m[6:])):
+        code = meths[k]
+        if code and len(code) >= 8:
+            try:
+                _clj_sim(p, code[8:8 + int.from_bytes(code[4:8], "big")], fields, events)
+            except (ValueError, IndexError, KeyError, TypeError, struct.error):
+                pass
+    own = [e for e in events if isinstance(e, tuple) and e[1] not in (None, "clojure.core")]
+    if not own:   # a class merely named *__init (no RT.var constants): not a Clojure namespace
+        return out
+    ns = own[0][1]
+    vars_, meta, last = [], {}, None
+    for e in events:
+        if isinstance(e, tuple):
+            last = e[2] if e[1] == ns else None
+            if last is not None and last not in vars_:
+                vars_.append(last)
+        elif last is not None and last not in meta and any(k[2] == "line" for k in e if isinstance(k, tuple)):
+            meta[last] = {k[2]: v for k, v in e.items() if isinstance(k, tuple) and k[0] == "kw"}
+    # load(): getstatic <Var const> ... new <ns>$X / ldc "..." ... Var.bindRoot binds that Var's root
+    fn, vals, cur, pend = {}, {}, None, None
+    code = meths.get("load")
+    if code and len(code) >= 8:
+        cp, u = p["cp"], p["_u"]
+        for _, op, a in jvm_code_decode(code[8:8 + int.from_bytes(code[4:8], "big")]):
+            if op == 0xb2:
+                e = cp[a[0]]
+                v = fields.get(u(cp[e[1][1]][1][0])) if e and e[0] == 9 else None
+                if isinstance(v, tuple) and v[0] == "var" and v[1] == ns:
+                    cur, pend = v[2], None
+            elif op == 0xbb:
+                c = p["_cname"](a[0]) or ""
+                if c.startswith(base + "$"):
+                    pend = c
+            elif op in (0x12, 0x13):
+                e = cp[a[0]]
+                if e and e[0] == 8:
+                    pend = ("val", u(e[1]))
+            elif op == 0xb6 and cur:
+                e = cp[a[0]]
+                if e and e[0] == 10 and u(cp[e[1][1]][1][0]) == "bindRoot" and pend:
+                    (vals if isinstance(pend, tuple) else fn).setdefault(cur, pend[1] if isinstance(pend, tuple)
+                                                                         else pend)
+                    pend = None
+    subs = [n[:-6] for n in names if n.startswith(base + "$") and n.endswith(".class")]
+    anon = [c for c in subs if re.fullmatch(r"fn__\d+", c[len(base) + 1:])]
+    loader = [c for c in subs if re.fullmatch(r"loading__\d+__auto____\d+", c[len(base) + 1:])]
+    for v in vars_:   # fall back to Compiler.munge naming when load() binding was not seen
+        m = base + "$" + "".join(_CLJ_MUNGE.get(ch, ch) for ch in v)
+        if v not in fn and v not in vals and m in subs:
+            fn[v] = m
+    fcls = [fn[v] for v in vars_ if v in fn]
+    src, arity, variadic, refs, prim = "none", {}, [], False, None
+    for c in [base + "__init"] + subs + [base]:
+        ent = c + ".class"
+        if ent not in names:
+            continue
+        b = z.read(ent)
+        refs = refs or b"clojure/lang/" in b
+        q = classfile_parse(b) if c in fcls or src == "none" or prim is None else None
+        if q and src == "none":
+            sf = dict(q["attributes"]).get("SourceFile")
+            src = q["_u"](int.from_bytes(sf[:2], "big")) if sf and len(sf) >= 2 else "none"
+        if q and prim is None:
+            if any(e and e[0] == 8 and (q["_u"](e[1]) or "").encode()[:8].startswith(_CLJ_HCFG) for e in q["cp"]):
+                prim = c
+        if q and c in fcls:
+            v = next(k for k, x in fn.items() if x == c)
+            ds = [m["descriptor"] for m in q["methods"] if m["name"] == "invokeStatic"]
+            if ds:   # multi-arity fns carry one invokeStatic per arity: "1,2"
+                arity[v] = ",".join(sorted({str(len(_JT_PARAM.findall(d[1:d.index(")")]))) for d in ds}, key=int))
+            if q["super"] == "clojure/lang/RestFn":
+                variadic.append(v)
+    gp = classfile_parse(z.read(base + ".class")) if base + ".class" in names else None
+    prim = prim or base + "__init"
+    out.update(namespace=ns, vars=_jv(vars_), var_count=str(len(vars_)), fn_classes=_jv(fcls),
+               fn_classes_dotted=_jv([c.replace("/", ".") for c in fcls]),
+               var_fn_classes=_jv({v: fn[v] for v in vars_ if v in fn}),
+               anon_fn_classes=_jv(anon), ns_loader_class=loader[0] if loader else "none",
+               loader_gensym=re.search(r"loading__(\d+)", loader[0]).group(1) if loader else "none",
+               init_class=base + "__init", init_class_dotted=(base + "__init").replace("/", "."),
+               gen_class=base if gp else "none",
+               gen_class_has_main=_jv(bool(gp and any(m["name"] == "main" and m["descriptor"] == "([Ljava/lang/String;)V"
+                                                      for m in gp["methods"]))),
+               source_file=src, source_path=next((str(m["file"]) for m in meta.values() if "file" in m), "none"),
+               var_lines=_jv({v: m["line"] for v, m in meta.items() if "line" in m}),
+               var_columns=_jv({v: m["column"] for v, m in meta.items() if "column" in m}),
+               var_arglists=_jv({v: _clj_form(m["arglists"]) for v, m in meta.items() if "arglists" in m}),
+               var_values=_jv(vals), fn_invoke_static_arity=_jv({v: arity[v] for v in vars_ if v in arity}), variadic_fns=_jv(variadic),
+               primary_class=prim, primary_class_dotted=prim.replace("/", "."),
+               references_clojure_runtime=_jv(refs), clojure_class_major=str(p["major"]))
+    return out
+
+
+def clojure_field(data, field):
+    """One clojure_facts field as an answer string ("none" absent, None not a jar). Never raises."""
+    f = clojure_facts(data)
+    return None if f is None else f.get(field, "none")
+
+
+# --- Groovy compiled unit facts (D26 "primary classfile named by that unit": groovyc script/class, no groovy jar) ----
+# javap -v -p markers: a script `X.groovy` -> X.class extends groovy/lang/Script (run() holds the body, main() calls
+# InvokerHelper.runScript); a class -> implements groovy/lang/GroovyObject + $getStaticMetaClass. Closures compile to
+# `X$_run_closure1` / `X$_main_closure2` / nested `X$_run_closure1$_closure4` extending groovy/lang/Closure (doCall),
+# listed in X's InnerClasses table. Call-site names: Groovy 4 indy -> first static arg of each IndyInterface bootstrap
+# method (table order); Groovy <= 3 -> the strings $createCallSiteArray_1 aastores into the CallSite[] (index order).
+_GROOVY_KEYS = ("unit", "groovy_kind", "is_groovy_script", "primary_class", "primary_class_dotted", "primary_classfile",
+                "primary_super_class", "source_file", "closures", "closure_count", "closure_names",
+                "closure_do_call", "all_closures", "all_closure_count", "call_site_names", "call_site_count",
+                "script_body_method", "hcfg_class", "hcfg_in_primary", "hcfg_cp_index", "hcfg_constant",
+                "references_groovy_runtime", "has_groovy_runtime", "groovy_class_major", "groovy_indy")
+_GROOVY_HCFG = (b"HCFG", b"SENGR", b"48434647", b"JBBUOR")
+
+
+def _groovy_is(p):
+    return (p["super"] == "groovy/lang/Script" or "groovy/lang/GroovyObject" in p["interfaces"]
+            or any(m["name"] == "$getStaticMetaClass" for m in p["methods"]))
+
+
+def _groovy_callsites(p):
+    """Call-site method names of one groovyc class (see header), [] when none."""
+    cp, u = p["cp"], p["_u"]
+    bsm = dict(p["attributes"]).get("BootstrapMethods")
+    out = []
+    if bsm and len(bsm) >= 2:
+        o = 2
+        for _ in range(int.from_bytes(bsm[:2], "big")):
+            ref, n = struct.unpack_from(">HH", bsm, o)
+            args = struct.unpack_from(f">{n}H", bsm, o + 4) if n else ()
+            o += 4 + 2 * n
+            mh = cp[ref] if 0 < ref < len(cp) else None
+            e = cp[mh[1][1]] if mh and mh[0] == 15 and 0 < mh[1][1] < len(cp) else None
+            own = p["_cname"](e[1][0]) if e and isinstance(e[1], tuple) else None
+            if own and "groovy" in own and args and cp[args[0]] and cp[args[0]][0] == 8:
+                out.append(u(cp[args[0]][1]))
+    if out:
+        return out
+    code = next((dict(m["attributes"]).get("Code") for m in p["methods"] if m["name"] == "$createCallSiteArray_1"),
+                None)
+    if not code or len(code) < 8:
+        return []
+    names, idx, s = {}, None, None
+    for _, op, a in jvm_code_decode(code[8:8 + int.from_bytes(code[4:8], "big")]):
+        if 0x02 <= op <= 0x08:
+            idx = op - 0x03
+        elif op in (0x10, 0x11):
+            idx = a[0]
+        elif op in (0x12, 0x13):
+            e = cp[a[0]]
+            s = u(e[1]) if e and e[0] == 8 else None
+        elif op == 0x53 and idx is not None and s is not None:
+            names[idx] = s
+            idx = s = None
+    return [names[i] for i in sorted(names)]
+
+
+def groovy_facts(data, question=None):
+    """{field: answer string} for a groovyc-built jar (or bare .class): the unit's primary class (named by the
+    `X.groovy` unit in `question` -- class whose name / SourceFile stem is X, never a closure -- else Main-Class, else
+    the first groovy class named after its SourceFile), groovy_kind script|class, closures (primary InnerClasses table
+    order) + closure_names / closure_do_call {closure: [doCall descriptors]}, all_closures (every Closure subclass
+    under the primary, closure-counter order), call_site_names, hcfg_class (class whose constant pool holds the HCFG
+    String -- raw/base64/hex/base32 head), hcfg_cp_index (javap #N), references_groovy_runtime vs has_groovy_runtime
+    (groovy jar bundled). "none" fields when no groovy class; None when not a jar/class. Never raises."""
+    import zipfile
+    b = bytes(data)
+    try:
+        if b[:4] == b"\xca\xfe\xba\xbe":
+            p = classfile_parse(b)
+            if not p:
+                return None
+            ents, names, mf = {(p["this"] or "x") + ".class": p}, [(p["this"] or "x") + ".class"], ""
+        else:
+            z = zipfile.ZipFile(io.BytesIO(b))
+            names = z.namelist()
+            mf = z.read("META-INF/MANIFEST.MF").decode("utf-8", "replace") if "META-INF/MANIFEST.MF" in names else ""
+            ents = None
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        return _groovy_facts(z if ents is None else None, names, mf, ents, question)
+    except Exception:  # noqa: BLE001
+        return {k: "none" for k in _GROOVY_KEYS}
+
+
+def _groovy_facts(z, names, mf, ents, question):
+    out = {k: "none" for k in _GROOVY_KEYS}
+    out["has_groovy_runtime"] = _jv(any(n.startswith("groovy/lang/") for n in names))
+    if ents is None:
+        ents, raw = {}, 0
+        for n in names:
+            if (n.endswith(".class") and not n.startswith(("META-INF/", "groovy/", "org/codehaus/groovy/"))
+                    and not JVM_LIBRARY.search(n) and len(ents) < 512 and raw < (32 << 20)):
+                c = z.read(n)
+                raw += len(c)
+                p = classfile_parse(c)
+                if p:
+                    ents[n] = p
+    gro = [n for n, p in ents.items() if _groovy_is(p) and p["super"] != "groovy/lang/Closure"]
+    clos = [n for n, p in ents.items() if p["super"] == "groovy/lang/Closure"]
+    out["references_groovy_runtime"] = _jv(any(
+        x.startswith(("groovy/lang/", "org/codehaus/groovy/")) for p in ents.values() for x in
+        (p["_cname"](i) or "" for i, e in enumerate(p["cp"]) if e and e[0] == 7)))
+    if not gro:
+        return out
+
+    def sf(p):
+        a = dict(p["attributes"]).get("SourceFile")
+        return (p["_u"](int.from_bytes(a[:2], "big")) or "none") if a and len(a) >= 2 else "none"
+
+    unit = re.search(r"(?<![\w$/.-])([\w$/-]+)\.groovy\b", question or "")
+    main = dict(re.findall(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$", re.sub(r"\r?\n ", "", mf), re.M)).get("Main-Class")
+    prim = None
+    if unit:
+        u_ = unit.group(1)
+        stem = u_.rsplit("/", 1)[-1]
+        hit = [n for n in gro if n[:-6].rsplit("/", 1)[-1] == stem and ("/" not in u_ or n[:-6].endswith(u_))]
+        hit = hit or [n for n in gro if sf(ents[n]) == stem + ".groovy" and "$" not in n.rsplit("/", 1)[-1]]
+        prim = (hit or [None])[0]
+        out["unit"] = stem + ".groovy"
+    if prim is None and not unit and main and main.replace(".", "/") + ".class" in gro:
+        prim = main.replace(".", "/") + ".class"
+    if prim is None and not unit:
+        prim = next((n for n in gro if sf(ents[n]) == n[:-6].rsplit("/", 1)[-1] + ".groovy"), gro[0])
+    if prim is None:
+        return out
+    p = ents[prim]
+    this = p["this"] or prim[:-6]
+    script = p["super"] == "groovy/lang/Script"
+    inner, ic = [], dict(p["attributes"]).get("InnerClasses")
+    if ic and len(ic) >= 2:
+        for j in range(int.from_bytes(ic[:2], "big")):
+            ii, oi, ni, _ = struct.unpack_from(">HHHH", ic, 2 + 8 * j)
+            c = p["_cname"](ii)
+            q = ents.get(f"{c}.class")
+            if c and c.startswith(this + "$") and (q["super"] == "groovy/lang/Closure" if q else
+                                                   re.search(r"\$_\w*closure\d+$", c)):
+                inner.append((c, p["_u"](ni) if ni else c.rsplit("$", 1)[-1]))
+    allc = sorted((n[:-6] for n in clos if n.startswith(this + "$")),   # groovyc's closure counter = compile order
+                  key=lambda c: int(re.search(r"(\d*)$", c).group(1) or 0))
+    calls = _groovy_callsites(p)
+    hc = None
+    for n in [prim] + [x for x in ents if x != prim]:
+        q = ents[n]
+        k = next((i for i, e in enumerate(q["cp"]) if e and e[0] == 8 and
+                  (q["_u"](e[1]) or "").encode()[:8].startswith(_GROOVY_HCFG)), None)
+        if k is not None:
+            hc = (q["this"] or n[:-6], k, q["_u"](q["cp"][k][1]))
+            break
+    out.update(groovy_kind="script" if script else "class", is_groovy_script=_jv(script), primary_class=this,
+               primary_class_dotted=this.replace("/", "."), primary_classfile=prim, primary_super_class=p["super"]
+               or "none", source_file=sf(p), closures=_jv([c for c, _ in inner]), closure_count=str(len(inner)),
+               closure_names=_jv([s for _, s in inner]),
+               closure_do_call=_jv({c: [m["descriptor"] for m in ents[c + ".class"]["methods"] if m["name"] == "doCall"]
+                                    for c in allc}),
+               all_closures=_jv(allc), all_closure_count=str(len(allc)), call_site_names=_jv(calls),
+               call_site_count=str(len(calls)), script_body_method="run" if script else "none",
+               groovy_class_major=str(p["major"]),
+               groovy_indy=_jv(bool(calls) and "$createCallSiteArray_1" not in {m["name"] for m in p["methods"]}))
+    if unit is None and out["unit"] == "none" and out["source_file"] != "none":
+        out["unit"] = out["source_file"]
+    if hc:
+        out.update(hcfg_class=hc[0], hcfg_in_primary=_jv(hc[0] == this), hcfg_cp_index=str(hc[1]), hcfg_constant=hc[2])
+    else:
+        out["hcfg_in_primary"] = "false"
+    return out
+
+
+def groovy_field(data, field, question=None):
+    """One groovy_facts field as an answer string ("none" absent, None not a jar/class). Never raises."""
+    f = groovy_facts(data, question)
+    return None if f is None else f.get(field, "none")
 
 
 # --- JVM twin-jar patch diff (D24 "spot the difference": vulnerable vs corrected Scala jar) --------------------------
@@ -614,15 +1107,50 @@ def _jpd_role(names_a, names_b):
     return max(votes, key=lambda k: (votes[k], len(k[0]) + len(k[1])))
 
 
-def _jpd_class(cb, role):
-    """One .class -> {"name", "size", "methods": [(name, descriptor, access, code facts | None)]}; None if unparsable."""
+# Compiler gensym digits inside class names: Clojure fn__269 / loading__6812__auto____267, Groovy _closure1, Kotlin
+# $lambda$0 / $lambda-1, Scala $anonfun$score$1 and javac $1 anonymous classes. Twins agree on them only by accident.
+_JGS = re.compile(r"(?:(?<=__)|(?<=_closure)|(?<=\$lambda[$-])|(?<=\$))(\d+)(?=$|[$_])")
+
+
+def _jpd_gensyms(names):
+    """{raw class name: positional canonical name} for every gensym-bearing class name of one side (the k-th
+    `fn__N` of a stem by numeric order -> `fn__#~k`), plus the compiled matcher; (None, {}) when there are none."""
+    groups = {}
+    for n in names:
+        nums = _JGS.findall(n)
+        if nums:
+            groups.setdefault(_JGS.sub("#", n), []).append((tuple(map(int, nums)), n))
+    gm = {n: f"{stem}~{k}" for stem, xs in groups.items() for k, (_, n) in enumerate(sorted(xs))}
+    gm.update({"L" + n: "L" + v for n, v in list(gm.items())})   # descriptor spelling Lpkg/Cls$fn__1;
+    return (_JGS_WORD, gm) if gm else (None, {})
+
+
+_JGS_WORD = re.compile(r"[\w/$]+")
+
+
+def _jpd_demunge(s):
+    """Clojure Compiler.demunge for a fn class's Var segment (parse_frame -> parse-frame, valid_QMARK_ -> valid?)."""
+    for a, b in (("_QMARK_", "?"), ("_BANG_", "!"), ("_STAR_", "*"), ("_GT_", ">"), ("_LT_", "<"), ("_EQ_", "="),
+                 ("_PLUS_", "+"), ("_SLASH_", "/"), ("_COLON_", ":"), ("_SINGLEQUOTE_", "'"), ("_PERCENT_", "%"),
+                 ("_AMPERSAND_", "&"), ("_CARET_", "^"), ("_BAR_", "|"), ("_SHARP_", "#"), ("_DOT_", "."),
+                 ("_", "-")):
+        s = s.replace(a, b)
+    return s
+
+
+def _jpd_class(cb, role, gs=(None, {})):
+    """One .class -> {"name", "size", "methods": [(name, descriptor, access, code facts | None)]}; None if unparsable.
+    `gs` = _jpd_gensyms of the class's own jar: gensym class names in the comparison tokens become positional."""
     p = classfile_parse(cb)
     if not p:
         return None
     cp, u, cname = p["cp"], p["_u"], p["_cname"]
     tok = role
+    grx, gmap = gs
 
-    def nm(s):
+    def nm(s, g=False):
+        if g and grx and s:
+            s = grx.sub(lambda m: gmap.get(m.group(0), m.group(0)), s)
         if not tok or s is None:
             return s
         return s.replace(tok, "\0R").replace(tok.lower(), "\0r")
@@ -680,10 +1208,15 @@ def _jpd_class(cb, role):
             code = raw[8:8 + ln]
             ins = jvm_code_decode(code)
             idx = {pc: k for k, (pc, _, _) in enumerate(ins)}
-            toks, invokes, lambdas, ops = [], [], [], []
+            toks, invokes, lambdas, ops, consts = [], [], [], [], []
             for pc, op, arg in ins:
                 mn = _JOPS[op]
                 ops.append(mn)
+                if 0x02 <= op <= 0x11:   # iconst_m1..dconst_1, bipush, sipush
+                    consts.append(str(arg[0] if op >= 0x10 else op - 3 if op <= 8 else op - 9 if op <= 0x0a
+                                      else float(op - 0x0b) if op <= 0x0d else float(op - 0x0e)))
+                elif op in (0x12, 0x13, 0x14) and cp[arg[0]] and cp[arg[0]][0] in (3, 4, 5, 6):
+                    consts.append(repr(cp[arg[0]][1]))
                 if op in _JBRANCH:
                     t = f"{mn} @{idx.get(pc + arg[0], '?')}"
                 elif op in (0xaa, 0xab):
@@ -704,17 +1237,20 @@ def _jpd_class(cb, role):
                     t = f"{mn} {cname(arg[0])} {arg[1:]}"
                 else:
                     t = f"{mn} {arg}" if arg else mn
-                toks.append(nm(t))
+                head, sp, rest = t.partition(" ")   # mnemonic kept: a role token "new" must not eat `new`
+                toks.append(head + sp + nm(rest, True))
             et, o = [], 8 + ln
             ne = struct.unpack_from(">H", raw, o)[0] if o + 2 <= len(raw) else 0
             for k in range(ne):
                 s, e_, h, ct = struct.unpack_from(">HHHH", raw, o + 2 + 8 * k)
                 et.append((idx.get(s), idx.get(e_, len(ins)), idx.get(h), nm(cname(ct)) if ct else "any"))
             cf = {"tokens": tuple(toks), "exc": tuple(et), "code_length": ln, "insns": len(ins), "ops": ops,
+                  "consts": consts,
                   "invokes": [(nm(a), nm(b)) for a, b in invokes], "lambdas": [nm(x) for x in lambdas],
                   "max_stack": struct.unpack_from(">H", raw, 0)[0], "max_locals": struct.unpack_from(">H", raw, 2)[0]}
         methods.append((m["name"], m["descriptor"], m["access"], cf))
-    return {"name": p["this"], "norm": nm(p["this"]), "size": len(cb), "methods": methods, "nm": nm}
+    return {"name": p["this"], "norm": nm(p["this"], True), "size": len(cb), "methods": methods, "nm": nm,
+            "super": p["super"] or ""}
 
 
 def _jpd_classes(blob):
@@ -723,6 +1259,27 @@ def _jpd_classes(blob):
         p = classfile_parse(b)
         return [((p and p["this"] or "class") + ".class", b)]
     return [(n, c) for n, c in jar_app_classes(b) if c[:4] == b"\xca\xfe\xba\xbe"]
+
+
+def _jpd_jvm_lang_facts(changed, role):
+    """Clojure per-Var view of the changed classes: `ns$var` / `ns$var$fn__N` AFunction/RestFn classes -> demunged
+    Var names (changed_vars), plus the changed method list across every changed class (role token stripped)."""
+    out, cl, allm = {}, False, []
+    for A, _, ch in changed:
+        cn = A["name"]
+        nr = cn.replace(role, "").replace(role.lower(), "") if role else cn
+        allm += [f"{nr.replace('/', '.')}.{n}{d}" for n, d, _, _ in ch]
+        if A["super"].startswith("clojure/lang/") and "$" in cn:
+            seg = cn.split("$")[1]
+            if seg and not _JGS.search("$" + seg) and not seg.startswith(("loading__", "fn__")):
+                cl = True
+                v = _jpd_demunge(seg)
+                if v not in out:
+                    out[v] = None
+    f = {"changed_methods_all": _jv(_jpd_uniq(allm)), "changed_methods_all_count": str(len(_jpd_uniq(allm)))}
+    if cl:
+        f.update({"changed_vars": _jv(list(out)), "changed_var": next(iter(out)), "changed_var_count": str(len(out))})
+    return f
 
 
 def _jpd_uniq(xs):
@@ -742,7 +1299,7 @@ def _jpd_fix_kind(ma, mb):
     if grew("ifnull", "ifnonnull") or any(re.search(r"(Option\$\.apply|Optional\.ofNullable|requireNonNull|"
                                                     r"Objects\.(isNull|nonNull)|checkNotNull)$", x) for x in add_inv):
         return "null_guard"
-    if grew("arraylength") or any(re.search(r"(checkIndex|checkFromToIndex|isDefinedAt|lift|indices)$", x)
+    if grew("arraylength") or any(re.search(r"(checkIndex|checkFromToIndex|isDefinedAt|lift|indices|RT\.count)$", x)
                                   for x in add_inv):
         return "bounds_check"
     if any(re.search(r"\.(length|isEmpty|nonEmpty|size|isBlank)(\$extension)?$", x) for x in add_inv) \
@@ -774,15 +1331,16 @@ def _jvm_patch_diff(jar_a, jar_b):
 
     def names(cl):
         return [n[:-6] if n.endswith(".class") else n for n, _ in cl]
-    ra, rb = _jpd_role(names(ca), names(cb))
-    pa = [x for x in (_jpd_class(c, ra) for _, c in ca) if x]
-    pb = [x for x in (_jpd_class(c, rb) for _, c in cb) if x]
+    ra, rb = _jpd_role([_JGS.sub("#", n) for n in names(ca)], [_JGS.sub("#", n) for n in names(cb)])
+    ga, gb = _jpd_gensyms(names(ca)), _jpd_gensyms(names(cb))
+    pa = [x for x in (_jpd_class(c, ra, ga) for _, c in ca) if x]
+    pb = [x for x in (_jpd_class(c, rb, gb) for _, c in cb) if x]
     if not pa or not pb:
         return None
     bmap = {x["norm"]: x for x in pb}
     if len(pa) == len(pb) == 1:
         bmap = {pa[0]["norm"]: pb[0]}
-    rows, changed_classes = [], []
+    rows, changed_classes, all_changed = [], [], []
     for A in pa:
         B = bmap.get(A["norm"])
         if not B:
@@ -801,9 +1359,11 @@ def _jvm_patch_diff(jar_a, jar_b):
         removed = [(n, d) for n, d, _, _ in A["methods"] if (n, A["nm"](d)) not in mb]
         if ch or added or removed:
             changed_classes.append(A["name"])
+            all_changed.append((A, B, ch))
         rows.append((A, B, ch, same, added, removed))
     if not rows:
         return None
+    jf = _jpd_jvm_lang_facts(all_changed, ra)
     rows.sort(key=lambda r: (not r[2], not (r[4] or r[5])))
     A, B, ch, same, added, removed = rows[0]
     f = {"role_a": ra or "none", "role_b": rb or "none", "classes_compared": str(len(rows)),
@@ -811,6 +1371,7 @@ def _jvm_patch_diff(jar_a, jar_b):
     if not changed_classes:
         f.update({"changed_methods": "[]", "changed_method_names": "[]", "changed_method_count": "0",
                   "fix_kind": "none", "changed_class": "none"})
+        f.update(jf)
         return f
     sig = lambda n, d: f"{n}{d}"   # noqa: E731
     first = ch[0] if ch else None
@@ -863,6 +1424,22 @@ def _jvm_patch_diff(jar_a, jar_b):
     f["catch_types_a"] = _jv(_jpd_uniq(unrole(e[3], ra) for e in (xa or {}).get("exc", ())))
     f["catch_types_b"] = _jv(_jpd_uniq(unrole(e[3], rb) for e in (xb or {}).get("exc", ())))
     f["fix_kind"] = _jpd_fix_kind(xa, xb) if first else ("method_added" if added else "method_removed")
+    f.update(jf)
+    ca_, cb_ = [], []   # constants pushed anywhere in the changed class (ldc/ldc2_w numerics, *const_*, *ipush)
+    for _, _, _, c in A["methods"]:
+        ca_ += (c or {}).get("consts", [])
+    for _, _, _, c in B["methods"]:
+        cb_ += (c or {}).get("consts", [])
+    f["added_constants"] = _jv(_jpd_uniq(x for x in cb_ if x not in ca_))
+    f["removed_constants"] = _jv(_jpd_uniq(x for x in ca_ if x not in cb_))
+    guard = re.compile(r"^(if\w*|[lfd]cmp[lg]?|arraylength|athrow|instanceof)$")
+    f["added_guard_opcodes"] = _jv(sorted({o for o in ob if guard.match(o) and ob.count(o) > oa.count(o)}))
+    gcall = re.compile(r"(RT\.count|\.length|\.size|\.isEmpty|\.nonEmpty(\$extension)?|Option\$\.apply|"
+                       r"Optional\.ofNullable|requireNonNull|checkIndex|checkFromToIndex|isDefinedAt|\.lift|"
+                       r"Intrinsics\.checkNotNull\w*|Objects\.(isNull|nonNull)|Numbers\.(lt|lte|gt|gte)|"
+                       r"\.(contains|containsKey))$")
+    f["added_guard_calls"] = _jv(_jpd_uniq(unrole(x, rb) for x in ib if x not in ia and gcall.search(x)))
+    f["guard_added"] = _jv(f["added_guard_opcodes"] != "[]" or f["added_guard_calls"] != "[]")
     for k in [k for k in f if k.endswith(("_a", "_b"))]:
         base, s = k[:-2], k[-1]
         f[base + ("_before" if s == "a" else "_after")] = f[k]
@@ -924,7 +1501,7 @@ def _npd_elf(data):
                 exe.append((s["sh_addr"], s["sh_addr"] + len(d), d, s.name))
     if not exe:
         return None
-    slot = {}
+    slot, slot_raw = {}, {}
     for s in ef.iter_sections():
         if isinstance(s, RelocationSection) and s["sh_link"]:
             st = ef.get_section(s["sh_link"])
@@ -933,11 +1510,12 @@ def _npd_elf(data):
                     nm_ = st.get_symbol(r["r_info_sym"]).name
                     if nm_:
                         slot[r["r_offset"]] = _npd_imp(nm_)
+                        slot_raw[r["r_offset"]] = nm_.split("@")[0]
     import capstone
     md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64 if bits == 64 else capstone.CS_MODE_32)
     gotplt = next((lo for lo, _, _, n in secs if n == ".got.plt"), 0) or next((lo for lo, _, _, n in secs
                                                                                 if n == ".got"), 0)
-    imp = {}
+    imp, imp_raw = {}, {}
     for lo, hi, d, n in exe:
         if not n.startswith(".plt"):
             continue
@@ -954,7 +1532,8 @@ def _npd_elf(data):
                 tgt = int(m.group(1), 16) + (gotplt if "ebx" in op else 0)
             if tgt in slot:
                 imp[lo + ((a - lo) & ~15)] = slot[tgt]
-    funcs, obj, seen = [], {}, set()
+                imp_raw[lo + ((a - lo) & ~15)] = slot_raw[tgt]
+    funcs, obj, obj_size, seen = [], {}, {}, set()
     for s in ef.iter_sections():
         if not isinstance(s, SymbolTableSection):
             continue
@@ -962,6 +1541,7 @@ def _npd_elf(data):
             t, v, z = y["st_info"]["type"], y["st_value"], y["st_size"]
             if t == "STT_OBJECT" and y.name and v:
                 obj.setdefault(v, y.name)
+                obj_size.setdefault(v, z)
             if t != "STT_FUNC" or not v or not z or v in seen or not y.name:
                 continue
             if any(lo <= v < hi for lo, hi, _, _ in exe):
@@ -981,7 +1561,8 @@ def _npd_elf(data):
         except Exception:   # noqa: BLE001 -- no/odd eh_frame
             pass
     funcs.sort()
-    return {"bits": bits, "funcs": funcs, "exec": exe, "secs": secs, "imp": imp, "slot": slot, "obj": obj, "md": md}
+    return {"bits": bits, "funcs": funcs, "exec": exe, "secs": secs, "imp": imp, "slot": slot, "obj": obj, "md": md,
+            "imp_raw": imp_raw, "slot_raw": slot_raw, "obj_size": obj_size}
 
 
 def _npd_same_raw(x, y):
@@ -1343,6 +1924,433 @@ def native_patch_diff_field(a, b, field):
     return None if f is None else f.get(field, "none")
 
 
+# --- Stripped twin function matching (BinDiff/Diaphora-style, no symbols) --------------------------------------------
+# Function starts/ranges = .eh_frame FDEs (_npd_elf), bodies = _npd_body tokens with callees as fn:0x<addr>. Matching
+# rounds over the unmatched set: unique strict hash (callees blanked) -> unique register-blind hash -> unique
+# strings/imports signature -> call-graph propagation (positional callees of matched pairs) -> last 1:1 leftover ->
+# best (mnemonic shape + refs) score >= 0.6. Matched-but-different (callees renamed to their pair) = changed; the
+# patched function = the changed pair with the biggest register-blind delta. An optional symbolized twin names it
+# (same text bytes -> by address, else by the same matcher). Answer vocabulary is SPECULATIVE (no GM label yet).
+_STW_REG = re.compile(r"\b(?:[re]?[a-d]x|[a-d][lh]|[re]?[sd]il?|[re]?[sb]pl?|r(?:[89]|1[0-5])[dwb]?|[xy]mm\d+)\b")
+_STW_FN = re.compile(r"fn:0x([0-9a-f]+)")
+
+
+def _stw_funcs(img, deadline):
+    """[{addr, size, toks, strict, loose, refs, callees, mn}] for every function of an _npd_elf image."""
+    names = {f[0]: hex(f[0]) for f in img["funcs"]}
+    out = []
+    for f in img["funcs"]:
+        if time.monotonic() > deadline:
+            return None
+        if _NPD_RUNTIME.match(f[2]):
+            continue
+        body = _npd_body(img, f, names)
+        toks = [t for t, _, _ in body]
+        blank = [_STW_FN.sub("fn", t) for t in toks]
+        out.append({"addr": f[0], "size": f[1], "name": f[2] if f[3] else None, "toks": toks,
+                    "strict": hash(tuple(blank)), "loose": hash(tuple(_STW_REG.sub("r", t) for t in blank)),
+                    "refs": frozenset(t.split(" ", 1)[1] for t in toks if " " in t and ("imp:" in t or "str:" in t)),
+                    "callees": [int(m, 16) for t in toks for m in _STW_FN.findall(t)],
+                    "mn": [b for _, b, _ in body], "bbs": 1 + sum(b.startswith("j") for _, b, _ in body)})
+    return out
+
+
+def _stw_match(A, B):
+    """{A index: B index} over two _stw_funcs lists."""
+    m, ua, ub = {}, set(range(len(A))), set(range(len(B)))
+
+    def pair(i, j):
+        m[i] = j
+        ua.discard(i)
+        ub.discard(j)
+
+    def uniq(key):
+        ka, kb = {}, {}
+        for i in ua:
+            ka.setdefault(key(A[i]), []).append(i)
+        for j in ub:
+            kb.setdefault(key(B[j]), []).append(j)
+        for k, xs in ka.items():
+            if k is not None and len(xs) == 1 and len(kb.get(k, ())) == 1:
+                pair(xs[0], kb[k][0])
+    ia, ib = {f["addr"]: i for i, f in enumerate(A)}, {f["addr"]: j for j, f in enumerate(B)}
+
+    def propagate():
+        grew = True
+        while grew:
+            grew = False
+            for i, j in list(m.items()):
+                ca = [ia[c] for c in dict.fromkeys(A[i]["callees"]) if c in ia]
+                cb = [ib[c] for c in dict.fromkeys(B[j]["callees"]) if c in ib]
+                if len(ca) == len(cb):
+                    for x, y in zip(ca, cb):
+                        if x in ua and y in ub:
+                            pair(x, y)
+                            grew = True
+    for key in (lambda f: (f["strict"], f["size"]), lambda f: f["strict"], lambda f: f["loose"],
+                lambda f: f["refs"] or None):
+        uniq(key)
+        propagate()
+    ka, kb = {}, {}   # duplicate bodies (thunks, wrappers): same count on both sides -> pair in address order
+    for i in sorted(ua):
+        ka.setdefault(A[i]["strict"], []).append(i)
+    for j in sorted(ub):
+        kb.setdefault(B[j]["strict"], []).append(j)
+    for k, xs in ka.items():
+        if len(xs) == len(kb.get(k, ())):
+            for i, j in zip(xs, kb[k]):
+                pair(i, j)
+    propagate()
+    if len(ua) == 1 and len(ub) == 1:
+        pair(ua.pop(), ub.pop())
+    import difflib
+    if ua and ub and len(ua) * len(ub) <= 20000:
+        cand = []
+        for i in ua:
+            for j in ub:
+                sa, sb = A[i]["refs"], B[j]["refs"]
+                jac = len(sa & sb) / len(sa | sb) if sa | sb else 0.5
+                r = difflib.SequenceMatcher(None, A[i]["mn"], B[j]["mn"], autojunk=False).quick_ratio()
+                cand.append(((jac + r) / 2, -abs(A[i]["addr"] - B[j]["addr"]), i, j))
+        for sc, _, i, j in sorted(cand, reverse=True):
+            if sc >= 0.6 and i in ua and j in ub:
+                pair(i, j)
+        propagate()
+    return m
+
+
+def _stw_fde(img, data):
+    """{pc_begin: pc_range} from .eh_frame (hdr table first, pyelftools CFI fallback)."""
+    out = dict(_npd_ehhdr(img["secs"]))
+    if not out:
+        from elftools.elf.elffile import ELFFile
+        for e in ELFFile(io.BytesIO(data)).get_dwarf_info().EH_CFI_entries():
+            h = getattr(e, "header", None)
+            if h is not None and "initial_location" in h:
+                out[h["initial_location"]] = h["address_range"]
+    return out
+
+
+def _stw_off(data, va):
+    from elftools.elf.elffile import ELFFile
+    for s in ELFFile(io.BytesIO(data)).iter_segments():
+        if s["p_type"] == "PT_LOAD" and s["p_vaddr"] <= va < s["p_vaddr"] + s["p_filesz"]:
+            return va - s["p_vaddr"] + s["p_offset"]
+    return None
+
+
+def _stw_sym_names(sym, side, img_side, F_side):
+    """{side addr: name} from a symbolized twin: same text bytes -> by address, else by _stw_match."""
+    if sym is None or sym[:4] != b"\x7fELF":
+        return {}
+    ims = _npd_elf(sym)
+    if not ims or not all(f[3] for f in ims["funcs"]):
+        return {}
+    tx = lambda im: [(lo, d) for lo, _, d, n in im["exec"] if n == ".text"]   # noqa: E731
+    byaddr = {f[0]: f[2] for f in ims["funcs"]}
+    if tx(ims) == tx(img_side):
+        return {f["addr"]: byaddr[f["addr"]] for f in F_side if f["addr"] in byaddr}
+    S = _stw_funcs(ims, time.monotonic() + 1.5)
+    if not S:
+        return {}
+    return {F_side[i]["addr"]: S[j]["name"] for i, j in _stw_match(F_side, S).items()}
+
+
+def stripped_twin_match(a, b, sym=None):
+    """Match functions of two STRIPPED x86/x86-64 ELF twins (A = vulnerable/before, B = patched/after; bytes) and
+    report the changed one -> {field: answer string}; None when either side is not a parsable x86 ELF with functions.
+    Optional `sym` = a symbolized build of A or B (names the functions). Fields: function_count_a/b,
+    matched_function_count, changed_function_count, changed_functions (sub_<A va> or symbol name, JSON),
+    added_functions / removed_functions, patched_function / changed_function (name when sym resolves it, else
+    sub_<hex>), changed_function_name ("none" without sym), changed_function_va(_a/_b) (hex),
+    changed_function_offset(_a/_b) (file offset hex; _dec decimal), eh_frame_range(_a/_b) ("0xSTART-0xEND", end
+    exclusive), eh_frame_start/_end/_size(_a/_b), function_size_a/b, instruction_count_a/b, basic_block_count_a/b.
+    _before/_after, _vulnerable/_fixed/_patched alias every _a/_b field. Identical twins -> changed_function "none"."""
+    try:
+        return _stripped_twin_match(bytes(a), bytes(b), None if sym is None else bytes(sym))
+    except Exception:   # noqa: BLE001 -- malformed / decoy input: no answer
+        return None
+
+
+def _stripped_twin_match(a, b, sym):
+    if a[:4] != b"\x7fELF" or b[:4] != b"\x7fELF":
+        return None
+    ia, ib = _npd_elf(a), _npd_elf(b)
+    if not ia or not ib or not ia["funcs"] or not ib["funcs"] or max(len(ia["funcs"]), len(ib["funcs"])) > 2500:
+        return None   # no anchor at that size: too slow to align inside the clock
+    deadline = time.monotonic() + 1.5
+    A, B = _stw_funcs(ia, deadline), _stw_funcs(ib, deadline)
+    if not A or not B:
+        return None
+    m = _stw_match(A, B)
+    pid_a = {A[i]["addr"]: f"p{k}" for k, (i, _) in enumerate(sorted(m.items()))}
+    pid_b = {B[j]["addr"]: f"p{k}" for k, (_, j) in enumerate(sorted(m.items()))}
+
+    def ren(f, pid):
+        return [_STW_FN.sub(lambda x: "fn:" + pid.get(int(x.group(1), 16), "u" + x.group(1)), t) for t in f["toks"]]
+    changed = []
+    for i, j in sorted(m.items()):
+        ta, tb = ren(A[i], pid_a), ren(B[j], pid_b)
+        if ta != tb:
+            la, lb = [_STW_REG.sub("r", t) for t in ta], [_STW_REG.sub("r", t) for t in tb]
+            import difflib
+            delta = 0 if la == lb else sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in difflib.SequenceMatcher(
+                None, la, lb, autojunk=False).get_opcodes() if op != "equal")
+            changed.append((delta, i, j))
+    na, nb = _stw_sym_names(sym, a, ia, A), _stw_sym_names(sym, b, ib, B)
+    name_a = {f["addr"]: f["name"] or na.get(f["addr"]) or nb.get(B[m[i]]["addr"] if i in m else -1) or
+              f"sub_{f['addr']:x}" for i, f in enumerate(A)}
+    inv = {j: i for i, j in m.items()}
+    name_b = {f["addr"]: f["name"] or nb.get(f["addr"]) or na.get(A[inv[j]]["addr"] if j in inv else -1) or
+              f"sub_{f['addr']:x}" for j, f in enumerate(B)}
+    fde_a, fde_b = _stw_fde(ia, a), _stw_fde(ib, b)
+    out = {"function_count_a": str(len(A)), "function_count_b": str(len(B)), "matched_function_count": str(len(m)),
+           "changed_function_count": str(len(changed)),
+           "changed_functions": _jv([name_a[A[i]["addr"]] for _, i, _ in changed]),
+           "added_functions": _jv([name_b[f["addr"]] for j, f in enumerate(B) if j not in inv]),
+           "removed_functions": _jv([name_a[f["addr"]] for i, f in enumerate(A) if i not in m])}
+    if not changed:
+        out.update({"changed_function": "none", "patched_function": "none", "changed_function_name": "none"})
+        return out
+    _, i, j = max(changed, key=lambda c: (c[0], -A[c[1]]["addr"]))
+    fa, fb = A[i], B[j]
+    nm_ = name_a[fa["addr"]]
+    real = nm_ if not nm_.startswith("sub_") or fa["name"] or fa["addr"] in na or fb["addr"] in nb else "none"
+    out.update({"changed_function": nm_, "patched_function": nm_, "changed_function_name": real,
+                "changed_function_a": nm_, "changed_function_b": name_b[fb["addr"]]})
+    for s, f, img, data, fde in (("a", fa, ia, a, fde_a), ("b", fb, ib, b, fde_b)):
+        off = _stw_off(data, f["addr"])
+        r = fde.get(f["addr"])
+        out.update({f"changed_function_va_{s}": hex(f["addr"]), f"function_size_{s}": str(f["size"]),
+                    f"changed_function_offset_{s}": hex(off) if off is not None else "none",
+                    f"changed_function_offset_dec_{s}": str(off) if off is not None else "none",
+                    f"instruction_count_{s}": str(len(f["toks"])), f"basic_block_count_{s}": str(f["bbs"]),
+                    f"eh_frame_range_{s}": f"{hex(f['addr'])}-{hex(f['addr'] + r)}" if r else "none",
+                    f"eh_frame_start_{s}": hex(f["addr"]) if r else "none",
+                    f"eh_frame_end_{s}": hex(f["addr"] + r) if r else "none",
+                    f"eh_frame_size_{s}": str(r) if r else "none"})
+    for k in ("changed_function_va", "changed_function_offset", "changed_function_offset_dec", "eh_frame_range",
+              "eh_frame_start", "eh_frame_end", "eh_frame_size"):
+        out[k] = out[k + "_a"]
+    out["changed_function_address"] = out["changed_function_va"]
+    for k in [k for k in out if k.endswith(("_a", "_b"))]:
+        base, s = k[:-2], k[-1]
+        for al in (("_before", "_after"), ("_vulnerable", "_fixed"), ("_vulnerable", "_patched")):
+            out[base + al[s == "b"]] = out[k]
+    return out
+
+
+def stripped_twin_field(a, b, field, sym=None):
+    """One stripped_twin_match fact; "none" when absent, None when the inputs aren't x86 ELF twins."""
+    f = stripped_twin_match(a, b, sym)
+    return None if f is None else f.get(field, "none")
+
+
+# --- Bounds-check twins (C manual guard / UBSan / FORTIFY / Rust / Go / Swift) on top of native_patch_diff ----------
+# Per changed function: bounds-check sink calls by family, cmp+jcc guards, indexed memory accesses ([base+idx*scale]) and
+# how many have no earlier guard in linear order (a dominance PROXY), the guard limit -> buffer length, the indexed
+# .data/.bss object (st_size) and which twin carries more checks. Sink families from real gcc/rustc/go 1.26 builds.
+_BCK_SINKS = (("ubsan", re.compile(r"^__ubsan_handle_out_of_bounds")),
+              ("rust_panic_bounds_check", re.compile(r"panic_bounds_check")),
+              ("rust_slice_index_fail", re.compile(r"slice_(?:start_|end_)?index_(?:len|order)_fail|str_index_overflow")),
+              ("go_panic_index", re.compile(r"^runtime\.(?:goP|p)anicIndex")),
+              ("go_panic_slice", re.compile(r"^runtime\.(?:goP|p)anicSlice")),
+              ("go_panic_bounds", re.compile(r"^runtime\.(?:panicBounds|panicExtend|goPanicExtend)")),
+              ("swift_index_out_of_range", re.compile(r"fatalErrorMessage|_assertionFailure")),
+              ("fortify_chk", re.compile(r"^__(?!stack_chk)\w+_chk$|^__chk_fail$")))
+_BCK_LANG = {"ubsan": "c", "fortify_chk": "c", "swift_index_out_of_range": "swift"}
+_BCK_MEM = re.compile(r"\[([^\]]+)\]")
+_BCK_REG = r"(?:[re]?[a-d]x|[re]?[sd]il?|[re]?[sb]pl?|r\d+[dwb]?|[a-d]l)"
+_BCK_IDX = re.compile(rf"^(?:{_BCK_REG}\s*\+\s*)?({_BCK_REG})\*([1248])\b|^{_BCK_REG}\s*\+\s*({_BCK_REG})(?:\s*[+-]|$)")
+_BCK_CHK_LEN = {"memcpy": "rcx", "memmove": "rcx", "memset": "rcx", "strncpy": "rcx", "strncat": "rcx",
+                "stpncpy": "rcx", "read": "rcx", "fgets": "rcx", "strcpy": "rdx", "strcat": "rdx", "stpcpy": "rdx",
+                "snprintf": "rcx", "vsnprintf": "rcx", "sprintf": "rcx", "vsprintf": "rcx", "gets": "rsi"}
+
+
+def _bck_demangle(n):
+    """Rust legacy `_ZN4core9panicking18panic_bounds_check17h..E` -> core::panicking::panic_bounds_check (hash dropped)."""
+    if not n.startswith("_ZN"):
+        return n
+    k, parts = 3, []
+    while k < len(n) and n[k].isdigit():
+        j = k
+        while n[j].isdigit():
+            j += 1
+        ln = int(n[k:j])
+        parts.append(n[j:j + ln])
+        k = j + ln
+    if parts and re.fullmatch(r"h[0-9a-f]{16}", parts[-1]):
+        parts.pop()
+    return "::".join(parts) or n
+
+
+def _bck_reg64(r):
+    r = r.strip()
+    m = re.fullmatch(r"r(\d+)[dwb]?", r)
+    if m:
+        return f"r{m.group(1)}"
+    return {"eax": "rax", "ebx": "rbx", "ecx": "rcx", "edx": "rdx", "esi": "rsi", "edi": "rdi", "ebp": "rbp",
+            "esp": "rsp", "al": "rax", "bl": "rbx", "cl": "rcx", "dl": "rdx", "sil": "rsi", "dil": "rdi"}.get(r, r)
+
+
+def _bck_func(img, fn, fnames):
+    a0, sz, name, _ = fn
+    code = _npd_bytes(img, a0, sz)
+    ins = [(a, s, mn, op) for a, s, mn, op in img["md"].disasm_lite(code, a0) if mn not in ("nop", "int3")]
+    calls, guards, acc, objs, regimm = [], [], [], [], {}
+    guarded = False
+    for k, (a, s, mn, op) in enumerate(ins):
+        base = mn.split()[-1]
+        if base == "mov":
+            m = re.fullmatch(r"(\w+), (0x[0-9a-f]+|\d+)", op)
+            if m:
+                regimm[_bck_reg64(m.group(1))] = int(m.group(2), 0)
+        rip = _NPD_RIP.search(op)
+        if rip:
+            t = a + s + (1 if rip.group(2) == "+" else -1) * int(rip.group(3), 16)
+            if base == "call" or base == "jmp":
+                nm_ = img["slot_raw"].get(t)
+                if nm_:
+                    calls.append((nm_, dict(regimm)))
+                    regimm = {}
+                continue
+            if t in img["obj"]:
+                objs.append((img["obj"][t], img["obj_size"].get(t, 0)))
+            elif b"Index out of range" in _npd_bytes(img, t, 64):
+                calls.append(("swift:Index out of range", {}))
+        if base in ("call", "jmp") and re.fullmatch(r"0x[0-9a-f]+", op):
+            t = int(op, 16)
+            nm_ = img["imp_raw"].get(t) or (fnames.get(t) if base == "call" or not a0 <= t < a0 + sz else None)
+            if nm_:
+                calls.append((nm_, dict(regimm)))
+                regimm = {}
+            continue
+        if base == "cmp" and k + 1 < len(ins) and ins[k + 1][2] in _NPD_JCC:
+            guards.append((op, ins[k + 1][2]))
+            guarded = True
+        if base not in ("lea", "nop") and not base.startswith("prefetch"):
+            for mm in _BCK_MEM.findall(op):
+                m = _BCK_IDX.match(mm.strip())
+                if m and "rip" not in mm and "sp" not in (m.group(1) or m.group(3) or ""):
+                    acc.append({"scale": int(m.group(2) or 1), "guarded": guarded, "op": f"{mn} {op}"})
+    sinks = []
+    for nm_, regs in calls:
+        for fam, rx in _BCK_SINKS:
+            if rx.search(nm_) or rx.search(_bck_demangle(nm_)) or fam.startswith("swift") and nm_.startswith("swift:"):
+                ln = None
+                if fam.startswith("rust"):
+                    ln = regs.get("rsi")
+                elif fam == "fortify_chk":
+                    ln = regs.get(_BCK_CHK_LEN.get(_npd_imp(nm_), ""))
+                sinks.append((fam, _bck_demangle(nm_), ln))
+                break
+    return {"sinks": sinks, "guards": guards, "acc": acc, "objs": objs, "frame": _npd_frame(_npd_body(img, fn, fnames))}
+
+
+def bounds_check_facts(a, b):
+    """Bounds-check twin facts (A/B = ELF x86 twins, normally A unchecked, B checked) -> {field: answer string}; None
+    when the inputs aren't x86 ELF twins. Fields (first differing changed function; "<field>:<function>" for each):
+    bounds_check_twin ("a"/"b"/"none" = which twin carries more checks; aliases checked_twin / added_check_twin),
+    bounds_check_added (B adds), bounds_check_function, bounds_check_kind (manual_compare / ubsan /
+    rust_panic_bounds_check / rust_slice_index_fail / go_panic_index / go_panic_slice / go_panic_bounds /
+    swift_index_out_of_range / fortify_chk), bounds_check_language (c/rust/go/swift), bounds_check_sink(s_a/_b),
+    bounds_check_calls_a/b, bounds_compares_a/b, bounds_checks_a/b, indexed_accesses_a/b, unchecked_accesses_a/b,
+    bounds_limit (guard immediate) / bounds_check_jcc / buffer_length (limit+1 for ja/jbe/jg/jle, else limit; else the
+    Rust len / FORTIFY object-size argument; else object size / scale), buffer_object / buffer_object_size,
+    access_scale, frame_size_a/b; _before/_after, _vulnerable/_fixed alias every _a/_b."""
+    try:
+        return _bounds_check_facts(bytes(a), bytes(b))
+    except Exception:   # noqa: BLE001 -- malformed / decoy input: no answer
+        return None
+
+
+def _bounds_check_facts(a, b):
+    d = _native_patch_diff(a, b)
+    if d is None:
+        return None
+    f = {"bounds_check_twin": "none", "bounds_check_added": "false", "bounds_check_function": "none",
+         "bounds_check_kind": "none"}
+    names = json.loads(d["changed_functions"]) if d.get("changed_functions", "[]") != "[]" else []
+    if not names:
+        return _bck_alias(f)
+    ia, ib = _npd_elf(a), _npd_elf(b)
+    fna, fnb = ({x[0]: x[2] for x in i["funcs"]} for i in (ia, ib))
+    first = True
+    for nm_ in names:
+        aa, ab = (int(d.get(f"changed_function_address_{s}:{nm_}", "-1"), 16) for s in "ab")
+        xa = next((x for x in ia["funcs"] if x[0] == aa), None)
+        xb = next((x for x in ib["funcs"] if x[0] == ab), None)
+        if not xa or not xb:
+            continue
+        ra, rb = _bck_func(ia, xa, fna), _bck_func(ib, xb, fnb)
+        pre = {}
+        for s, r in (("a", ra), ("b", rb)):
+            pre[f"bounds_check_calls_{s}"] = len(r["sinks"])
+            pre[f"bounds_compares_{s}"] = len(r["guards"])
+            pre[f"bounds_checks_{s}"] = len(r["sinks"]) + len(r["guards"])
+            pre[f"indexed_accesses_{s}"] = len(r["acc"])
+            pre[f"unchecked_accesses_{s}"] = sum(1 for x in r["acc"] if not x["guarded"])
+            pre[f"bounds_check_sinks_{s}"] = _jv(list(dict.fromkeys(x[1] for x in r["sinks"])))
+            pre[f"frame_size_{s}"] = "none" if r["frame"] is None else r["frame"]
+        ca, cb = pre["bounds_checks_a"], pre["bounds_checks_b"]
+        if ca == cb and pre["unchecked_accesses_a"] != pre["unchecked_accesses_b"]:
+            ca, cb = -pre["unchecked_accesses_a"], -pre["unchecked_accesses_b"]
+        twin = "b" if cb > ca else "a" if ca > cb else "none"
+        chk, unc = (rb, ra) if twin != "a" else (ra, rb)
+        new_s = [x for x in chk["sinks"] if (x[0], x[1]) not in {(y[0], y[1]) for y in unc["sinks"]}] or chk["sinks"]
+        new_g = [x for x in chk["guards"] if x not in unc["guards"]] or chk["guards"]
+        kind = new_s[0][0] if new_s and twin != "none" else "manual_compare" if new_g and twin != "none" else "none"
+        lang = _BCK_LANG.get(kind) or (kind.split("_")[0] if kind.startswith(("rust", "go")) else None)
+        if not lang:
+            allsyms = " ".join(list(img_n for img_n in fnb.values())[:4000])
+            lang = "go" if "runtime.gopanic" in allsyms or "runtime.main" in allsyms else \
+                "rust" if "_ZN4core" in allsyms or "_RN" in allsyms or "rust_begin_unwind" in allsyms else "c"
+        lim = jcc = ln = None
+        for op, j in new_g:
+            m = re.search(r", (0x[0-9a-f]+|\d+)$", op)
+            if m:
+                lim, jcc = int(m.group(1), 0), j
+                ln = lim + 1 if j in ("ja", "jbe", "jg", "jle") else lim
+                break
+        if jcc is None and new_g:
+            jcc = new_g[0][1]
+        if ln is None:
+            ln = next((x[2] for x in new_s if x[2] is not None), None)
+        ob = next(iter(chk["objs"] or unc["objs"]), None)
+        sc = next((x["scale"] for x in chk["acc"] or unc["acc"]), None)
+        if ln is None and ob and ob[1] and sc:
+            ln = ob[1] // sc
+        pre.update({"bounds_check_twin": twin, "checked_twin": twin, "added_check_twin": twin,
+                    "bounds_check_added": str(twin == "b").lower(), "bounds_check_function": nm_,
+                    "bounds_check_kind": kind, "bounds_check_language": lang,
+                    "bounds_check_sink": new_s[0][1] if new_s and twin != "none" else "none",
+                    "bounds_limit": "none" if lim is None else lim, "bounds_limit_hex": "none" if lim is None
+                    else hex(lim), "bounds_check_jcc": jcc or "none", "buffer_length": "none" if ln is None else ln,
+                    "buffer_object": ob[0] if ob else "none", "buffer_object_size": ob[1] if ob else "none",
+                    "access_scale": "none" if sc is None else sc})
+        pre = {k: str(v) for k, v in pre.items()}
+        for k, v in pre.items():
+            f[f"{k}:{nm_}"] = v
+        if first and (twin != "none" or nm_ == names[-1]):
+            f.update(pre)
+            first = False
+    return _bck_alias(f)
+
+
+def _bck_alias(f):
+    for k in [k for k in f if k.endswith(("_a", "_b")) and ":" not in k]:
+        base, s = k[:-2], k[-1]
+        for al in (("_before", "_after"), ("_vulnerable", "_fixed"), ("_unchecked", "_checked")):
+            f[base + al[s == "b"]] = f[k]
+    return f
+
+
+def bounds_check_field(a, b, field):
+    """One bounds_check_facts fact; "none" when absent, None when the inputs aren't x86 ELF twins."""
+    f = bounds_check_facts(a, b)
+    return None if f is None else f.get(field, "none")
+
+
 # --- Vulnerability class of a twin-build fix (CWE token + snake_case name) ------------------------------------------
 # Rule table over the jvm_patch_diff / native_patch_diff facts (A = vulnerable, B = fixed). The GM spelling is
 # UNKNOWN (D24 fixture = CWE-476 null guard): answer "CWE-<n>" / "<n>" / the snake_case name, or hand an enum's
@@ -1370,6 +2378,10 @@ _VC_NAMES = {
     248: ("uncaught_exception", "unhandled_exception", "improper_exception_handling"),
     338: ("weak_prng", "use_of_cryptographically_weak_prng", "insecure_randomness"),
     377: ("insecure_temporary_file", "insecure_temp_file"),
+    457: ("use_of_uninitialized_variable", "uninitialized_variable", "uninitialised_variable", "uninitialized_read",
+          "uninitialised_read", "uninitialized_value", "uninit_read", "uninitialized_variable_use"),
+    908: ("use_of_uninitialized_resource", "uninitialized_memory", "uninitialised_memory", "uninitialized_buffer",
+          "uninitialized_memory_read"),
 }
 _VC_MEMO = []
 _VC_JLOAD = {"iaload", "baload", "caload", "saload", "laload", "faload", "daload", "aaload"}
@@ -1449,6 +2461,20 @@ def _vc_native(f):
         if any(_VC_CPY.match(c) for c in ca) or f.get("_st_a"):
             return 787, "bounds check before a write"
         return 125, "bounds check before a read"
+    nj = lambda xs: [t for t in xs if not re.match(r"^j\w+ L\d+$", t)]   # noqa: E731 -- drop relabelled jumps
+    if fk == "logic_change" and not nj(rem) and nj(add):
+        if all(re.match(r"^mov (byte|word|dword|qword) ptr \[[re][bs]p [-+] 0x\w+\], 0$", t) for t in nj(add)):
+            return 457, "stack variable now zero-initialised"
+        if any(c in ("memset", "bzero", "explicit_bzero") for c in ac) or "stosq" in mb - ma or "stosd" in mb - ma:
+            return 908, "buffer now cleared before use"
+    sj = {"jl", "jle", "jg", "jge", "setl", "setle", "setg", "setge", "cmovl", "cmovle", "cmovg", "cmovge"}
+    uj = {"jb", "jbe", "ja", "jae", "setb", "setbe", "seta", "setae", "cmovb", "cmovbe", "cmova", "cmovae"}
+    ci = lambda xs: {m.group(1) for m in (re.match(r"^cmp .*, (0x\w+|\d+)$", t) for t in xs) if m}   # noqa: E731
+    if fk == "logic_change" and any(t.split()[0] in sj for t in rem) and any(t.split()[0] in uj for t in add) and \
+            not any(t.split()[0] in uj for t in rem) and ci(rem) & ci(add):
+        return 195, "signed -> unsigned compare"
+    if f.get("_uaf_a") and not f.get("_uaf_b"):
+        return 416, "freed pointer no longer used after free"
     if fk == "frame_size_change" and f.get("frame_size_b", "none") != "none" and \
             int(f.get("frame_size_b")) > int(f.get("frame_size_a") if f.get("frame_size_a", "none") != "none" else 0):
         return 787, "buffer enlarged"
@@ -1527,7 +2553,7 @@ def patch_vuln_class(a, b):
     """Twin builds (A = vulnerable, B = fixed: jars/.class or x86 ELF) -> {field: answer}; None when neither diff
     parses. Fields: cwe / cwe_id / cwe_token ("CWE-476"), cwe_number ("476"), vulnerability_class / vuln_class /
     bug_class / cwe_name / class_name ("null_pointer_dereference"), cwe_with_name ("CWE-476: null_pointer_dereference"),
-    cwe_aliases (JSON), platform, fix_kind, evidence. Unchanged twins -> "none"; unclassifiable fix -> field absent."""
+    cwe_aliases (JSON), platform, fix_kind, changed_function, evidence. Unchanged twins -> "none"; unclassifiable fix -> field absent."""
     a, b = bytes(a), bytes(b)
     if _VC_MEMO and _VC_MEMO[0] == a and _VC_MEMO[1] == b:   # several fields of one pair: diff once
         return _VC_MEMO[2]
@@ -1551,10 +2577,46 @@ def _vc_indexed_store(body):
     return False
 
 
+def _vc_uaf(body):
+    """-O0 shape: a stack slot's pointer goes to free(), later the slot is reloaded and dereferenced (no reassign)."""
+    freed, reg, last = set(), {}, None
+    for k, (t, mn, op) in enumerate(body):
+        m = re.match(r"^mov (\w+), qword ptr (\[[re][bs]p [-+] [\w]+\])$", t)
+        if m:
+            reg[m.group(1)] = m.group(2)
+            if m.group(2) in freed and any(re.search(rf"ptr \[{m.group(1)}\b", x[0]) and not x[0].startswith("lea")
+                                           for x in body[k + 1:k + 4]):
+                return True
+            continue
+        m = re.match(r"^mov (\w+), (\w+)$", t)
+        if m:
+            if m.group(1) == "rdi":
+                last = reg.get(m.group(2))
+            reg.pop(m.group(1), None)
+            continue
+        m = re.match(r"^mov qword ptr (\[[re][bs]p [-+] [\w]+\]), ", t)
+        if m:
+            freed.discard(m.group(1))
+            continue
+        if t == "call imp:free" and last:
+            freed.add(last)
+        if mn == "call":
+            reg, last = {}, None
+    return False
+
+
 def _patch_vuln_class(a, b):
     f, plat = None, None
     if a[:4] == b"\x7fELF" and b[:4] == b"\x7fELF":
         f, plat = _native_patch_diff(a, b), "native"
+        if f and f.get("fix_kind") == "logic_change" and f.get("changed_function", "none") != "none":
+            bodies = []
+            for blob, key in ((a, "changed_function_address"), (b, "changed_function_address_b")):
+                im = _npd_elf(blob)
+                fn = next((x for x in im["funcs"] if x[2] == f["changed_function"] and hex(x[0]) == f.get(key)),
+                          None) if im else None
+                bodies.append(_vc_uaf(_npd_body(im, fn, {x[0]: x[2] for x in im["funcs"]})) if fn else False)
+            f = dict(f, _uaf_a=bodies[0], _uaf_b=bodies[1])
         if f and f.get("fix_kind") == "bounds_check" and f.get("changed_function", "none") != "none":
             ia = _npd_elf(a)
             fn = next((x for x in ia["funcs"] if x[2] == f["changed_function"] and
@@ -1567,7 +2629,8 @@ def _patch_vuln_class(a, b):
         f, plat = _jvm_patch_diff(a, b), "jvm"
     if not f:
         return None
-    out = {"platform": plat, "fix_kind": f.get("fix_kind", "none")}
+    out = {"platform": plat, "fix_kind": f.get("fix_kind", "none"),
+           "changed_function": f.get("changed_function", "none")}
     if f.get("fix_kind") in (None, "none"):
         return dict(out, **{k: "none" for k in ("cwe", "cwe_id", "cwe_token", "cwe_number", "vulnerability_class",
                                                 "vuln_class", "bug_class", "cwe_name", "class_name", "cwe_with_name")})
@@ -8613,7 +9676,7 @@ def machine_facts(data):
 PYC_MAGIC_VERSION = {3379: "3.6", 3394: "3.7", 3413: "3.8", 3425: "3.9", 3439: "3.10", 3495: "3.11", 3531: "3.12",
                      3571: "3.13", 3627: "3.14"}
 _BYTECODE_CANDIDATES = {"llvm_bitcode": ["llvm_bitcode", "bitcode", "llvm-bc", "bc"], "pyc": ["pyc", "python_bytecode"],
-                        "luac": ["luac", "lua", "lua_bytecode"], "class": ["class", "java_class", "jvm"],
+                        "luac": ["luac", "lua", "lua_bytecode"], "class": ["class", "java_class", "jvm", "jar"],
                         "dex": ["dex", "dalvik"], "neko_bytecode": ["neko_bytecode", "neko", "nekovm", "n"],
                         "hashlink_bytecode": ["hashlink_bytecode", "hashlink", "hl", "hl_bytecode", "hlb"]}
 
@@ -14807,6 +15870,456 @@ def dotnet_il_field(data, name):
     if what == "strings":
         return js(s["string"] for s in json.loads(f["ldstr_sites"]) if hit(s["method"]))
     return js(a for a in json.loads(f["array_inits"]) if hit(a["method"]))
+
+
+# --- .NET twin patch diff (vulnerable/corrected CLI assemblies) ---------------------------------------------------
+# Methods match by 'Namespace.Type::Method(sig)' (sig types resolved to names, so metadata-token renumbering, the MVID
+# and the PE timestamp never count). IL bodies compare as decoded instructions with tokens resolved (calls/fields/
+# types by name, ldstr by literal, branches by target instruction index) plus the exception clauses.
+_MPD_OPN = dict((int(k, 16), v) for k, v in zip(*[iter((
+    "00 nop 01 break 02 ldarg.0 03 ldarg.1 04 ldarg.2 05 ldarg.3 06 ldloc.0 07 ldloc.1 08 ldloc.2 09 ldloc.3 0a stloc.0 "
+    "0b stloc.1 0c stloc.2 0d stloc.3 0e ldarg.s 0f ldarga.s 10 starg.s 11 ldloc.s 12 ldloca.s 13 stloc.s 14 ldnull "
+    "15 ldc.i4.m1 16 ldc.i4.0 17 ldc.i4.1 18 ldc.i4.2 19 ldc.i4.3 1a ldc.i4.4 1b ldc.i4.5 1c ldc.i4.6 1d ldc.i4.7 "
+    "1e ldc.i4.8 1f ldc.i4.s 20 ldc.i4 21 ldc.i8 22 ldc.r4 23 ldc.r8 25 dup 26 pop 27 jmp 28 call 29 calli 2a ret "
+    "2b br.s 2c brfalse.s 2d brtrue.s 2e beq.s 2f bge.s 30 bgt.s 31 ble.s 32 blt.s 33 bne.un.s 34 bge.un.s 35 bgt.un.s "
+    "36 ble.un.s 37 blt.un.s 38 br 39 brfalse 3a brtrue 3b beq 3c bge 3d bgt 3e ble 3f blt 40 bne.un 41 bge.un "
+    "42 bgt.un 43 ble.un 44 blt.un 45 switch 46 ldind.i1 47 ldind.u1 48 ldind.i2 49 ldind.u2 4a ldind.i4 4b ldind.u4 "
+    "4c ldind.i8 4d ldind.i 4e ldind.r4 4f ldind.r8 50 ldind.ref 51 stind.ref 52 stind.i1 53 stind.i2 54 stind.i4 "
+    "55 stind.i8 56 stind.r4 57 stind.r8 58 add 59 sub 5a mul 5b div 5c div.un 5d rem 5e rem.un 5f and 60 or 61 xor "
+    "62 shl 63 shr 64 shr.un 65 neg 66 not 67 conv.i1 68 conv.i2 69 conv.i4 6a conv.i8 6b conv.r4 6c conv.r8 6d conv.u4 "
+    "6e conv.u8 6f callvirt 70 cpobj 71 ldobj 72 ldstr 73 newobj 74 castclass 75 isinst 76 conv.r.un 79 unbox 7a throw "
+    "7b ldfld 7c ldflda 7d stfld 7e ldsfld 7f ldsflda 80 stsfld 81 stobj 82 conv.ovf.i1.un 83 conv.ovf.i2.un "
+    "84 conv.ovf.i4.un 85 conv.ovf.i8.un 86 conv.ovf.u1.un 87 conv.ovf.u2.un 88 conv.ovf.u4.un 89 conv.ovf.u8.un "
+    "8a conv.ovf.i.un 8b conv.ovf.u.un 8c box 8d newarr 8e ldlen 8f ldelema 90 ldelem.i1 91 ldelem.u1 92 ldelem.i2 "
+    "93 ldelem.u2 94 ldelem.i4 95 ldelem.u4 96 ldelem.i8 97 ldelem.i 98 ldelem.r4 99 ldelem.r8 9a ldelem.ref "
+    "9b stelem.i 9c stelem.i1 9d stelem.i2 9e stelem.i4 9f stelem.i8 a0 stelem.r4 a1 stelem.r8 a2 stelem.ref a3 ldelem "
+    "a4 stelem a5 unbox.any b3 conv.ovf.i1 b4 conv.ovf.u1 b5 conv.ovf.i2 b6 conv.ovf.u2 b7 conv.ovf.i4 b8 conv.ovf.u4 "
+    "b9 conv.ovf.i8 ba conv.ovf.u8 c2 refanyval c3 ckfinite c6 mkrefany d0 ldtoken d1 conv.u2 d2 conv.u1 d3 conv.i "
+    "d4 conv.ovf.i d5 conv.ovf.u d6 add.ovf d7 add.ovf.un d8 mul.ovf d9 mul.ovf.un da sub.ovf db sub.ovf.un "
+    "dc endfinally dd leave de leave.s df stind.i e0 conv.u fe00 arglist fe01 ceq fe02 cgt fe03 cgt.un fe04 clt "
+    "fe05 clt.un fe06 ldftn fe07 ldvirtftn fe09 ldarg fe0a ldarga fe0b starg fe0c ldloc fe0d ldloca fe0e stloc "
+    "fe0f localloc fe11 endfilter fe12 unaligned. fe13 volatile. fe14 tail. fe15 initobj fe16 constrained. fe17 cpblk "
+    "fe18 initblk fe19 no. fe1a rethrow fe1c sizeof fe1d refanytype fe1e readonly.").split())] * 2))
+_MPD_ET = {0x01: "void", 0x02: "bool", 0x03: "char", 0x04: "sbyte", 0x05: "byte", 0x06: "short", 0x07: "ushort",
+           0x08: "int", 0x09: "uint", 0x0A: "long", 0x0B: "ulong", 0x0C: "float", 0x0D: "double", 0x0E: "string",
+           0x16: "typedref", 0x18: "nint", 0x19: "nuint", 0x1C: "object"}
+_MPD_REF_ET = (0x0E, 0x12, 0x14, 0x1C, 0x1D)   # string, class, array, object, szarray: a null-testable value
+_MPD_OVF = ("add.ovf", "add.ovf.un", "sub.ovf", "sub.ovf.un", "mul.ovf", "mul.ovf.un")
+_MPD_NULLCALL = re.compile(r"(ArgumentNullException(::\.ctor|::ThrowIfNull)|::IsNullOrEmpty|::IsNullOrWhiteSpace|"
+                           r"::ReferenceEquals|Objects?::IsNull|ArgumentException::ThrowIfNullOr\w+)$")
+
+
+def _mpd_sig_type(b, p, tdor, depth=0):
+    """One ECMA-335 II.23.2.12 Type at p -> (text, next, is_reference)."""
+    if depth > 24:
+        raise ValueError("deep sig")
+    e = b[p]
+    p += 1
+    if e in _MPD_ET:
+        return _MPD_ET[e], p, e in _MPD_REF_ET
+    if e in (0x1F, 0x20):   # cmod_reqd / cmod_opt TypeDefOrRef Type
+        _, p = _pinv_cu(b, p)
+        return _mpd_sig_type(b, p, tdor, depth + 1)
+    if e in (0x0F, 0x10, 0x45, 0x1D):
+        t, p, _ = _mpd_sig_type(b, p, tdor, depth + 1)
+        return {0x0F: t + "*", 0x10: t + "&", 0x45: t, 0x1D: t + "[]"}[e], p, e == 0x1D
+    if e in (0x11, 0x12):
+        c, p = _pinv_cu(b, p)
+        return tdor(c), p, e == 0x12
+    if e in (0x13, 0x1E):
+        n, p = _pinv_cu(b, p)
+        return ("!" if e == 0x13 else "!!") + str(n), p, False
+    if e == 0x15:
+        k = b[p]
+        c, p = _pinv_cu(b, p + 1)
+        n, p = _pinv_cu(b, p)
+        args = []
+        for _ in range(min(n, 64)):
+            t, p, _ = _mpd_sig_type(b, p, tdor, depth + 1)
+            args.append(t)
+        return f"{tdor(c)}<{','.join(args)}>", p, k == 0x12
+    if e == 0x14:
+        t, p, _ = _mpd_sig_type(b, p, tdor, depth + 1)
+        rank, p = _pinv_cu(b, p)
+        for _ in range(2):   # NumSizes Size*, NumLoBounds LoBound*
+            n, p = _pinv_cu(b, p)
+            for _ in range(min(n, 64)):
+                _, p = _pinv_cu(b, p)
+        return f"{t}[{',' * max(rank - 1, 0)}]", p, True
+    if e == 0x1B:
+        return "fnptr", len(b), False   # rare: the rest of the blob is the pointee method sig
+    raise ValueError(f"element 0x{e:02x}")
+
+
+def _mpd_method_sig(b, tdor):
+    """MethodDefSig -> ("(params)ret", [param is_reference], ret is_reference); ("?", [], False) when unreadable."""
+    try:
+        p = 1 + (b[0] & 0x10 and 1)
+        if b[0] & 0x10:
+            _, p = _pinv_cu(b, 1)
+        n, p = _pinv_cu(b, p)
+        r, p, rref = _mpd_sig_type(b, p, tdor)
+        ps, refs = [], []
+        for _ in range(min(n, 256)):
+            if b[p] == 0x41:   # SENTINEL (vararg)
+                p += 1
+            t, p, isref = _mpd_sig_type(b, p, tdor)
+            ps.append(t)
+            refs.append(isref)
+        return f"({','.join(ps)}){r}", refs, rref
+    except (IndexError, ValueError):
+        return "?", [], False
+
+
+def _mpd_assembly(data):
+    """{method key: body facts} + meta for one CLI assembly; None when not one."""
+    import dnfile
+    pe = dnfile.dnPE(data=bytes(data), fast_load=False)
+    net = pe.net
+    if net is None or net.mdtables is None:
+        return None
+    t = net.mdtables
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+    nm = lambda x: "" if x is None else str(x)   # noqa: E731
+    blob = lambda x: bytes(getattr(x, "value", x) or b"")   # noqa: E731
+    mds, tds, trs, flds = rows("MethodDef"), rows("TypeDef"), rows("TypeRef"), rows("Field")
+    mrs, msp, tsp, sas = rows("MemberRef"), rows("MethodSpec"), rows("TypeSpec"), rows("StandAloneSig")
+    if not mds:
+        return None
+    enclosing = {}
+    for r in rows("NestedClass"):
+        enclosing[int(r.struct.NestedClass_Index)] = int(r.struct.EnclosingClass_Index)
+
+    def tdname(i, depth=0):
+        if not 0 < i <= len(tds):
+            return "?"
+        r = tds[i - 1]
+        if i in enclosing and depth < 16:
+            return tdname(enclosing[i], depth + 1) + "/" + nm(r.TypeName)
+        return (nm(r.TypeNamespace) + "." if nm(r.TypeNamespace) else "") + nm(r.TypeName)
+
+    def trname(i, depth=0):
+        if not 0 < i <= len(trs):
+            return "?"
+        r = trs[i - 1]
+        rs = int(r.struct.ResolutionScope_CodedIndex)
+        if rs & 3 == 3 and depth < 16:
+            return trname(rs >> 2, depth + 1) + "/" + nm(r.TypeName)
+        return (nm(r.TypeNamespace) + "." if nm(r.TypeNamespace) else "") + nm(r.TypeName)
+
+    def tsname(i, depth=0):
+        if not 0 < i <= len(tsp) or depth > 4:
+            return "?"
+        try:
+            return _mpd_sig_type(blob(tsp[i - 1].Signature), 0, lambda c: tdor(c, depth + 1))[0]
+        except (IndexError, ValueError):
+            return "?"
+
+    def tdor(c, depth=0):
+        tag, i = c & 3, c >> 2
+        return tdname(i) if tag == 0 else trname(i) if tag == 1 else tsname(i, depth) if tag == 2 else "?"
+    mowner, fowner = {}, {}
+    for own, attr, total in ((mowner, "MethodList_Index", len(mds)), (fowner, "FieldList_Index", len(flds))):
+        st = [int(getattr(r.struct, attr)) for r in tds]
+        for k in range(len(tds)):
+            end = st[k + 1] if k + 1 < len(st) else total + 1
+            for i in range(st[k], min(end, total + 1)):
+                own[i] = k + 1
+    msig = [_mpd_method_sig(blob(r.Signature), tdor) for r in mds]
+
+    def fref(b):   # FieldSig: 0x06 Type
+        try:
+            return _mpd_sig_type(b, 1, tdor)[2] if b and b[0] == 0x06 else False
+        except (IndexError, ValueError):
+            return False
+
+    def member(tok):
+        """token -> (name, returns-a-reference?)"""
+        tab, i = tok >> 24, tok & 0xFFFFFF
+        if tab == 0x06 and 0 < i <= len(mds):
+            return f"{tdname(mowner.get(i, 0))}::{nm(mds[i - 1].Name)}", msig[i - 1][2]
+        if tab == 0x04 and 0 < i <= len(flds):
+            return f"{tdname(fowner.get(i, 0))}::{nm(flds[i - 1].Name)}", fref(blob(flds[i - 1].Signature))
+        if tab == 0x0A and 0 < i <= len(mrs):
+            r = mrs[i - 1]
+            c = int(r.struct.Class_CodedIndex)
+            tag, j = c & 7, c >> 3
+            own = mdname = None
+            if tag == 3 and 0 < j <= len(mds):
+                mdname = f"{tdname(mowner.get(j, 0))}::{nm(mds[j - 1].Name)}"
+            own = {0: tdname, 1: trname, 4: tsname}.get(tag)
+            sb = blob(r.Signature)
+            isref = fref(sb) if sb[:1] == b"\x06" else _mpd_method_sig(sb, tdor)[2]
+            name = mdname or f"{re.sub(r'<.*>$', '', own(j)) if own else '?'}::{nm(r.Name)}"
+            return name, isref
+        if tab == 0x2B and 0 < i <= len(msp):
+            c = int(msp[i - 1].struct.Method_CodedIndex)
+            return member((0x0A if c & 1 else 0x06) << 24 | c >> 1)
+        if tab in (0x01, 0x02, 0x1B):
+            return {0x01: trname, 0x02: tdname, 0x1B: tsname}[tab](i), False
+        if tab == 0x11:
+            return "sig", False
+        return "?", False
+    us = bytes(getattr(net.user_strings, "__data__", b"") or b"") if net.user_strings else b""
+
+    def us_at(o):
+        try:
+            n, q = _pinv_cu(us, o)
+            return us[q:q + max(n - 1, 0)].decode("utf-16-le", "replace")
+        except IndexError:
+            return "?"
+
+    def locals_ref(tok):
+        i = tok & 0xFFFFFF
+        if tok >> 24 != 0x11 or not 0 < i <= len(sas):
+            return []
+        b = blob(sas[i - 1].Signature)
+        try:
+            if b[0] != 0x07:
+                return []
+            n, p = _pinv_cu(b, 1)
+            out = []
+            for _ in range(min(n, 1024)):
+                if b[p] == 0x16:   # TYPEDBYREF local
+                    out.append(False)
+                    p += 1
+                    continue
+                _, p, isref = _mpd_sig_type(b, p, tdor)
+                out.append(isref)
+            return out
+        except (IndexError, ValueError):
+            return []
+    methods, mvid = {}, ""
+    try:
+        mvid = str(rows("Module")[0].Mvid)
+    except Exception:   # noqa: BLE001
+        pass
+    for i, r in enumerate(mds, 1):
+        full = f"{tdname(mowner.get(i, 0))}::{nm(r.Name)}"
+        sig, prefs, _ = msig[i - 1]
+        key = full + sig
+        k2, n = key, 1
+        while k2 in methods:   # same name+sig twice (hostile/obfuscated): keep both, by MethodDef order
+            n += 1
+            k2 = f"{key}#{n}"
+        rva = int(r.struct.Rva or 0)
+        body = _mpd_body(pe, rva) if rva else None
+        methods[k2] = {"name": full, "sig": sig, "flags": int(r.struct.Flags or 0),
+                       "body": body and _mpd_norm(body, member, us_at, prefs, locals_ref(body["local_sig"]),
+                                                  bool(int(r.struct.Flags or 0) & 0x10))}
+    return {"methods": methods, "mvid": mvid, "size": len(data)}
+
+
+def _mpd_body(pe, rva):
+    """_il_body + the decoded exception clauses [(flags, try_off, try_len, h_off, h_len, class_token|filter_off)]."""
+    b = _il_body(pe, rva)
+    if not b:
+        return None
+    b["clauses"] = []
+    if b["header"] != "fat":
+        return b
+    fl = int.from_bytes(pe.get_data(rva, 2), "little")
+    s, more = (rva + b["header_size"] + b["code_size"] + 3) & ~3, fl & 0x8
+    for _ in range(16):
+        if not more:
+            break
+        k = pe.get_data(s, 4)
+        if len(k) < 4:
+            break
+        fat = k[0] & 0x40
+        size = int.from_bytes(k[1:4], "little") if fat else k[1]
+        if size < 4:
+            break
+        if k[0] & 1:
+            raw, w = pe.get_data(s + 4, size - 4), 24 if fat else 12
+            for q in range(0, min(len(raw), size - 4) - w + 1, w):
+                b["clauses"].append(struct.unpack_from("<IIIIII" if fat else "<HHBHBI", raw, q))
+        more = k[0] & 0x80
+        s = (s + size + 3) & ~3
+    return b
+
+
+def _mpd_norm(b, member, us_at, prefs, lrefs, static):
+    ins = il_decode(b["code"])
+    at = {o: n for n, (o, _, _) in enumerate(ins)}
+    at[len(b["code"])] = len(ins)
+    nxt = [ins[n + 1][0] if n + 1 < len(ins) else len(b["code"]) for n in range(len(ins))]
+    toks, ops, calls, strs = [], [], [], []
+    for n, (o, op, arg) in enumerate(ins):
+        name = _MPD_OPN.get(op, f"0x{op:x}")
+        ops.append(name)
+        sz = _IL_OPS2.get(op & 0xFF) if op > 0xFF else _IL_OPS.get(op)
+        if op == 0x72:
+            v = "str:" + us_at(arg & 0xFFFFFF)
+            strs.append(v[4:])
+        elif sz == -1:
+            v = member(arg)[0]
+            if op in _IL_CALL_OPS:
+                calls.append(v)
+        elif op == 0x45:
+            v = tuple(at.get(nxt[n] + d, -1) for d in arg)
+        elif name.startswith(("b", "leave")) and name not in ("box", "break"):
+            v = at.get(nxt[n] + arg, -1)
+        else:
+            v = arg
+        toks.append((name, v))
+    cl = []
+    for c in b["clauses"]:
+        kind = {0: "catch", 1: "filter", 2: "finally", 4: "fault"}.get(c[0] & 7, "?")
+        cls = member(c[5])[0] if kind == "catch" else at.get(c[5], -1) if kind == "filter" else None
+        cl.append((kind, at.get(c[1], -1), at.get(c[1] + c[2], -1), at.get(c[3], -1), at.get(c[3] + c[4], -1), cls))
+
+    def isref(n):   # does instruction n push a null-testable reference?
+        nm_, v = toks[n]
+        op = ins[n][1]
+        if nm_ in ("dup", "isinst", "ldnull"):
+            return True
+        a = {0x02: 0, 0x03: 1, 0x04: 2, 0x05: 3, 0x0E: -1, 0xFE09: -1}.get(op)
+        if a is not None:
+            j = (ins[n][2] if a < 0 else a) - (0 if static else 1)
+            return j < 0 if not static and j == -1 else 0 <= j < len(prefs) and prefs[j]
+        lo = {0x06: 0, 0x07: 1, 0x08: 2, 0x09: 3, 0x11: -1, 0xFE0C: -1}.get(op)
+        if lo is not None:
+            j = ins[n][2] if lo < 0 else lo
+            return 0 <= j < len(lrefs) and lrefs[j]
+        if op in (0x28, 0x6F, 0x7B, 0x7E):
+            return member(ins[n][2])[1]
+        return False
+    cmp = re.compile(r"^(c(eq|gt|lt)(\.un)?|b(eq|ne|ge|gt|le|lt)(\.un)?(\.s)?)$")
+    null = bounds = 0
+    for n, (nm_, v) in enumerate(toks):
+        if nm_ == "ldnull" and n + 1 < len(toks) and re.match(r"^(ceq|cgt\.un|beq|bne\.un)", toks[n + 1][0]):
+            null += 1
+        elif nm_.startswith(("brtrue", "brfalse")) and n and isref(n - 1):
+            null += 1
+        elif nm_ in ("call", "callvirt", "newobj") and _MPD_NULLCALL.search(str(v)):
+            null += 1
+        if nm_ == "ldlen" or (nm_ in ("call", "callvirt") and re.search(r"::get_(Length|Count)$", str(v))):
+            for m in range(n + 1, min(n + 4, len(toks))):
+                if cmp.match(toks[m][0]):
+                    bounds += 1
+                    break
+                if not toks[m][0].startswith(("conv.", "ldarg", "ldloc", "ldc.")):
+                    break
+    return {"tokens": toks, "eh": cl, "ops": ops, "calls": calls, "strings": strs, "code_size": b["code_size"],
+            "max_stack": b["max_stack"], "null": null, "bounds": bounds,
+            "ovf": sum(o in _MPD_OVF for o in ops), "conv_ovf": sum(o.startswith("conv.ovf") for o in ops)}
+
+
+def dotnet_patch_diff(dll_a, dll_b):
+    """IL method-body diff of twin .NET (CLI) builds (A = before/vulnerable, B = after/corrected) -> {field: answer
+    string}; None when either side is not a CLI assembly. Methods match by 'Namespace.Type::Method(sig)'; tokens are
+    resolved to names / string literals, so token renumbering, MVID and timestamp never count. Fields: changed_methods /
+    changed_method_names ('Namespace.Type::Method') / changed_method(_signature) / changed_method_count, changed_type(s),
+    unchanged_method_count, added_/removed_methods, methods_compared, mvid_changed, code_size_ / instruction_count_ /
+    max_stack_ / eh_clause_count_ / eh_kinds_ / catch_types_ / null_checks_ / bounds_checks_ / checked_ops_{a,b},
+    added_/removed_calls, added_/removed_strings, added_/removed_opcodes, null_guard_added, bounds_check_added,
+    checked_arithmetic_added, try_catch_added, exception_clauses_added, guard_added, fix_kind (null_guard |
+    bounds_check | checked_arithmetic | exception_handling | constant_change | logic_change | method_added |
+    method_removed | none). _before/_after and _vulnerable/_corrected alias every _a/_b field."""
+    try:
+        return _dotnet_patch_diff(dll_a, dll_b)
+    except Exception:   # noqa: BLE001 -- malformed / decoy input: no answer
+        return None
+
+
+def _dotnet_patch_diff(dll_a, dll_b):
+    if dll_a[:2] != b"MZ" or dll_b[:2] != b"MZ":
+        return None
+    A, B = _mpd_assembly(dll_a), _mpd_assembly(dll_b)
+    if not A or not B:
+        return None
+    ma, mb = A["methods"], B["methods"]
+    sig = lambda m: m["body"] and (m["body"]["tokens"], m["body"]["eh"])   # noqa: E731
+    ch = [k for k in ma if k in mb and (sig(ma[k]) != sig(mb[k]) or ma[k]["flags"] != mb[k]["flags"])]
+    added = [k for k in mb if k not in ma]
+    removed = [k for k in ma if k not in mb]
+    same = [k for k in ma if k in mb and k not in ch]
+    tyname = lambda k: k.split("::")[0]   # noqa: E731
+    types = list(dict.fromkeys(tyname(k) for k in ch + added + removed))
+    f = {"methods_compared": str(len(same) + len(ch)), "changed_methods": _jv([ma[k]["name"] for k in ch]),
+         "changed_method_names": _jv([ma[k]["name"].split("::", 1)[1] for k in ch]),
+         "changed_method_signatures": _jv(ch), "changed_method_count": str(len(ch)),
+         "unchanged_method_count": str(len(same)), "changed_types": _jv(types), "changed_type_count": str(len(types)),
+         "changed_type": types[0] if types else "none",
+         "added_methods": _jv([mb[k]["name"] for k in added]), "removed_methods": _jv([ma[k]["name"] for k in removed]),
+         "added_method_count": str(len(added)), "removed_method_count": str(len(removed)),
+         "mvid_a": A["mvid"] or "none", "mvid_b": B["mvid"] or "none",
+         "mvid_changed": _jv(A["mvid"] != B["mvid"]), "assembly_size_a": str(A["size"]),
+         "assembly_size_b": str(B["size"])}
+    first = ch[0] if ch else None
+    f["changed_method"] = ma[first]["name"] if first else "none"
+    f["changed_method_short"] = ma[first]["name"].split("::", 1)[1] if first else "none"
+    f["changed_method_signature"] = first or "none"
+    xa = ma[first]["body"] if first else None
+    xb = mb[first]["body"] if first else None
+    for side, x in (("a", xa), ("b", xb)):
+        f[f"code_size_{side}"] = str(x["code_size"]) if x else "none"
+        f[f"instruction_count_{side}"] = str(len(x["ops"])) if x else "none"
+        f[f"max_stack_{side}"] = str(x["max_stack"]) if x else "none"
+        f[f"eh_clause_count_{side}"] = str(len(x["eh"])) if x else "none"
+        f[f"eh_kinds_{side}"] = _jv([c[0] for c in x["eh"]]) if x else "none"
+        f[f"catch_types_{side}"] = _jv(list(dict.fromkeys(c[5] for c in x["eh"] if c[0] == "catch"))) if x else "none"
+        f[f"null_checks_{side}"] = str(x["null"]) if x else "none"
+        f[f"bounds_checks_{side}"] = str(x["bounds"]) if x else "none"
+        f[f"checked_ops_{side}"] = str(x["ovf"]) if x else "none"
+    # whole-diff deltas: every changed method (a body that only exists on one side counts as empty)
+    na = nb = 0
+    ca, cb, sa, sb, oa, ob = [], [], [], [], [], []
+    d = {"null": 0, "bounds": 0, "ovf": 0, "eh": 0}
+    for k in ch:
+        x, y = ma[k]["body"] or {}, mb[k]["body"] or {}
+        ca += x.get("calls", [])
+        cb += y.get("calls", [])
+        sa += x.get("strings", [])
+        sb += y.get("strings", [])
+        oa += x.get("ops", [])
+        ob += y.get("ops", [])
+        for q in ("null", "bounds", "ovf"):
+            d[q] += y.get(q, 0) - x.get(q, 0)
+        d["eh"] += len(y.get("eh", ())) - len(x.get("eh", ()))
+        na += len(x.get("eh", ()))
+        nb += len(y.get("eh", ()))
+    uniq = lambda xs: list(dict.fromkeys(xs))   # noqa: E731
+    f["added_calls"] = _jv(uniq(x for x in cb if x not in ca))
+    f["removed_calls"] = _jv(uniq(x for x in ca if x not in cb))
+    f["added_strings"] = _jv(uniq(x for x in sb if x not in sa))
+    f["removed_strings"] = _jv(uniq(x for x in sa if x not in sb))
+    f["added_opcodes"] = _jv(sorted({o for o in ob if ob.count(o) > oa.count(o)}))
+    f["removed_opcodes"] = _jv(sorted({o for o in oa if oa.count(o) > ob.count(o)}))
+    f["null_guard_added"] = _jv(d["null"] > 0)
+    f["bounds_check_added"] = _jv(d["bounds"] > 0)
+    f["checked_arithmetic_added"] = _jv(d["ovf"] > 0)
+    f["try_catch_added"] = _jv(d["eh"] > 0)
+    f["exception_clauses_added"] = str(max(d["eh"], 0))
+    f["guard_added"] = _jv(d["null"] > 0 or d["bounds"] > 0)
+    if not ch:
+        kind = "method_added" if added else "method_removed" if removed else "none"
+    elif d["null"] > 0:
+        kind = "null_guard"
+    elif d["bounds"] > 0:
+        kind = "bounds_check"
+    elif d["ovf"] > 0:
+        kind = "checked_arithmetic"
+    elif d["eh"] > 0:
+        kind = "exception_handling"
+    elif all([n for n, _ in (ma[k]["body"] or {}).get("tokens", [])] == [n for n, _ in (mb[k]["body"] or {}).get(
+            "tokens", [])] for k in ch):
+        kind = "constant_change"
+    else:
+        kind = "logic_change"
+    f["fix_kind"] = kind
+    for k in [k for k in f if k.endswith(("_a", "_b"))]:
+        base, s = k[:-2], k[-1]
+        f[base + ("_before" if s == "a" else "_after")] = f[k]
+        f[base + ("_vulnerable" if s == "a" else "_corrected")] = f[k]
+    return f
+
+
+def dotnet_patch_diff_field(dll_a, dll_b, field):
+    """One dotnet_patch_diff fact as an answer string; "none" when absent, None when the inputs aren't CLI twins."""
+    f = dotnet_patch_diff(dll_a, dll_b)
+    return None if f is None else f.get(field, "none")
 
 
 def dotnet_field_owner(data, offset):
@@ -26493,3 +28006,1571 @@ def garble_field(data, name):
     k = {"garble": "has_garble", "is_garble": "has_garble", "garbled": "has_garble", "tiny": "garble_tiny",
          "magic": "pclntab_magic", "module_path": "go_module_path"}.get(k, k)
     return f.get(k, "none")
+
+
+# ---- reachability facts: entry point -> vulnerable call, env/argv gates on the path (JVM: Java/Scala/Clojure) ----
+_RF_SINKS = {("clojure/lang/RT", "nth", "(Ljava/lang/Object;I)Ljava/lang/Object;"), ("java/lang/String", "charAt", None),
+             ("java/util/List", "get", None), ("java/util/ArrayList", "get", None), ("java/lang/System", "arraycopy", None)}
+
+
+def _rf_clinit(p, code):
+    """<clinit> constants of one class: field -> str / int / ("vec", n items) / ("var", ns, name) / ("arr", n)."""
+    cp, u, fields, st = p["cp"], p["_u"], {}, []
+
+    def ref(i):
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e or e[0] not in (9, 10, 11):
+            return None, None, None
+        c, nt = cp[e[1][0]], cp[e[1][1]]
+        return u(c[1]) if c and c[0] == 7 else None, u(nt[1][0]), u(nt[1][1])
+    for _, op, a in jvm_code_decode(code):
+        if 0x02 <= op <= 0x08 or op in (0x09, 0x0a):
+            st.append(op - 3 if op <= 0x08 else op - 9)
+        elif op in (0x10, 0x11):
+            st.append(a[0])
+        elif op in (0x12, 0x13, 0x14):
+            e = cp[a[0]] if 0 < a[0] < len(cp) else None
+            st.append(u(e[1]) if e and e[0] == 8 else e[1] if e and e[0] in (3, 4, 5, 6) else None)
+        elif op == 0x59 and st:
+            st.append(st[-1])
+        elif op in (0xbc, 0xbd) and st:
+            n = st.pop()
+            st.append(("arr", n if isinstance(n, int) else None, [None] * n if isinstance(n, int) and 0 <= n < 4096
+                       else []))
+        elif op in (0x4f, 0x50, 0x53, 0x54, 0x55, 0x56) and len(st) >= 3:
+            v, i, arr = st.pop(), st.pop(), st.pop()
+            if isinstance(arr, tuple) and arr[0] == "arr" and isinstance(i, int) and 0 <= i < len(arr[2]):
+                arr[2][i] = v
+        elif op == 0xb3 and st:
+            fields[ref(a[0])[1]] = st.pop()
+        elif op == 0xb2:
+            st.append(None)
+        elif op in (0xb8, 0xb7, 0xb6):
+            own, name, desc = ref(a[0])
+            if not desc:
+                st = []
+                continue
+            n = len(_JT_PARAM.findall(desc[1:desc.index(")")])) + (op != 0xb8)
+            args = ([None] * n + st)[-n:] if n else []
+            del st[max(0, len(st) - n):]
+            r = None
+            if own == "clojure/lang/RT" and name == "var" and len(args) == 2:
+                r = ("var", *args)
+            elif name == "valueOf" and own.startswith("java/lang/") or own == "clojure/lang/Symbol":
+                r = args[-1] if args else None
+            elif own == "clojure/lang/Tuple" and name == "create":
+                r = ("vec", len(args), list(args))
+            elif name in ("vector", "asList", "of", "create", "wrapArray") and args and isinstance(args[-1], tuple) \
+                    and args[-1][0] == "arr":
+                r = ("vec", args[-1][1], args[-1][2])
+            if desc[-1] != "V":
+                st.append(r)
+        elif op == 0xc0:
+            pass
+        elif op == 0x57:
+            st = st[:-1]
+        elif op != 0xb1:
+            st = []
+    return fields
+
+
+def _rf_merge(x, y, cx, cy):
+    """Join two abstract values at a control-flow merge (cx/cy = path conditions of each edge)."""
+    if x == y:
+        return x
+    if isinstance(x, tuple) and x[0] == "env" and isinstance(y, tuple) and y[0] == "str":
+        return ("env", x[1], y[1])
+    if isinstance(y, tuple) and y[0] == "env" and isinstance(x, tuple) and x[0] == "str":
+        return ("env", y[1], x[1])
+    d = [c for c in cx if (c[0], c[1], not c[2]) in cy]
+    if d and x is not None and y is not None:
+        c = d[-1]
+        return ("sel", (c[0], c[1]), x if c[2] else y, y if c[2] else x)
+    return None
+
+
+def _rf_method(p, code, consts, resolve):
+    """Abstract-interpret one method body: env reads, env compares, calls (callee key, arg values, path condition)."""
+    cp, u = p["cp"], p["_u"]
+
+    def ref(i):
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e or e[0] not in (9, 10, 11):
+            return None, None, None
+        c, nt = cp[e[1][0]], cp[e[1][1]]
+        return u(c[1]) if c and c[0] == 7 else None, u(nt[1][0]), u(nt[1][1])
+    ins = jvm_code_decode(code)
+    saved, envs, cmps, calls = {}, [], [], []
+    st, loc, cond, live = [], {}, (), True
+
+    def save(t, s, l, c):
+        if t in saved:
+            s0, l0, c0 = saved[t]
+            m = [_rf_merge(a, b, c0, c) for a, b in zip(s0, s)] if len(s0) == len(s) else []
+            saved[t] = (m, {k: _rf_merge(l0[k], l[k], c0, c) for k in l0.keys() & l.keys()},
+                        tuple(x for x in c0 if x in c))
+        else:
+            saved[t] = (list(s), dict(l), c)
+    for pc, op, a in ins:
+        if pc in saved:
+            if live:
+                save(pc, st, loc, cond)
+            s, l, c = saved[pc]
+            st, loc, cond = list(s), dict(l), c
+        live = True
+        if op in (0x12, 0x13):
+            e = cp[a[0]] if 0 < a[0] < len(cp) else None
+            st.append(("str", u(e[1])) if e and e[0] == 8 else ("int", e[1]) if e and e[0] in (3, 4) else None)
+        elif op == 0x14:
+            e = cp[a[0]] if 0 < a[0] < len(cp) else None
+            st.append(("int", e[1]) if e and e[0] == 5 else None)
+        elif 0x02 <= op <= 0x08 or op in (0x09, 0x0a):
+            st.append(("int", op - 3 if op <= 0x08 else op - 9))
+        elif op in (0x10, 0x11):
+            st.append(("int", a[0]))
+        elif op == 0x01:
+            st.append(None)
+        elif 0x15 <= op <= 0x2d:   # loads
+            st.append(loc.get(a[0] if op <= 0x19 else (op - 0x1a) % 4))
+        elif 0x36 <= op <= 0x4e:   # stores
+            v = st.pop() if st else None
+            loc[a[0] if op <= 0x3a else (op - 0x3b) % 4] = v
+            if isinstance(v, tuple) and v[0] == "env" and v[2] is not None:
+                envs.append((-1, v[1], v[2]))
+        elif op == 0x59:
+            st.append(st[-1] if st else None)
+        elif op == 0x57:
+            st = st[:-1]
+        elif op == 0x58:
+            st = st[:-2]
+        elif op == 0x5f and len(st) >= 2:
+            st[-1], st[-2] = st[-2], st[-1]
+        elif op == 0xc0:
+            pass
+        elif op == 0xb2:
+            own, name, _ = ref(a[0])
+            v = consts.get((own, name))
+            st.append(("str", v) if isinstance(v, str) else v if isinstance(v, tuple) else None)
+        elif op in (0xb6, 0xb7, 0xb8, 0xb9):
+            own, name, desc = ref(a[0])
+            if not desc:
+                st = []
+                continue
+            n = len(_JT_PARAM.findall(desc[1:desc.index(")")]))
+            args = ([None] * n + st)[-n:] if n else []
+            del st[max(0, len(st) - n):]
+            recv = (st.pop() if st else None) if op != 0xb8 else None
+            r = None
+            if own == "java/lang/System" and name == "getenv" and args and isinstance(args[0], tuple) \
+                    and args[0][0] == "str":
+                r = ("env", args[0][1], None)
+                envs.append((pc, args[0][1]))
+            elif (name in ("equals", "equiv", "equalsIgnoreCase", "contentEquals") or own == "java/util/Objects"
+                  and name == "equals") and len([recv, *args] if op != 0xb8 else args) >= 2:
+                xs = [recv, *args] if op != 0xb8 else args
+                e = next((x for x in xs if isinstance(x, tuple) and x[0] == "env"), None)
+                s = next((x for x in xs if isinstance(x, tuple) and x[0] in ("str", "int")), None)
+                if e and s:
+                    r = ("cmp", e[1], str(s[1]))
+                    cmps.append((pc, e[1], str(s[1])))
+            elif name in ("apply", "getOrElse", "ofNullable", "orElse", "getRawRoot", "valueOf", "toString",
+                          "intern", "trim", "toLowerCase", "strip") and (recv or args):
+                x = recv if name in ("getOrElse", "orElse", "getRawRoot", "toString", "trim", "toLowerCase",
+                                     "strip") else args[0] if args else None
+                r = x if isinstance(x, tuple) and x[0] in ("env", "var", "str") else None
+            elif name == "hashCode" or own == "clojure/lang/Util" and name in ("hash", "hasheq"):
+                x = recv if name == "hashCode" else args[0] if args else None
+                r = ("hash", x[1]) if isinstance(x, tuple) and x[0] == "env" else None
+            else:
+                key = resolve(own, name, desc, recv, op)
+                if key:
+                    calls.append((pc, key, args, cond))
+            if desc[-1] != "V":
+                st.append(r)
+        elif op in (0x99, 0x9a, 0xc6, 0xc7):   # ifeq/ifne/ifnull/ifnonnull
+            x = st.pop() if st else None
+            t = pc + a[0]
+            if isinstance(x, tuple) and x[0] == "cmp" and op in (0x99, 0x9a):
+                save(t, st, loc, cond + ((x[1], x[2], op == 0x9a),))
+                cond = cond + ((x[1], x[2], op == 0x99),)
+            else:
+                save(t, st, loc, cond)
+        elif 0x9b <= op <= 0xa6:
+            st = st[:-1] if op <= 0x9e else st[:-2]
+            save(pc + a[0], st, loc, cond)
+        elif op in (0xa7, 0xc8):
+            save(pc + a[0], st, loc, cond)
+            live = False
+        elif op in (0xaa, 0xab):
+            st = st[:-1]
+            for t in {a[0], *(d for _, d in a[1])}:
+                save(pc + t, st, loc, cond)
+            live = False
+        elif 0xac <= op <= 0xb1 or op == 0xbf:
+            live, st = False, []
+        elif op == 0xbb:
+            st.append(None)
+        elif 0x60 <= op <= 0x83 or 0x94 <= op <= 0x98:
+            k = 1 if 0x74 <= op <= 0x77 else 2
+            st = st[:-k] + [None]
+        elif 0x85 <= op <= 0x93:
+            st = st[:-1] + [None]
+        elif op == 0xbe:
+            st = st[:-1] + [None]
+        elif op in (0xb3, 0xb5):
+            st = st[:-1 - (op == 0xb5)]
+        elif op == 0xb4:
+            st = st[:-1] + [None]
+        elif op == 0xba:
+            own, name, desc = None, None, None
+            e = cp[a[0]] if 0 < a[0] < len(cp) else None
+            d = u(cp[e[1][1]][1][1]) if e and e[0] == 18 else "()V"
+            n = len(_JT_PARAM.findall(d[1:d.index(")")]))
+            st = st[:len(st) - n] + ([("lam", a[0])] if d[-1] != "V" else [])
+        elif op == 0x84 or op == 0x00:
+            pass
+        else:
+            st = []
+    return envs, cmps, calls
+
+
+def reachability_facts(member, target_fn=None):
+    """'Trace its reachability' for a JVM jar (Java / Scala / Clojure): call path entry -> target_fn (auto: the first
+    fn on a path that does an unchecked indexed read: RT.nth w/o default, charAt, List.get, array load), env gates
+    (System.getenv names in order of use, compared values, Clojure `(or (getenv ..) "dflt")` / Scala getOrElse
+    defaults), which env predicate selects the target's argument (trigger), the argument sizes on trigger vs safe
+    (Tuple.create arity / array length), and reachable_for_<host_model>. None when not a jar / no entry."""
+    try:
+        data = bytes(member)
+        if _RF_MEMO and _RF_MEMO[0] == data and _RF_MEMO[1] == target_fn:
+            return _RF_MEMO[2]
+        r = _reachability_facts(data, target_fn)
+        _RF_MEMO[:] = [data, target_fn, r]
+        return r
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_RF_MEMO = []
+
+
+def _rf_size(v):
+    if isinstance(v, tuple):
+        if v[0] in ("vec", "arr") and isinstance(v[1], int):
+            return v[1]
+        if v[0] == "str":
+            return len(v[1])
+    return None
+
+
+def _reachability_facts(data, target_fn):
+    import zipfile
+    if data[:4] == b"\x7fELF":
+        return _rf_native(data, target_fn)
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except (zipfile.BadZipFile, ValueError):
+        return None
+    names = [n for n in z.namelist() if n.endswith(".class") and not n.startswith("META-INF/")]
+    if not names or len(names) > 400:
+        return None
+    cls, consts = {}, {}
+    for n in names:
+        p = classfile_parse(z.read(n))
+        if not p or not p.get("this"):
+            continue
+        ms = {}
+        for m in p["methods"]:
+            c = dict(m["attributes"]).get("Code")
+            if c and len(c) >= 8:
+                ms[(m["name"], m["descriptor"])] = c[8:8 + int.from_bytes(c[4:8], "big")]
+        cls[p["this"]] = (p, ms)
+        ci = ms.get(("<clinit>", "()V"))
+        if ci:
+            try:
+                for k, v in _rf_clinit(p, ci).items():
+                    consts[(p["this"], k)] = v
+            except (ValueError, IndexError, KeyError, TypeError, struct.error):
+                pass
+    if not cls:
+        return None
+    mf = ""
+    if "META-INF/MANIFEST.MF" in z.namelist():
+        mf = re.sub(r"\r?\n ", "", z.read("META-INF/MANIFEST.MF").decode("utf-8", "replace"))
+    main = (dict(re.findall(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$", mf, re.M)).get("Main-Class") or "").replace(".", "/")
+    clj = {c for c in cls if c.endswith("$_main")}
+    munge = lambda s: "".join(_CLJ_MUNGE.get(ch, ch) for ch in s)   # noqa: E731
+
+    def fnkey(c):   # Clojure fn class -> its body method
+        ms = cls[c][1]
+        return next(((c, *k) for k in ms if k[0] in ("invokeStatic", "doInvoke", "invoke")), None)
+
+    def resolve(own, name, desc, recv, op):
+        if isinstance(recv, tuple) and recv[0] == "var" and name in ("invoke", "applyTo"):
+            c = recv[1].replace(".", "/").replace("-", "_") + "$" + munge(recv[2]) if recv[1] else None
+            return fnkey(c) if c in cls else ("ext", recv[1], recv[2])
+        if own in cls:
+            if (name, desc) in cls[own][1]:
+                return (own, name, desc)
+            if name == "invokeStatic" or "$" in own and own.split("$")[-1] and name in ("invoke", "doInvoke"):
+                return fnkey(own)
+        return None
+    if clj:
+        entry = fnkey(sorted(clj, key=lambda c: not c.startswith(main + "$"))[0])
+    elif main in cls and ("main", "([Ljava/lang/String;)V") in cls[main][1]:
+        entry = (main, "main", "([Ljava/lang/String;)V")
+    else:
+        return None
+
+    def disp(k):
+        if not k or k[0] == "ext":
+            return k[2] if k else None
+        c, m = k[0], k[1]
+        if m in ("invokeStatic", "doInvoke", "invoke") and "$" in c:
+            return _clj_demunge(c.split("$", 1)[1])
+        return m
+    info, order, todo = {}, [], [entry]
+    while todo and len(info) < 200:
+        k = todo.pop(0)
+        if k in info or k[0] == "ext" or k[0] not in cls:
+            continue
+        p, ms = cls[k[0]]
+        code = ms.get((k[1], k[2]))
+        try:
+            info[k] = _rf_method(p, code, {(o, f): v for (o, f), v in consts.items() if o == k[0]} | {
+                (o, f): v for (o, f), v in consts.items()}, resolve) if code else ([], [], [])
+        except (ValueError, IndexError, KeyError, TypeError, struct.error):
+            info[k] = ([], [], [])
+        order.append(k)
+        todo += [c[1] for c in info[k][2]]
+
+    def sinky(k):
+        p, ms = cls[k[0]] if k[0] in cls else (None, {})
+        code = ms.get((k[1], k[2])) if p else None
+        if not code:
+            return False
+        cp, u = p["cp"], p["_u"]
+        try:
+            for _, op, a in jvm_code_decode(code):
+                if 0x2e <= op <= 0x35:
+                    return True
+                if op in (0xb6, 0xb8, 0xb9):
+                    e = cp[a[0]]
+                    c, nt = cp[e[1][0]], cp[e[1][1]]
+                    t = (u(c[1]), u(nt[1][0]), u(nt[1][1]))
+                    if any(t[0] == s[0] and t[1] == s[1] and (s[2] is None or s[2] == t[2]) for s in _RF_SINKS):
+                        return True
+        except (ValueError, IndexError, KeyError, TypeError, struct.error):
+            return False
+        return False
+    want = None
+    if target_fn:
+        tn = str(target_fn).strip()
+        want = next((k for k in order if disp(k) in (tn, _clj_demunge(tn)) or k[1] == tn), None)
+    else:
+        want = next((k for k in order[1:] if sinky(k)), None)
+    if not want:
+        return None
+    # BFS parent links entry -> want
+    par, q = {entry: None}, [entry]
+    while q:
+        k = q.pop(0)
+        for c in info.get(k, ([], [], []))[2]:
+            if c[1] not in par:
+                par[c[1]] = (k, c)
+                q.append(c[1])
+    if want not in par:
+        return {"call_path": "none", "reachable": "false"}
+    path, edges, k = [], [], want
+    while k:
+        path.append(k)
+        if par[k]:
+            edges.append(par[k][1])
+        k = par[k][0] if par[k] else None
+    path.reverse()
+    edges.reverse()
+    names_ = []
+    for k in path:
+        d = disp(k)
+        if not names_ or names_[-1] != d:
+            names_.append(d)
+    envs, gv, defaults, conds = [], {}, {}, []
+    for k, e in zip(path, edges + [None]):
+        ev, cm, calls = info[k]
+        lim = e[0] if e else 1 << 30
+        for pc, n, *d in ev:
+            if d:
+                defaults.setdefault(n, d[0])
+            elif pc < lim and n not in envs:
+                envs.append(n)
+        for pc, n, v in cm:
+            gv.setdefault(n, [])
+            if v not in gv[n]:
+                gv[n].append(v)
+        if e:
+            conds += list(e[3])
+    # defaults: Clojure (or ...) / Scala getOrElse(() -> "x") -> the literal at the env merge / in the lambda
+    for k in path:
+        p, ms = cls[k[0]]
+        for (mn, md), code in ms.items():
+            if "anonfun" in mn and md.endswith("Ljava/lang/String;") or mn == k[1] and md == k[2]:
+                try:
+                    ins = jvm_code_decode(code)
+                except (ValueError, IndexError, struct.error):
+                    continue
+                if "anonfun" in mn and len(ins) == 2 and ins[0][1] in (0x12, 0x13) and ins[1][1] == 0xb0:
+                    e = p["cp"][ins[0][2][0]]
+                    if e and e[0] == 8:
+                        for n in envs:
+                            if "HOST" in n.upper() or "MODEL" in n.upper():
+                                defaults.setdefault(n, p["_u"](e[1]))
+    last = edges[-1] if edges else None
+    trig, on, off = None, None, None
+    if last:
+        for a in last[2]:
+            if isinstance(a, tuple) and a[0] == "sel":
+                trig, on, off = a[1], _rf_size(a[2]), _rf_size(a[3])
+    host = next((n for n in envs if re.search(r"HOST|MODEL|PROFILE|ROLE", n, re.I)), None)
+    if host is None:
+        host = next((n for n in envs if len(gv.get(n, [])) >= 2), None)
+    out = {"entry_point": disp(entry), "target_function": disp(want), "call_path": names_,
+           "gate_env_vars": envs or "none", "gate_values": {n: gv.get(n, []) for n in envs} or "none"}
+    if trig:
+        out.update(trigger_env_var=trig[0], trigger_value=trig[1],
+                   trigger_condition=f"{trig[0]} == \"{trig[1]}\"",
+                   input_size_on_trigger=str(on) if on is not None else "none",
+                   input_size_safe=str(off) if off is not None else "none")
+    else:
+        out.update(trigger_env_var="none", trigger_value="none", trigger_condition="none",
+                   input_size_on_trigger="none", input_size_safe="none")
+    out["host_model_env_var"] = host or "none"
+    models = list(gv.get(host, [])) if host else []
+    if host and host in defaults and defaults[host] not in models:
+        models.append(defaults[host])
+    out["host_model_default"] = defaults.get(host, "none") if host else "none"
+    out["host_models"] = models or "none"
+    hc = [c for c in conds if c[0] == host]
+    for m in models:
+        out["reachable_for_" + m] = _jv(all((m == c[1]) == c[2] for c in hc))
+    out["reachable"] = "true"
+    return out
+
+
+def reachability_field(member, field, target_fn=None):
+    """One reachability_facts value: list/dict values as compact JSON, "none" for an absent key, None if no facts."""
+    f = reachability_facts(member, target_fn)
+    if not isinstance(f, dict):
+        return f
+    k = str(field).strip().lower().replace("-", "_").replace(" ", "_")
+    k = {"path": "call_path", "env_vars": "gate_env_vars", "gate_env": "gate_env_vars", "trigger": "trigger_condition",
+         "entry": "entry_point", "target": "target_function", "sink": "target_function"}.get(k, k)
+    v = f.get(k, "none")
+    return json.dumps(v, separators=(",", ":")) if isinstance(v, (list, dict)) else v
+
+
+_RF_NSINKS = ("memcpy", "memmove", "strcpy", "strcat", "sprintf", "gets", "read", "fread", "strncpy", "recv")
+_RF_SLOT = re.compile(r"\[[er]bp - (0x[0-9a-f]+|\d+)\]")
+
+
+def _rf_native(data, target_fn):
+    """x86/x64 ELF half of reachability_facts: direct-call graph from main (pyelftools symbols + PLT imports via
+    _npd_elf/_npd_body), getenv("X") -> stack slot, slot defaults (`if (!p) p = "dflt"`), strcmp(slot, "v") gates,
+    the trigger compare whose equal-branch rewrites a size slot that feeds the path call, and per-host-model early
+    exits (strcmp(host, "m") == 0 -> return before the call)."""
+    img = _npd_elf(data)
+    if not img:
+        return None
+    fnames = {a: n for a, _, n, _ in img["funcs"]}
+    byname = {n: f for f in img["funcs"] for n in [f[2]]}
+    if "main" not in byname:
+        return None
+    bodies = {}
+
+    def body(n):
+        if n not in bodies:
+            bodies[n] = _npd_body(img, byname[n], fnames) if n in byname else []
+        return bodies[n]
+
+    def callees(n):
+        return [(k, t.split(" fn:", 1)[1]) for k, (t, b, _) in enumerate(body(n)) if b == "call" and " fn:" in t]
+    want, sink = None, None
+    tn = str(target_fn).strip() if target_fn else None
+    par, q = {"main": None}, ["main"]
+    while q and len(par) < 400:
+        n = q.pop(0)
+        bd = body(n)
+        imps = [c for c in _npd_calls(bd)]
+        if tn and (n == tn or tn in imps) or not tn and any(c in _RF_NSINKS for c in imps) and n != "main":
+            want, sink = n, (tn if tn in imps else next((c for c in imps if c in _RF_NSINKS), None))
+            break
+        for k, c in callees(n):
+            if c not in par and c in byname:
+                par[c] = (n, k)
+                q.append(c)
+    if not want:
+        return None
+    path, k = [], want
+    while k:
+        path.append(k)
+        k = par[k][0] if par[k] else None
+    path.reverse()
+    envs, gv, dfl, conds, slot_env, trig, sizes = [], {}, {}, [], {}, None, (None, None)
+    for i, n in enumerate(path):
+        bd = body(n)
+        lim = par[path[i + 1]][1] if i + 1 < len(path) else len(bd)
+        last_str, imm = None, {}
+        for j, (t, b, op) in enumerate(bd):
+            m = re.search(r'\[str:("(?:[^"\\]|\\.)*")\]', t)
+            if m:
+                last_str = json.loads(m.group(1))
+            sl = _RF_SLOT.search(op)
+            if b == "mov" and sl and op.startswith(("qword", "dword")) and re.search(r", (0x[0-9a-f]+|\d+)$", op):
+                imm[sl.group(1)] = int(op.rsplit(", ", 1)[1], 0)
+            if b == "call" and t.endswith("imp:getenv") and last_str:
+                envs.append(last_str) if last_str not in envs else None
+                nx = bd[j + 1][2] if j + 1 < len(bd) else ""
+                s2 = _RF_SLOT.search(nx)
+                if s2 and nx.endswith(", rax"):
+                    slot_env[s2.group(1)] = last_str
+                last_str = None
+            elif b == "mov" and sl and op.endswith(", rax") and j and "[str:" in bd[j - 1][0] and \
+                    sl.group(1) in slot_env:
+                dfl.setdefault(slot_env[sl.group(1)], last_str)
+            elif b == "call" and re.search(r"imp:(strcmp|strncmp|strcasecmp)$", t):
+                win = [x[2] for x in bd[max(0, j - 5):j]]
+                ev = next((slot_env[s.group(1)] for x in win for s in [_RF_SLOT.search(x)] if s and
+                           s.group(1) in slot_env), None)
+                if not ev or last_str is None:
+                    continue
+                gv.setdefault(ev, [])
+                if last_str not in gv[ev]:
+                    gv[ev].append(last_str)
+                # test eax, eax ; jne L  -> equal branch = [j+3, L)
+                if j < lim and j + 2 < len(bd) and bd[j + 1][1] == "test" and bd[j + 2][1] in ("jne", "je"):
+                    jm = re.search(r" L(\d+)$", bd[j + 2][0])
+                    if not jm:
+                        continue
+                    L = int(jm.group(1))
+                    eq = bd[j + 3:L] if bd[j + 2][1] == "jne" else bd[L:L + 8]
+                    exits = any(x[1] in ("ret", "leave") or x[0].endswith(("imp:exit", "imp:_exit", "imp:abort")) or
+                                x[1] == "jmp" and re.search(r" L(\d+)$", x[0]) and
+                                int(re.search(r" L(\d+)$", x[0]).group(1)) > lim for x in eq)
+                    if exits and (bd[j + 2][1] == "jne" and L <= lim):
+                        conds.append((ev, last_str, False))
+                    for x in eq:
+                        s3 = _RF_SLOT.search(x[2])
+                        if x[1] == "mov" and s3 and s3.group(1) in imm and re.search(r", (0x[0-9a-f]+|\d+)$", x[2]):
+                            trig = (ev, last_str, s3.group(1), imm[s3.group(1)],
+                                    int(x[2].rsplit(", ", 1)[1], 0))
+                last_str = None
+        if trig and i + 1 < len(path) and sizes == (None, None):
+            win = [x[2] for x in bd[max(0, lim - 4):lim]]
+            if any(_RF_SLOT.search(x) and _RF_SLOT.search(x).group(1) == trig[2] for x in win):
+                sizes = (trig[4], trig[3])
+    names_ = path + ([sink] if sink and sink != path[-1] else [])
+    out = {"entry_point": "main", "target_function": want, "vulnerable_call": sink or "none", "call_path": names_,
+           "gate_env_vars": envs or "none", "gate_values": {n: gv.get(n, []) for n in envs} or "none"}
+    if trig:
+        out.update(trigger_env_var=trig[0], trigger_value=trig[1], trigger_condition=f"{trig[0]} == \"{trig[1]}\"",
+                   input_size_on_trigger=str(sizes[0]) if sizes[0] is not None else "none",
+                   input_size_safe=str(sizes[1]) if sizes[1] is not None else "none")
+    else:
+        out.update(trigger_env_var="none", trigger_value="none", trigger_condition="none",
+                   input_size_on_trigger="none", input_size_safe="none")
+    host = next((n for n in envs if re.search(r"HOST|MODEL|PROFILE|ROLE", n, re.I)), None) or \
+        next((n for n in envs if len(gv.get(n, [])) >= 2), None)
+    out["host_model_env_var"] = host or "none"
+    out["host_model_default"] = dfl.get(host, "none") if host else "none"
+    models = list(gv.get(host, [])) if host else []
+    if host and host in dfl and dfl[host] not in models:
+        models.append(dfl[host])
+    out["host_models"] = models or "none"
+    for m in models:
+        out["reachable_for_" + m] = _jv(all((m == c[1]) == c[2] for c in conds if c[0] == host))
+    out["reachable"] = "true"
+    return out
+
+
+# ---- stack-overflow exploitability facts ("prove it is broken") -------------------------------------------------------
+# Static pass over x86-64 ELF functions (capstone via _npd_elf/_npd_body: frame `sub rsp, N`, buffer `lea reg,
+# [rbp-0xNN]` / `[rsp+0xNN]` reaching the buffer argument of an unsafe / length-taking sink, canary `mov rax, fs:[0x28]`
+# + __stack_chk_fail) plus a unicorn run of the chosen function fed a de Bruijn (pwntools-style cyclic, a-z, n=4) input
+# through stubbed imports: ret_overwrite_length = shortest input that changes the saved return address (terminating NUL
+# included), canary_trip_length = shortest that reaches __stack_chk_fail. Field vocabulary is SPECULATIVE (no GM label).
+_OVF_UNBOUNDED = {"gets": "rdi", "strcpy": "rdi", "stpcpy": "rdi", "strcat": "rdi", "wcscpy": "rdi", "sprintf": "rdi",
+                  "vsprintf": "rdi"}
+_OVF_BOUNDED = {"fgets": ("rdi", "rsi"), "read": ("rsi", "rdx"), "recv": ("rsi", "rdx"), "recvfrom": ("rsi", "rdx"),
+                "memcpy": ("rdi", "rdx"), "memmove": ("rdi", "rdx"), "strncpy": ("rdi", "rdx"),
+                "strncat": ("rdi", "rdx"), "snprintf": ("rdi", "rsi"), "vsnprintf": ("rdi", "rsi"),
+                "fread": ("rdi", "rdx")}
+_OVF_SCANF = {"scanf": ("rdi", ("rsi", "rdx", "rcx", "r8", "r9")), "fscanf": ("rsi", ("rdx", "rcx", "r8", "r9")),
+              "sscanf": ("rsi", ("rdx", "rcx", "r8", "r9"))}
+_OVF_ARGS = ("rdi", "rsi", "rdx", "rcx", "r8", "r9")
+_OVF_R64 = {**{p + r: "r" + r for r in ("ax", "bx", "cx", "dx", "si", "di", "bp", "sp") for p in ("r", "e")},
+            **{f"r{i}{s}": f"r{i}" for i in range(8, 16) for s in ("", "d", "w", "b")},
+            "ax": "rax", "bx": "rbx", "cx": "rcx", "dx": "rdx", "si": "rsi", "di": "rdi", "al": "rax", "bl": "rbx",
+            "cl": "rcx", "dl": "rdx", "sil": "rsi", "dil": "rdi"}
+_OVF_MEMO = [None, None, None]
+
+
+def _ovf_sink(n):
+    n = _npd_imp(n)
+    m = re.fullmatch(r"__isoc\d\d_(\w+)", n)
+    return m.group(1) if m else n
+
+
+
+def de_bruijn(n=4, alphabet=b"abcdefghijklmnopqrstuvwxyz", length=None):
+    """pwntools cyclic(): de Bruijn sequence B(k, n) over `alphabet` (Ruskey's db(t, p); recursion depth n + 1)."""
+    k, a, out = len(alphabet), [0] * len(alphabet) * n, bytearray()
+
+    def db(t, p):
+        if length is not None and len(out) >= length:
+            return
+        if t > n:
+            if n % p == 0:
+                out.extend(alphabet[a[j]] for j in range(1, p + 1))
+            return
+        a[t] = a[t - p]
+        db(t + 1, p)
+        for j in range(a[t - p] + 1, k):
+            a[t] = j
+            db(t + 1, t)
+    db(1, 1)
+    return bytes(out if length is None else out[:length])
+
+
+def _ovf_frame(raw):
+    """Prologue -> (pushes before the frame is set, rbp_frame, frame size N, pushes counted when rbp was set)."""
+    pushes, rbp_at, frame = 0, None, 0
+    for _, _, mn, op in raw[:16]:
+        if mn == "push":
+            pushes += 1
+        elif mn == "mov" and op == "rbp, rsp":
+            rbp_at = pushes
+        elif mn in ("sub", "add") and op.startswith("rsp, "):
+            try:
+                v = int(op[5:], 0)
+            except ValueError:
+                break
+            v = v if mn == "sub" else (-v) & 0xffffffffffffffff   # add rsp, -0x80 == sub rsp, 0x80
+            frame = v if v < 1 << 32 else 0
+            break
+        elif mn == "call" or mn.startswith("j") or mn == "ret":
+            break
+    return pushes, rbp_at, frame
+
+
+def _ovf_func_sinks(img, fn):
+    """[(sink, call address, buffer (base, off), length int|None, fmt)] for stack-buffer sink calls of one function, plus
+    the frame / canary facts."""
+    a0, sz, name, _ = fn
+    code = _npd_bytes(img, a0, sz)
+    raw = [(a, s, mn, op) for a, s, mn, op in img["md"].disasm_lite(code, a0) if mn not in ("nop", "int3")]
+    pushes, rbp_at, frame = _ovf_frame(raw)
+    st, out, canary_slot, canary_load, rets, chk = {}, [], None, False, [], False
+    for k, (a, s, mn, op) in enumerate(raw):
+        ops = [x.strip() for x in op.split(",")] if op else []
+        dst = _OVF_R64.get(ops[0]) if ops else None
+        if mn == "ret":
+            rets.append(a)
+        if mn == "mov" and len(ops) == 2 and "fs:[0x28]" in ops[1]:
+            canary_load = True
+            for _, _, mn2, op2 in raw[k + 1:k + 3]:
+                m = re.fullmatch(r"qword ptr \[(rbp|rsp) ([+-]) (0x[0-9a-f]+|\d+)\], \w+", op2) if mn2 == "mov" else None
+                if m:
+                    canary_slot = (m.group(1), int(m.group(3), 0) * (-1 if m.group(2) == "-" else 1))
+                    break
+            st.pop(dst, None)
+            continue
+        if mn == "call":
+            t = int(op, 16) if re.fullmatch(r"0x[0-9a-f]+", op) else None
+            ref = None
+            if t is not None:
+                ref = img["imp"].get(t) or img["slot"].get(t)
+            else:
+                m = _NPD_RIP.search(op)
+                if m:
+                    ref = img["slot"].get(a + s + (1 if m.group(2) == "+" else -1) * int(m.group(3), 16))
+            if ref:
+                sk = _ovf_sink(ref)
+                chk = chk or sk.endswith("stack_chk_fail")
+                ent = None
+                if sk in _OVF_UNBOUNDED:
+                    ent = (st.get(_OVF_UNBOUNDED[sk]), None, None)
+                elif sk in _OVF_BOUNDED:
+                    br, lr = _OVF_BOUNDED[sk]
+                    ln = st.get(lr)
+                    ln = ln[1] if ln and ln[0] == "imm" else None
+                    if sk == "fread" and ln is not None:
+                        sz_ = st.get("rsi")
+                        ln = ln * sz_[1] if sz_ and sz_[0] == "imm" else None
+                    ent = (st.get(br), ln, None)
+                elif sk in _OVF_SCANF:
+                    fr, argr = _OVF_SCANF[sk]
+                    f = st.get(fr)
+                    fmt = None
+                    if f and f[0] == "addr":
+                        b = _npd_bytes(img, f[1], 256).split(b"\0", 1)[0]
+                        fmt = b.decode("latin-1")
+                    if fmt:
+                        specs = re.findall(r"%(\*?)(\d*)[hlLqjzt]*([a-zA-Z\[%])", fmt)
+                        j = 0
+                        for star, w, c in specs:
+                            if c == "%":
+                                continue
+                            if c in "s[" and not star:
+                                if j < len(argr):
+                                    ent = (st.get(argr[j]), int(w) + 1 if w else None, fmt)
+                                break
+                            j += 0 if star else 1
+                if ent and ent[0] and ent[0][0] == "stk":
+                    out.append((sk, a, ent[0][1:], ent[1], ent[2]))
+            for r in ("rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"):
+                st.pop(r, None)
+            continue
+        if not dst or len(ops) != 2:
+            if dst and mn in ("pop", "inc", "dec", "neg", "not"):
+                st.pop(dst, None)
+            continue
+        src = ops[1]
+        val = None
+        if mn == "lea":
+            m = re.fullmatch(r"\[(rbp|rsp)(?: ([+-]) (0x[0-9a-f]+|\d+))?\]", src)
+            if m:
+                val = ("stk", m.group(1), int(m.group(3) or "0", 0) * (-1 if m.group(2) == "-" else 1))
+            else:
+                m = _NPD_RIP.fullmatch(src)
+                if m:
+                    val = ("addr", a + s + (1 if m.group(2) == "+" else -1) * int(m.group(3), 16))
+        elif mn in ("mov", "movabs"):
+            if src in ("rsp", "rbp"):
+                val = ("stk", src, 0)
+            elif _OVF_R64.get(src):
+                val = st.get(_OVF_R64[src])
+            elif re.fullmatch(r"(0x[0-9a-f]+|\d+)", src):
+                val = ("imm", int(src, 0))
+        elif mn == "xor" and _OVF_R64.get(src) == dst:
+            val = ("imm", 0)
+        if val is None:
+            st.pop(dst, None)
+        else:
+            st[dst] = val
+    return {"raw": raw, "pushes": pushes, "rbp_at": rbp_at, "frame": frame, "canary_slot": canary_slot,
+            "canary": canary_load and chk,
+            "rets": rets, "sinks": out}
+
+
+def _ovf_dist(info, base, off):
+    """Bytes from a [base+off] stack object up to the saved return address (None when the frame is not understood)."""
+    if base == "rbp":
+        return -off + 8 * info["rbp_at"] if info["rbp_at"] else None
+    if info["rbp_at"] is None or base == "rsp":
+        return 8 * info["pushes"] + info["frame"] - off
+    return None
+
+
+class _OvfEmu:
+    """One unicorn x86-64 image of the ELF: PT_LOAD segments mapped at their vaddrs, imports stubbed (PLT entries and
+    GOT slots), fs:[0x28] canary with a zero low byte like glibc."""
+    STK, STKSZ, INP, TLS, HEAP, RET = 0x7ff000000000, 0x100000, 0x7fe000000000, 0x7fd000000000, 0x7fc000000000, \
+        0x7fb000000123
+    CANARY = 0x5ab1e5c0ffee7700
+
+    def __init__(self, data, img):
+        from elftools.elf.elffile import ELFFile
+        import unicorn as U
+        import unicorn.x86_const as X
+        self.U, self.X, self.img = U, X, img
+        uc = U.Uc(U.UC_ARCH_X86, U.UC_MODE_64)
+        ef = ELFFile(io.BytesIO(data))
+        pages, self.wseg = [], []
+        for sg in ef.iter_segments():
+            if sg["p_type"] != "PT_LOAD" or not sg["p_memsz"]:
+                continue
+            lo, hi = sg["p_vaddr"] & ~0xfff, (sg["p_vaddr"] + sg["p_memsz"] + 0xfff) & ~0xfff
+            pages.append([lo, hi])
+            blob = data[sg["p_offset"]:sg["p_offset"] + sg["p_filesz"]]
+            self.wseg.append((sg["p_vaddr"], blob + b"\0" * (sg["p_memsz"] - len(blob)), bool(sg["p_flags"] & 2)))
+        pages.sort()
+        merged = []
+        for lo, hi in pages:
+            if merged and lo <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], hi)
+            else:
+                merged.append([lo, hi])
+        if not merged or sum(hi - lo for lo, hi in merged) > 256 << 20:
+            raise ValueError("image")
+        for lo, hi in merged:
+            uc.mem_map(lo, hi - lo)
+        for va, blob, _ in self.wseg:
+            uc.mem_write(va, blob)
+        for b, n in ((self.STK - self.STKSZ, self.STKSZ), (self.INP, 0x10000), (self.TLS, 0x1000),
+                     (self.HEAP, 0x100000), (self.RET & ~0xfff, 0x1000), (0x7fa000000000, 0x10000)):
+            uc.mem_map(b, n)
+        uc.mem_write(self.TLS + 0x28, struct.pack("<Q", self.CANARY))
+        names = sorted(set(img["imp"].values()) | set(img["slot"].values()))
+        self.stub = {0x7fa000000000 + 16 * i: n for i, n in enumerate(names)}
+        uc.mem_write(0x7fa000000000, b"\xc3" * 16 * max(1, len(names)))
+        rev = {n: a for a, n in self.stub.items()}
+        for slot, n in img["slot"].items():
+            try:
+                uc.mem_write(slot, struct.pack("<Q", rev[n]))
+            except U.UcError:
+                pass
+        self.stub.update({a: n for a, n in img["imp"].items()})
+        uc.hook_add(U.UC_HOOK_CODE, self._hook)
+        self.uc = uc
+
+    def _cstr(self, a, cap=0x2000):
+        try:
+            b = bytes(self.uc.mem_read(a, cap))
+        except self.U.UcError:
+            return b""
+        return b.split(b"\0", 1)[0]
+
+    def _hook(self, uc, addr, size, _):
+        X = self.X
+        if addr in self.rets and uc.reg_read(X.UC_X86_REG_RSP) == self.slot:
+            self.result = "ret"
+            uc.emu_stop()
+            return
+        n = self.stub.get(addr)
+        if n is None:
+            return
+        n = _ovf_sink(n)
+        a = [uc.reg_read(getattr(X, "UC_X86_REG_" + r.upper())) for r in _OVF_ARGS]
+        L, pat, ret = self.L, self.pat, 0
+        w = lambda d, b: uc.mem_write(d, bytes(b))
+        try:
+            if n.endswith("stack_chk_fail") or n in ("abort", "exit", "_exit", "__assert_fail", "__fortify_fail"):
+                self.result = "canary" if "stack_chk" in n else n
+                uc.emu_stop()
+                return
+            if n == "gets":
+                w(a[0], pat[:L] + b"\0"); ret = a[0]
+            elif n == "fgets":
+                m = max(0, min(L, (a[1] & 0xffffffff) - 1))
+                w(a[0], pat[:m] + (b"\n" if m == L and m < (a[1] & 0xffffffff) - 1 else b"") + b"\0"); ret = a[0]
+            elif n in ("read", "recv", "recvfrom", "fread"):
+                m = min(L, a[2] * (a[1] if n == "fread" else 1))
+                w(a[1] if n != "fread" else a[0], pat[:m]); ret = m // (a[1] or 1) if n == "fread" else m
+            elif n in ("strcpy", "stpcpy", "strcat", "strncpy", "strncat"):
+                s = self._cstr(a[1])
+                d = a[0] + (len(self._cstr(a[0])) if n.endswith("cat") else 0)
+                s = s[:a[2]] if n in ("strncpy", "strncat") else s
+                w(d, s + b"\0"); ret = a[0]
+            elif n in ("memcpy", "memmove"):
+                w(a[0], uc.mem_read(a[1], a[2]) if a[2] < 0x100000 else b""); ret = a[0]
+            elif n == "memset":
+                w(a[0], bytes([a[1] & 0xff]) * min(a[2], 0x100000)); ret = a[0]
+            elif n in ("scanf", "fscanf", "sscanf"):
+                fi = {"scanf": 0, "fscanf": 1, "sscanf": 1}[n]
+                fmt = self._cstr(a[fi]).decode("latin-1")
+                j = fi + 1
+                for star, wd, c in re.findall(r"%(\*?)(\d*)[hlLqjzt]*([a-zA-Z\[%])", fmt):
+                    if c == "%" or star:
+                        continue
+                    if j >= 6:
+                        break
+                    if c in "s[":
+                        m = min(L, int(wd)) if wd else L
+                        w(a[j], pat[:m] + b"\0")
+                        break
+                    j += 1
+                ret = 1
+            elif n in ("sprintf", "snprintf"):
+                fmt = self._cstr(a[1 if n == "sprintf" else 2]).decode("latin-1")
+                o = re.sub(r"%[-0-9.]*[a-zA-Z]", lambda mm: "\0S" if mm.group(0).endswith("s") else "0", fmt, count=1)
+                o = o.encode("latin-1").replace(b"\0S", self._cstr(a[2 if n == "sprintf" else 3]))
+                o = o[:max(0, a[1] - 1)] if n == "snprintf" else o
+                w(a[0], o + b"\0"); ret = len(o)
+            elif n == "strlen":
+                ret = len(self._cstr(a[0]))
+            elif n in ("malloc", "calloc"):
+                ret, self.heap = self.heap, self.heap + ((a[0] * (a[1] if n == "calloc" else 1) + 15) & ~15)
+            elif n in ("write", "send"):
+                ret = a[2]
+        except (self.U.UcError, OverflowError, ValueError):
+            pass
+        rsp = uc.reg_read(X.UC_X86_REG_RSP)
+        uc.reg_write(X.UC_X86_REG_RAX, ret & 0xffffffffffffffff)
+        uc.reg_write(X.UC_X86_REG_RIP, struct.unpack("<Q", uc.mem_read(rsp, 8))[0])
+        uc.reg_write(X.UC_X86_REG_RSP, rsp + 8)
+
+    def run(self, fn, rets, L, pat, is_main=False):
+        """-> (result "ret" | "canary" | "exit" | "fault" | "timeout", saved-return slot value at the stop)."""
+        uc, X = self.uc, self.X
+        for va, blob, wr in self.wseg:
+            if wr:
+                uc.mem_write(va, blob)
+        uc.mem_write(self.STK - 0x10000, b"\0" * 0x10000)
+        uc.mem_write(self.INP, pat[:L] + b"\0")
+        uc.mem_write(self.INP + 0x8000, struct.pack("<QQQQ", self.INP + 0x7ff0, self.INP, 0, 0))
+        self.L, self.pat, self.rets, self.result, self.heap = L, pat, set(rets), "fault", self.HEAP
+        self.slot = self.STK - 0x8000
+        uc.mem_write(self.slot, struct.pack("<Q", self.RET))
+        uc.reg_write(X.UC_X86_REG_RSP, self.slot)
+        uc.reg_write(X.UC_X86_REG_RBP, self.STK - 0x100)
+        uc.reg_write(X.UC_X86_REG_FS_BASE, self.TLS)
+        args = (2, self.INP + 0x8000, self.INP + 0x8010) if is_main else (self.INP,) * 6
+        for r, v in zip(_OVF_ARGS, args):
+            uc.reg_write(getattr(X, "UC_X86_REG_" + r.upper()), v)
+        try:
+            uc.emu_start(fn, self.RET, timeout=60000, count=200000)
+            if uc.reg_read(X.UC_X86_REG_RIP) == self.RET and self.result == "fault":
+                self.result = "ret"
+        except self.U.UcError:
+            self.result = "fault" if self.result == "fault" else self.result
+        return self.result, struct.unpack("<Q", uc.mem_read(self.slot, 8))[0]
+
+
+def overflow_facts(data, function=None):
+    """Stack-buffer-overflow exploitability facts of an x86-64 ELF (dict of strings; None when not one):
+      vulnerable_function, unsafe_call (gets / strcpy / read / scanf / fgets ... the sink writing the stack buffer;
+      __isoc99_/__isoc23_ / __x_chk folded), call_address, vulnerable "true"/"false" (unbounded sink or length >
+      bytes up to the first saved control data), frame_size (sub rsp, N), buffer_offset (NN of [rbp-NN] /
+      [rsp+NN]) + buffer_base, read_length (length argument / %Ns width + 1 / "none"), distance_to_canary,
+      distance_to_saved_rbp, distance_to_return (bytes of padding before the saved RIP = NN + 8 on rbp frames),
+      offset_to_rip (= distance_to_return), payload_length_ret (distance_to_return + 8), canary / stack_canary
+      (function check: fs:[0x28] + __stack_chk_fail), canary_offset (rbp-8 -> 8), binary_canary (checksec rule:
+      __stack_chk_fail imported), nx / pie / relro (elf_header_facts checksec rules), fortify; emulated (unicorn,
+      de Bruijn cyclic a-z n=4 input): ret_overwrite_length, canary_trip_length, crash_length (canary trip when a
+      canary guards the frame, else ret overwrite), cyclic_offset (offset of the 4-byte cyclic window found in the
+      saved RIP), faulting_instruction ("ret" / "call __stack_chk_fail") + faulting_address, crash_signal
+      SIGSEGV / SIGABRT. Integers decimal; *_hex twins. "none" = absent / not applicable."""
+    t0 = time.time()
+    try:
+        if bytes(data[:4]) != b"\x7fELF" or data[4] != 2 or data[5] != 1:
+            return None
+        shoff, = struct.unpack_from("<Q", data, 0x28)
+        shes, shn = struct.unpack_from("<HH", data, 0x3a)
+        if not shoff or shoff + shes * shn > len(data):   # truncated / section table cut: cannot answer
+            return None
+        big = len(data) > 8 << 20 or not re.search(rb"(?:gets|fgets|st[rp]n?c(?:py|at)|v?s?n?printf|"
+                                                   rb"read|recv(?:from)?|mem(?:cpy|move)|f?s?scanf|fread)(?:_chk)?\0", data)
+        img = _npd_elf(bytes(data)) if not big else None
+        if not big and (not img or img["bits"] != 64):
+            return None
+        img = img or {"imp": {}, "slot": {}, "funcs": []}
+        t0 = time.time()   # budget for the scan + emulation (image parse / cold imports above are not counted)
+        imps = set(img["imp"].values()) | set(img["slot"].values())
+        sinkset = set(_OVF_UNBOUNDED) | set(_OVF_BOUNDED) | set(_OVF_SCANF)
+        has_sink = any(_ovf_sink(n) in sinkset for n in imps)
+        cands = []
+        for fn in img["funcs"] if has_sink else ():
+            if _NPD_RUNTIME.match(fn[2]) or (function and fn[2] != function) or fn[1] > 1 << 16:
+                continue
+            if time.time() - t0 > 0.45:
+                break
+            info = _ovf_func_sinks(img, fn)
+            for sk, ca, (base, off), ln, fmt in info["sinks"]:
+                d = _ovf_dist(info, base, off)
+                if d is None or d <= 0:
+                    continue
+                cs = info["canary_slot"]
+                dc = _ovf_dist(info, *cs) if cs else None
+                dc = d - dc if dc is not None else None
+                ctl = dc if info["canary"] and dc is not None else d - 8 * (info["pushes"] if base == "rsp" or
+                                                                           info["rbp_at"] is None else info["rbp_at"])
+                vul = ln is None or ln > ctl
+                cands.append((not vul, fn[0], fn, info, sk, ca, base, off, ln, d, dc, vul))
+        hdr = elf_header_facts(data, hcfg=False) or {}
+        tf = lambda b: "true" if b else "false"
+        h = lambda v: hex(v) if isinstance(v, int) else "none"
+        s = lambda v: str(v) if isinstance(v, int) else "none"
+        f = {"binary_canary": tf(any(n.endswith("stack_chk_fail") for n in imps) or
+                                 big and b"\0__stack_chk_fail\0" in data), "nx": hdr.get("has_nx", "none"),
+             "pie": hdr.get("is_pie", "none"), "relro": hdr.get("relro", "none"),
+             "fortify": tf(any(re.fullmatch(r"__\w+_chk", n) and "stack_chk" not in n for n in
+                               img["slot"].values()))}
+        f["checksec"] = f"canary={f['binary_canary']} nx={f['nx']} pie={f['pie']} relro={f['relro']}"
+        if not cands:
+            f.update(vulnerable="false", vulnerable_function="none", unsafe_call="none")
+            return f
+        cands.sort(key=lambda c: (c[0], c[1], c[5]))
+        _, _, fn, info, sk, ca, base, off, ln, d, dc, vul = cands[0]
+        nmax = 1 << max(9, (d + 72).bit_length())
+        f.update(vulnerable=tf(vul), vulnerable_function=fn[2], function_address=h(fn[0]), unsafe_call=sk,
+                 call_address=h(ca), bounded=tf(ln is not None), read_length=s(ln), read_length_hex=h(ln),
+                 frame_size=s(info["frame"]), frame_size_hex=h(info["frame"]), buffer_base=base,
+                 buffer_offset=s(abs(off)), buffer_offset_hex=h(abs(off)), distance_to_return=s(d),
+                 distance_to_return_hex=h(d), offset_to_rip=s(d), payload_length_ret=s(d + 8),
+                 distance_to_saved_rbp=s(d - 8) if info["rbp_at"] else "none",
+                 distance_to_canary=s(dc) if info["canary"] else "none",
+                 canary=tf(info["canary"]), stack_canary=tf(info["canary"]),
+                 canary_offset=s(-info["canary_slot"][1]) if info["canary"] and info["canary_slot"] and
+                 info["canary_slot"][0] == "rbp" else "none")
+        emu = {"ret_overwrite_length": "none", "canary_trip_length": "none", "crash_length": "none",
+               "cyclic_offset": "none", "faulting_instruction": "none", "faulting_address": "none",
+               "crash_signal": "none"}
+        f.update(emu)
+        if time.time() - t0 > 0.6:
+            return f
+        try:
+            E = _OvfEmu(bytes(data), img)
+        except Exception:  # noqa: BLE001 -- no unicorn / odd image: static facts only
+            return f
+        pat = de_bruijn(4, length=nmax + 16)
+        main = fn[2] == "main"
+
+        def first(pred):
+            r0 = E.run(fn[0], info["rets"], nmax, pat, main)
+            if not pred(r0):
+                return None
+            lo, hi = 0, nmax   # pred(hi) true, find the smallest
+            while lo < hi and time.time() - t0 < 0.85:
+                mid = (lo + hi) // 2
+                if pred(E.run(fn[0], info["rets"], mid, pat, main)):
+                    hi = mid
+                else:
+                    lo = mid + 1
+            return hi if lo == hi else None
+        changed = lambda r: r[1] != E.RET or r[0] == "canary"
+        if E.run(fn[0], info["rets"], 0, pat, main)[0] not in ("ret", "canary"):
+            return f
+        ro = first(lambda r: r[1] != E.RET)
+        ct = first(lambda r: r[0] == "canary") if info["canary"] else None
+        res, slot = E.run(fn[0], info["rets"], nmax, pat, main)
+        cyc = pat.find(struct.pack("<Q", slot)[:4]) if slot != E.RET else -1
+        crash = ct if info["canary"] and ct is not None else ro
+        f.update(ret_overwrite_length=s(ro), canary_trip_length=s(ct), crash_length=s(crash),
+                 cyclic_offset=s(cyc) if cyc >= 0 else "none")
+        if crash is not None and changed((res, slot)):
+            if info["canary"] and ct is not None:
+                f.update(faulting_instruction="call __stack_chk_fail", crash_signal="SIGABRT",
+                         faulting_address=h(next((a for a, _, mn, op in info["raw"] if mn == "call" and
+                                                  _ovf_sink(img["imp"].get(int(op, 16), "") if re.fullmatch(
+                                                      r"0x[0-9a-f]+", op) else "").endswith("stack_chk_fail")),
+                                                 None)))
+            else:
+                f.update(faulting_instruction="ret", crash_signal="SIGSEGV",
+                         faulting_address=h(info["rets"][-1] if info["rets"] else None))
+        return f
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+def overflow_field(data, name, function=None):
+    """One overflow_facts value; "none" for an unknown key / non-ELF input; None when unparseable."""
+    try:
+        if _OVF_MEMO[0] is data and _OVF_MEMO[1] == function:
+            f = _OVF_MEMO[2]
+        else:
+            f = overflow_facts(data, function)
+            _OVF_MEMO[:] = [data, function, f]
+        if f is None:
+            return "none"
+        return f.get(name.strip(), "none")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# ---- check-input solver: an input that reaches the accept branch of `int check(const char *s)` (x86-64 ELF) ----
+# angr/z3 are not in-window; unicorn is. The two families seen in crackmes/license checks: (1) the accepted input is one
+# of the binary's own literals behind a hash / strcmp gate -> try every printable literal; (2) a strlen-gated per-char
+# compare (s[i] ^ k == c / s[i] + k == c, early exit) -> pick the length whose run reaches the buffer, then per position
+# the byte that makes the function read the input more often (one more check passed). libc calls go through GOT slots
+# pointed at an import page: strlen/strcmp/memcmp/... emulated, output calls return 0, anything else refuses.
+SOLVE_INPUT_SYMBOLS = ("check", "check_serial", "check_license", "check_key", "check_password", "verify", "validate",
+                       "verify_serial", "validate_key", "is_valid")
+
+
+def _si_imp(uc, name, a, cstr):
+    if name in ("strlen", "strnlen"):
+        return len(cstr(a[0]))
+    if name in ("strcmp", "strcasecmp", "strncmp", "strncasecmp", "memcmp", "bcmp"):
+        if name.startswith("str"):
+            x, y = cstr(a[0]), cstr(a[1])
+            if "case" in name:
+                x, y = x.lower(), y.lower()
+            if "n" in name[3:5]:
+                x, y = x[:a[2]], y[:a[2]]
+        else:
+            n = a[2] & 0xffff
+            x, y = bytes(uc.mem_read(a[0], n)), bytes(uc.mem_read(a[1], n))
+        return 0 if x == y else (1 if x > y else 0xffffffff)
+    if name in ("toupper", "tolower"):
+        c = a[0] & 0xff
+        return ord(chr(c).upper() if name == "toupper" else chr(c).lower()) if c < 128 else c
+    if name in ("puts", "printf", "fprintf", "fputs", "putchar", "fflush", "__printf_chk", "__fprintf_chk", "fwrite"):
+        return 0
+    return None
+
+
+def _si_setup(data, symbol):
+    """-> (run(buf) -> (ret, reads), literals) | "none" (no FUNC symbol) | None."""
+    import unicorn as U
+    from elftools.elf.elffile import ELFFile
+    X = U.x86_const
+    elf = ELFFile(io.BytesIO(data))
+    if elf["e_machine"] != "EM_X86_64" or elf.elfclass != 64:
+        return None
+    names = [symbol] if symbol else list(SOLVE_INPUT_SYMBOLS)
+    syms, dsym = {}, None
+    for sec in elf.iter_sections():
+        if sec["sh_type"] == "SHT_SYMTAB":
+            for s in sec.iter_symbols():
+                if s.name in names and s["st_info"]["type"] == "STT_FUNC" and s["st_value"] and s["st_shndx"] != \
+                        "SHN_UNDEF":
+                    syms.setdefault(s.name, s["st_value"])
+    addr = next((syms[n] for n in names if n in syms), None)
+    if addr is None:
+        return "none"
+    base = 0x10000000 if elf["e_type"] == "ET_DYN" else 0
+    pages, loads = {}, []
+    for seg in elf.iter_segments():
+        if seg["p_type"] != "PT_LOAD" or not seg["p_memsz"]:
+            continue
+        va, msz = seg["p_vaddr"] + base, seg["p_memsz"]
+        if msz > 64 << 20:
+            return None
+        for p in range(va & ~0xfff, (va + msz + 0xfff) & ~0xfff, 0x1000):
+            pages[p] = U.UC_PROT_ALL
+        off = seg["p_offset"]
+        loads.append((va, data[off:off + min(seg["p_filesz"], max(0, len(data) - off))]))
+    if not pages or len(pages) > 32768:
+        return None
+    top = (max(pages) + 0x100000 + 0xfffff) & ~0xfffff
+    stk, sent, imp, inb = top, top + 0x40000, top + 0x41000, top + 0x50000
+    rels, imps = [], []
+    for sec in elf.iter_sections():
+        if sec["sh_type"] != "SHT_RELA":
+            continue
+        dyn = elf.get_section(sec["sh_link"]) if sec["sh_link"] else None
+        for r in sec.iter_relocations():
+            t = r["r_info_type"]
+            if t == 8 and base:
+                rels.append((r["r_offset"] + base, (r["r_addend"] + base) & (1 << 64) - 1))
+            elif t in (6, 7) and dyn is not None and r["r_info_sym"]:
+                nm = dyn.get_symbol(r["r_info_sym"]).name.split("@")[0]
+                rels.append((r["r_offset"] + base, imp + 16 * len(imps)))
+                imps.append(nm)
+            if len(rels) > 200_000:
+                return None
+    lits = [m.group().decode() for m in re.finditer(rb"[\x21-\x7e][\x20-\x7e]{2,63}(?=\0)", data[:1 << 22])]
+    uc = U.Uc(U.UC_ARCH_X86, U.UC_MODE_64)
+    run = []
+    for p in sorted(pages):
+        if run and p == run[-1][0] + run[-1][1]:
+            run[-1][1] += 0x1000
+        else:
+            run.append([p, 0x1000])
+    for p, n in run:
+        uc.mem_map(p, n)
+    for va, blob in loads:
+        uc.mem_write(va, blob)
+    for off, v in rels:
+        uc.mem_write(off, v.to_bytes(8, "little"))
+    snap = [(p, bytes(uc.mem_read(p, n))) for p, n in run if n <= 1 << 22]
+    uc.mem_map(stk, 0x40000)
+    uc.mem_map(sent, 0x1000)
+    uc.mem_map(imp, max(0x1000, (16 * len(imps) + 0xfff) & ~0xfff))
+    uc.mem_map(inb, 0x1000)
+    st = {"bad": False, "reads": 0}
+
+    def cstr(a):
+        out = bytearray()
+        while len(out) < 4096:
+            b = uc.mem_read(a + len(out), 64)
+            z = b.find(0)
+            if z >= 0:
+                return bytes(out + b[:z])
+            out += b
+        return bytes(out)
+
+    def on_imp(uc_, a, size, _):
+        k = (a - imp) // 16
+        nm = imps[k] if 0 <= k < len(imps) else ""
+        args = [uc.reg_read(r) for r in (X.UC_X86_REG_RDI, X.UC_X86_REG_RSI, X.UC_X86_REG_RDX)]
+        v = _si_imp(uc, nm, args, cstr)
+        if v is None:
+            st["bad"] = True
+            uc.emu_stop()
+            return
+        sp = uc.reg_read(X.UC_X86_REG_RSP)
+        uc.reg_write(X.UC_X86_REG_RAX, v)
+        uc.reg_write(X.UC_X86_REG_RSP, sp + 8)
+        uc.reg_write(X.UC_X86_REG_RIP, int.from_bytes(uc.mem_read(sp, 8), "little"))
+
+    def on_read(uc_, acc, a, size, val, _):
+        st["reads"] += 1
+
+    def stop(uc_, *a):
+        st["bad"] = True
+        uc.emu_stop()
+        return False
+    if imps:
+        uc.hook_add(U.UC_HOOK_CODE, on_imp, None, imp, imp + 16 * len(imps) - 1)
+    uc.hook_add(U.UC_HOOK_MEM_READ, on_read, None, inb, inb + 0xfff)
+    uc.hook_add(U.UC_HOOK_INTR, stop)
+    uc.hook_add(U.UC_HOOK_INSN, stop, None, 1, 0, X.UC_X86_INS_SYSCALL)
+    uc.hook_add(U.UC_HOOK_MEM_INVALID, stop)
+
+    def go(buf):
+        for p, b in snap:   # globals the check may mutate
+            uc.mem_write(p, b)
+        uc.mem_write(inb, bytes(buf[:0xff0]) + b"\0" * 16)
+        sp = stk + 0x30000 - 8
+        uc.mem_write(sp, sent.to_bytes(8, "little"))
+        for r, v in ((X.UC_X86_REG_RSP, sp), (X.UC_X86_REG_RBP, 0), (X.UC_X86_REG_RDI, inb),
+                     (X.UC_X86_REG_RSI, len(buf)), (X.UC_X86_REG_RAX, 0)):
+            uc.reg_write(r, v)
+        st.update(bad=False, reads=0)
+        try:
+            uc.emu_start(addr + base, sent, count=100_000)
+        except Exception:  # noqa: BLE001
+            return None, st["reads"]
+        if st["bad"] or uc.reg_read(X.UC_X86_REG_RIP) != sent:
+            return None, st["reads"]
+        return uc.reg_read(X.UC_X86_REG_EAX), st["reads"]
+    return go, lits
+
+
+def solve_check_input(data, symbol=None, *, max_len=48, budget_s=0.9):
+    """Concrete input accepted by the ELF x86-64 check function `symbol` (default: first of SOLVE_INPUT_SYMBOLS present)
+    called as f(const char *s, size_t len) returning nonzero on accept. -> {"input", "input_hex", "input_len",
+    "method": literal|per_char, "function"}; "none" when the ELF has no such FUNC symbol; None when not an x86-64 ELF,
+    the emulation refuses (unmodelled libc call, syscall) or no input is found within the budget. Never raises."""
+    import time
+    t_end = time.time() + budget_s
+    try:
+        r = _si_setup(data, symbol)
+        if not isinstance(r, tuple):
+            return r
+        go, lits = r
+
+        def ok(b, method):
+            return {"input": b.decode("latin-1"), "input_hex": b.hex(), "input_len": str(len(b)), "method": method,
+                    "function": symbol or "auto"}
+        for s in dict.fromkeys(lits):
+            if time.time() > t_end:
+                return None
+            b = s.encode("latin-1")
+            if go(b)[0]:
+                return ok(b, "literal")
+        lens = []
+        for n in range(1, max_len + 1):
+            v, reads = go(b"\x01" * n)
+            if v:
+                return ok(b"\x01" * n, "per_char")
+            lens.append((reads, n))
+        top = max(x[0] for x in lens)
+        cand = [n for rd, n in lens if rd == top] if len({x[0] for x in lens}) > 1 else []
+        cs = bytes(range(0x30, 0x3a)) + bytes(range(0x41, 0x5b)) + bytes(range(0x61, 0x7b)) + \
+            bytes(c for c in range(0x20, 0x7f) if not chr(c).isalnum())
+        for n in cand[:3]:
+            buf = bytearray(b"\x01" * n)
+            for i in range(n):
+                best, base_r = None, go(bytes(buf))[1]
+                for c in cs:
+                    if time.time() > t_end:
+                        return None
+                    buf[i] = c
+                    v, rd = go(bytes(buf))
+                    if v:
+                        return ok(bytes(buf), "per_char")
+                    if rd > base_r and (best is None or rd > best[0]):
+                        best = (rd, c)
+                        break
+                if best is None:
+                    break
+                buf[i] = best[1]
+        return None
+    except Exception:  # noqa: BLE001 -- untrusted bytes: cannot answer
+        return None
+
+
+_SI_MEMO = [None, None, None]
+
+
+def solve_input_field(data, field, symbol=None):
+    """One solve_check_input value (input / input_hex / input_len / method); "none" when absent, None when unsolved."""
+    if _SI_MEMO[0] is data and _SI_MEMO[1] == symbol:
+        r = _SI_MEMO[2]
+    else:
+        r = solve_check_input(data, symbol)
+        _SI_MEMO[:] = [data, symbol, r]
+    if not isinstance(r, dict):
+        return r
+    return r.get(field.strip(), "none")
+
+
+# --- Binary patch FILES applied to a base member (bsdiff40 / IPS / BPS / UPS) -----------------------------------------
+# "Two builds, one fix" shipped as base + patch: apply in pure Python, then report the target identity, the changed
+# byte ranges mapped through the target's ELF section/symbol table, and (ELF twins) the native_patch_diff facts.
+# Vocabulary is SPECULATIVE (no GM label seen). VCDIFF/xdelta3 (d6 c3 c4 00) is detected but not applied.
+_BP_MAX = 1 << 27
+
+
+def _bp_varint(p, i):
+    """beat/byuu varint (BPS/UPS) -> (value, next index)."""
+    d, s = 0, 1
+    while True:
+        x = p[i]
+        i += 1
+        d += (x & 0x7F) * s
+        if x & 0x80:
+            return d, i
+        s <<= 7
+        d += s
+
+
+def _bp_add(old, diff):
+    """bsdiff byte-wise add mod 256: only the nonzero diff runs are touched (diff blocks are mostly zero)."""
+    out = bytearray(old)
+    for m in re.finditer(rb"[^\x00]+", diff):
+        a = m.start()
+        for k, d in enumerate(m.group(), a):
+            out[k] = (out[k] + d) & 0xFF
+    return out
+
+
+def _bp_bsdiff(src, p):
+    import bz2
+    def off(b):
+        v = int.from_bytes(b[:7] + bytes([b[7] & 0x7F]), "little")
+        return -v if b[7] & 0x80 else v
+    cl, dl, ns = off(p[8:16]), off(p[16:24]), off(p[24:32])
+    if cl < 0 or dl < 0 or not 0 <= ns <= _BP_MAX or 32 + cl + dl > len(p):
+        return None
+    ctrl = bz2.decompress(p[32:32 + cl])
+    diff = bz2.decompress(p[32 + cl:32 + cl + dl])
+    extra = bz2.decompress(p[32 + cl + dl:]) if len(p) > 32 + cl + dl else b""
+    out, op, dp, ep, ci = bytearray(), 0, 0, 0, 0
+    while len(out) < ns:
+        if ci + 24 > len(ctrl):
+            return None
+        x, y, z = off(ctrl[ci:ci + 8]), off(ctrl[ci + 8:ci + 16]), off(ctrl[ci + 16:ci + 24])
+        ci += 24
+        if x < 0 or y < 0 or len(out) + x + y > ns or dp + x > len(diff) or ep + y > len(extra):
+            return None
+        old = src[op:op + x] if op >= 0 else b""
+        old = old + bytes(x - len(old))   # bspatch: bytes outside the old file count as 0
+        out += _bp_add(old, diff[dp:dp + x])
+        dp += x
+        op += x
+        out += extra[ep:ep + y]
+        ep += y
+        op += z
+    return bytes(out), {"patch_record_count": str(ci // 24)}
+
+
+def _bp_ips(src, p):
+    out, i, n, rle = bytearray(src), 5, 0, 0
+    while True:
+        if i + 3 > len(p):
+            return None
+        if p[i:i + 3] == b"EOF" and len(p) in (i + 3, i + 6):
+            break
+        o, sz = int.from_bytes(p[i:i + 3], "big"), int.from_bytes(p[i + 3:i + 5], "big")
+        i += 5
+        if sz:
+            chunk = p[i:i + sz]
+            i += sz
+        else:
+            if i + 3 > len(p):
+                return None
+            chunk = p[i + 2:i + 3] * int.from_bytes(p[i:i + 2], "big")
+            i += 3
+            rle += 1
+        if len(chunk) != (sz or len(chunk)):
+            return None
+        if o > len(out):
+            out += bytes(o - len(out))
+        out[o:o + len(chunk)] = chunk
+        n += 1
+    if len(p) == i + 6:   # Lunar IPS truncation extension: u24 final size after EOF
+        del out[int.from_bytes(p[i + 3:i + 6], "big"):]
+    return bytes(out), {"patch_record_count": str(n), "rle_record_count": str(rle)}
+
+
+def _bp_crcs(src, out, p):
+    s, t, c = struct.unpack("<III", p[-12:])
+    f = {"source_crc32": "%08x" % s, "target_crc32": "%08x" % t, "patch_crc32": "%08x" % c,
+         "source_crc_valid": str(zlib.crc32(src) == s).lower(), "target_crc_valid": str(zlib.crc32(out) == t).lower(),
+         "patch_crc_valid": str(zlib.crc32(p[:-4]) == c).lower()}
+    f["crc_valid"] = str(all(f[k] == "true" for k in ("source_crc_valid", "target_crc_valid", "patch_crc_valid"))).lower()
+    return f
+
+
+def _bp_bps(src, p):
+    ss, i = _bp_varint(p, 4)
+    ts, i = _bp_varint(p, i)
+    ms, i = _bp_varint(p, i)
+    if ts > _BP_MAX:
+        return None
+    meta = p[i:i + ms]
+    i += ms
+    end, out, so, to, n = len(p) - 12, bytearray(), 0, 0, 0
+    while i < end:
+        d, i = _bp_varint(p, i)
+        cmd, ln = d & 3, (d >> 2) + 1
+        if len(out) + ln > ts:
+            return None
+        if cmd == 0:
+            out += src[len(out):len(out) + ln]
+        elif cmd == 1:
+            out += p[i:i + ln]
+            i += ln
+        else:
+            v, i = _bp_varint(p, i)
+            v = -(v >> 1) if v & 1 else v >> 1
+            if cmd == 2:
+                so += v
+                out += src[so:so + ln]
+                so += ln
+            else:
+                to += v
+                if not 0 <= to < len(out):
+                    return None
+                for _ in range(ln):
+                    out.append(out[to])
+                    to += 1
+        n += 1
+    if len(out) != ts:
+        return None
+    f = {"patch_record_count": str(n), "source_size": str(ss), "metadata": meta.decode("utf-8", "replace") or "none"}
+    return bytes(out), {**f, **_bp_crcs(src, bytes(out), p)}
+
+
+def _bp_ups(src, p):
+    ss, i = _bp_varint(p, 4)
+    ts, i = _bp_varint(p, i)
+    if ts > _BP_MAX:
+        return None
+    out, pos, end, n = bytearray(src[:ts] + bytes(max(0, ts - len(src)))), 0, len(p) - 12, 0
+    while i < end:
+        skip, i = _bp_varint(p, i)
+        pos += skip
+        while i < end and p[i]:
+            if pos < ts:
+                out[pos] ^= p[i]
+            pos, i = pos + 1, i + 1
+        pos, i, n = pos + 1, i + 1, n + 1
+    return bytes(out), {"patch_record_count": str(n), "source_size": str(ss), **_bp_crcs(src, bytes(out), p)}
+
+
+_BP_FORMATS = ((b"BSDIFF40", "bsdiff40", _bp_bsdiff), (b"PATCH", "ips", _bp_ips), (b"BPS1", "bps", _bp_bps),
+               (b"UPS1", "ups", _bp_ups), (b"\xd6\xc3\xc4\x00", "vcdiff", None))
+
+
+def binary_patch_format(patch):
+    """Magic of a binary patch file -> bsdiff40/ips/bps/ups/vcdiff, or "none"."""
+    p = bytes(patch or b"")[:8]
+    return next((nm for mg, nm, _ in _BP_FORMATS if p.startswith(mg)), "none")
+
+
+def binary_patch_apply(base, patch):
+    """(format, target bytes, extra facts) for base + patch; None when the patch is not a recognised/appliable one."""
+    try:
+        src, p = bytes(base), bytes(patch)
+        for mg, nm, fn in _BP_FORMATS:
+            if p.startswith(mg) and fn:
+                r = fn(src, p)
+                return None if r is None else (nm, r[0], r[1])
+    except Exception:   # noqa: BLE001 -- truncated / corrupt patch: no answer
+        pass
+    return None
+
+
+def _bp_ranges(a, b):
+    """Changed [start, end) file ranges of b vs a (b's growth/shrink tail included); chunk compare first."""
+    out, n, CH = [], min(len(a), len(b)), 4096
+    for c in range(0, n, CH):
+        if a[c:c + CH] == b[c:c + CH]:
+            continue
+        for k in range(c, min(c + CH, n)):
+            if a[k] != b[k]:
+                if out and out[-1][1] == k:
+                    out[-1][1] = k + 1
+                else:
+                    out.append([k, k + 1])
+    if len(a) != len(b):
+        if out and out[-1][1] == n:
+            out[-1][1] = max(len(a), len(b))
+        else:
+            out.append([n, max(len(a), len(b))])
+    return out
+
+
+def _bp_elf_map(data, ranges):
+    """Changed ranges -> (section names, FUNC symbol names) through the ELF section table / symtab."""
+    from elftools.elf.elffile import ELFFile
+    from elftools.elf.sections import SymbolTableSection
+    e = ELFFile(io.BytesIO(data))
+    secs = [(s.name, s["sh_offset"], s["sh_size"], s["sh_addr"]) for s in e.iter_sections()
+            if s["sh_type"] != "SHT_NOBITS" and s["sh_size"] and s.name]
+    funcs = []
+    for s in e.iter_sections():
+        if isinstance(s, SymbolTableSection):
+            funcs += [(y["st_value"], y["st_size"], y.name) for y in s.iter_symbols()
+                      if y["st_info"]["type"] == "STT_FUNC" and y["st_value"] and y["st_size"] and y.name]
+    snames, fnames = [], []
+    for a, b in ranges[:4096]:
+        for nm, so, sz, sa in secs:
+            lo, hi = max(a, so), min(b, so + sz)
+            if lo >= hi:
+                continue
+            if nm not in snames:
+                snames.append(nm)
+            if sa:
+                va, vb = sa + lo - so, sa + hi - so
+                for fv, fs, fn in sorted(set(funcs)):
+                    if fv < vb and va < fv + fs and fn not in fnames:
+                        fnames.append(fn)
+    return snames, fnames
+
+
+def binary_patch_facts(base, patch):
+    """base + patch file -> {field: answer string}; None when the patch is not appliable. Fields: patch_format,
+    patch_size, base_size/base_sha256, target_size/target_sha256/target_md5/target_sha1, size_delta,
+    changed_byte_count, changed_range_count, changed_ranges ([["0x..","0x.."],...] half-open file offsets in the
+    target), first/last_changed_offset, changed_sections, changed_symbols / changed_symbol (ELF symtab FUNCs over the
+    ranges), patch_record_count, rle_record_count (IPS), crc_valid / source_/target_/patch_crc_valid (+ *_crc32 hex;
+    BPS/UPS, "none" otherwise), metadata (BPS), then every native_patch_diff fact (changed_function, fix_kind, ...)
+    when base and target are x86 ELF twins. Arguments are accepted in either order."""
+    import hashlib
+    try:
+        base, patch = bytes(base), bytes(patch)
+        if binary_patch_format(patch) == "none" and binary_patch_format(base) != "none":
+            base, patch = patch, base
+        r = binary_patch_apply(base, patch)
+        if r is None:
+            return None
+        fmt, t, extra = r
+        rg = _bp_ranges(base, t)
+        f = {"patch_format": fmt, "patch_size": str(len(patch)), "base_size": str(len(base)),
+             "base_sha256": hashlib.sha256(base).hexdigest(), "target_size": str(len(t)),
+             "target_sha256": hashlib.sha256(t).hexdigest(), "target_sha1": hashlib.sha1(t).hexdigest(),
+             "target_md5": hashlib.md5(t).hexdigest(), "size_delta": str(len(t) - len(base)),
+             "changed_byte_count": str(sum(b - a for a, b in rg)), "changed_range_count": str(len(rg)),
+             "changed_ranges": _jv([[hex(a), hex(b)] for a, b in rg[:256]]),
+             "first_changed_offset": hex(rg[0][0]) if rg else "none",
+             "last_changed_offset": hex(rg[-1][1] - 1) if rg else "none",
+             "rle_record_count": "none", "crc_valid": "none", "metadata": "none", **extra}
+        if t[:4] == b"\x7fELF":
+            try:
+                sn, fn = _bp_elf_map(t, rg)
+                f.update({"changed_sections": _jv(sn), "changed_symbols": _jv(fn),
+                          "changed_symbol": fn[0] if fn else "none"})
+            except Exception:   # noqa: BLE001 -- broken section table: offsets only
+                pass
+            if base[:4] == b"\x7fELF" and len(t) < 64 << 20:
+                d = native_patch_diff(base, t)
+                for k, v in (d or {}).items():
+                    f.setdefault(k, v)
+        return f
+    except Exception:   # noqa: BLE001
+        return None
+
+
+def binary_patch_field(base, patch, field):
+    """One binary_patch_facts fact; "none" when absent or the patch file is a decoy/unappliable (patch_format of a
+    non-patch is "none")."""
+    if _BP_MEMO[:2] != [base, patch]:
+        _BP_MEMO[:] = [base, patch, binary_patch_facts(base, patch)]
+    return (_BP_MEMO[2] or {}).get(field.strip(), "none")
+
+
+_BP_MEMO = [None, None, None]

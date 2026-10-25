@@ -1,0 +1,17 @@
+{
+ "family": "stripped_twin_match",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "stw_decoy_text_a.bin",
+ "file_b": "stw_decoy_text_b.bin",
+ "file_sym": null,
+ "expected_facts": {
+  "stripped_twin_match": null,
+  "changed_function": null
+ },
+ "generator_cmd": "sh stw_gen.sh .   # gcc -O2 [-no-pie] stw_src.c (-DFIXED bounds guard in store / -DMIXK constant in mix), strip -s",
+ "oracle_cmd": "file stw_decoy_text_a.bin   # ASCII text, not ELF -> no answer (None)",
+ "decoy": true,
+ "note": "lib.binary.stripped_twin_field(a, b, key, sym); not ELF -> None; field vocabulary SPECULATIVE (no GM label yet)"
+}

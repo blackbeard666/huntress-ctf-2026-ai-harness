@@ -1,0 +1,8 @@
+{
+ "field": "chrome.download_urls",
+ "expected": "[\"https://cdn.evil.test/files/update.exe\",\"https://cdn.evil.test/r/42\",\"https://mail.example.com/att/invoice.zip\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_history.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_history.db \"select distinct url from downloads_url_chains order by url\" list -> [\"https://cdn.evil.test/files/update.exe\",\"https://cdn.evil.test/r/42\",\"https://mail.example.com/att/invoice.zip\"]",
+ "decoy": false,
+ "member": "History"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "ntuser.hive_root_name",
+ "expected": "none",
+ "generator_cmd": "printf 'CREG\\x00\\x00\\x01\\x00' > out; head -c 8184 /dev/zero >> out  (Win9x CREG impostor renamed NTUSER.DAT)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/ntuser/decoy_creg__ntuser_hive_root_name.bin -> 'MS Windows 95/98/ME registry file' (not regf: no NT root key)",
+ "decoy": true,
+ "member": "NTUSER.DAT"
+}

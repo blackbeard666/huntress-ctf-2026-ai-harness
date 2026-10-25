@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_offset",
+ "expected": "0",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> x.zip",
+ "oracle_cmd": "unzip -p a.apk assets/data.db | head -c16 -> 'SQLite format 3\\0' at 0",
+ "decoy": false,
+ "member": "app.apk -> assets/data.db"
+}

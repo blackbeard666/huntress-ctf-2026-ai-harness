@@ -1,0 +1,25 @@
+{
+ "family": "bounds_check_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "bchk_go_a.bin",
+ "file_b": "bchk_go_b.bin",
+ "expected_facts": {
+  "bounds_check_calls_a": "0",
+  "bounds_check_calls_b": "1",
+  "bounds_compares_a": "0",
+  "bounds_compares_b": "1",
+  "unchecked_accesses_a": "1",
+  "unchecked_accesses_b": "0",
+  "bounds_check_twin": "b",
+  "bounds_check_kind": "go_panic_bounds",
+  "bounds_check_sink": "runtime.panicBounds",
+  "bounds_check_function": "main.get",
+  "bounds_check_added": "true"
+ },
+ "generator_cmd": "bash bchk_gen.sh OUT   # go build -gcflags='-B -l' vs '-l'",
+ "oracle_cmd": "python3 bchk_oracle.py bchk_go_a.bin bchk_go_b.bin   # binutils objdump -d -C -M intel + readelf -sW + nm",
+ "decoy": false,
+ "note": "lib.binary.bounds_check_field(a, b, key); bounds_check_kind vocabulary SPECULATIVE (no GM label yet)"
+}

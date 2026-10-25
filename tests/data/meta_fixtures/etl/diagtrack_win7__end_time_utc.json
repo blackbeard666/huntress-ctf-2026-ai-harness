@@ -1,0 +1,8 @@
+{
+ "field": "etl.end_time_utc",
+ "expected": "2019-07-04T18:00:59Z",
+ "generator_cmd": "python3 tests/data/meta_fixtures/etl/gen_etl.py OUT  (stdlib struct writer of evntrace.h TRACE_LOGFILE_HEADER + geoffchappell WMI_BUFFER_HEADER / SYSTEM_TRACE_HEADER) -> diagtrack_win7.etl",
+ "oracle_cmd": "python3 -I -c 'from dissect.etl.etl import ETL; e=ETL(open(\"diagtrack_win7.etl\",\"rb\")); h=e.logfile_header.header; print(e.end)'  (dissect.etl 3.14 reader, pip --target)",
+ "decoy": false,
+ "member": "diagtrack_win7.etl"
+}

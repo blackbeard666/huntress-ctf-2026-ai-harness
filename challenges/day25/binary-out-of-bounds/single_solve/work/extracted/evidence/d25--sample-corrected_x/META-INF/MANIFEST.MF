@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Main-Class: day25.corrected000
+Created-By: Huntress deterministic Clojure factory
+

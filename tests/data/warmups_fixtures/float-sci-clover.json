@@ -1,0 +1,9 @@
+{
+ "codec": "float-sci",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mantis-64",
+ "encoded": "7.80e+01 1.05e+02 9.90e+01 1.01e+02 3.20e+01 1.19e+02 1.11e+02 1.14e+02 1.07e+02 3.20e+01 1.00e+02 1.01e+02 9.90e+01 1.11e+02 1.00e+02 1.05e+02 1.10e+02 1.03e+02 3.20e+01 1.16e+02 1.04e+02 1.05e+02 1.15e+02 3.20e+01 1.19e+02 9.70e+01 1.14e+02 1.09e+02 1.17e+02 1.12e+02 3.30e+01 3.20e+01 8.40e+01 1.11e+02 3.20e+01 1.15e+02 1.11e+02 1.08e+02 1.18e+02 1.01e+02 4.40e+01 3.20e+01 1.15e+02 1.17e+02 9.80e+01 1.09e+02 1.05e+02 1.16e+02 3.20e+01 1.16e+02 1.04e+02 1.05e+02 1.15e+02 3.20e+01 1.01e+02 1.20e+02 9.70e+01 9.90e+01 1.16e+02 3.20e+01 9.70e+01 1.10e+02 1.15e+02 1.19e+02 1.01e+02 1.14e+02 3.20e+01 1.16e+02 1.11e+02 3.20e+01 1.16e+02 1.04e+02 1.01e+02 3.20e+01 7.10e+01 9.70e+01 1.09e+02 1.01e+02 3.20e+01 7.70e+01 9.70e+01 1.15e+02 1.16e+02 1.01e+02 1.14e+02 5.80e+01 3.20e+01 9.90e+01 1.08e+02 1.11e+02 1.18e+02 1.01e+02 1.14e+02 4.50e+01 1.09e+02 9.70e+01 1.10e+02 1.16e+02 1.05e+02 1.15e+02 4.50e+01 5.40e+01 5.20e+01",
+ "generator_cmd": "printf %s \"$plain\" | perl -CS -ne 'print join(\" \", map ord, split //), \"\\n\"' | awk '{for(i=1;i<=NF;i++) printf \"%s%.2e\", (i>1?\" \":\"\"), $i}'  # awk printf %.2e (7.80e+01)",
+ "oracle_cmd": "printf %s \"$encoded\" | awk '{for(i=1;i<=NF;i++) printf \"%s%d\", (i>1?\" \":\"\"), $i+0.5}' | perl -CS -ne 'chomp; print join \"\", map chr, split / /'  # awk numeric read of e-notation, perl chr",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-mantis-64",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": "ANS-6B1E39C47A20D58F",
+ "decoy": false,
+ "note": "D18 v2 Encrypted Strings + D25 reflection, 2-set bundle. set01: decryptByte (b ^ K[i%5] ^ i, K has >=0x80 bytes) -> new String(byte[], StandardCharsets.UTF_8).intern() -> Class.forName; method name via (b - K[i%5]) & 0xff -> new String(byte[], \"US-ASCII\"); getDeclaredMethod(name, long.class).invoke(null, seed); target builds the hex table 0123456789ABCDEF from char[] (int-to-char e[i]-k-i) -> String.valueOf -> toCharArray, prefix via getBytes(US_ASCII) round trip, String.format(\"%s\"). set02 = strdec_sub_field. The stand-alone default-arg run of h.q(long) (ANS-0000000000000000) must not be reported.",
+ "generator_cmd": "python3 tests/data/android_fixtures/strdec_src/gen_strdec.py xor_method tests/data/android_fixtures/strdec_xor_method.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile; python3 tests/data/android_fixtures/strdec_src/gen_strdec.py sub_field tests/data/android_fixtures/strdec_sub_field.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile; cp strdec_xor_method.apk a/set01.apk; cp strdec_sub_field.apk a/set02.apk; cd a && zip -q -X -0 ../deep-eval-bench-strdec-2set.zip set*.apk",
+ "oracle_cmd": "sh tests/data/android_fixtures/strdec_src/oracle.sh tests/data/android_fixtures/strdec_xor_method.apk  # d2j-dex2jar back to JVM classes, RUN Locator.reveal() on the JVM (real decryptByte / Charset / reflection) -> reveal -> ANS-6B1E39C47A20D58F"
+}

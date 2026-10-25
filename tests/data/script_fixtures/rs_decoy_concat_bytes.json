@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/rs_gen.py  (stdlib base64/bytes.hex; rs template)",
+ "oracle_cmd": "perl -ne 'print \"$1\\n\" if /DESCRIPTOR_\\w+.*?=\\s*(.*);/' tests/data/script_fixtures/rs_decoy_concat_bytes.rs; echo '# no v=3 plan: version banner, b\"ok\", bytes status'"
+}

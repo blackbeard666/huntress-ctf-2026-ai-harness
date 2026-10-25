@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=rust|role=loader|verdict=malicious|attack=T1105|adapter=http_get|host_profile=standalone|obfuscation_profile=u8_array_hex|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=fetch_stage,run_stage|campaign_id=RUST-a77a7b17|url=https://rust-a77a7b17.example.invalid/stage|file_path=/tmp/huntress-rust/.a77a7b17a77a7b17.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/rs_gen.py  (stdlib base64/bytes.hex; rs template)",
+ "oracle_cmd": "python3 -I -c 'import re,sys,json; s=open(sys.argv[1]).read(); a=json.loads(re.search(r\"= (\\[[^\\]]*\\])\", s).group(1)); print(bytes(a).decode())' tests/data/script_fixtures/rs_u8_array.rs | xxd -r -p"
+}

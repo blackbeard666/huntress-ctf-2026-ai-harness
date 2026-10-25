@@ -1,0 +1,8 @@
+{
+ "field": "journal.journal_page_size_bytes",
+ "expected": "2048",
+ "generator_cmd": "python3 -c 'sqlite3: page_size=2048 journal_mode=DELETE synchronous=OFF; 60-row commit; BEGIN; UPDATE id%7=0; copy app.db-journal before COMMIT'",
+ "oracle_cmd": "sqlite3 app.db 'PRAGMA page_size' -> 2048; od -j24 -N4 -> 00 00 08 00",
+ "decoy": false,
+ "member": "app.db-journal"
+}

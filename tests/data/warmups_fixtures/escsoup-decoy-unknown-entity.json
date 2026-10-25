@@ -1,0 +1,12 @@
+{
+ "codec": "escsoup",
+ "decoder": "escsoup_dec(encoded)",
+ "plain": null,
+ "encoded": "&#78;\\u{69}&#99;&#101;U+0020&#119;&#111;\\u{72}%u006B&bogus;&#120;",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl escsoup_gen.pl '7' 'char' '' <<< 'Nice work' + '&bogus;&#120;' (no such HTML5 entity)",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/escsoup_oracle.py",
+ "oracle_plain": "Nice work&bogus;x",
+ "oracle_note": "html.unescape leaves '&bogus;' undecoded: not a valid escape token"
+}

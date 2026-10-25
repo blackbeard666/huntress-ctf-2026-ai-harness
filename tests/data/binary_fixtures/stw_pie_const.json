@@ -1,0 +1,26 @@
+{
+ "family": "stripped_twin_match",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "stw_pie_const_a.bin",
+ "file_b": "stw_pie_const_b.bin",
+ "file_sym": "stw_pie_const_sym.bin",
+ "expected_facts": {
+  "changed_function_count": "1",
+  "changed_function": "mix",
+  "changed_function_name": "mix",
+  "changed_function_va": "0x1400",
+  "changed_function_va_b": "0x1400",
+  "changed_function_offset": "0x1400",
+  "changed_function_offset_b": "0x1400",
+  "eh_frame_range": "0x1400-0x1419",
+  "eh_frame_range_b": "0x1400-0x1419",
+  "eh_frame_size": "25",
+  "eh_frame_size_b": "25"
+ },
+ "generator_cmd": "sh stw_gen.sh .   # gcc -O2 [-no-pie] stw_src.c (-DFIXED bounds guard in store / -DMIXK constant in mix), strip -s",
+ "oracle_cmd": "python3 stw_oracle.py stw_pie_const_a.bin stw_pie_const_b.bin stw_pie_const_sym.bin   # binutils objdump -d split at readelf --debug-dump=frames FDE starts, readelf -lW / -sW",
+ "decoy": false,
+ "note": "lib.binary.stripped_twin_field(a, b, key, sym); same-size constant change in mix(), PIE; sym = symbolized A; field vocabulary SPECULATIVE (no GM label yet)"
+}

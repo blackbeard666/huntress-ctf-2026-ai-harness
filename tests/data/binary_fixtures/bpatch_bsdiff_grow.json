@@ -1,0 +1,17 @@
+{
+ "family": "binary_patch_file",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "base": "bpatch_base.bin",
+ "expected_facts": {
+  "patch_format": "bsdiff40",
+  "target_size": "16120",
+  "target_sha256": "79834b79518494913f575f8eb7042e52e297f1f9d26d85e959d7983ac610f105",
+  "changed_byte_count": "1119",
+  "changed_sections": "[\".note.gnu.build-id\",\".dynsym\",\".dynstr\",\".gnu.version\",\".gnu.version_r\",\".rela.dyn\",\".rela.plt\",\".text\",\".eh_frame_hdr\",\".eh_frame\",\".note.gnu.property\",\".note.ABI-tag\",\".dynamic\",\".symtab\",\".strtab\",\".shstrtab\"]"
+ },
+ "generator_cmd": "bash bpatch_gen.sh   # bsdiff4.diff(A, B) (pip bsdiff4, C ext)",
+ "oracle_cmd": "PYTHONPATH=../../../tools/pypatch python3 bpatch_oracle.py   # bsdiff4.patch(A, patch); cmp -l / readelf -SW / nm -S",
+ "decoy": false
+}

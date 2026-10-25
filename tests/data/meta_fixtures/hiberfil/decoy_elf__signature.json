@@ -1,0 +1,8 @@
+{
+ "field": "hiberfil.signature",
+ "expected": "none",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> not_hiberfil.sys",
+ "oracle_cmd": "file not_hiberfil.sys -> ELF ... (od -c: 177 E L F)",
+ "decoy": true,
+ "member": "not_hiberfil.sys"
+}

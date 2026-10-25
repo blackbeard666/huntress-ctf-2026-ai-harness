@@ -1,0 +1,10 @@
+{
+ "codec": "float-charcodes",
+ "plain": null,
+ "encoded": "0x3dcccccd 0x40533333 0x33d6bf95 0xc0200000 0x449a5225 0x66fef4f9",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "/home/testpwn/huntress-2026/tools/node/bin/node -e \"process.stdout.write([0.1,3.3,1e-7,-2.5,1234.567,6.02e23].map(v=>{const b=Buffer.alloc(4);b.writeFloatBE(v);return '0x'+b.toString('hex')}).join(' '))\"  # Node writeFloatBE of non-code values",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -ne 'for (split / /) { $v = unpack(\"f>\", pack(\"H8\", substr($_, 2))); print \"$v\\n\" }'  # perl unpack f>: 0.1, 3.3, ... (non-integral)",
+ "oracle_out": "0.100000001490116\n3.29999995231628\n1.0000000116861e-07\n-2.5\n1234.56701660156\n6.02000017271895e+23"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "etl.os_version",
+ "expected": "10.0.19045",
+ "generator_cmd": "python3 tests/data/meta_fixtures/etl/gen_etl.py OUT  (stdlib struct writer of evntrace.h TRACE_LOGFILE_HEADER + geoffchappell WMI_BUFFER_HEADER / SYSTEM_TRACE_HEADER) -> kernel_trace.etl",
+ "oracle_cmd": "python3 -I -c 'from dissect.etl.etl import ETL; e=ETL(open(\"kernel_trace.etl\",\"rb\")); h=e.logfile_header.header; print('%d.%d.%d'%(h.MajorVersion,h.MinorVersion,h.ProviderVersion))'  (dissect.etl 3.14 reader, pip --target)",
+ "decoy": false,
+ "member": "kernel_trace.etl"
+}

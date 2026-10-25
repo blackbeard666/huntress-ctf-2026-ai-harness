@@ -1,0 +1,8 @@
+{
+ "field": "windows_registry.hive_version",
+ "expected": "none",
+ "generator_cmd": "printf 'Windows Registry Editor Version 5.00\\r\\n\\r\\n[HKEY_CURRENT_USER\\\\Software\\\\Demo]\\r\\n\"Marker\"=\"x\"\\r\\n' > out  (.reg export text renamed .hiv)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/windows_registry/decoy_regtext__windows_registry_hive_version.bin -> 'Windows Registry text (Win2K or above)' (not a regf hive: no base block)",
+ "decoy": true,
+ "member": "hive-001.hiv"
+}

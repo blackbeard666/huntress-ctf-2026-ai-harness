@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-63",
+ "encoded": ">YSU\u0010g_b[\u0010TUS_TY^W\u0010dXYc\u0010gQb]e`\u0011\u0010D_\u0010c_\\fU\u001c\u0010ceR]Yd\u0010dXYc\u0010UhQSd\u0010Q^cgUb\u0010d_\u0010dXU\u00107Q]U\u0010=QcdUb*\u0010S\\_fUb\u001d\\i^h\u001d&#",
+ "generator_cmd": "perl -CSA -e 'my $o = join q(), map { my $c = $_; chr(ord($c)-0x10) } split //, $ARGV[0]; print $o;' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];t=t.strip('\\\\U000E0001\\\\U000E007F');print(''.join(chr(ord(c)+0x10) for c in t),end='')\" \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-lynx-63",
+ "expected": "match"
+}

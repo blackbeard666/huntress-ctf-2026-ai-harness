@@ -1,0 +1,19 @@
+#!/bin/sh
+# Fixture generator for lib/meta/prebuilt/sqlite_embedded.py. WRITERS: sqlite3 CLI (database), Pillow (PNG host),
+# cat (append = carve target), head -c (truncation), zip (x.zip -> app.apk -> assets/data.db). PE stub = the 1024-byte
+# tests/data/script_fixtures/ahk_pe_decoy_benign.exe (no overlay, no SQLite string).
+# usage: sh GENERATOR_sqlite_embedded.sh.txt <repo-root> <outdir>
+set -e
+R=$(cd "$1" && pwd); cd "$2"
+rm -rf emb && mkdir emb && cd emb
+sqlite3 data.db "PRAGMA page_size=2048; CREATE TABLE logins(id INTEGER PRIMARY KEY, user TEXT, ts INTEGER); INSERT INTO logins(user,ts) VALUES('alice',1700000000),('bob',1700000100); CREATE TABLE notes(t TEXT); INSERT INTO notes VALUES(hex(randomblob(3000)));"
+python3 -c "from PIL import Image; Image.new('RGB',(32,24),(200,30,60)).save('host.png')"
+cat host.png data.db > panel.png
+cat "$R/tests/data/script_fixtures/ahk_pe_decoy_benign.exe" data.db > agent.exe
+# truncated carve: the PNG host + the database minus its last 1000 bytes
+head -c $(( $(wc -c < data.db) - 1000 )) data.db > data_trunc.db
+cat host.png data_trunc.db > trunc.png
+# nested: x.zip -> app.apk -> assets/data.db
+mkdir -p apk/assets && cp data.db apk/assets/data.db && (cd apk && zip -q -X ../app.apk assets/data.db) && zip -q -X x.zip app.apk
+# decoy: the magic STRING with a bogus page size (0x0003) after it, inside a PNG
+python3 -c "import sys; sys.stdout.buffer.write(open('host.png','rb').read() + b'SQLite format 3\x00\x00\x03' + bytes(120))" > decoy_string.png

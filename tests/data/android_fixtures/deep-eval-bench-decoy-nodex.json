@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": null,
+ "decoy": true,
+ "note": "Same bundle layout (3 D25 v2 sets) with classes.dex deleted from every member: nothing to evaluate -> no token.",
+ "generator_cmd": "for i in 1 2 3: cp \"challenges/day25/mobile-integrity-signals/solver/cases/auto-mastery-5b4cdb60/artifacts/delivery $i: integrity_signals_mastery_0$i.apk\" c/set0$i.apk && zip -q -d c/set0$i.apk classes.dex; cd c && zip -q -X -0 ../deep-eval-bench-decoy-nodex.zip set*.apk",
+ "oracle_cmd": "for f in c/set0*.apk; do unzip -l \"$f\" | grep -c \"classes.*\\.dex\"; done  # 0 0 0: no Dalvik code in any member"
+}

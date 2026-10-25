@@ -1,0 +1,9 @@
+{
+ "codec": "script-letter-map",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: fancy-quilt-88",
+ "encoded": "𐑮𐑕𐑿𐑭 𐑥𐑢𐑘𐑾 𐑨𐑭𐑿𐑢𐑨𐑕𐑮𐑔 𐑺𐑫𐑕𐑜 𐑥𐑩𐑘𐑦𐑚𐑠! 𐑺𐑢 𐑜𐑢𐑡𐑼𐑭, 𐑜𐑚𐑧𐑦𐑕𐑺 𐑺𐑫𐑕𐑜 𐑭𐑲𐑩𐑿𐑺 𐑩𐑮𐑜𐑥𐑭𐑘 𐑺𐑢 𐑺𐑫𐑭 𐑔𐑩𐑦𐑭 𐑦𐑩𐑜𐑺𐑭𐑘: 𐑝𐑩𐑮𐑿𐑻-𐑛𐑚𐑕𐑡𐑺-88",
+ "generator_cmd": "printf %s \"$plain\" | sed 'y/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/𐑩𐑧𐑿𐑨𐑭𐑝𐑔𐑫𐑕𐑑𐑾𐑡𐑦𐑮𐑢𐑠𐑛𐑘𐑜𐑺𐑚𐑼𐑥𐑲𐑻𐑱𐑩𐑧𐑿𐑨𐑭𐑝𐑔𐑫𐑕𐑑𐑾𐑡𐑦𐑮𐑢𐑠𐑛𐑘𐑜𐑺𐑚𐑼𐑥𐑲𐑻𐑱/'  # GNU sed y/// letter -> glyph table; Shavian block U+10450.. shuffled (random.Random(2026)): an arbitrary glyph alphabet",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CSD -Mutf8 -pe 'tr/𐑩𐑧𐑿𐑨𐑭𐑝𐑔𐑫𐑕𐑑𐑾𐑡𐑦𐑮𐑢𐑠𐑛𐑘𐑜𐑺𐑚𐑼𐑥𐑲𐑻𐑱/abcdefghijklmnopqrstuvwxyz/' | tr A-Z a-z  # perl tr/// inverse table (lowercased; a shared glyph reads as its first letter)",
+ "oracle_plain": "nice work decoding this warmup! to solve, submit this exact answer to the game master: fancy-quilt-88",
+ "expected": "match"
+}

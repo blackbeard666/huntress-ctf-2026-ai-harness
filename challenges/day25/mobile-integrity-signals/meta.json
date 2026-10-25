@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-25-integrity-signals",
+  "lane": "mobile-android",
+  "name": "📱 Integrity Signals",
+  "ids": {
+    "single_solve": "mobile-android-day-25-integrity-signals",
+    "time_trial": "mobile-android-day-25-integrity-signals/time_trial",
+    "mastery": "mobile-android-day-25-integrity-signals/mastery"
+  }
+}

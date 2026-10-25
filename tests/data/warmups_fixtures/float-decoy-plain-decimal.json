@@ -1,0 +1,10 @@
+{
+ "codec": "float-charcodes",
+ "plain": null,
+ "encoded": "78 105 99 101 32 119 111 114 107 32 100 101 99 111 100 105 110 103 32 116 104 105 115 32 119 97 114 109 117 112 33 32 84 111 32 115 111 108 118 101 44 32 115 117 98 109 105 116 32 116 104 105 115 32 101 120 97 99 116 32 97 110 115 119 101 114 32 116 111 32 116 104 101 32 71 97 109 101 32 77 97 115 116 101 114 58 32 100 101 99 111 121 45 112 108 97 105 110 45 48 48",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$plain\" | perl -CS -ne 'print join(\" \", map ord, split //), \"\\n\"' | tr -d '\\n'  # perl ord: plain decimal char codes",
+ "oracle_cmd": "printf %s \"$encoded\" | awk '{m=0; for(i=1;i<=NF;i++) if($i>255||$i!=int($i)) m=1; print (m?\"scaled\":\"plain-bytes\")}'  # awk: all integer <= 255 -> decimal codec",
+ "oracle_out": "plain-bytes"
+}

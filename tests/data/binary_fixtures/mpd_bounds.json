@@ -1,0 +1,27 @@
+{
+ "family": "dotnet_patch_diff",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "dll_a": "mpd_bounds_a.bin",
+ "dll_b": "mpd_bounds_b.bin",
+ "expected_facts": {
+  "changed_methods": "[\"<StartupCode$variant-000>.$Program::main@\"]",
+  "changed_method_count": "1",
+  "changed_method": "<StartupCode$variant-000>.$Program::main@",
+  "eh_clause_count_a": "0",
+  "eh_clause_count_b": "0",
+  "added_opcodes": "[\"call\",\"conv.i4\",\"ldlen\"]",
+  "removed_opcodes": "[\"ldc.i4\",\"nop\"]",
+  "null_guard_added": "false",
+  "bounds_check_added": "true",
+  "checked_arithmetic_added": "false",
+  "try_catch_added": "false",
+  "fix_kind": "bounds_check",
+  "mvid_changed": "false"
+ },
+ "generator_cmd": "python3 tests/data/binary_fixtures/mpd_gen.py d03--sample.dll d22--sample.dll d23--sample.dll   # pefile RVA->offset + asserted same-length byte patches of the cached D03/D22/D23 sample dlls",
+ "oracle_cmd": "python3 tests/data/binary_fixtures/mpd_oracle.py mpd_bounds_a.bin mpd_bounds_b.bin   # ilspycmd -il text diff + own counts, dnfile Module MVID",
+ "decoy": false,
+ "note": "lib.binary.dotnet_patch_diff_field(a, b, key). D22 F# main@: A compares the loop index with ldc.i4 380, B with get_arr@1().Length (ldlen; conv.i4; blt.s) -> bounds_check"
+}

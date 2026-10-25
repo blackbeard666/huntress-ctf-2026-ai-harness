@@ -21,7 +21,8 @@ registering `synthesis.<algo>_order` makes the D15-D17 `...-synthesis-sha256-ord
 whose lane call holds only the lone member (no siblings) -> "registered but no answer" regressions.
 equivalence_groups(question, get_bytes, field) is the solver-facing call; through lib.meta.answer the extractor reads
 siblings from ctx["read"] when supplied, else from `data` when the artifact IS the container zip (all its audio
-members when the question has no Files list). A lone member / no reader -> None; a container with no audio -> "none"."""
+members when the question has no Files list). A lone member / no reader -> None; a container with no audio -> "none"
+(odd_* / outlier_* over a set holding regf hives -> synthesis_regf.py's planted hive)."""
 import hashlib
 import io
 import json
@@ -468,6 +469,10 @@ def media_value(data, ctx):
         field = ctx.get("field") or ""
         t = equivalence(names, read, _criterion(field))
         if t is None:
+            if ("odd" in field or "outlier" in field):   # no audio: a hive set's planted hive (synthesis_regf.py)
+                from .synthesis_regf import any_regf, regf_synthesis_value
+                if any_regf(names, read):
+                    return regf_synthesis_value(data, ctx)
             return "none" if from_zip else None
         return _pick(t, field)
     except Exception:  # noqa: BLE001 - a decoy / damaged input must never raise past the extractor

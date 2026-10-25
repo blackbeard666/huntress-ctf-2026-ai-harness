@@ -1,0 +1,9 @@
+{
+ "codec": "codepoints-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-90",
+ "encoded": "U+4E u+69 U+63 u+65 U+20 u+77 U+6F u+72 U+6B u+20 U+64 u+65 U+63 u+6f U+64 u+69 U+6E u+67 U+20 u+74 U+68 u+69 U+73 u+20 U+77 u+61 U+72 u+6d U+75 u+70 U+21 u+20 U+54 u+6f U+20 u+73 U+6F u+6c U+76 u+65 U+2C u+20 U+73 u+75 U+62 u+6d U+69 u+74 U+20 u+74 U+68 u+69 U+73 u+20 U+65 u+78 U+61 u+63 U+74 u+20 U+61 u+6e U+73 u+77 U+65 u+72 U+20 u+74 U+6F u+20 U+74 u+68 U+65 u+20 U+47 u+61 U+6D u+65 U+20 u+4d U+61 u+73 U+74 u+65 U+72 u+3a U+20 u+6d U+61 u+70 U+6C u+65 U+2D u+62 U+61 u+64 U+67 u+65 U+72 u+2d U+39 u+30",
+ "generator_cmd": "printf %s \"$plain\" | perl -CSD -0777 -ne 'my $i = 0; print join(\" \", map { $i++ % 2 ? sprintf(\"u+%x\", ord) : sprintf(\"U+%X\", ord) } split //)'",
+ "oracle_cmd": "python3 -I -c 'import os, re; print(\"\".join(chr(int(h, 16)) for h in re.findall(r\"[Uu]\\+([0-9A-Fa-f]+)\", os.environ[\"encoded\"])), end=\"\")'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-badger-90",
+ "expected": "match"
+}

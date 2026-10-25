@@ -1,0 +1,47 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls2_gsigned_a.bin",
+ "file_b": "vcls2_gsigned_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-195",
+  "cwe_number": "195",
+  "vulnerability_class": "signedness_error",
+  "changed_function": "target"
+ },
+ "expected_changed_function": "target",
+ "trigger_input": {
+  "argv": [
+   "hi",
+   "-1"
+  ],
+  "env": {
+   "HUNTRESS_KEY": "arena-2026"
+  }
+ },
+ "outcome_a": {
+  "exit": 1,
+  "stdout": [
+   ""
+  ],
+  "sanitizer": "negative-size-param"
+ },
+ "outcome_b": {
+  "exit": 1,
+  "stdout": [
+   "HCFG"
+  ],
+  "sanitizer": "clean"
+ },
+ "gate_closed_stdout": [
+  "locked"
+ ],
+ "analyzer_a": [],
+ "analyzer_b": [],
+ "generator_cmd": "W=$(mktemp -d) bash vcls2_gen.sh OUT   # gcc -fno-inline C twins, getenv(HUNTRESS_KEY) gate + HCFG{json} rodata blob",
+ "oracle_cmd": "python3 vcls2_oracle.py $W gsigned hi -1   # gcc -fsanitize=address,undefined run + gcc -fanalyzer + objdump -d -M intel: added=['cdqe', 'jbe'] removed=['jle', 'movsxd']",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (signed int len <= 32 check then memcpy(n) -> size_t compare); outcome_* from the ASan copies of the same source; CWE spelling SPECULATIVE until a GM label is seen"
+}

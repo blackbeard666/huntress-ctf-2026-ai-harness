@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "丮义乃久一乗乏乒之一乄久乃乏乄义乎乇一乔么义乓一乗乁乒乍乕乐丁一临乏一乓乏乌乖久丌一乓乕乂乍义乔一乔么义乓一久乘乁乃乔一乁乎乓乗久乒一乔乏一乔么久一丧乁乍久一中乁乓乔久乒业一乁乍乂久乒不乆乁乌乃乏乎不且丒",
+ "generator_cmd": "perl -CSA -e 'my $o = join q(), map { my $c = $_; chr(ord($c)+0x4DE0) } split //, $ARGV[0]; print $o;' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];t=t.strip('\\\\U000E0001\\\\U000E007F');print(''.join(chr(ord(c)-0x4DE0) for c in t),end='')\" \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

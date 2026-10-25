@@ -1,0 +1,11 @@
+{
+ "material": "4108838517ed189ccacc1fbefd49d66bad853c64b24b83001165d47db7372b0a959472cc4aec207eee26861e22487cf4",
+ "rep": "hex",
+ "transform": "rolling_xor",
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I -c 'import os; print(os.urandom(48).hex())'  # random bytes, no plan under any seed",
+ "oracle_cmd": "perl -e '$h=shift; @b=map hex, unpack(\"(A2)*\",$h); for $s (0..255){for $f (0,1){$p=$s;$o=\"\";for $x (@b){$y=$x^$p;$o.=chr($y);$p=$f?$y:$x}; print \"HIT\" if $o=~/^v=3\\|/}}' <material>  # prints nothing",
+ "note": "decoy: random bytes must not decode to a plan through the rolling_xor sweep"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "dbf.field_names",
+ "expected": "[\"CUSTNAME\",\"AGE\",\"JOINED\"]",
+ "generator_cmd": "dbf.Table('customers.dbf', 'custname C(25); age N(3,0); joined D', dbf_type='db3') + 3 appends (python dbf pkg)",
+ "oracle_cmd": "python3 -c \"import dbfread; t=dbfread.DBF('customers.dbf', load=False); print(t.field_names)\"",
+ "decoy": false,
+ "member": "customers.dbf"
+}

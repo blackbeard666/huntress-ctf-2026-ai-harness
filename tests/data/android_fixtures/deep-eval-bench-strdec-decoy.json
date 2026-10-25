@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": null,
+ "decoy": true,
+ "note": "Same chain as strdec_xor_method but the hex loop stops at i >= 4: the app computes a 15-digit near-miss (ANS-6B1E39C47A20D58) -> no token.",
+ "generator_cmd": "python3 tests/data/android_fixtures/strdec_src/gen_strdec.py decoy_nearmiss tests/data/android_fixtures/strdec_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile; cp strdec_decoy_nearmiss.apk c/set01.apk; cd c && zip -q -X -0 ../deep-eval-bench-strdec-decoy.zip set*.apk",
+ "oracle_cmd": "sh tests/data/android_fixtures/strdec_src/oracle.sh tests/data/android_fixtures/strdec_decoy_nearmiss.apk  # d2j-dex2jar back to JVM classes, RUN Locator.reveal() on the JVM (real decryptByte / Charset / reflection) -> reveal -> ANS-6B1E39C47A20D58 (15 hex digits: not an answer token)"
+}

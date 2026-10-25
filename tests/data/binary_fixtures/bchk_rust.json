@@ -1,0 +1,27 @@
+{
+ "family": "bounds_check_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "bchk_rust_a.bin",
+ "file_b": "bchk_rust_b.bin",
+ "expected_facts": {
+  "bounds_check_calls_a": "0",
+  "bounds_check_calls_b": "1",
+  "bounds_compares_a": "0",
+  "bounds_compares_b": "1",
+  "unchecked_accesses_a": "1",
+  "unchecked_accesses_b": "0",
+  "bounds_check_twin": "b",
+  "bounds_check_kind": "rust_panic_bounds_check",
+  "bounds_check_sink": "core::panicking::panic_bounds_check",
+  "bounds_limit": "15",
+  "buffer_length": "16",
+  "bounds_check_function": "_ZN4twin3get17h5139e5ae81b469b8E",
+  "bounds_check_added": "true"
+ },
+ "generator_cmd": "bash bchk_gen.sh OUT   # rustc -O get_unchecked(i) vs v[i] (panic_bounds_check)",
+ "oracle_cmd": "python3 bchk_oracle.py bchk_rust_a.bin bchk_rust_b.bin   # binutils objdump -d -C -M intel + readelf -sW + nm",
+ "decoy": false,
+ "note": "lib.binary.bounds_check_field(a, b, key); bounds_check_kind vocabulary SPECULATIVE (no GM label yet)"
+}

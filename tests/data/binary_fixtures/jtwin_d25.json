@@ -1,0 +1,20 @@
+{
+ "family": "jvm_patch_diff_gensym",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "jtwin_d25_a.bin",
+ "jar_b": "jtwin_d25_b.bin",
+ "expected_facts": {
+  "changed_classes": "[\"day25/vulnerable000$parse_frame\"]",
+  "changed_class_count": "1",
+  "changed_vars": "[\"parse-frame\"]",
+  "changed_methods": "[\"invokeStatic(Ljava/lang/Object;)Ljava/lang/Object;\",\"<clinit>()V\"]",
+  "added_constants": "[\"-1\"]",
+  "added_invokes": "[\"clojure/lang/RT.count\"]"
+ },
+ "generator_cmd": "GM artifact (D25 binary-out-of-bounds evidence.zip members d25--sample-{vulnerable,corrected}.jar, AES pw infected, extracted with pyzipper)",
+ "oracle_cmd": "python3 jtwin_oracle.py jtwin_d25_a.bin jtwin_d25_b.bin vulnerable corrected   # zipfile + JDK javap -c -p -s, own role/gensym normalisation",
+ "decoy": false,
+ "note": "lib.binary.jvm_patch_diff_field(a, b, key). D25 Clojure twins day25/<role>000$...: only parse-frame changed (count guard before nth, -1 fallback)"
+}

@@ -1,0 +1,42 @@
+{
+ "kind": "groovy_facts",
+ "decoy": false,
+ "question": "Day 26: for the primary classfile named by that unit (Day26Vulnerable000.groovy), how many methods does it declare?",
+ "expected": {
+  "unit": "Day26Vulnerable000.groovy",
+  "groovy_kind": "script",
+  "is_groovy_script": "true",
+  "primary_class": "Day26Vulnerable000",
+  "primary_class_dotted": "Day26Vulnerable000",
+  "primary_classfile": "Day26Vulnerable000.class",
+  "primary_super_class": "groovy/lang/Script",
+  "source_file": "Day26Vulnerable000.groovy",
+  "closures": "[\"Day26Vulnerable000$_run_closure1\",\"Day26Vulnerable000$_run_closure2\",\"Day26Vulnerable000$_run_closure3\"]",
+  "closure_count": "3",
+  "closure_names": "[\"_run_closure1\",\"_run_closure2\",\"_run_closure3\"]",
+  "closure_do_call": "{\"Day26Vulnerable000$_run_closure1\":[\"([B)Ljava/lang/Object;\"],\"Day26Vulnerable000$_run_closure2\":[\"(Ljava/lang/String;)Ljava/lang/Object;\"],\"Day26Vulnerable000$_run_closure3\":[\"(Ljava/lang/Object;)Ljava/lang/Object;\"],\"Day26Vulnerable000$_run_closure1$_closure4\":[\"(Ljava/lang/Object;)Ljava/lang/Object;\",\"()Ljava/lang/Object;\"]}",
+  "all_closures": "[\"Day26Vulnerable000$_run_closure1\",\"Day26Vulnerable000$_run_closure2\",\"Day26Vulnerable000$_run_closure3\",\"Day26Vulnerable000$_run_closure1$_closure4\"]",
+  "all_closure_count": "4",
+  "call_site_names": "[\"runScript\",\"each\",\"bytes\",\"call\",\"println\",\"()\"]",
+  "call_site_count": "6",
+  "script_body_method": "run",
+  "hcfg_class": "Day26Vulnerable000",
+  "hcfg_in_primary": "true",
+  "hcfg_cp_index": "44",
+  "hcfg_constant": "SENGRwFaOgDdSd9fIXg5aHhgeDIuLiopYHV1PSg1NSwjdD8iOzcqNj91OD87OTU0eHZ4Mz54YHg+OyNobHc9KDU1LCN4Jw==",
+  "references_groovy_runtime": "true",
+  "has_groovy_runtime": "false",
+  "groovy_class_major": "52",
+  "groovy_indy": "true",
+  "method_count": "6",
+  "methods": "[\"<init>\",\"<init>\",\"main\",\"run\",\"$getStaticMetaClass\",\"$getLookup\"]",
+  "access_flags": "33"
+ },
+ "expected_config": {
+  "c2": "https://groovy.example/beacon",
+  "id": "day26-groovy"
+ },
+ "generator_cmd": "bash groovy_gen.sh   # groovyc 4.0.12 (FileSystemCompiler, groovy-4.0.12.jar from Ghidra) + javac/jar JDK 21; HCFG base64 via coreutils base64 -w0",
+ "oracle_cmd": "python3 groovy_oracle.py groovy_script_unit_jar.bin --unit Day26Vulnerable000.groovy   # unzip -Z1/-p + javap -v -p text (OpenJDK 21); HCFG via stdlib base64+crc32",
+ "note": "groovyc 4.0.12 script: Day26Vulnerable000 extends groovy/lang/Script, 3 _run_closureN + nested _closure4, HCFG base64 ldc in run()"
+}

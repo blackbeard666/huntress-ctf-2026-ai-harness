@@ -1,0 +1,8 @@
+{
+ "field": "kernel_dump.system_time_utc",
+ "expected": "2024-11-01T09:30:00Z",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> MEMORY.DMP",
+ "oracle_cmd": "od -A x -t u8 -j 0xfa8 -N 8 MEMORY.DMP -> FILETIME; date -u -d @$((ft/10000000-11644473600)) -> 2024-11-01T09:30:00Z",
+ "decoy": false,
+ "member": "MEMORY.DMP"
+}

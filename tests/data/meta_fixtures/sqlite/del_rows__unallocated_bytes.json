@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.unallocated_bytes",
+ "expected": "1692",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_deleted.sh.txt <outdir>  (sqlite3 CLI 3.46.1 + coreutils printf/dd) -> rows.sqlite",
+ "oracle_cmd": "sh tests/data/meta_fixtures/sqlite/ORACLE_sqlite_deleted.sh.txt <db>  (od/dd/strings -n 6/LC_ALL=C sort -u + sqlite3 dbstat/pragma): dbstat unused - freeblock bytes - frag: page1 837 + page2 933-78 = 855",
+ "decoy": false,
+ "member": "rows.sqlite"
+}

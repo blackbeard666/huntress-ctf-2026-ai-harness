@@ -1,0 +1,43 @@
+#!/bin/sh
+# Fixture generator for lib/meta/prebuilt/sqlite_browser.py -- the sqlite3 CLI (SQLite 3.46.1) is the WRITER.
+# Schemas follow Chromium's Cookies / Login Data / Web Data / History and Firefox cookies / formhistory / places.
+# usage: sh GENERATOR_sqlite_browser.sh.txt <outdir>
+set -e
+cd "$1"
+rm -f br_*.db
+sqlite3 br_chrome_cookies.db "CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR); INSERT INTO meta VALUES('version','21');
+CREATE TABLE cookies(creation_utc INTEGER NOT NULL,host_key TEXT NOT NULL,top_frame_site_key TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,encrypted_value BLOB NOT NULL,path TEXT NOT NULL,expires_utc INTEGER NOT NULL,is_secure INTEGER NOT NULL,is_httponly INTEGER NOT NULL,last_access_utc INTEGER NOT NULL,has_expires INTEGER NOT NULL,is_persistent INTEGER NOT NULL,priority INTEGER NOT NULL,samesite INTEGER NOT NULL,source_scheme INTEGER NOT NULL,source_port INTEGER NOT NULL,last_update_utc INTEGER NOT NULL,source_type INTEGER NOT NULL,has_cross_site_ancestor INTEGER NOT NULL);
+INSERT INTO cookies VALUES(13370000000000000,'.login.evil.test','','sessid','',X'7631303A0102030405',  '/',13400000000000000,1,1,13370000500000000,1,1,1,0,2,443,13370000500000000,0,0);
+INSERT INTO cookies VALUES(13370000100000000,'.example.com','','_ga','',X'763130AABBCCDD',      '/',13410000000000000,0,0,13370000200000000,1,1,1,-1,2,443,13370000200000000,0,0);
+INSERT INTO cookies VALUES(13369999000000000,'accounts.example.com','','SID','',X'76313011223344','/',13405000000000000,1,1,13370000900000000,1,1,1,1,2,443,13370000900000000,0,0);
+INSERT INTO cookies VALUES(13370000300000000,'.example.com','','pref','',X'763130FFEE',          '/app',13401000000000000,0,0,13370000300000000,1,1,1,0,2,443,13370000300000000,0,0);"
+sqlite3 br_chrome_cookies_v20.db "CREATE TABLE cookies(creation_utc INTEGER NOT NULL,host_key TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,encrypted_value BLOB NOT NULL,path TEXT NOT NULL,expires_utc INTEGER NOT NULL,is_secure INTEGER NOT NULL,is_httponly INTEGER NOT NULL,last_access_utc INTEGER NOT NULL,samesite INTEGER NOT NULL);
+INSERT INTO cookies VALUES(13372000000000000,'.bank.test','auth','',X'7632300011223344','/',13402000000000000,1,1,13372000000000000,1);
+INSERT INTO cookies VALUES(13372000000000001,'.bank.test','csrf','',X'76323055667788','/',13402000000000000,1,0,13372000000000001,1);"
+sqlite3 br_login_data.db "CREATE TABLE logins(origin_url VARCHAR NOT NULL,action_url VARCHAR,username_element VARCHAR,username_value VARCHAR,password_element VARCHAR,password_value BLOB,submit_element VARCHAR,signon_realm VARCHAR NOT NULL,date_created INTEGER NOT NULL,blacklisted_by_user INTEGER NOT NULL,scheme INTEGER NOT NULL,id INTEGER PRIMARY KEY AUTOINCREMENT);
+INSERT INTO logins(origin_url,action_url,username_element,username_value,password_element,password_value,submit_element,signon_realm,date_created,blacklisted_by_user,scheme) VALUES
+('https://portal.corp.test/login','https://portal.corp.test/session','user','jdoe','pass',X'763130AA','','https://portal.corp.test/',13371000000000000,0,0),
+('https://mail.example.com/','https://mail.example.com/auth','email','alice@example.com','pw',X'763130BB','','https://mail.example.com/',13371500000000000,0,0),
+('https://portal.corp.test/admin','https://portal.corp.test/session','user','admin','pass',X'763130CC','','https://portal.corp.test/',13370500000000000,0,0);"
+sqlite3 br_web_data.db "CREATE TABLE autofill(name VARCHAR,value VARCHAR,value_lower VARCHAR,date_created INTEGER DEFAULT 0,date_last_used INTEGER DEFAULT 0,count INTEGER DEFAULT 1,PRIMARY KEY(name,value));
+INSERT INTO autofill VALUES('email','alice@example.com','alice@example.com',1700000000,1700500000,7),('q','invoice.zip download','invoice.zip download',1700100000,1700900000,3),('username','jdoe','jdoe',1699000000,1700200000,12);"
+sqlite3 br_history.db "CREATE TABLE urls(id INTEGER PRIMARY KEY AUTOINCREMENT,url LONGVARCHAR,title LONGVARCHAR,visit_count INTEGER DEFAULT 0 NOT NULL,typed_count INTEGER DEFAULT 0 NOT NULL,last_visit_time INTEGER NOT NULL,hidden INTEGER DEFAULT 0 NOT NULL);
+CREATE TABLE downloads(id INTEGER PRIMARY KEY,guid VARCHAR NOT NULL,current_path LONGVARCHAR NOT NULL,target_path LONGVARCHAR NOT NULL,start_time INTEGER NOT NULL,received_bytes INTEGER NOT NULL,total_bytes INTEGER NOT NULL,state INTEGER NOT NULL,danger_type INTEGER NOT NULL,interrupt_reason INTEGER NOT NULL,hash BLOB NOT NULL,end_time INTEGER NOT NULL,opened INTEGER NOT NULL,last_access_time INTEGER NOT NULL,transient INTEGER NOT NULL,referrer VARCHAR NOT NULL,site_url VARCHAR NOT NULL,tab_url VARCHAR NOT NULL,tab_referrer_url VARCHAR NOT NULL,http_method VARCHAR NOT NULL,by_ext_id VARCHAR NOT NULL,by_ext_name VARCHAR NOT NULL,etag VARCHAR NOT NULL,last_modified VARCHAR NOT NULL,mime_type VARCHAR(255) NOT NULL,original_mime_type VARCHAR(255) NOT NULL);
+CREATE TABLE downloads_url_chains(id INTEGER NOT NULL,chain_index INTEGER NOT NULL,url LONGVARCHAR NOT NULL, PRIMARY KEY (id, chain_index));
+INSERT INTO urls(url,title,visit_count,last_visit_time) VALUES('https://cdn.evil.test/','x',1,13371000000000000);
+INSERT INTO downloads VALUES(1,'g1','C:\Users\jdoe\Downloads\invoice.zip.crdownload','C:\Users\jdoe\Downloads\invoice.zip',13371000000000000,2048,2048,1,0,0,X'',13371000100000000,0,0,0,'https://mail.example.com/','','https://mail.example.com/inbox','','GET','','','','','application/zip','application/zip');
+INSERT INTO downloads VALUES(2,'g2','C:\Users\jdoe\Downloads\update.exe','C:\Users\jdoe\Downloads\update.exe',13371200000000000,73728,73728,1,3,0,X'',13371200500000000,1,0,0,'https://cdn.evil.test/','','https://cdn.evil.test/get','','GET','','','','','application/x-msdownload','application/octet-stream');
+INSERT INTO downloads_url_chains VALUES(1,0,'https://mail.example.com/att/invoice.zip'),(2,0,'https://cdn.evil.test/r/42'),(2,1,'https://cdn.evil.test/files/update.exe');"
+sqlite3 br_ff_cookies.db "PRAGMA user_version=12; CREATE TABLE moz_cookies (id INTEGER PRIMARY KEY, originAttributes TEXT NOT NULL DEFAULT '', name TEXT, value TEXT, host TEXT, path TEXT, expiry INTEGER, lastAccessed INTEGER, creationTime INTEGER, isSecure INTEGER, isHttpOnly INTEGER, inBrowserElement INTEGER DEFAULT 0, sameSite INTEGER DEFAULT 0, rawSameSite INTEGER DEFAULT 0, schemeMap INTEGER DEFAULT 0, CONSTRAINT moz_uniqueid UNIQUE (name, host, path, originAttributes));
+INSERT INTO moz_cookies(name,value,host,path,expiry,lastAccessed,creationTime,isSecure,isHttpOnly,sameSite) VALUES
+('NID','abc','.google.com','/',1735689600,1700000123456789,1699999000000000,1,1,0),
+('session','zz','shop.example.org','/',1704067200,1700000999000000,1700000001000000,0,1,1);"
+sqlite3 br_ff_formhistory.db "PRAGMA user_version=5; CREATE TABLE moz_formhistory (id INTEGER PRIMARY KEY, fieldname TEXT NOT NULL, value TEXT NOT NULL, timesUsed INTEGER, firstUsed INTEGER, lastUsed INTEGER, guid TEXT);
+INSERT INTO moz_formhistory(fieldname,value,timesUsed,firstUsed,lastUsed,guid) VALUES('searchbar-history','mimikatz download',4,1700000000000000,1700300000000000,'a1'),('email','bob@example.org',9,1699000000000000,1700100000000000,'a2');"
+sqlite3 br_ff_places.db "PRAGMA user_version=74; CREATE TABLE moz_places(id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR, visit_count INTEGER DEFAULT 0, last_visit_date INTEGER);
+CREATE TABLE moz_bookmarks(id INTEGER PRIMARY KEY, type INTEGER, fk INTEGER DEFAULT NULL, parent INTEGER, position INTEGER, title LONGVARCHAR, keyword_id INTEGER, folder_type TEXT, dateAdded INTEGER, lastModified INTEGER, guid TEXT);
+INSERT INTO moz_places VALUES(1,'https://vpn.corp.test/','VPN',3,1700000000000000),(2,'https://pastebin.test/raw/x','paste',1,1700000500000000);
+INSERT INTO moz_bookmarks VALUES(1,2,NULL,0,0,'',NULL,NULL,1,1,'root________'),(2,2,NULL,1,0,'toolbar',NULL,NULL,1,1,'toolbar_____'),(3,1,1,2,0,'Corp VPN',NULL,NULL,1700000000000000,1700000000000000,'b1'),(4,3,NULL,2,1,'',NULL,NULL,1,1,'s1'),(5,1,2,2,2,'Drop site',NULL,NULL,1700000500000000,1700000500000000,'b2');"
+# decoys: a JSON cookie export renamed Cookies (no SQLite magic); a real SQLite DB without any browser store table
+printf '[{"domain":".example.com","name":"_ga"}]\n' > br_decoy_json.db
+sqlite3 br_decoy_notes.db "CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT); INSERT INTO notes(body) VALUES('cookies are tasty');"

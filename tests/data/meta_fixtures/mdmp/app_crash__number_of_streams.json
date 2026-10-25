@@ -1,0 +1,8 @@
+{
+ "field": "mdmp.number_of_streams",
+ "expected": "5",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> app_crash.dmp",
+ "oracle_cmd": "file app_crash.dmp -> 'Mini DuMP crash report, 5 streams, ...'",
+ "decoy": false,
+ "member": "app_crash.dmp"
+}

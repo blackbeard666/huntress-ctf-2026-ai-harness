@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-25-synthetic-vulnerability-root-cause",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Out of Bounds",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-25-synthetic-vulnerability-root-cause",
+    "time_trial": "binary-reverse-engineering-day-25-synthetic-vulnerability-root-cause/time_trial",
+    "mastery": "binary-reverse-engineering-day-25-synthetic-vulnerability-root-cause/mastery"
+  }
+}

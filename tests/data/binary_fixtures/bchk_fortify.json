@@ -1,0 +1,27 @@
+{
+ "family": "bounds_check_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "bchk_fortify_a.bin",
+ "file_b": "bchk_fortify_b.bin",
+ "expected_facts": {
+  "bounds_check_calls_a": "0",
+  "bounds_check_calls_b": "1",
+  "bounds_compares_a": "0",
+  "bounds_compares_b": "0",
+  "unchecked_accesses_a": "0",
+  "unchecked_accesses_b": "0",
+  "bounds_check_twin": "b",
+  "bounds_check_kind": "fortify_chk",
+  "bounds_check_sink": "__memcpy_chk",
+  "buffer_object": "dst",
+  "buffer_object_size": "32",
+  "bounds_check_function": "get",
+  "bounds_check_added": "true"
+ },
+ "generator_cmd": "bash bchk_gen.sh OUT   # gcc -O2 _FORTIFY_SOURCE=0 vs =2 (memcpy -> __memcpy_chk)",
+ "oracle_cmd": "python3 bchk_oracle.py bchk_fortify_a.bin bchk_fortify_b.bin   # binutils objdump -d -C -M intel + readelf -sW + nm",
+ "decoy": false,
+ "note": "lib.binary.bounds_check_field(a, b, key); bounds_check_kind vocabulary SPECULATIVE (no GM label yet)"
+}

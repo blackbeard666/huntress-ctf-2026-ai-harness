@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=java_jsp|role=webshell|verdict=malicious|attack=T1505.003|adapter=operation_graph|host_profile=war_static_include|obfuscation_profile=b64|stage_profile=single_descriptor|next_language=bash|stage_count=2|steps=decode_configuration,run_command|campaign_id=JAVA_JSP-5a6b7c8d|url=https://java_jsp-5a6b7c8d.example.invalid/stage|file_path=/tmp/huntress-java_jsp/.5a6b7c8d.stage",
+ "decoy": false,
+ "host": "jsp",
+ "what": ".war (stored zip): index.jsp <%@ include file=/WEB-INF/jspf/head.jspf %> supplies PART_A of DESCRIPTOR = PART_A + \"..\"",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm3_gen.py  (run inside tests/data/script_fixtures; stdlib base64 writer; members zipped with `zip -q -0 -X -r`)",
+ "oracle_cmd": "d=$(mktemp -d) && (unzip -p tests/data/script_fixtures/jvm3_war_include.war WEB-INF/jspf/head.jspf; unzip -p tests/data/script_fixtures/jvm3_war_include.war index.jsp) | perl -0ne 'print \"class O {\"; print $1 while /<%!(.*?)%>/sg; print \" public static void main(String[] a){System.out.print(new String(java.util.Base64.getDecoder().decode(DESCRIPTOR_5a6b7c8d)));}}\"' > $d/O.java && java $d/O.java   # java single-file launch: javac lexes the \\uXXXX escapes / folds the constants"
+}

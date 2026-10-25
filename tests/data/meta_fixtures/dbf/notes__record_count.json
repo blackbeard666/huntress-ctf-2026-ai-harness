@@ -1,0 +1,8 @@
+{
+ "field": "dbf.record_count",
+ "expected": "1",
+ "generator_cmd": "dbf.Table('notes.dbf', 'title C(40); body M; flag L; amount N(10,2)', dbf_type='db3') + 1 append (python dbf pkg)",
+ "oracle_cmd": "python3 -c \"import dbfread; t=dbfread.DBF('notes.dbf', load=False); print(t.header.numrecords)\"",
+ "decoy": false,
+ "member": "notes.dbf"
+}

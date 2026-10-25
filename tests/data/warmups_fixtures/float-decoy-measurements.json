@@ -1,0 +1,10 @@
+{
+ "codec": "float-charcodes",
+ "plain": null,
+ "encoded": "3.14159 2.71828 1.41421 1.73205 0.57721 1.61803 2.50290 4.66920",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s '3.14159 2.71828 1.41421 1.73205 0.57721 1.61803 2.50290 4.66920'  # well-known constants, not char codes",
+ "oracle_cmd": "printf %s \"$encoded\" | awk '{for(i=1;i<=NF;i++){x=$i*100; if(x!=int(x)) {print \"non-integral\"; exit}} print \"integral\"}'  # awk: x100 not integral",
+ "oracle_out": "non-integral"
+}

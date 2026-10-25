@@ -1,0 +1,11 @@
+{
+ "description": "RPA-3.0 (key 0x0badf00d, pickle protocol 4 index) carrying game/script.rpyc (RENPY RPC2) whose python block source holds the descriptor hex",
+ "material": "UlBBLTMuMCAwMDAwMDAwMDAwMDAwMmYzIDBiYWRmMDBkClJFTlBZIFJQQzIBAAAAIgAAAK8CAAAAAAAAAAAAAAAAAAB4nH1UTXPTMBRM009M0/L9WSCUA+ESHMmSkgMX2h6gHei0DPjSYWxZxpkmceUklBwyA5f+Zo7sUzKkpR0m41jSW73dt0/yz/LYlmrhcqlU+m6Kfjvv2bn3vz/vlcJ5LB2bkS2HKxgNe51cH5vEzg+P7EJNF6Z3MqpH/YG3F8Wm49nFV7/s0tgu18IFwHtR19iVcBHD/iAqBvaaG8eUxHpH9rpLmrY7xiFXw3VMv2H4uq+L9smgXpyMbCX0sNpp90xv2I1NYdd254bxOer90SDLe55dB/eNsb054dZ5YuytC7AtLHn2NmB3xvZuLVwiXfmw0MbeC1+i0u2dw62Dd/ufPh58fasaO/62CKpvqptK8oRzpaWWDWmkUgJvJQVPFJNCGuWrltIYp0BgVQYyVQpIjZUGZkIxxCW9MWtJrgLs5Urg8WmOJ3UzMKhABdjFZcwTEfAGfj4XFMHeBrhcPrA0Cal8kQKrkYGUBMA1kQsMIgWWNEnEnC5adRXQP2kzkvKmkklJ7MgDdtIizRW7fVd/i2LgEKqJmiYZ4cVVbIRFTFPUuQAGYFquhpQ8cQqapPUKb33nInnHiQ8IfZEReuEaVY3+sGlMIDt3PRAUp/cEieykDQzQ8LdORn0T8I1Wzf+QUAt/JOkiF5RDtyS4BQtEYIQvWiyRjCvegH4fEcHRD5dFz/oFdRFLWTo7O5d3SXSdOW+mjPAQc/iJU9Rw3Q5YOvMC2qa+Ux+c5iZPgAhoN0O/Jj65WkHFzp1caDGX+P+ZMzPj2vTsfXdvcYujAX0qHmSV3fKZfejuXZfu3SM3ND+Mto+HcbaaVbK13fL0Q5AXxm5kGxfu8GE08uwT3MynY/us5r46p1luqx9cotMsGtjnYQXDL6aj866pxpE+rtvNaeqFYWzO7Iv6H7uUM0J4nGtgmarJAAG1U3oE0hNzU/WLk4syC0r0igoqk6fETvHS/7CW2+vOp7XczgxT2qckFusBAKhWEqQ=",
+ "rep": "rpa",
+ "transform": "identity",
+ "key": "",
+ "expected": "v=3|language=renpy|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=RENPY-b71e0d54|url=https://renpy-b71e0d54a1.example.invalid/stage|file_path=/tmp/huntress-renpy/.b71e0d54b71e0d54.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/renpy_gen.py  (stdlib pickle/zlib/struct writer of the Ren'Py format -> renpy_rpa3_rpyc_proto4.json material, base64)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/renpy_oracle.py tests/data/script_fixtures/renpy_rpa3_rpyc_proto4.json  (stdlib pickle.loads index / pickletools.genops strings, hex -> plan; prints 'v=3|language=renpy|role=downloader|verdi'...)"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "cert_spki_scan",
+ "expected": "ANS-5d0c7e93a1f42b68",
+ "decoy": false,
+ "_why": "res/raw/server.der RSA cert matched by NSC <pin> #1 (set_index 1); data = openssl enc -aes-256-ecb -K <SPKI sha256>",
+ "generator_cmd": "bash tests/data/android_fixtures/spkipin_src/gen_spkipin.sh spkipin_nsc_der_aes  # openssl req -x509 certs; pin = openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64; res/raw/server.der RSA cert matched by NSC <pin> #1 (set_index 1); data = openssl enc -aes-256-ecb -K <SPKI sha256>; NSC + smali via apktool b (aapt2 binary XML)",
+ "oracle_cmd": "bash tests/data/android_fixtures/spkipin_src/oracle.sh tests/data/android_fixtures/spkipin_nsc_der_aes.apk  # openssl SPKI pin of each shipped cert vs aapt dump xmltree / strings dex pins -> matching digest decrypts data (openssl enc -d / python3 xor) -> ANS-5d0c7e93a1f42b68"
+}

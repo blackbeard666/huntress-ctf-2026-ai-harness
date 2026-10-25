@@ -1,0 +1,12 @@
+{
+  "stage": "single_solve:generalizing",
+  "name": "\ud83d\udc76 You Have a Point",
+  "lane": "warmups",
+  "worker": null,
+  "updated": "2026-10-25T21:28:24",
+  "error": "     ^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 3580, in single\n    ok = self._single()\n         ^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 3699, in _single\n    fresh = not any((cli.cdir(cid) / f).exists() for f in (\"start.json\", \"submissions.jsonl\", \"solved_once\"))\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/orchestrate.py\", line 3699, in <genexpr>\n    fresh = not any((cli.cdir(cid) / f).exists() for f in (\"start.json\", \"submissions.jsonl\", \"solved_once\"))\n                     ^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/cli.py\", line 56, in cdir\n    return paths.mode_dir(cid)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/paths.py\", line 125, in mode_dir\n    d = challenge_root(cid) / mode_of(cid)\n        ^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/paths.py\", line 118, in challenge_root\n    entry = _load_index().get(b)\n            ^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/hctf/paths.py\", line 85, in _load_index\n    return json.loads(INDEX.read_text()) if INDEX.exists() else {}\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/tools/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/json/__init__.py\", line 346, in loads\n    return _default_decoder.decode(s)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/tools/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/json/decoder.py\", line 338, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/testpwn/huntress-2026/tools/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/json/decoder.py\", line 356, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)\n",
+  "launches": 1,
+  "attempt": 2,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

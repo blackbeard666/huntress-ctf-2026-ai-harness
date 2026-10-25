@@ -1,0 +1,13 @@
+{
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "input": "HNT-7Q2X-K9ZP",
+  "input_hex": "484e542d375132582d4b395a50"
+ },
+ "decoy": false,
+ "generator_cmd": "bash solvein_gen.sh   # gcc on solvein_serial.c / solvein_hash.c; table + FNV-1a constant from python3 over the design input",
+ "oracle_cmd": "bash solvein_oracle.sh solvein_serial_O2pie.bin 'HNT-7Q2X-K9ZP'   # native run prints ACCEPT for the expected input (REJECT for others, e.g. 'analysis'); readelf -sW shows the check FUNC symbol",
+ "note": "same check, gcc -O2 PIE (R_X86_64_RELATIVE + JUMP_SLOT relocations)"
+}

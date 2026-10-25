@@ -1,0 +1,9 @@
+{
+ "codec": "mojibake-cp1252x2",
+ "plain": "“Nice work decoding this warmup!” To solve, submit this exact answer to the Game Master: ‘maple-lynx-08’",
+ "encoded": "Ã¢â‚¬Å“Nice work decoding this warmup!Ã¢â‚¬Â To solve, submit this exact answer to the Game Master: Ã¢â‚¬Ëœmaple-lynx-08Ã¢â‚¬â„¢",
+ "generator_cmd": "node -e \"const w=s=>new TextDecoder('windows-1252').decode(Buffer.from(s,'utf8'));process.stdout.write(w(w(process.env.plain)))\"  # double windows-1252 misread of a smart-quoted sentence (â€œ family)",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -f utf-8 -t windows-1252 | uconv -f utf-8 -t windows-1252 | uconv -f utf-8 -t utf-8 -x '::NFKC;'  # ICU uconv twice, ICU NFKC",
+ "oracle_plain": "“Nice work decoding this warmup!” To solve, submit this exact answer to the Game Master: ‘maple-lynx-08’",
+ "expected": "match"
+}

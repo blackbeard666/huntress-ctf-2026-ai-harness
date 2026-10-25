@@ -1,0 +1,8 @@
+{
+ "field": "sqlite_wal.frame_count",
+ "expected": "none",
+ "generator_cmd": "python3 -c 'sqlite3: PRAGMA page_size=4096; journal_mode=WAL; wal_autocheckpoint=0; CREATE TABLE + 3 insert txns; copy app.db-wal/-shm while the connection is open' (stdlib sqlite3 = libsqlite3 3.53 writer) -- the MAIN db file renamed",
+ "oracle_cmd": "file app.db -> 'SQLite 3.x database' (not a WAL: magic 53514c69)",
+ "decoy": true,
+ "member": "app.db-wal"
+}

@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=java_jsp|role=webshell|verdict=malicious|attack=T1505.003|adapter=operation_graph|host_profile=jsp_constant_concat|obfuscation_profile=b64|stage_profile=single_descriptor|next_language=bash|stage_count=2|steps=decode_configuration,run_command|campaign_id=JAVA_JSP-b40c55e2|url=https://java_jsp-b40c55e2.example.invalid/stage|file_path=/tmp/huntress-java_jsp/.b40c55e2.stage",
+ "decoy": false,
+ "host": "jsp",
+ "what": "JSP <%! %>: DESCRIPTOR = HEAD + MID + \"..\" over other String constants (javac constant fold)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm3_gen.py  (run inside tests/data/script_fixtures; stdlib base64 writer)",
+ "oracle_cmd": "d=$(mktemp -d) && perl -0ne '/<%!(.*?)%>/s and print \"class O {$1 public static void main(String[] a){System.out.print(new String(java.util.Base64.getDecoder().decode(DESCRIPTOR_b40c55e2)));}}\"' tests/data/script_fixtures/jvm3_jsp_const_fold.jsp > $d/O.java && java $d/O.java   # java single-file launch: javac lexes the \\uXXXX escapes / folds the constants"
+}

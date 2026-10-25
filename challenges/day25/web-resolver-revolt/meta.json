@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-18-resolver-revolt",
+  "lane": "web",
+  "name": "🌐 Resolver Revolt",
+  "ids": {
+    "single_solve": "web-exploitation-day-18-resolver-revolt",
+    "time_trial": "web-exploitation-day-18-resolver-revolt/time_trial",
+    "mastery": "web-exploitation-day-18-resolver-revolt/mastery"
+  }
+}

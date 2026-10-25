@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.host_magic_prefix_hex_16",
+ "expected": "89504e470d0a1a0a0000000d49484452",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> panel.png",
+ "oracle_cmd": "head -c16 panel.png | od -An -tx1 | tr -d ' \\n' -> 89504e470d0a1a0a0000000d49484452",
+ "decoy": false,
+ "member": "panel-001.png"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "varargs_x86_64's dex, the .so FindClass-es com/huntress/mobile/d26/Kx (not in the dex): no answer",
+ "generator_cmd": "python3 tests/data/android_fixtures/jnienv_src/gen_jnienv.py decoy_nearmiss tests/data/android_fixtures/jnienv_decoy_nearmiss.apk  # javac --release 8 + dex2jar d2j-jar2dex + gcc -shared -fPIC -O2 -s jnienv_src/jnienv.c + zipfile (assets/huntress_puzzle.json v2 codec analysis, no data)",
+ "oracle_cmd": "sh tests/data/android_fixtures/jnienv_src/oracle.sh tests/data/android_fixtures/jnienv_decoy_nearmiss.apk  # d2j-dex2jar back to classes, RUN Release.code() on the real JVM with REAL JNI (the apk's own lib/x86_64/libarena.so) -> NoClassDefFoundError com/huntress/mobile/d26/Kx, no token"
+}

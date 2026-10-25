@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=terraform_hcl|role=execution|verdict=malicious|attack=T1059.004|adapter=local_exec|host_profile=terraform_hcl_host|obfuscation_profile=b64|stage_profile=two_stage_download_execute|next_language=bash|stage_count=2|steps=acquire_remote,run_stage|campaign_id=TERRAFORM_HCL-3f9a1c7e|url=https://terraform_hcl-3f9a1c7e5d.example.invalid/stage|file_path=/tmp/huntress-terraform_hcl/.5d0b8e2a91c4f7e3.stage",
+ "decoy": false,
+ "host": "terraform_hcl",
+ "note": "terraform-hcl-function-fold: descriptor folded statically over HCL locals / variables / functions (lib.codec._tfh_codecs)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/tfh_gen.py tests/data/script_fixtures  (stdlib base64 / bytes.hex writer; pieces split over Terraform locals / var defaults / heredocs / join / format / replace / base64decode / .tf.json templates)",
+ "oracle_cmd": "d=$(mktemp -d); cp tests/data/script_fixtures/tfh_native_fold.tf $d/main.tf; echo local.descriptor_3f9a1c7e | terraform -chdir=$d console | tr -d '\"' | base64 -d  (terraform v1.15.8 console = the real HCL evaluator, run without init)"
+}

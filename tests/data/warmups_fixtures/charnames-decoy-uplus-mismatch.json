@@ -1,0 +1,11 @@
+{
+ "codec": "charnames",
+ "plain": null,
+ "encoded": "U+0041 LATIN CAPITAL LETTER B\nU+0042 LATIN CAPITAL LETTER B\nU+0043 LATIN CAPITAL LETTER C",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'U+0041 LATIN CAPITAL LETTER B\nU+0042 LATIN CAPITAL LETTER B\nU+0043 LATIN CAPITAL LETTER C'   # hand-written U+ lines whose first code point disagrees with its name",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CSD -Mcharnames=:full -ne 'chomp; my ($cp, $n) = /^U\\+([0-9A-F]+) (.+)$/ or die; my $c = charnames::string_vianame($n); die \"mismatch $_\" unless $c eq chr(hex $cp); print $c'",
+ "oracle_plain": "",
+ "oracle_note": "oracle rc=255: mismatch U+0041 LATIN CAPITAL LETTER B at -e line 1, <> line 1."
+}

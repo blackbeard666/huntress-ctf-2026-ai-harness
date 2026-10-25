@@ -1,0 +1,10 @@
+{
+ "material": "417c4f335c2c1162167710750965046a0d30402f583d4f3c54315d314d384a261b73077303704a654a294d230d6810711c6c00654b3f5a295d72133d4d3e0f73187d04394b24482442235024",
+ "rep": "hex",
+ "transform": "rolling_xor",
+ "key": "",
+ "expected": "v=3|op=stage|lang=powershell|url=https://cdn.example.test/a.ps1|key=rollfast",
+ "generator_cmd": "python3 -I -c 'p=PLAN.encode(); k=0x37; o=bytearray()\\nfor c in p: k^=c; o.append(k)\\nprint(o.hex())'  # plaintext-feedback rolling XOR, seed 0x37, no key declared",
+ "oracle_cmd": "perl -e '$h=shift; @b=map hex, unpack(\"(A2)*\",$h); for $s (0..255){$p=$s;$o=\"\";for $x (@b){$o.=chr($x^$p);$p=$x}; if($o=~/^v=3\\|/){print $o; last}}' <material>",
+ "note": "exercises the unkeyed 256-seed rolling_xor sweep (find-codecs-speed-gate fast path)"
+}

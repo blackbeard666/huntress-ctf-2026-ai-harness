@@ -1,0 +1,47 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls2_sizewrap_a.bin",
+ "file_b": "vcls2_sizewrap_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-190",
+  "cwe_number": "190",
+  "vulnerability_class": "integer_overflow",
+  "changed_function": "target"
+ },
+ "expected_changed_function": "target",
+ "trigger_input": {
+  "argv": [
+   "0x4000000000000001",
+   "4"
+  ],
+  "env": {
+   "HUNTRESS_KEY": "arena-2026"
+  }
+ },
+ "outcome_a": {
+  "exit": 1,
+  "stdout": [
+   ""
+  ],
+  "sanitizer": "heap-buffer-overflow"
+ },
+ "outcome_b": {
+  "exit": 1,
+  "stdout": [
+   "HCFG"
+  ],
+  "sanitizer": "clean"
+ },
+ "gate_closed_stdout": [
+  "locked"
+ ],
+ "analyzer_a": [],
+ "analyzer_b": [],
+ "generator_cmd": "W=$(mktemp -d) bash vcls2_gen.sh OUT   # gcc -fno-inline C twins, getenv(HUNTRESS_KEY) gate + HCFG{json} rodata blob",
+ "oracle_cmd": "python3 vcls2_oracle.py $W sizewrap 0x4000000000000001 4   # gcc -fsanitize=address,undefined run + gcc -fanalyzer + objdump -d -M intel: added=['cmp', 'je', 'je', 'jmp', 'jno', 'mov', 'mov', 'mov', 'mov', 'mov', 'mul', 'test'] removed=[]",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (malloc(n * sz) size_t wrap -> n > SIZE_MAX / sz rejected); outcome_* from the ASan copies of the same source; CWE spelling SPECULATIVE until a GM label is seen"
+}

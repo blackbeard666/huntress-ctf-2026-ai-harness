@@ -1,0 +1,27 @@
+#!/bin/sh
+# Deleted-content SQLite fixtures (sqlite3 CLI 3.46.1, coreutils printf/dd). Usage: sh GENERATOR_sqlite_deleted.sh.txt <outdir>
+# Debian's sqlite3 defaults to secure_delete=ON, so every non-secure case turns it OFF explicitly.
+set -e
+o=${1:?outdir}; mkdir -p "$o"; cd "$o"; rm -f rows.sqlite freelist.sqlite secure.sqlite mismatch.sqlite sqlite2.db
+# 1) two deleted rows in one table leaf page -> two freeblocks (rows 2 and 4 are not next to the unallocated gap)
+sqlite3 rows.sqlite "pragma secure_delete=off; pragma page_size=1024;
+ create table t(id integer primary key, name text, note text);
+ insert into t(name,note) values('alice_row','first note here'),('bob_deleted','secret password hunter2'),
+  ('carol_row','third note'),('dave_deleted','another removed note'),('erin_row','last one');
+ delete from t where id in (2,4);" >/dev/null
+# 2) dropped table -> freelist (512-B pages: <= 120 leaves per trunk -> 2 trunks)
+mk() { sqlite3 "$1" "pragma secure_delete=$2; pragma page_size=512; pragma auto_vacuum=none;
+ create table keep(k text); insert into keep values('kept_row_value');
+ create table gone(id integer primary key, tag text, pad blob);
+ with recursive c(i) as (select 1 union all select i+1 from c where i<180)
+  insert into gone(tag,pad) select 'dropped_tag_'||i, zeroblob(300) from c;
+ drop table gone;" >/dev/null; }
+mk freelist.sqlite off
+mk secure.sqlite on
+# 3) header freelist count @36 patched +1 (a lying header)
+cp freelist.sqlite mismatch.sqlite
+n=$(sqlite3 freelist.sqlite "pragma freelist_count;"); n=$((n+1))
+printf "$(printf '\\%03o\\%03o\\%03o\\%03o' $((n>>24&255)) $((n>>16&255)) $((n>>8&255)) $((n&255)))" |
+  dd of=mismatch.sqlite bs=1 seek=36 conv=notrunc 2>/dev/null
+# 4) decoy: SQLite 2.x header (renamed impostor)
+{ printf '** This file contains an SQLite 2.1 database **'; head -c 976 /dev/zero; } > sqlite2.db

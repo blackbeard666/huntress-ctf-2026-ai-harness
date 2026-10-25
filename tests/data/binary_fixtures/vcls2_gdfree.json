@@ -1,0 +1,55 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls2_gdfree_a.bin",
+ "file_b": "vcls2_gdfree_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-415",
+  "cwe_number": "415",
+  "vulnerability_class": "double_free",
+  "changed_function": "target"
+ },
+ "expected_changed_function": "target",
+ "trigger_input": {
+  "argv": [
+   "x",
+   "5"
+  ],
+  "env": {
+   "HUNTRESS_KEY": "arena-2026"
+  }
+ },
+ "outcome_a": {
+  "exit": 1,
+  "stdout": [
+   ""
+  ],
+  "sanitizer": "attempting double-free"
+ },
+ "outcome_b": {
+  "exit": 5,
+  "stdout": [
+   "x"
+  ],
+  "sanitizer": "clean"
+ },
+ "gate_closed_stdout": [
+  "locked"
+ ],
+ "analyzer_a": [
+  "-Wanalyzer-double-free",
+  "-Wanalyzer-possible-null-argument",
+  "CWE-415",
+  "CWE-690"
+ ],
+ "analyzer_b": [
+  "-Wanalyzer-possible-null-argument",
+  "CWE-690"
+ ],
+ "generator_cmd": "W=$(mktemp -d) bash vcls2_gen.sh OUT   # gcc -fno-inline C twins, getenv(HUNTRESS_KEY) gate + HCFG{json} rodata blob",
+ "oracle_cmd": "python3 vcls2_oracle.py $W gdfree x 5   # gcc -fsanitize=address,undefined run + gcc -fanalyzer + objdump -d -M intel: added=[] removed=['call free', 'call free', 'cmp', 'jg', 'mov', 'mov', 'mov', 'nop', 'pop', 'pop', 'pop', 'ret']",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (conditional free(p) + free(p) -> one free (-O2, p escapes via puts)); outcome_* from the ASan copies of the same source; CWE spelling SPECULATIVE until a GM label is seen"
+}

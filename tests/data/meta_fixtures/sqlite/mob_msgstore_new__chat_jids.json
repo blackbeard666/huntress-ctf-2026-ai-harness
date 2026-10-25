@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.chat_jids",
+ "expected": "[\"33612345678@s.whatsapp.net\",\"4915112345678@s.whatsapp.net\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_mobile.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> mob_msgstore_new.db)",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_mobile.py.txt mob_msgstore_new.db chat_jids  (Python sqlite3 / SQLite C library SQL + SQLite strftime epoch conversion)",
+ "decoy": false,
+ "member": "mob_msgstore_new.db"
+}

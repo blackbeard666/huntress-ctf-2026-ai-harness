@@ -1,0 +1,9 @@
+{
+ "codec": "float-dec",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-badger-31",
+ "encoded": "78.0 105.0 99.0 101.0 32.0 119.0 111.0 114.0 107.0 32.0 100.0 101.0 99.0 111.0 100.0 105.0 110.0 103.0 32.0 116.0 104.0 105.0 115.0 32.0 119.0 97.0 114.0 109.0 117.0 112.0 33.0 32.0 84.0 111.0 32.0 115.0 111.0 108.0 118.0 101.0 44.0 32.0 115.0 117.0 98.0 109.0 105.0 116.0 32.0 116.0 104.0 105.0 115.0 32.0 101.0 120.0 97.0 99.0 116.0 32.0 97.0 110.0 115.0 119.0 101.0 114.0 32.0 116.0 111.0 32.0 116.0 104.0 101.0 32.0 71.0 97.0 109.0 101.0 32.0 77.0 97.0 115.0 116.0 101.0 114.0 58.0 32.0 105.0 118.0 111.0 114.0 121.0 45.0 98.0 97.0 100.0 103.0 101.0 114.0 45.0 51.0 49.0",
+ "generator_cmd": "printf %s \"$plain\" | perl -CS -ne 'print join(\" \", map ord, split //), \"\\n\"' | awk '{for(i=1;i<=NF;i++) printf \"%s%.1f\", (i>1?\" \":\"\"), $i}'  # awk printf %.1f (78.0)",
+ "oracle_cmd": "printf %s \"$encoded\" | awk '{for(i=1;i<=NF;i++) printf \"%s%d\", (i>1?\" \":\"\"), $i+0.5}' | perl -CS -ne 'chomp; print join \"\", map chr, split / /'  # awk round, perl chr",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-badger-31",
+ "expected": "match"
+}

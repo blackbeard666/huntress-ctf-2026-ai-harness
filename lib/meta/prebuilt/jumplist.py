@@ -14,11 +14,15 @@ DestList (libyal "Jump lists format" / plaso automatic_destinations.yaml), littl
 Lists keep stored order (DestList = MRU order); lnk_stream_names are in CFB directory order = numeric (shorter name
 first, then upper-case compare -- i.e. hex value). first_target_path = the target of the lowest-numbered LNK stream
 (lnk.target_path rules: LinkInfo LocalBasePath+suffix, else env block, else IDList path).
-Not a CFB / no DestList and no LNK stream -> "none"."""
+A `<AppID>.customDestinations-ms` member (not a CFB: header u32 version 2 + categories of CLSID-prefixed LNKs) is
+delegated to customdestinations.py: app_id / format_version / *count (= embedded LNK count) / *target_path(s) /
+entry_paths answer from it, the CFB-only DestList and stream-name fields are absent there -> "none".
+Not a CFB / no DestList and no LNK stream (and not a custom-destinations stream) -> "none"."""
 import re
 import struct
 
 from ..cfb import cfb_streams
+from . import customdestinations as _cd
 from . import lnk as _lnk
 
 FIELDS = {
@@ -138,13 +142,22 @@ def _pick(j, f, member):
     return None
 
 
+def _custom(b, f, member):
+    c = _cd.parse(b)
+    if c is None or f.startswith("destlist") or "pinned" in f or "stream_names" in f or "revision" in f:
+        return "none"
+    if f.endswith("count") or f == "number_of_entries":
+        f = "entry_count"
+    return _cd._pick(c, f, member)
+
+
 def jumplist_value(data, ctx):
     if data is None:
         return None
     try:
         j = parse(bytes(data))
         if j is None:
-            return "none"
+            return _custom(bytes(data), ctx.get("field") or "", ctx.get("member") or "")
         return _pick(j, ctx.get("field") or "", ctx.get("member") or "")
     except Exception:
         return None

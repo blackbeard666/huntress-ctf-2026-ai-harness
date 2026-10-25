@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "76bfa85f-80d0-4943-a1b6-8836bcb13d84",
+  "window": null,
+  "elapsed": 1.11,
+  "in_window": 0.9,
+  "phases": {
+    "start": 0.21,
+    "download": 0.1,
+    "solve": 0.21,
+    "submit": 0.58
+  },
+  "routed": "homebase (window unknown)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "fancy-castle-quartz-43"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

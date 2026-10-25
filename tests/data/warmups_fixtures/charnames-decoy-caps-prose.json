@@ -1,0 +1,11 @@
+{
+ "codec": "charnames",
+ "plain": null,
+ "encoded": "PLEASE FILE THE REPORT, THEN CALL THE FRONT OFFICE, SPACE IS LIMITED, THANK YOU",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s 'PLEASE FILE THE REPORT, THEN CALL THE FRONT OFFICE, SPACE IS LIMITED, THANK YOU'   # hand-written English prose in capitals, comma-separated like a name list",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I -c 'import sys, unicodedata as u; print(\"\".join(u.lookup(x) for x in sys.stdin.read().split(\", \")), end=\"\")'",
+ "oracle_plain": "",
+ "oracle_note": "oracle rc=1: KeyError: \"undefined character name 'PLEASE FILE THE REPORT'\""
+}

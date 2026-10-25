@@ -1,0 +1,15 @@
+{
+ "codec": "invisible-tags",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-29",
+ "encoded": "Ignore\u200b\u200bnothing\u200c\u200bhere,\u200b\u200cthis\u200c\u200cis\u200b\u200bjust\u200c\u200ba\u200b\u200cnormal\u200c\u200cstatus\u200b\u200bline\u200c\u200bfor\u200b\u200cthe\u200c\u200cteam\u200b\u200b\udb40\udc4e\udb40\udc69\udb40\udc63\udb40\udc65\udb40\udc20\udb40\udc77\udb40\udc6f\udb40\udc72\udb40\udc6b\udb40\udc20\udb40\udc64\udb40\udc65\udb40\udc63\udb40\udc6f\udb40\udc64\udb40\udc69\udb40\udc6e\udb40\udc67\udb40\udc20\udb40\udc74\udb40\udc68\udb40\udc69\udb40\udc73\udb40\udc20\udb40\udc77\udb40\udc61\udb40\udc72\udb40\udc6d\udb40\udc75\udb40\udc70\udb40\udc21\udb40\udc20\udb40\udc54\udb40\udc6f\udb40\udc20\udb40\udc73\udb40\udc6f\udb40\udc6c\udb40\udc76\udb40\udc65\udb40\udc2c\udb40\udc20\udb40\udc73\udb40\udc75\udb40\udc62\udb40\udc6d\udb40\udc69\udb40\udc74\udb40\udc20\udb40\udc74\udb40\udc68\udb40\udc69\udb40\udc73\udb40\udc20\udb40\udc65\udb40\udc78\udb40\udc61\udb40\udc63\udb40\udc74\udb40\udc20\udb40\udc61\udb40\udc6e\udb40\udc73\udb40\udc77\udb40\udc65\udb40\udc72\udb40\udc20\udb40\udc74\udb40\udc6f\udb40\udc20\udb40\udc74\udb40\udc68\udb40\udc65\udb40\udc20\udb40\udc47\udb40\udc61\udb40\udc6d\udb40\udc65\udb40\udc20\udb40\udc4d\udb40\udc61\udb40\udc73\udb40\udc74\udb40\udc65\udb40\udc72\udb40\udc3a\udb40\udc20\udb40\udc63\udb40\udc6f\udb40\udc62\udb40\udc61\udb40\udc6c\udb40\udc74\udb40\udc2d\udb40\udc6c\udb40\udc79\udb40\udc6e\udb40\udc78\udb40\udc2d\udb40\udc32\udb40\udc39",
+ "generator_cmd": "perl -CSA -e 'my ($cov, $p, $w) = @ARGV; my $t = join q(), map { chr(0xE0000 + ord) } split //, $p; $t = chr(0xE0001) . $t . chr(0xE007F) if $w; print $cov . $t' \"$cover\" \"$plain\" \"$wrap\"",
+ "generator_env": {
+  "cover": "Ignore\u200b\u200bnothing\u200c\u200bhere,\u200b\u200cthis\u200c\u200cis\u200b\u200bjust\u200c\u200ba\u200b\u200cnormal\u200c\u200cstatus\u200b\u200bline\u200c\u200bfor\u200b\u200cthe\u200c\u200cteam\u200b\u200b",
+  "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-29",
+  "wrap": ""
+ },
+ "oracle_cmd": "python3 -I -c \"import sys; print(''.join(chr(ord(c) - 0xE0000) for c in sys.argv[1] if 0xE0020 <= ord(c) <= 0xE007E), end='')\" \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-29",
+ "expected": "match",
+ "note": "tags payload in a cover sprinkled with 30 U+200B/U+200C (zero-width noise): the tag reading must win"
+}

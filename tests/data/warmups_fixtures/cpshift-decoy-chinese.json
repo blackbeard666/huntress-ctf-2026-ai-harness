@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": null,
+ "encoded": "你好世界，这是一个普通的中文句子，并没有经过任何旋转。",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "hand-written genuine Chinese prose",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];k=ord(t[0])-ord('N');print(''.join(chr(ord(c)-k) for c in t)[:20])\" \"$encoded\"  # no constant K maps it onto the crib"
+}

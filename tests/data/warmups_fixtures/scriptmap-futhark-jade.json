@@ -1,0 +1,9 @@
+{
+ "codec": "script-letter-map",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jazzy-falcon-31",
+ "encoded": "ᚾᛁᚲᛖ ᚹᛟᚱᚲ ᛞᛖᚲᛟᛞᛁᚾᚷ ᛏᚺᛁᛊ ᚹᚨᚱᛗᚢᛈ! ᛏᛟ ᛊᛟᛚᚹᛖ, ᛊᚢᛒᛗᛁᛏ ᛏᚺᛁᛊ ᛖᛉᚨᚲᛏ ᚨᚾᛊᚹᛖᚱ ᛏᛟ ᛏᚺᛖ ᚷᚨᛗᛖ ᛗᚨᛊᛏᛖᚱ: ᛃᚨᛉᛉᛃ-ᚠᚨᛚᚲᛟᚾ-31",
+ "generator_cmd": "printf %s \"$plain\" | sed 'y/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/ᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᚲᚱᛊᛏᚢᚹᚹᛉᛃᛉᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᚲᚱᛊᛏᚢᚹᚹᛉᛃᛉ/'  # GNU sed y/// letter -> glyph table",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CSD -Mutf8 -pe 'tr/ᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᛚᛗᚾᛟᛈᚱᛊᛏᚢᚹᛉ/abcdefghijlmnoprstuvx/' | tr A-Z a-z  # perl tr/// inverse table (lowercased; a shared glyph reads as its first letter)",
+ "oracle_plain": "nice vorc decoding this varmup! to solve, submit this exact ansver to the game master: jaxxj-falcon-31",
+ "expected": "match"
+}

@@ -1,0 +1,23 @@
+{
+ "kind": "clojure_facts",
+ "decoy": false,
+ "expected": {
+  "main_class": "acme.tool_kit",
+  "has_clojure_runtime": "false",
+  "namespace": "acme.tool-kit",
+  "vars": "[\"blob-key\",\"valid?\",\"parse->map\",\"counter\",\"-main\"]",
+  "var_count": "5",
+  "fn_classes": "[\"acme/tool_kit$valid_QMARK_\",\"acme/tool_kit$parse__GT_map\",\"acme/tool_kit$_main\"]",
+  "var_fn_classes": "{\"valid?\":\"acme/tool_kit$valid_QMARK_\",\"parse->map\":\"acme/tool_kit$parse__GT_map\",\"-main\":\"acme/tool_kit$_main\"}",
+  "anon_fn_classes": "[\"acme/tool_kit$fn__128\"]",
+  "ns_loader_class": "acme/tool_kit$loading__6812__auto____126",
+  "init_class": "acme/tool_kit__init",
+  "gen_class": "acme/tool_kit",
+  "source_file": "tool_kit.clj",
+  "primary_class": "acme/tool_kit__init",
+  "references_clojure_runtime": "true"
+ },
+ "generator_cmd": "bash cljns_gen.sh   # clojure.main -e (compile 'acme.tool-kit) (Clojure 1.12.0, OpenJDK 21) + jar --create; D25 jar copied; decoy javac --release 17 + jar",
+ "oracle_cmd": "python3 cljns_oracle.py cljns_aot_toolkit.bin   # unzip -Z1/-p + javap -c -p -v text (RT.var ldc pairs in __init0, load() new/bindRoot, SourceFile)",
+ "note": "real `clojure.core/compile` AOT of ns acme.tool-kit (:gen-class; munged valid? / parse->map, multi-arity, private atom Var, nested anon fn), no clojure.jar bundled"
+}

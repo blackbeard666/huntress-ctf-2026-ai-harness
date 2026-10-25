@@ -1,0 +1,26 @@
+{
+ "family": "stripped_twin_match",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "stw_nopie_bounds_a.bin",
+ "file_b": "stw_nopie_bounds_b.bin",
+ "file_sym": null,
+ "expected_facts": {
+  "changed_function_count": "1",
+  "changed_function": "sub_4013c0",
+  "changed_function_name": "none",
+  "changed_function_va": "0x4013c0",
+  "changed_function_va_b": "0x4013c0",
+  "changed_function_offset": "0x13c0",
+  "changed_function_offset_b": "0x13c0",
+  "eh_frame_range": "0x4013c0-0x4013d5",
+  "eh_frame_range_b": "0x4013c0-0x4013f4",
+  "eh_frame_size": "21",
+  "eh_frame_size_b": "52"
+ },
+ "generator_cmd": "sh stw_gen.sh .   # gcc -O2 [-no-pie] stw_src.c (-DFIXED bounds guard in store / -DMIXK constant in mix), strip -s",
+ "oracle_cmd": "python3 stw_oracle.py stw_nopie_bounds_a.bin stw_nopie_bounds_b.bin stw_pie_const_sym.bin   # binutils objdump -d split at readelf --debug-dump=frames FDE starts, readelf -lW / -sW  (no-sym run: changed_function = 'sub_' + oracle va)",
+ "decoy": false,
+ "note": "lib.binary.stripped_twin_field(a, b, key, sym); same twins, no symbolized twin -> sub_<A va>, changed_function_name none; field vocabulary SPECULATIVE (no GM label yet)"
+}

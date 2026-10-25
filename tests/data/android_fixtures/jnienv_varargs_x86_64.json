@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-5517B525E55BF9FB",
+ "decoy": false,
+ "_why": "Release.code(): Bridge.fold(String, byte[], int) in lib/x86_64/libarena.so = GetStringUTFChars/Release + GetArrayLength + GetByteArrayElements/Release(JNI_ABORT) + FindClass(K) + GetStaticFieldID/GetStaticLongField(K1, dex static value)/GetStaticIntField(K2) + GetStaticMethodID + variadic CallStaticLongMethod(K.mixer(JI)J); Bridge.seal(long, byte[]) = GetByteArrayRegion + CallStaticLongMethodA(jvalue[]) + snprintf + NewStringUTF",
+ "generator_cmd": "python3 tests/data/android_fixtures/jnienv_src/gen_jnienv.py varargs_x86_64 tests/data/android_fixtures/jnienv_varargs_x86_64.apk  # javac --release 8 + dex2jar d2j-jar2dex + gcc -shared -fPIC -O2 -s jnienv_src/jnienv.c + zipfile (assets/huntress_puzzle.json v2 codec analysis, no data)",
+ "oracle_cmd": "sh tests/data/android_fixtures/jnienv_src/oracle.sh tests/data/android_fixtures/jnienv_varargs_x86_64.apk  # d2j-dex2jar back to classes, RUN Release.code() on the real JVM with REAL JNI (the apk's own lib/x86_64/libarena.so) -> ANS-5517B525E55BF9FB"
+}

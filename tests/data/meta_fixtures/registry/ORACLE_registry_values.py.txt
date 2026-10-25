@@ -1,0 +1,59 @@
+"""Oracle: python-registry 1.3.1 (tools/pylib/Registry). Usage:
+PYTHONPATH=tools/pylib .venv/bin/python -P ORACLE_registry_values.py.txt <hive> <op> [arg]
+ops: value <root-relative\\key\\path> <value name>  -> data (SZ text, DWORD int, MULTI_SZ compact JSON, BINARY hex)
+     computer_name / timezone_key_name               -> via Select\\Current -> ControlSet00N
+     install_date_utc                                -> InstallDate (unix seconds) as YYYY-MM-DDTHH:MM:SSZ
+     machine_sid                                     -> SAM\\Domains\\Account V last 12 bytes
+     root_value_types / hive_type                    -> sorted Name:REG_*, root-subkey rule table"""
+import datetime
+import json
+import struct
+import sys
+
+from Registry import Registry
+
+r = Registry.Registry(sys.argv[1])
+op = sys.argv[2]
+TN = {"RegSZ": "REG_SZ", "RegExpandSZ": "REG_EXPAND_SZ", "RegBin": "REG_BINARY", "RegDWord": "REG_DWORD",
+      "RegMultiSZ": "REG_MULTI_SZ", "RegQWord": "REG_QWORD", "RegNone": "REG_NONE"}
+
+
+def show(v):
+    x = v.value()
+    if isinstance(x, list):
+        return json.dumps(x, separators=(",", ":"))
+    if isinstance(x, bytes):
+        return x.hex()
+    return str(x)
+
+
+def cs():
+    n = r.open("Select").value("Current").value()
+    return "ControlSet%03d" % n
+
+
+if op == "value":
+    k = r.open(sys.argv[3]) if sys.argv[3] else r.root()
+    print(show(k.value(sys.argv[4])))
+elif op == "computer_name":
+    print(r.open(cs() + "\\Control\\ComputerName\\ComputerName").value("ComputerName").value())
+elif op == "timezone_key_name":
+    print(r.open(cs() + "\\Control\\TimeZoneInformation").value("TimeZoneKeyName").value())
+elif op == "install_date_utc":
+    t = r.open("Microsoft\\Windows NT\\CurrentVersion").value("InstallDate").value()
+    print((datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=t)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+elif op == "machine_sid":
+    v = r.open("SAM\\Domains\\Account").value("V").value()
+    print("S-1-5-21-%d-%d-%d" % struct.unpack("<III", v[-12:]))
+elif op == "root_value_types":
+    print(json.dumps(sorted("%s:%s" % (v.name(), TN[v.value_type_str()]) for v in r.root().values()), separators=(",", ":")))
+elif op == "hive_type":
+    s = {k.name().lower() for k in r.root().subkeys()}
+    if any(n.startswith("controlset") for n in s) and "select" in s:
+        print("SYSTEM")
+    elif "microsoft" in s and "classes" in s:
+        print("SOFTWARE")
+    elif "sam" in s and any(k.name() == "Domains" for k in r.open("SAM").subkeys()):
+        print("SAM")
+    else:
+        print("DEFAULT")

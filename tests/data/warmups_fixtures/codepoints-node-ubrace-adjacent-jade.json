@@ -1,0 +1,9 @@
+{
+ "codec": "codepoints-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-73 😀",
+ "encoded": "\\u{4E}\\u{69}\\u{63}\\u{65}\\u{20}\\u{77}\\u{6F}\\u{72}\\u{6B}\\u{20}\\u{64}\\u{65}\\u{63}\\u{6F}\\u{64}\\u{69}\\u{6E}\\u{67}\\u{20}\\u{74}\\u{68}\\u{69}\\u{73}\\u{20}\\u{77}\\u{61}\\u{72}\\u{6D}\\u{75}\\u{70}\\u{21}\\u{20}\\u{54}\\u{6F}\\u{20}\\u{73}\\u{6F}\\u{6C}\\u{76}\\u{65}\\u{2C}\\u{20}\\u{73}\\u{75}\\u{62}\\u{6D}\\u{69}\\u{74}\\u{20}\\u{74}\\u{68}\\u{69}\\u{73}\\u{20}\\u{65}\\u{78}\\u{61}\\u{63}\\u{74}\\u{20}\\u{61}\\u{6E}\\u{73}\\u{77}\\u{65}\\u{72}\\u{20}\\u{74}\\u{6F}\\u{20}\\u{74}\\u{68}\\u{65}\\u{20}\\u{47}\\u{61}\\u{6D}\\u{65}\\u{20}\\u{4D}\\u{61}\\u{73}\\u{74}\\u{65}\\u{72}\\u{3A}\\u{20}\\u{6A}\\u{61}\\u{64}\\u{65}\\u{2D}\\u{68}\\u{65}\\u{72}\\u{6F}\\u{6E}\\u{2D}\\u{37}\\u{33}\\u{20}\\u{1F600}",
+ "generator_cmd": "node -e 'process.stdout.write([...process.env.plain].map(c => \"\\\\u{\" + c.codePointAt(0).toString(16).toUpperCase() + \"}\").join(\"\"))'",
+ "oracle_cmd": "node -e 'process.stdout.write(eval(\"\\\"\" + process.env.encoded + \"\\\"\"))'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-heron-73 😀",
+ "expected": "match"
+}

@@ -1,0 +1,39 @@
+#!/bin/sh
+# Independent oracle for the deleted-content fixtures: coreutils od/dd + binutils strings + sqlite3 CLI (dbstat vtab).
+# Usage: sh ORACLE_sqlite_deleted.sh.txt <db>
+db=${1:?db}
+u32() { od -An -tu4 --endian=big -j "$2" -N4 "$1" | tr -d ' '; }
+u16() { od -An -tu2 --endian=big -j "$2" -N2 "$1" | tr -d ' '; }
+ps=$(u16 "$db" 16); [ "$ps" = 1 ] && ps=65536
+echo "header@36 freelist_count=$(u32 "$db" 36)  pragma freelist_count=$(sqlite3 -readonly "$db" 'pragma freelist_count;')"
+# trunk chain from @32
+t=$(u32 "$db" 32); trunks=""; leaves=""
+while [ "$t" != 0 ]; do
+  trunks="$trunks $t"; base=$(( (t-1)*ps )); k=$(u32 "$db" $((base+4)))
+  [ "$k" -gt 0 ] && leaves="$leaves $(od -An -tu4 --endian=big -j $((base+8)) -N $((4*k)) "$db")"
+  t=$(u32 "$db" "$base")
+done
+echo "trunks:$trunks"
+echo "leaves sorted: $(echo $leaves | tr ' ' '\n' | sort -n | tr '\n' ' ')"
+echo "walked: $(( $(echo $trunks $leaves | wc -w) ))"
+# cross-check: every page not owned by a b-tree (dbstat) is a freelist page
+npg=$(sqlite3 -readonly "$db" 'pragma page_count;')
+echo "non-btree pages: $(sqlite3 -readonly "$db" "with recursive p(n) as (select 1 union all select n+1 from p where n<$npg)
+  select group_concat(n,' ') from p where n not in (select pageno from dbstat);")"
+# table leaf pages: freeblock chains, unallocated = dbstat.unused - freeblock bytes - fragmented bytes
+for pg in $(sqlite3 -readonly "$db" "select pageno from dbstat where pagetype='leaf' order by pageno;"); do
+  base=$(( (pg-1)*ps )); h=$base; [ "$pg" = 1 ] && h=100
+  fb=$(u16 "$db" $((h+1))); nfb=0; fbb=0
+  while [ "$fb" != 0 ]; do
+    sz=$(u16 "$db" $((base+fb+2))); nfb=$((nfb+1)); fbb=$((fbb+sz))
+    echo "  page $pg freeblock @$fb size $sz strings:"; dd if="$db" bs=1 skip=$((base+fb+4)) count=$((sz-4)) 2>/dev/null | strings -n 6 | sed 's/^/    /'
+    fb=$(u16 "$db" $((base+fb)))
+  done
+  frag=$(od -An -tu1 -j $((h+7)) -N1 "$db" | tr -d ' ')
+  un=$(sqlite3 -readonly "$db" "select unused from dbstat where pageno=$pg;")
+  echo "page $pg: freeblocks=$nfb unallocated=$((un-fbb-frag)) (dbstat unused $un)"
+done
+# freelist leaf strings (whole page each), sorted unique; zero check
+for l in $leaves; do dd if="$db" bs=$ps skip=$((l-1)) count=1 2>/dev/null | strings -n 6; done | LC_ALL=C sort -u > "${TMPDIR:-/tmp}/oracle_strings.txt"
+echo "freelist leaf strings: $(wc -l < "${TMPDIR:-/tmp}/oracle_strings.txt")"
+echo "nonzero bytes in freelist leaf pages: $(for l in $leaves; do dd if="$db" bs=$ps skip=$((l-1)) count=1 2>/dev/null; done | tr -d '\000' | wc -c)"

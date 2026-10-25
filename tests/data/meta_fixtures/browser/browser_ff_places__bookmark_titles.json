@@ -1,0 +1,8 @@
+{
+ "field": "browser.bookmark_titles",
+ "expected": "[\"Corp VPN\",\"Drop site\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_ff_places.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_ff_places.db \"select distinct title from moz_bookmarks where type=1 order by title\" list -> [\"Corp VPN\",\"Drop site\"]",
+ "decoy": false,
+ "member": "places.sqlite"
+}

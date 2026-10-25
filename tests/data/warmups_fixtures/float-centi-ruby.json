@@ -1,0 +1,9 @@
+{
+ "codec": "float-centi",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ruby-gecko-90",
+ "encoded": "0.78 1.05 0.99 1.01 0.32 1.19 1.11 1.14 1.07 0.32 1 1.01 0.99 1.11 1 1.05 1.1 1.03 0.32 1.16 1.04 1.05 1.15 0.32 1.19 0.97 1.14 1.09 1.17 1.12 0.33 0.32 0.84 1.11 0.32 1.15 1.11 1.08 1.18 1.01 0.44 0.32 1.15 1.17 0.98 1.09 1.05 1.16 0.32 1.16 1.04 1.05 1.15 0.32 1.01 1.2 0.97 0.99 1.16 0.32 0.97 1.1 1.15 1.19 1.01 1.14 0.32 1.16 1.11 0.32 1.16 1.04 1.01 0.32 0.71 0.97 1.09 1.01 0.32 0.77 0.97 1.15 1.16 1.01 1.14 0.58 0.32 1.14 1.17 0.98 1.21 0.45 1.03 1.01 0.99 1.07 1.11 0.45 0.57 0.48",
+ "generator_cmd": "printf %s \"$plain\" | perl -CS -ne 'print join(\" \", map ord, split //), \"\\n\"' | awk '{for(i=1;i<=NF;i++) printf \"%s%g\", (i>1?\" \":\"\"), $i/100}'  # awk %g of code/100 (0.78, 1.05)",
+ "oracle_cmd": "printf %s \"$encoded\" | awk '{for(i=1;i<=NF;i++) printf \"%s%d\", (i>1?\" \":\"\"), $i*100+0.5}' | perl -CS -ne 'chomp; print join \"\", map chr, split / /'  # awk x100 round, perl chr",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ruby-gecko-90",
+ "expected": "match"
+}

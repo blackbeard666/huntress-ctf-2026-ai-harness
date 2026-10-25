@@ -1,0 +1,8 @@
+{
+ "field": "sqlite_shm.mx_frame",
+ "expected": "11",
+ "generator_cmd": "python3 -c 'sqlite3: PRAGMA page_size=4096; journal_mode=WAL; wal_autocheckpoint=0; CREATE TABLE + 3 insert txns; copy app.db-wal/-shm while the connection is open' (stdlib sqlite3 = libsqlite3 3.53 writer)",
+ "oracle_cmd": "file app.db-shm -> '11 frames'",
+ "decoy": false,
+ "member": "app.db-shm"
+}

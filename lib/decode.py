@@ -304,6 +304,14 @@ def decode_chunk(p, _nested=False):
             cands.append((_wc.netstr_dec(t), 0))
         except ValueError:
             pass
+    if _max_day() >= 25 and re.match(r"(?:U\+|u\+|\\u|\\U|%u|0x)[0-9A-Fa-f]{2,8}", t):
+        # UNICODE CODE POINTS (warmups Day 25 "You Have a Point": 'U+004E U+0069 ...' = one U+XXXX per character),
+        # the whole fragment must be tokens
+        from lib import warmups_codecs as _wc
+        try:
+            cands.append((_wc.uplus_dec(t), 0))
+        except (ValueError, OverflowError):
+            pass
     if _B32S.match(t) and len(t) % 8 == 0:
         try:
             cands.append((_ascii(base64.b32decode(t)), 5))

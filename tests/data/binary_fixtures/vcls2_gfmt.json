@@ -1,0 +1,49 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls2_gfmt_a.bin",
+ "file_b": "vcls2_gfmt_b.bin",
+ "expected_facts": {
+  "cwe": "CWE-134",
+  "cwe_number": "134",
+  "vulnerability_class": "format_string",
+  "changed_function": "target"
+ },
+ "expected_changed_function": "target",
+ "trigger_input": {
+  "argv": [
+   "%x.%x",
+   "1"
+  ],
+  "env": {
+   "HUNTRESS_KEY": "arena-2026"
+  }
+ },
+ "outcome_a": {
+  "exit": 1,
+  "stdout": [
+   "1.0"
+  ],
+  "sanitizer": "clean"
+ },
+ "outcome_b": {
+  "exit": 1,
+  "stdout": [
+   "%x.%x"
+  ],
+  "sanitizer": "clean"
+ },
+ "gate_closed_stdout": [
+  "locked"
+ ],
+ "analyzer_a": [
+  "-Wformat-security"
+ ],
+ "analyzer_b": [],
+ "generator_cmd": "W=$(mktemp -d) bash vcls2_gen.sh OUT   # gcc -fno-inline C twins, getenv(HUNTRESS_KEY) gate + HCFG{json} rodata blob",
+ "oracle_cmd": "python3 vcls2_oracle.py $W gfmt %x.%x 1   # gcc -fsanitize=address,undefined run + gcc -fanalyzer + objdump -d -M intel: added=['lea', 'mov'] removed=[]",
+ "decoy": false,
+ "note": "lib.binary.patch_vuln_class_field(a, b, key). Expected = planted source change (printf(s) -> printf(\"%s\", s)); outcome_* from the ASan copies of the same source; CWE spelling SPECULATIVE until a GM label is seen"
+}

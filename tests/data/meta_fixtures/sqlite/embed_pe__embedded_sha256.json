@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_sha256",
+ "expected": "eea213f60fdaa1e8401cff9d52199946fca8d4ae706e1eac341c9b45e55b8d83",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> agent.exe",
+ "oracle_cmd": "tail -c +1025 agent.exe | sha256sum -> eea213f60fdaa1e8401cff9d52199946fca8d4ae706e1eac341c9b45e55b8d83",
+ "decoy": false,
+ "member": "agent-001.exe"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: file_cls host whose loadClass names com.huntress.arena.payload.Modul (absent) -> ClassNotFoundException -> 'none'; neither dex holds a token literal",
+ "generator_cmd": "python3 tests/data/android_fixtures/dexload_src/gen_dexload.py decoy_name tests/data/android_fixtures/dexload_decoy_name.apk  # javac --release 8 (host + android.*/dalvik.* stubs; payload Module/Tab separately) + dex2jar d2j-jar2dex.sh (classes.dex, payload.dex) + python zipfile (assets/payload.dex, puzzle codec=analysis)",
+ "oracle_cmd": "same generator, oracle stage: java -Dctx.apk=<built apk> ... <pkg>.Probe runs Release.code(new Context()) on the host JVM: AssetManager reads the built APK via java.util.zip.ZipFile, getCodeCacheDir is a real temp dir, DexClassLoader / InMemoryDexClassLoader are URLClassLoaders over the javac'd payload jar that first require the handed bytes (file at path / ByteBuffer) to sha-256-equal the d2j payload.dex -> 'none'"
+}

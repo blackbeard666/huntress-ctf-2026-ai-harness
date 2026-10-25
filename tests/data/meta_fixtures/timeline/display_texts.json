@@ -1,0 +1,8 @@
+{
+ "field": "timeline.display_texts",
+ "expected": "[\"Q3-report.xlsx\",\"Command Prompt\",\"Microsoft Edge\"]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/timeline/GENERATOR_timeline.py.txt <outdir>  (stdlib sqlite3 writer, CPython sqlite 3.53.1)",
+ "oracle_cmd": "sqlite3 -readonly ActivitiesCache.db \"select json_group_array(t) from (select json_extract(cast(Payload as text),'$.displayText') t, min(rowid) m from Activity where t is not null group by t order by m)\"  (SQLite 3.53.1 CLI, JSON1)",
+ "decoy": false,
+ "member": "ActivitiesCache.db"
+}

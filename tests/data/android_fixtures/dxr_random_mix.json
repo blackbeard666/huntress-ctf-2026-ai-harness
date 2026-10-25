@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": "ANS-580D1D653D9917C3",
+ "decoy": false,
+ "description": "Rng.code(): new Random(0x2026102AL) -> nextBytes(7), nextLong, nextInt(), nextInt(1000) (rejection), nextInt(64) (pow2), nextInt(0x7FFFFFF1), nextBoolean, nextDouble (26+27 bits), Collections.shuffle(Arrays.asList(Integer[]), r), setSeed + nextLong; String.format(%016X)",
+ "generator_cmd": "python3 tests/data/android_fixtures/dxr_src/gen_dxr.py random_mix tests/data/android_fixtures/dxr_random_mix.zip  # javac --release 8 + dex2jar d2j-jar2dex + zipfile (APK wrapped in a one-set deep_eval_bench bundle)",
+ "oracle_cmd": "sh tests/data/android_fixtures/dxr_src/oracle.sh tests/data/android_fixtures/dxr_random_mix.zip  # d2j-dex2jar back to classes, RUN Rng.code() on the JVM (real java.util)"
+}

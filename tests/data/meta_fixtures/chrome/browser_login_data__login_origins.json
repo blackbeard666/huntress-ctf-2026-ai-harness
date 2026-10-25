@@ -1,0 +1,8 @@
+{
+ "field": "chrome.login_origins",
+ "expected": "[\"https://mail.example.com/\",\"https://portal.corp.test/admin\",\"https://portal.corp.test/login\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_login_data.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_login_data.db \"select distinct origin_url from logins order by origin_url\" list -> [\"https://mail.example.com/\",\"https://portal.corp.test/admin\",\"https://portal.corp.test/login\"]",
+ "decoy": false,
+ "member": "Login Data"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "the gate chain, but the hex loop emits 15 nibbles (ANS-5DD70B22D9D6FCE: a near-miss) -- no valid token anywhere",
+ "generator_cmd": "python3 tests/data/android_fixtures/dbgv2_src/gen_dbgv2.py decoy tests/data/android_fixtures/dbgv2_decoy.apk  # javac --release 8 (app + android.os.Debug/SystemClock, android.content.Context/pm.ApplicationInfo stubs) -> dex2jar d2j-jar2dex.sh -> zipfile (+ assets/huntress_puzzle.json v2 codec analysis, no data)",
+ "oracle_cmd": "same generator: the host JVM (java -cp <javac out> <pkg>.Oracle) runs Release.code(new Context()) on CLEAN stubs (Debug false, ApplicationInfo.flags 0, real /proc/self/status TracerPid, SystemClock = System.nanoTime) -> 'oracle=ANS-5DD70B22D9D6FCE'; `gen_dbgv2.py gate /dev/null --debugged` (DEBUGGED stubs) -> 'oracle=ANS-8A149F208776D9FC' (the trap state's honeypot) (15 hex: not a token)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_count",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> decoy_string.png",
+ "oracle_cmd": "grep finds the magic at 95 but od -An -tx1 -j111 -N2 -> '00 03' (page size 3, invalid; tail -c +96 > c.db; sqlite3 -readonly c.db 'select count(*) from sqlite_master' -> 'file is not a database (26)') -> none",
+ "decoy": true,
+ "member": "panel-004.png"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "timeline.application_names",
+ "expected": "[\"Microsoft.Windows.Explorer\",\"{6D809377-6AF0-444B-8957-A3773F02200E}\\\\Windows\\\\System32\\\\cmd.exe\",\"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\\\notepad.exe\",\"Microsoft.MicrosoftEdge_8wekyb3d8bbwe!MicrosoftEdge\"]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/timeline/GENERATOR_timeline.py.txt <outdir>  (stdlib sqlite3 writer, CPython sqlite 3.53.1)",
+ "oracle_cmd": "sqlite3 -readonly ActivitiesCache.db \"with a as (select rowid r, (select json_extract(value,'$.application') from json_each(AppId) where json_extract(value,'$.platform') in ('windows_win32','x_exe_path','windows_universal','packageId') order by case json_extract(value,'$.platform') when 'windows_win32' then 1 when 'x_exe_path' then 2 when 'windows_universal' then 3 else 4 end limit 1) n from Activity) select json_group_array(n) from (select n, min(r) m from a group by n order by m)\"  (SQLite 3.53.1 CLI, JSON1)",
+ "decoy": false,
+ "member": "ActivitiesCache.db"
+}

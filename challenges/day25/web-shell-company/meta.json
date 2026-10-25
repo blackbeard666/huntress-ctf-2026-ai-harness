@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-16-shell-company",
+  "lane": "web",
+  "name": "🌐 Shell Company",
+  "ids": {
+    "single_solve": "web-exploitation-day-16-shell-company",
+    "time_trial": "web-exploitation-day-16-shell-company/time_trial",
+    "mastery": "web-exploitation-day-16-shell-company/mastery"
+  }
+}

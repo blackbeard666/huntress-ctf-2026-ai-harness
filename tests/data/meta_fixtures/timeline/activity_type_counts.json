@@ -1,0 +1,8 @@
+{
+ "field": "timeline.activity_type_counts",
+ "expected": "{\"5\":3,\"6\":2}",
+ "generator_cmd": "python3 tests/data/meta_fixtures/timeline/GENERATOR_timeline.py.txt <outdir>  (stdlib sqlite3 writer, CPython sqlite 3.53.1)",
+ "oracle_cmd": "sqlite3 -readonly ActivitiesCache.db \"select json_group_object(cast(ActivityType as text), c) from (select ActivityType, count(*) c from Activity group by ActivityType order by ActivityType)\"  (SQLite 3.53.1 CLI, JSON1)",
+ "decoy": false,
+ "member": "ActivitiesCache.db"
+}

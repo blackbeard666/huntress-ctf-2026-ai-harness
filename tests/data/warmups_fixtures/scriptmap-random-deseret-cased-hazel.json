@@ -1,0 +1,9 @@
+{
+ "codec": "script-letter-map",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: daisy-quiet-fern-12",
+ "encoded": "𐐣𐐽𐐸𐑀 𐑏𐐾𐐩𐐱 𐑈𐑀𐐸𐐾𐑈𐐽𐑋𐑎 𐐯𐑁𐐽𐐫 𐑏𐐵𐐩𐐭𐑉𐐳! 𐐇𐐾 𐐫𐐾𐐲𐐻𐑀, 𐐫𐑉𐐼𐐭𐐽𐐯 𐐯𐑁𐐽𐐫 𐑀𐑌𐐵𐐸𐐯 𐐵𐑋𐐫𐑏𐑀𐐩 𐐯𐐾 𐐯𐑁𐑀 𐐦𐐵𐐭𐑀 𐐅𐐵𐐫𐐯𐑀𐐩: 𐑈𐐵𐐽𐐫𐐺-𐐰𐑉𐐽𐑀𐐯-𐑊𐑀𐐩𐑋-12",
+ "generator_cmd": "printf %s \"$plain\" | sed 'y/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/𐐵𐐼𐐸𐑈𐑀𐑊𐑎𐑁𐐽𐐷𐐱𐐲𐐭𐑋𐐾𐐳𐐰𐐩𐐫𐐯𐑉𐐻𐑏𐑌𐐺𐑅𐐍𐐔𐐐𐐠𐐘𐐢𐐦𐐙𐐕𐐏𐐉𐐊𐐅𐐣𐐖𐐋𐐈𐐁𐐃𐐇𐐡𐐓𐐧𐐤𐐒𐐝/'  # GNU sed y/// letter -> glyph table; Deseret letters (cased: U+10400 upper / U+10428 lower) shuffled, NOT the phonetic reading",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CSD -Mutf8 -pe 'tr/𐐵𐐼𐐸𐑈𐑀𐑊𐑎𐑁𐐽𐐷𐐱𐐲𐐭𐑋𐐾𐐳𐐰𐐩𐐫𐐯𐑉𐐻𐑏𐑌𐐺𐑅𐐍𐐔𐐐𐐠𐐘𐐢𐐦𐐙𐐕𐐏𐐉𐐊𐐅𐐣𐐖𐐋𐐈𐐁𐐃𐐇𐐡𐐓𐐧𐐤𐐒𐐝/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/' | tr A-Z a-z  # perl tr/// inverse table (lowercased; a shared glyph reads as its first letter)",
+ "oracle_plain": "nice work decoding this warmup! to solve, submit this exact answer to the game master: daisy-quiet-fern-12",
+ "expected": "match"
+}

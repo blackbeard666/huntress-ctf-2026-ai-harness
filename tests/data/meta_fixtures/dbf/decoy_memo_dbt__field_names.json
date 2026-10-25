@@ -1,0 +1,8 @@
+{
+ "field": "dbf.field_names",
+ "expected": "none",
+ "generator_cmd": "dbf.Table('notes.dbf', 'title C(40); body M; flag L; amount N(10,2)', dbf_type='db3') + 1 append (python dbf pkg); notes.dbt renamed notes2.dbf",
+ "oracle_cmd": "python3 -c \"import dbfread; dbfread.DBF('notes2.dbf')\" -> raises (not a DBF: no 0x0D-terminated descriptor table); file(1) -> dBase III DBT",
+ "decoy": true,
+ "member": "notes2.dbf"
+}

@@ -1,0 +1,46 @@
+{
+ "family": "patch_vuln_class",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "vcls2_gsame_a.bin",
+ "file_b": "vcls2_gsame_b.bin",
+ "expected_facts": {
+  "cwe": "none",
+  "vulnerability_class": "none",
+  "fix_kind": "none"
+ },
+ "expected_changed_function": "none",
+ "trigger_input": {
+  "argv": [
+   "x",
+   "1"
+  ],
+  "env": {
+   "HUNTRESS_KEY": "arena-2026"
+  }
+ },
+ "outcome_a": {
+  "exit": 2,
+  "stdout": [
+   "HCFG"
+  ],
+  "sanitizer": "clean"
+ },
+ "outcome_b": {
+  "exit": 2,
+  "stdout": [
+   "HCFG"
+  ],
+  "sanitizer": "clean"
+ },
+ "gate_closed_stdout": [
+  "locked"
+ ],
+ "analyzer_a": [],
+ "analyzer_b": [],
+ "generator_cmd": "W=$(mktemp -d) bash vcls2_gen.sh OUT   # gcc -fno-inline C twins, getenv(HUNTRESS_KEY) gate + HCFG{json} rodata blob",
+ "oracle_cmd": "python3 vcls2_oracle.py $W gsame x 1   # gcc -fsanitize=address,undefined run + gcc -fanalyzer + objdump -d -M intel: added=[] removed=[]",
+ "decoy": true,
+ "note": "decoy: decoy: identical gated builds, no code change -> every class field 'none'"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "wmi.consumer_names",
+ "expected": "[\"SCM Event Log Consumer\",\"UpdaterConsumer\"]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/wmi/GENERATOR_wmi.py.txt <outdir>  (stdlib writer, seeded) -> objects_ascii.data",
+ "oracle_cmd": "strings -a objects_ascii.data | grep -oE 'EventConsumer\\.Name=\"[^\"]*\"' | sed 's/.*Name=\"//;s/\"$//' | sort -u | jq -R . | jq -sc .  (GNU binutils strings 2.x + jq; -el = UTF-16LE)",
+ "decoy": false,
+ "member": "OBJECTS.DATA"
+}

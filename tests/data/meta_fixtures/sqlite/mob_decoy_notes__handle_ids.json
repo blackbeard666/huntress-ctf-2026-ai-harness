@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.handle_ids",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_mobile.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> mob_decoy_notes.db)",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_mobile.py.txt mob_decoy_notes.db handle_ids  (Python sqlite3 / SQLite C library SQL + SQLite strftime epoch conversion)",
+ "decoy": true,
+ "member": "mob_decoy_notes.db"
+}

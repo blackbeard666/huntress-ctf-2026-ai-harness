@@ -1,0 +1,15 @@
+{
+ "family": "bounds_check_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "bchk_decoy_text_a.bin",
+ "file_b": "bchk_decoy_text_b.bin",
+ "expected_facts": {
+  "bounds_check_facts": null
+ },
+ "generator_cmd": "bash bchk_gen.sh OUT   # non-ELF impostor (decoy)",
+ "oracle_cmd": "python3 bchk_oracle.py bchk_decoy_text_a.bin bchk_decoy_text_b.bin   # binutils objdump -d -C -M intel + readelf -sW + nm",
+ "decoy": true,
+ "note": "lib.binary.bounds_check_field(a, b, key); bounds_check_kind vocabulary SPECULATIVE (no GM label yet)"
+}

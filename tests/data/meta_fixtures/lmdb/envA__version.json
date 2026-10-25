@@ -1,0 +1,8 @@
+{
+ "field": "lmdb.version",
+ "expected": "1",
+ "generator_cmd": "python3 -c \"import lmdb; lmdb.open('envA', map_size=3145728)\"",
+ "oracle_cmd": "python3 -c \"import lmdb; lmdb.open(copy, readonly=True, lock=False)\" opens it (mdb_env_open rejects mm_version != MDB_DATA_VERSION=1, lmdb.h)",
+ "decoy": false,
+ "member": "data.mdb"
+}

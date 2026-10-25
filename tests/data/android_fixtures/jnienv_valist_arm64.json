@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-E9E59CBB0FD20A45",
+ "decoy": false,
+ "_why": "arm64-v8a only: same chain, fold calls back through CallStaticLongMethodV (AAPCS64 va_list), K.K2 assigned in <clinit>",
+ "generator_cmd": "python3 tests/data/android_fixtures/jnienv_src/gen_jnienv.py valist_arm64 tests/data/android_fixtures/jnienv_valist_arm64.apk  # javac --release 8 + dex2jar d2j-jar2dex + aarch64-linux-gnu-gcc -shared -fPIC -O2 -s jnienv_src/jnienv.c + zipfile (assets/huntress_puzzle.json v2 codec analysis, no data)",
+ "oracle_cmd": "sh tests/data/android_fixtures/jnienv_src/oracle.sh tests/data/android_fixtures/jnienv_valist_arm64.apk -DJE_CLS=com_huntress_mobile_d26_Bridge '-DJE_K=\"com/huntress/mobile/d26/K\"' -DJE_V  # d2j-dex2jar back to classes, RUN Release.code() on the real JVM with REAL JNI (host x86_64 gcc build of the same jnienv.c with the apk's defines) -> ANS-E9E59CBB0FD20A45"
+}

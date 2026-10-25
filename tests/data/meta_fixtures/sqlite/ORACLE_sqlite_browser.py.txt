@@ -1,0 +1,12 @@
+# Oracle for sqlite_browser fixtures: the SQLite library itself (python3 -I stdlib sqlite3, SQLite 3.46) runs plain SQL;
+# lists are rendered as compact JSON, timestamps via SQLite's own datetime(...,'unixepoch') -> 'YYYY-MM-DDTHH:MM:SSZ'.
+# usage: python3 -I ORACLE_sqlite_browser.py.txt <db> "<SQL returning one value>" [list]
+import json, sqlite3, sys
+db, sql = sys.argv[1], sys.argv[2]
+c = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+rows = [r[0] for r in c.execute(sql)]
+if len(sys.argv) > 3:
+    print(json.dumps(rows, separators=(",", ":"), ensure_ascii=False))
+else:
+    v = rows[0] if rows else None
+    print(str(v).replace(" ", "T") + "Z" if isinstance(v, str) and sys.argv[2].lstrip().lower().startswith("select datetime") else v)

@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_offset",
+ "expected": "1024",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> agent.exe",
+ "oracle_cmd": "LC_ALL=C grep -obUaP 'SQLite format 3\\x00' agent.exe | head -1 | cut -d: -f1 -> 1024; python3 -c 'pefile.PE(f).get_overlay_data_start_offset()' -> 1024",
+ "decoy": false,
+ "member": "agent-001.exe"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "mojibake-cp1252",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "ï¼®ï½‰ï½ƒï½…ã€€ï½—ï½ï½’ï½‹ã€€ï½„ï½…ï½ƒï½ï½„ï½‰ï½Žï½‡ã€€ï½”ï½ˆï½‰ï½“ã€€ï½—ï½ï½’ï½ï½•ï½ï¼ã€€ï¼´ï½ã€€ï½“ï½ï½Œï½–ï½…ï¼Œã€€ï½“ï½•ï½‚ï½ï½‰ï½”ã€€ï½”ï½ˆï½‰ï½“ã€€ï½…ï½˜ï½ï½ƒï½”ã€€ï½ï½Žï½“ï½—ï½…ï½’ã€€ï½”ï½ã€€ï½”ï½ˆï½…ã€€ï¼§ï½ï½ï½…ã€€ï¼­ï½ï½“ï½”ï½…ï½’ï¼šã€€ï½ï½ï½‚ï½…ï½’ï¼ï½†ï½ï½Œï½ƒï½ï½Žï¼ï¼”ï¼’",
+ "generator_cmd": "node -e \"const fw=s=>[...s].map(c=>c===' '?'\\u3000':String.fromCharCode(c.charCodeAt(0)+0xFEE0)).join('');const w=s=>new TextDecoder('windows-1252').decode(Buffer.from(s,'utf8'));process.stdout.write(w(fw(process.env.plain)))\"  # Node/WHATWG TextDecoder windows-1252 over the UTF-8 of the fullwidth (U+FF01.., space U+3000) sentence",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -f utf-8 -t windows-1252 | uconv -f utf-8 -t utf-8 -x '::NFKC;'  # ICU uconv: back to the windows-1252 bytes (= UTF-8), then ICU NFKC",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

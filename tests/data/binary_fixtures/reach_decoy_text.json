@@ -1,0 +1,12 @@
+{
+ "family": "reachability",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "target_fn": null,
+ "expected_facts": null,
+ "decoy": true,
+ "generator_cmd": "printf (reach_gen.sh): PK magic + text, not a zip/ELF",
+ "oracle_cmd": "file reach_decoy_text.bin -> data/ASCII text; unzip -l fails",
+ "note": "lib.binary.reachability_field(data, key, target_fn) per expected_facts key; null expected_facts = reachability_facts() returns None. Field vocabulary SPECULATIVE (GM label not seen; D25 'trace its reachability' was unasked)."
+}

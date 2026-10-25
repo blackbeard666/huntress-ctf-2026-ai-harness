@@ -1,0 +1,8 @@
+{
+ "field": "journal.journal_page_size_bytes",
+ "expected": "none",
+ "generator_cmd": "python3 -c 'sqlite3: page_size=1024 journal_mode=DELETE synchronous=FULL; 60-row commit; BEGIN; UPDATE id%7=0; copy app.db-journal before COMMIT'",
+ "oracle_cmd": "file snap-journal -> 'data' (synchronous=FULL: the magic is still zero until the journal is synced)",
+ "decoy": true,
+ "member": "app.db-journal"
+}

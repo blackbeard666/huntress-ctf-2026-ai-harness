@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": "ANS-1daa76c8f6f2f045",
+ "decoy": false,
+ "description": "Rng.code(): new SplittableRandom(0xC0FFEE1234L) nextLong/nextInt/nextInt(37)/nextInt(1<<20)/nextBoolean (mix64/mix32, GOLDEN_GAMMA), UUID.nameUUIDFromBytes (MD5 v3) msb/lsb, ArrayList + Collections.shuffle(l, new Random(acc))",
+ "generator_cmd": "python3 tests/data/android_fixtures/dxr_src/gen_dxr.py splittable_uuid tests/data/android_fixtures/dxr_splittable_uuid.zip  # javac --release 8 + dex2jar d2j-jar2dex + zipfile (APK wrapped in a one-set deep_eval_bench bundle)",
+ "oracle_cmd": "sh tests/data/android_fixtures/dxr_src/oracle.sh tests/data/android_fixtures/dxr_splittable_uuid.zip  # d2j-dex2jar back to classes, RUN Rng.code() on the JVM (real java.util)"
+}

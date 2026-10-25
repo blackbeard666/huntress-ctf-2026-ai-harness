@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": null,
+ "encoded": "临么久一乑乕义乃之一乂乒乏乗乎一乆乏乘一乊乕乍乐乓一乏乖久乒一乔么久一乌乁乚乙一乄乏乇一乗么义乌久一乔么久一乗乁乒乍乕乐一乗乁义乔乓一乆乏乒一乎乏乂乏乄乙一乁乔一乁乌乌一乔乏乄乁乙与",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl -CSA -e 'my $o = join q(), map { my $c = $_; chr(ord($c)+0x4DE0) } split //, $ARGV[0]; print $o;' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];k=ord(t[0])-ord('N');print(''.join(chr(ord(c)-k) for c in t)[:20])\" \"$encoded\"  # not the warmups sentence: K from 'N' fails the crib"
+}

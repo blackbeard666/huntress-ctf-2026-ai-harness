@@ -1,0 +1,32 @@
+{
+ "family": "reachability",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "target_fn": null,
+ "expected_facts": {
+  "call_path": [
+   "main",
+   "score"
+  ],
+  "gate_env_vars": [
+   "HUNTRESS_HOST_MODEL"
+  ],
+  "gate_values": {
+   "HUNTRESS_HOST_MODEL": [
+    "analysis",
+    "workstation",
+    "sandbox"
+   ]
+  },
+  "trigger_condition": "none",
+  "host_model_default": "workstation",
+  "reachable_for_analysis": "true",
+  "reachable_for_sandbox": "true",
+  "reachable_for_workstation": "true"
+ },
+ "decoy": false,
+ "generator_cmd": "GM D24 evidence.zip member d24--sample-vulnerable.jar (Scala, bytes unchanged)",
+ "oracle_cmd": "javap -c -p -constants -cp <jar> '<main fn class>' (getenv ldc names in order, String.equals/Util.equiv literals, <clinit> Tuple.create arity, invoke edges via RT.var/getstatic MODULE$)",
+ "note": "lib.binary.reachability_field(data, key, target_fn) per expected_facts key; null expected_facts = reachability_facts() returns None. Field vocabulary SPECULATIVE (GM label not seen; D25 'trace its reachability' was unasked)."
+}

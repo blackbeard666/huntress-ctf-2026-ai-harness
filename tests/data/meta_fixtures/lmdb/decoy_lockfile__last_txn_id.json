@@ -1,0 +1,8 @@
+{
+ "field": "lmdb.last_txn_id",
+ "expected": "none",
+ "generator_cmd": "lock.mdb from the envB generator renamed data.mdb",
+ "oracle_cmd": "python3 -c \"import lmdb; lmdb.open(dir_with_it_as_data.mdb, readonly=True, lock=False)\" -> lmdb.InvalidError",
+ "decoy": true,
+ "member": "data.mdb"
+}

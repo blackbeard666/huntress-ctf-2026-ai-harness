@@ -1,0 +1,1 @@
+{"key": "answer-first", "ts": 1792933253.3639743, "text": "ANSWER-FIRST WORKER: the GM CONFIRMED 1/1 field(s) of this attempt: {\"message\": \"brave-beacon-wizard-34\"}. Never recompute or resubmit them; your solver must PRODUCE exactly these values (`hctf solver-test warmups-day-25` checks them against confirmed.json). Every field is confirmed: finish the solver."}

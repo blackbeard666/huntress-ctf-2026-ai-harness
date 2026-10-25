@@ -1,0 +1,9 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "terraform_hcl",
+ "note": "terraform-hcl-function-fold: descriptor folded statically over HCL locals / variables / functions (lib.codec._tfh_codecs); DECOY: the folded descriptor is a benign config string (oracle_plain), not a plan",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/tfh_gen.py tests/data/script_fixtures  (stdlib base64 / bytes.hex writer; pieces split over Terraform locals / var defaults / heredocs / join / format / replace / base64decode / .tf.json templates)",
+ "oracle_cmd": "d=$(mktemp -d); cp tests/data/script_fixtures/tfh_decoy_benign.tf $d/main.tf; echo local.descriptor_77aa0011 | terraform -chdir=$d console | tr -d '\"' | base64 -d  (terraform v1.15.8 console = the real HCL evaluator, run without init)",
+ "oracle_plain": "region=us-east-1|tier=dev|owner=platform-team|note=inert benign module"
+}

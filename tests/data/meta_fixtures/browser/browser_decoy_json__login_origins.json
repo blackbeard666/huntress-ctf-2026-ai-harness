@@ -1,0 +1,8 @@
+{
+ "field": "browser.login_origins",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_decoy_json.db",
+ "oracle_cmd": "file br_decoy_json.db -> JSON text data (no 'SQLite format 3' magic) => field absent",
+ "decoy": true,
+ "member": "Login Data"
+}

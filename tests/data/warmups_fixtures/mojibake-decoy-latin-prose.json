@@ -1,0 +1,10 @@
+{
+ "codec": "mojibake",
+ "plain": null,
+ "encoded": "Café façade, naïve résumé from SÃO PAULO — À la carte », señor ÆON",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "printf %s \"$encoded\"  # genuine Latin-1-range prose (accents, Ã before O): no strict UTF-8 under either page",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -f utf-8 -t windows-1252 | iconv -f UTF-8 -t UTF-8  # ICU back to windows-1252 bytes; glibc iconv rejects them as UTF-8 -> not mojibake",
+ "oracle_plain": null
+}

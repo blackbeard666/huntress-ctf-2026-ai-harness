@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_carved_length",
+ "expected": "10240",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> data.db",
+ "oracle_cmd": "sqlite3 -readonly data.db 'pragma page_size; pragma page_count' -> 2048 5 = 10240 (wc -c = 10240)",
+ "decoy": false,
+ "member": "database-001.sqlite"
+}

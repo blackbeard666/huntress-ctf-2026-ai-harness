@@ -1,0 +1,10 @@
+{
+  "base": "metadata-forensics-day-25-hive-mind",
+  "lane": "metadata-forensics",
+  "name": "🔎 Hive Mind",
+  "ids": {
+    "single_solve": "metadata-forensics-day-25-hive-mind",
+    "time_trial": "metadata-forensics-day-25-hive-mind/time_trial",
+    "mastery": "metadata-forensics-day-25-hive-mind/mastery"
+  }
+}

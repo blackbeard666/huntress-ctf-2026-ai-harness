@@ -1,0 +1,8 @@
+{
+ "field": "minidump.time_date_stamp_utc",
+ "expected": "2024-10-25T10:00:00Z",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> app_crash.dmp",
+ "oracle_cmd": "file app_crash.dmp -> 'Mini DuMP crash report, 5 streams, Fri Oct 25 10:00:00 2024, 0x61907 type' (skelsec reads TimeDateStamp @24 -- its header has a phantom Reserved u32; MSDN/libmagic: @20)",
+ "decoy": false,
+ "member": "app_crash.dmp"
+}

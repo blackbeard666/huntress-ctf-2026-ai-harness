@@ -1,0 +1,8 @@
+{
+ "field": "firefox.cookie_hosts",
+ "expected": "[\".google.com\",\"shop.example.org\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_ff_cookies.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_ff_cookies.db \"select distinct host from moz_cookies order by host\" list -> [\".google.com\",\"shop.example.org\"]",
+ "decoy": false,
+ "member": "cookies.sqlite"
+}

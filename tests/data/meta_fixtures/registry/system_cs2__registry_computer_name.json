@@ -1,0 +1,8 @@
+{
+ "field": "registry.computer_name",
+ "expected": "WS-ANALYST7",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/registry/GENERATOR_registry_values.py.txt <outdir>  (system_cs2.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/registry/ORACLE_registry_values.py.txt <bin> computer_name  (python-registry 1.3.1; Select\\Current=2 -> ControlSet002; ControlSet001 holds decoy OLDHOST-01) -> WS-ANALYST7",
+ "decoy": false,
+ "member": "SYSTEM"
+}

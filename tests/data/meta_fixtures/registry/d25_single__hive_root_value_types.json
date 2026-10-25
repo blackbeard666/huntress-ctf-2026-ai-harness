@@ -1,0 +1,8 @@
+{
+ "field": "hive.root_value_types",
+ "expected": "[\"Marker:REG_SZ\",\"Ordinal:REG_DWORD\"]",
+ "generator_cmd": "GM-generated D25 'Hive Mind' hive (challenges/day25/metadata-hive-mind/solver/cases/single_solve/artifacts/metadata-day-25-evidence.zip -> hive-001.hiv), copied verbatim from tests/data/meta_fixtures/hive/d25_single__hive_root_value_names.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/registry/ORACLE_registry_values.py.txt <bin> root_value_types  (python-registry 1.3.1) -> [\"Marker:REG_SZ\",\"Ordinal:REG_DWORD\"]",
+ "decoy": false,
+ "member": "hive-001.hiv"
+}

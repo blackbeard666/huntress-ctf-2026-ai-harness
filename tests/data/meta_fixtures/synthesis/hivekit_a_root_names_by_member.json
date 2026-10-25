@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.root_names_by_member",
+ "expected": "{\"hive-001.hiv\":\"HuntressArtifactAssemblyLine\",\"hive-002.hiv\":\"QuietHarborLedgerArchive\",\"hive-003.hiv\":\"CopperLanternSignalRelay\",\"hive-004.hiv\":\"NorthwindPayrollShadow\",\"hive-005.hiv\":\"VelvetCipherOrchardKeep\"}",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/synthesis/GENERATOR_regf_hivekit.py.txt $T -> hivekit_a.zip (stdlib regf cell writer adapted from regf/GENERATOR_regf_keys.py.txt: renamed hives, root Marker/Ordinal values or ControlSet001 ComputerName, one planted hive; stdlib zipfile)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/ORACLE_regf_hivekit.py.txt hivekit_a.zip root_names_by_member (regipy 6.4.0 RegistryHive header/root/get_key + the atlas-row rules)",
+ "decoy": false
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "script-letter-map",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: misty-quartz-63",
+ "encoded": "᚛ᚅᚔᚉᚓ ᚃᚑᚏᚉ ᚇᚓᚉᚑᚇᚔᚅᚌ ᚈᚆᚔᚄ ᚃᚐᚏᚋᚒᚚ! ᚈᚑ ᚄᚑᚂᚃᚓ, ᚄᚒᚁᚋᚔᚈ ᚈᚆᚔᚄ ᚓᚕᚐᚉᚈ ᚐᚅᚄᚃᚓᚏ ᚈᚑ ᚈᚆᚓ ᚌᚐᚋᚓ ᚋᚐᚄᚈᚓᚏ: ᚋᚔᚄᚈᚔ-ᚊᚒᚐᚏᚈᚎ-63᚜",
+ "generator_cmd": "printf %s \"$plain\" | sed 'y/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/ᚐᚁᚉᚇᚓᚃᚌᚆᚔᚔᚉᚂᚋᚅᚑᚚᚊᚏᚄᚈᚒᚃᚃᚕᚔᚎᚐᚁᚉᚇᚓᚃᚌᚆᚔᚔᚉᚂᚋᚅᚑᚚᚊᚏᚄᚈᚒᚃᚃᚕᚔᚎ/; s/ / /g; s/^/᚛/; s/$/᚜/'  # GNU sed y/// letter -> glyph table; Ogham space mark U+1680 + feather marks",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CSD -Mutf8 -pe 's/[᚛᚜]//g; s/ / /g; tr/ᚐᚁᚉᚇᚓᚃᚌᚆᚔᚂᚋᚅᚑᚚᚊᚏᚄᚈᚒᚕᚎ/abcdefghilmnopqrstuxz/' | tr A-Z a-z  # perl tr/// inverse table (lowercased; a shared glyph reads as its first letter)",
+ "oracle_plain": "nice forc decoding this farmup! to solfe, submit this exact ansfer to the game master: misti-quartz-63",
+ "expected": "match"
+}

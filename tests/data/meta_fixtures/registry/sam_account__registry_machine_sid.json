@@ -1,0 +1,8 @@
+{
+ "field": "registry.machine_sid",
+ "expected": "S-1-5-21-3141592653-2718281828-1618033988",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/registry/GENERATOR_registry_values.py.txt <outdir>  (sam_account.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/registry/ORACLE_registry_values.py.txt <bin> machine_sid  (python-registry 1.3.1) -> S-1-5-21-3141592653-2718281828-1618033988",
+ "decoy": false,
+ "member": "SAM"
+}

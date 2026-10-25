@@ -3724,14 +3724,16 @@ class _NsoElf:
     struct (pyelftools' per-symbol parsing costs ~1 s on a libc-sized .so)."""
 
     def __init__(self, b):
-        from elftools.elf.elffile import ELFFile
-        elf = ELFFile(io.BytesIO(b))
-        h, self.b, self.arch = elf.header, b, elf["e_machine"]
-        self.e, self.is64 = "<" if elf.little_endian else ">", elf.elfclass == 64
-        self.segs = [(s["p_vaddr"], s["p_offset"], s["p_filesz"], s["p_memsz"]) for s in elf.iter_segments()
-                     if s["p_type"] == "PT_LOAD"]
-        self.dyn = next(((s["p_vaddr"], s["p_filesz"]) for s in elf.iter_segments() if s["p_type"] == "PT_DYNAMIC"),
-                        None)
+        h = self._fast_header(b)
+        if h is None:
+            from elftools.elf.elffile import ELFFile
+            elf = ELFFile(io.BytesIO(b))
+            h, self.b, self.arch = elf.header, b, elf["e_machine"]
+            self.e, self.is64 = "<" if elf.little_endian else ">", elf.elfclass == 64
+            self.segs = [(s["p_vaddr"], s["p_offset"], s["p_filesz"], s["p_memsz"]) for s in elf.iter_segments()
+                         if s["p_type"] == "PT_LOAD"]
+            self.dyn = next(((s["p_vaddr"], s["p_filesz"]) for s in elf.iter_segments()
+                             if s["p_type"] == "PT_DYNAMIC"), None)
         shf = self.e + ("IIQQQQIIQQ" if self.is64 else "IIIIIIIIII")
         self.secs = []  # [name, type, addr, offset, size, link]
         for i in range(min(h["e_shnum"], 512)):
@@ -3751,6 +3753,38 @@ class _NsoElf:
                 nm, val, sz, info, shndx = (t[0], t[4], t[5], t[1], t[3]) if self.is64 else (t[0], t[1], t[2], t[3], t[5])
                 out.append((self.cstr(stro + nm).decode("latin-1") if nm else "", val, sz, info & 0xF, shndx))
             self.syms[i] = out
+
+    _FAST_EM = {62: "EM_X86_64", 183: "EM_AARCH64", 40: "EM_ARM", 3: "EM_386"}
+
+    def _fast_header(self, b):
+        """ELF header + PT_LOAD / PT_DYNAMIC unpacked with struct for the 4 Android ABIs (importing pyelftools alone
+        costs ~150 ms in every forked Mastery set that hops into a .so); None -> the pyelftools path (other machines,
+        PN_XNUM). Raises on truncation like pyelftools does."""
+        if b[:4] != b"\x7fELF" or b[4:5] not in (b"\x01", b"\x02") or b[5:6] not in (b"\x01", b"\x02"):
+            return None
+        e, is64 = "<" if b[5] == 1 else ">", b[4] == 2
+        t = struct.unpack_from(e + ("HHIQQQIHHHHHH" if is64 else "HHIIIIIHHHHHH"), b, 16)
+        names = ("e_type", "e_machine", "e_version", "e_entry", "e_phoff", "e_shoff", "e_flags", "e_ehsize",
+                 "e_phentsize", "e_phnum", "e_shentsize", "e_shnum", "e_shstrndx")
+        h = dict(zip(names, t))
+        if h["e_machine"] not in self._FAST_EM or h["e_phnum"] == 0xFFFF:
+            return None
+        if h["e_shstrndx"]:  # pyelftools reads the shstrtab header at open: a truncated table raises there too
+            struct.unpack_from(e + ("IIQQQQIIQQ" if is64 else "IIIIIIIIII"), b,
+                               h["e_shoff"] + h["e_shstrndx"] * h["e_shentsize"])
+        segs, dyn = [], None
+        for i in range(h["e_phnum"]):
+            o = h["e_phoff"] + i * h["e_phentsize"]
+            if is64:
+                pt, _, off, va, _, fs, ms = struct.unpack_from(e + "IIQQQQQ", b, o)
+            else:
+                pt, off, va, _, fs, ms = struct.unpack_from(e + "IIIIII", b, o)
+            if pt == 1:  # PT_LOAD
+                segs.append((va, off, fs, ms))
+            elif pt == 2 and dyn is None:  # PT_DYNAMIC
+                dyn = (va, fs)
+        self.b, self.arch, self.e, self.is64, self.segs, self.dyn = b, self._FAST_EM[h["e_machine"]], e, is64, segs, dyn
+        return h
 
     def cstr(self, off, n=256):
         return self.b[off:off + n].split(b"\0")[0]
@@ -7693,6 +7727,170 @@ def cert_pin_scan(apk):
             hits += ANS_RE_T.findall(h)
     except Exception:  # noqa: BLE001
         pass
+    if not hits:
+        hits = cert_spki_scan(apk)
+    return list(dict.fromkeys(hits))
+
+
+# --- SPKI pins of shipped certs (coverage atlas: analysis-cert-pin-digest-chain, rows 27, 28, 96) ----------------------
+# A "pinning bypass" chain hashes the cert it ships (assets/ | res/raw/ DER, PEM or PKCS#7): pin = "sha256/" +
+# Base64.encodeToString(SHA-256(SubjectPublicKeyInfo DER), NO_WRAP) (DEFAULT adds a trailing "\n"), compares it to the
+# OkHttp CertificatePinner / NSC <pin digest="SHA-256"> values of cert_pins() and keys the answer on the MATCHED
+# cert's digest. SPKI comes from an asn1 walk of the TBSCertificate (no openssl). Only matched certs are keys, unless the
+# APK has no pin at all (then every shipped cert is); a near-miss pin (whole-cert digest, other cert) selects nothing.
+_SPK_MAX_ENTRY, _SPK_MAX_CERTS, _SPK_BUDGET_S = 1 << 20, 32, 0.4
+
+
+def _spk_hex(v):
+    """Bytes of a hex payload string, or None."""
+    v = v.strip() if isinstance(v, str) else ""
+    try:
+        return bytes.fromhex(v) if len(v) >= 16 and re.fullmatch(r"[0-9A-Fa-f]+", v) else None
+    except ValueError:
+        return None
+
+
+def _spk_time(d, t):
+    """UTCTime / GeneralizedTime TLV -> "YYYY-MM-DDTHH:MM:SSZ", or None."""
+    s = d[t[3]:t[4]].decode("ascii", "replace")
+    if t[2] == 0x17 and len(s) >= 12 and s[:12].isdigit():
+        s = ("19" if int(s[:2]) >= 50 else "20") + s
+    elif not (t[2] == 0x18 and len(s) >= 14 and s[:14].isdigit()):
+        return None
+    return f"{s[:4]}-{s[4:6]}-{s[6:8]}T{s[8:10]}:{s[10:12]}:{s[12:14]}Z"
+
+
+def _spk_walk(der):
+    """(spki_der, not_before, not_after) of one X.509 DER cert by an asn1 walk, or None when it is not a cert."""
+    t = _ka_tlv(der, 0, len(der))
+    if not t or t[:3] != (0, True, 16):
+        return None
+    tbs = _ka_tlv(der, t[3], t[4])
+    if not tbs or tbs[:3] != (0, True, 16):
+        return None
+    i, fields = tbs[3], []
+    while i < tbs[4] and len(fields) < 6:
+        e = _ka_tlv(der, i, tbs[4])
+        if not e:
+            return None
+        if not fields and e[0] == 2 and e[2] == 0:  # [0] EXPLICIT version
+            i = e[4]
+            continue
+        fields.append((i, e))
+        i = e[4]
+    if len(fields) < 6 or fields[5][1][:3] != (0, True, 16) or fields[3][1][:3] != (0, True, 16):
+        return None
+    val = fields[3][1]
+    nb = _ka_tlv(der, val[3], val[4])
+    na = _ka_tlv(der, nb[4], val[4]) if nb else None
+    s, e = fields[5]
+    return (bytes(der[s:e[4]]), _spk_time(der, nb) if nb else None, _spk_time(der, na) if na else None)
+
+
+def cert_spki_pins(apk):
+    """SPKI pins of the certs an APK ships and which pin matched which cert (rows 27, 28, 96): {"certs": [{"entry",
+    "index" (cert # inside the entry), "pin" ("sha256/<b64 NO_WRAP>"), "b64", "hex" (SHA-256 of the SPKI DER), "sha1_pin",
+    "not_before", "not_after"}], "pins": cert_pins()["pins"], "matches": [{"pin", "pin_index" (order in "pins"),
+    "set_index" (order inside its own source), "pin_source", "hosts", "entry", "cert_index", "expiration" (NSC pin-set),
+    "not_after", "cert_outlives_pinset"}]}. Empty lists when absent; never raises."""
+    out = {"certs": [], "pins": [], "matches": []}
+    try:
+        with zipfile.ZipFile(apk) as z:
+            for info in z.infolist():
+                n = info.filename
+                if (info.is_dir() or info.file_size > _SPK_MAX_ENTRY or not n.startswith(("assets/", "res/raw/"))
+                        or len(out["certs"]) >= _SPK_MAX_CERTS):
+                    continue
+                b = z.read(info)
+                if not (b[:1] == b"\x30" or b"-----BEGIN " in b[:4096]):
+                    continue
+                try:
+                    ders = _x5_read(b, 0, True)[0]
+                except Exception:  # noqa: BLE001 - not a cert stream
+                    continue
+                for k, der in enumerate(ders[:_SPK_MAX_CERTS]):
+                    w = _spk_walk(der)
+                    if not w:
+                        continue
+                    dg = hashlib.sha256(w[0]).digest()
+                    b64 = base64.b64encode(dg).decode()
+                    out["certs"].append({"entry": n, "index": k, "pin": "sha256/" + b64, "b64": b64, "hex": dg.hex(),
+                                         "sha1_pin": "sha1/" + base64.b64encode(hashlib.sha1(w[0]).digest()).decode(),
+                                         "not_before": w[1], "not_after": w[2]})
+        if not out["certs"]:
+            return out
+        cp = cert_pins(apk)
+        pins = out["pins"] = cp["pins"]
+        exp = {}
+        for r in cp["nsc"]:
+            for p in r["pins"]:
+                exp.setdefault((p["source"], p["b64"]), r["expiration"])
+        seen = {}
+        for pi, p in enumerate(pins):
+            si = seen[p["source"]] = seen.get(p["source"], -1) + 1
+            raw = _pin_b64(p["b64"])
+            for c in out["certs"]:
+                want = c["hex"] if p["algo"] == "sha256" else _pin_b64(c["sha1_pin"][5:]).hex()
+                if raw is None or raw.hex() != want:
+                    continue
+                ex = exp.get((p["source"], p["b64"]))
+                out["matches"].append({"pin": p["pin"], "pin_index": pi, "set_index": si, "pin_source": p["source"],
+                                       "hosts": p["hosts"], "entry": c["entry"], "cert_index": c["index"],
+                                       "expiration": ex, "not_after": c["not_after"],
+                                       "cert_outlives_pinset": (c["not_after"][:10] > ex[:10]) if ex and c["not_after"]
+                                       else None})
+    except Exception:  # noqa: BLE001 - not a zip / truncated
+        pass
+    return out
+
+
+def cert_spki_scan(apk):
+    """ANS tokens keyed by the SPKI SHA-256 of the pinned shipped cert (cert_spki_pins matches; every shipped cert when
+    the APK pins nothing): the digest as raw / first 16 / hex / Base64 NO_WRAP / DEFAULT ("\\n") / "sha256/<b64>" forms
+    as the decode_any key of every asset-json payload, then as AES/DES keys via static_key_cipher_scan, then the literal
+    "ANS-" + first 8 digest bytes (lower hex) of each matched cert as a last candidate. [] when absent; never raises."""
+    hits = []
+    try:
+        f = cert_spki_pins(apk)
+        if not f["certs"]:
+            return []
+        if f["pins"]:
+            sel = list(dict.fromkeys((m["entry"], m["cert_index"]) for m in f["matches"]))
+            certs = [c for s in sel for c in f["certs"] if (c["entry"], c["index"]) == s]
+        else:
+            certs = f["certs"]
+        if not certs:
+            return []
+        keys, raw = [], []
+        for c in certs:
+            dg = bytes.fromhex(c["hex"])
+            keys += [dg, dg[:16], c["hex"].encode(), c["hex"].upper().encode(), c["b64"].encode(),
+                     (c["b64"] + "\n").encode(), c["pin"].encode(), base64.urlsafe_b64encode(dg)]
+            raw += [dg, dg[:16], dg[:24]]
+        keys = list(dict.fromkeys(keys))
+        with zipfile.ZipFile(apk) as z:
+            payloads = _idk_seeds(z)[1]
+        for data in [p for p in payloads if isinstance(p, str)]:  # fast path: repeating-key XOR of b64 / hex bytes
+            for blob in (_pin_b64(data), _spk_hex(data)):
+                for k in keys if blob else ():
+                    x = bytes(c ^ k[i % len(k)] for i, c in enumerate(blob[:4096]))
+                    hits += [t.decode() for t in ANS_RE_B.findall(x) if t.decode() not in hits]
+        end = time.time() + _SPK_BUDGET_S
+        for data in payloads if not hits else ():
+            if ANS_RE_T.search(decode_any(data, depth=2, cap=300, chain=False) or ""):
+                continue
+            for k in keys[:3]:
+                if time.time() > end:
+                    break
+                d = decode_any(data, key=k, depth=2, cap=300, chain=False)
+                hits += [t for t in ANS_RE_T.findall(d or "") if t not in hits]
+        if not hits:
+            seeds = [k.decode() for k in keys if k.isascii() and len(k) >= 8]
+            hits += static_key_cipher_scan(apk, seeds=list(dict.fromkeys(seeds)), raw_keys=list(dict.fromkeys(raw)))
+        if not hits and f["matches"]:
+            hits += ["ANS-" + c["hex"][:16] for c in certs]
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
     return list(dict.fromkeys(hits))
 
 
@@ -9626,8 +9824,12 @@ def _dxe_default(p):
 class _DxeDeepVM(_DxVM):
     max_steps = _DXE_DEEP_STEPS
     natives = None  # ref -> callable(int) -> int | None: the app's own JNI exports (D23 set5 `jni_secret` bridge)
+    prng = True  # _DXR_INTR (seeded java.util.Random family); off in _CtxVM, whose _EnvVM models clocks / lists itself
+    nondet = None  # "non-deterministic" once the run hit an unseeded source (new Random(), Math.random, ...)
 
     def invoke(self, ref, raw, depth):
+        if self.prng and (ref in _DXR_NONDET or ref in _DXR_INTR and ref not in self.dx.code):  # row 96 PRNGs
+            return self.note(_dxr_call(self, ref, raw))
         if ref in self.dx.code and _dxp_pure(self.dx, ref):  # pure static long/int fn: memoised compiled closures
             ct = ref.split("->")[0]
             memo = self.dx.__dict__.setdefault("_dxp_memo", {})
@@ -9652,7 +9854,7 @@ class _DxeDeepVM(_DxVM):
         fn = None if self.natives is None or ref in self.dx.code or ref in _DXE_INTR else self.natives(ref)
         if fn is None:
             return super().invoke(ref, raw, depth)
-        v = fn(raw)
+        v = fn(raw, self, depth)
         if v is None:
             raise _DxAbort
         return self.note(v)
@@ -9666,6 +9868,8 @@ class _DxeDeepVM(_DxVM):
     def new_instance(self, t):
         if t in _dxx_supers(self.dx):  # an in-dex class with no statics: Release$Companion, $$ExternalSyntheticLambda0
             self.init_class(t)
+            return _DxObj(t)
+        if self.prng and t in _DXR_NEW:  # java.util.Random / SplittableRandom / ArrayList: state in .f, set by their _DXR_INTR <init>
             return _DxObj(t)
         return super().new_instance(t)
 
@@ -9710,6 +9914,212 @@ class _DxeDeepVM(_DxVM):
 # and the Locale constants of `uppercase()` / `lowercase()`; _DxeDeepVM.kotlin() runs them.
 _KOBJ_INLINE = frozenset(("Lkotlin/ULong;", "Lkotlin/UInt;", "Lkotlin/UShort;", "Lkotlin/UByte;"))
 _KOBJ_LOCALES = ("Ljava/util/Locale;->ROOT", "Ljava/util/Locale;->US", "Ljava/util/Locale;->ENGLISH")
+
+
+# --- seeded PRNGs inside the deep evaluator (coverage atlas row 96: dex-eval-java-random-lcg) -------------------------
+# Exact OpenJDK / libcore algorithms: java.util.Random (48-bit LCG, seed ^ 0x5DEECE66D; next(bits), nextInt(bound) with
+# the power-of-two shortcut and the rejection loop, nextLong, nextBoolean, nextFloat, nextDouble = 26+27 bits, nextBytes,
+# setSeed), java.util.SplittableRandom(seed) (GOLDEN_GAMMA, mix64 / mix32, boundedNextInt), Collections.shuffle(list,
+# rnd) over Arrays.asList / ArrayList, UUID.nameUUIDFromBytes (MD5 v3). Unseeded sources (new Random(), Math.random,
+# ThreadLocalRandom, nanoTime, currentTimeMillis, randomUUID, SecureRandom) mark the VM `nondet` and abort the candidate
+# instead of inventing a value. Only _DxeDeepVM consults this table; _DXE_INTR (the v1 scans) is untouched.
+_DXR_M48, _DXR_MUL, _DXR_GG = (1 << 48) - 1, 0x5DEECE66D, 0x9E3779B97F4A7C15
+_DXR_R, _DXR_SR, _DXR_AL = "Ljava/util/Random;", "Ljava/util/SplittableRandom;", "Ljava/util/ArrayList;"
+_DXR_NEW = frozenset((_DXR_R, _DXR_SR, _DXR_AL))
+_DXR_NONDET = frozenset((
+    _DXR_R + "-><init>()V", "Ljava/lang/Math;->random()D", "Ljava/lang/StrictMath;->random()D",
+    _DXR_SR + "-><init>()V", "Ljava/util/concurrent/ThreadLocalRandom;->current()Ljava/util/concurrent/ThreadLocalRandom;",
+    "Ljava/lang/System;->nanoTime()J", "Ljava/lang/System;->currentTimeMillis()J", "Ljava/util/UUID;->randomUUID()Ljava/util/UUID;",
+    "Ljava/security/SecureRandom;-><init>()V", "Ljava/security/SecureRandom;-><init>([B)V",
+    "Ljava/util/Collections;->shuffle(Ljava/util/List;)V"))
+
+
+def _dxr_s(o, t):
+    if not isinstance(o, _DxObj) or o.t != t or "s" not in o.f:
+        raise _DxAbort
+    return o
+
+
+def _dxr_next(o, bits):  # java.util.Random.next(bits): signed int of the top `bits` of the advanced 48-bit seed
+    s = (_dxr_s(o, _DXR_R).f["s"] * _DXR_MUL + 0xB) & _DXR_M48
+    o.f["s"] = s
+    return _dxe_w32(s >> (48 - bits))
+
+
+def _dxr_bounded(nxt31, bound, pow2):
+    """Random.nextInt(bound) (nxt31 = next(31), pow2 = (bound * r) >> 31) / SplittableRandom (r & m); bound <= 0 throws."""
+    if not isinstance(bound, int) or bound <= 0:
+        raise _DxAbort
+    r, m = nxt31(), bound - 1
+    if not bound & m:
+        return pow2(r, bound, m)
+    for _ in range(1 << 16):  # u - (u % bound) + m overflows int for < bound / 2^31 of draws
+        u = r
+        r = u % bound
+        if _dxe_w32(u - r + m) >= 0:
+            return r
+        r = nxt31()
+    raise _DxAbort
+
+
+def _dxr_mix64(z):
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    return z ^ (z >> 31)
+
+
+def _dxr_mix32(z):
+    z = ((z ^ (z >> 33)) * 0x62A9D9ED799705F5) & 0xFFFFFFFFFFFFFFFF
+    return _dxe_w32((((z ^ (z >> 28)) * 0xCB24D0A5C88C35B3) & 0xFFFFFFFFFFFFFFFF) >> 32)
+
+
+def _dxr_seed(o):  # SplittableRandom.nextSeed(): seed += gamma (unsigned 64-bit kept)
+    o = _dxr_s(o, _DXR_SR)
+    o.f["s"] = (o.f["s"] + o.f["g"]) & 0xFFFFFFFFFFFFFFFF
+    return o.f["s"]
+
+
+def _dxr_list(o):
+    if isinstance(o, _DxArr):
+        return o
+    if isinstance(o, _DxObj) and o.t == _DXR_AL and "l" in o.f:
+        return o.f["l"]
+    raise _DxAbort
+
+
+def _dxr_set_seed(o, v):
+    if not isinstance(v, int):
+        raise _DxAbort
+    o.f["s"] = (v ^ _DXR_MUL) & _DXR_M48
+    return None
+
+
+def _dxr_bytes(a):
+    o, b = a[0], a[1]
+    if not isinstance(b, list):
+        raise _DxAbort
+    i = 0
+    while i < len(b):
+        r = _dxr_next(o, 32)
+        for _ in range(min(len(b) - i, 4)):
+            b[i] = ((r & 0xFF) ^ 0x80) - 0x80
+            i += 1
+            r >>= 8
+    return None
+
+
+def _dxr_shuffle(a):
+    lst, o = _dxr_list(a[0]), a[1]
+    if len(lst) > 1 << 16:
+        raise _DxAbort
+    for i in range(len(lst), 1, -1):  # for (i = size; i > 1; i--) swap(list, i - 1, rnd.nextInt(i))
+        j = _DXR_INTR[_DXR_R + "->nextInt(I)I"]([o, i])
+        lst[i - 1], lst[j] = lst[j], lst[i - 1]
+    return None
+
+
+def _dxr_uuid(a):
+    h = bytearray(hashlib.md5(_dxe_bytes(a[0])).digest())
+    h[6] = (h[6] & 0x0F) | 0x30
+    h[8] = (h[8] & 0x3F) | 0x80
+    u = _DxObj("Ljava/util/UUID;")
+    u.f["v"] = int.from_bytes(h, "big")
+    return u
+
+
+def _dxr_uv(o):
+    if not isinstance(o, _DxObj) or o.t != "Ljava/util/UUID;" or "v" not in o.f:
+        raise _DxAbort
+    return o.f["v"]
+
+
+def _dxr_intrinsics():
+    R, SR, AL, U, S = _DXR_R, _DXR_SR, _DXR_AL, "Ljava/util/UUID;", "Ljava/lang/String;"
+    t = {}
+
+    def r_init(a):
+        a[0].f.clear()
+        return _dxr_set_seed(a[0], a[1])
+    t[R + "-><init>(J)V"] = r_init
+    t[R + "->setSeed(J)V"] = lambda a: _dxr_set_seed(_dxr_s(a[0], R), a[1])
+    t[R + "->nextInt()I"] = lambda a: _dxr_next(a[0], 32)
+    t[R + "->nextInt(I)I"] = lambda a: _dxr_bounded(lambda: _dxr_next(a[0], 31), a[1],
+                                                    lambda r, b, m: _dxe_w32((b * r) >> 31))
+    t[R + "->nextLong()J"] = lambda a: _dxe_w64((_dxr_next(a[0], 32) << 32) + _dxr_next(a[0], 32))
+    t[R + "->nextBoolean()Z"] = lambda a: int(_dxr_next(a[0], 1) != 0)
+    t[R + "->nextFloat()F"] = lambda a: _fx_F(_dxr_next(a[0], 24) / float(1 << 24))
+    t[R + "->nextDouble()D"] = lambda a: _fx_D(((_dxr_next(a[0], 26) << 27) + _dxr_next(a[0], 27)) * 2.0 ** -53)
+    t[R + "->nextBytes([B)V"] = _dxr_bytes
+
+    def sr_init(a):
+        if not isinstance(a[1], int):
+            raise _DxAbort
+        a[0].f.update(s=a[1] & 0xFFFFFFFFFFFFFFFF, g=_DXR_GG)
+        return None
+    t[SR + "-><init>(J)V"] = sr_init
+    t[SR + "->nextLong()J"] = lambda a: _dxe_w64(_dxr_mix64(_dxr_seed(a[0])))
+    t[SR + "->nextInt()I"] = lambda a: _dxr_mix32(_dxr_seed(a[0]))
+    t[SR + "->nextBoolean()Z"] = lambda a: int(_dxr_mix32(_dxr_seed(a[0])) < 0)
+    t[SR + "->nextDouble()D"] = lambda a: _fx_D((_dxr_mix64(_dxr_seed(a[0])) >> 11) * 2.0 ** -53)
+    t[SR + "->nextInt(I)I"] = lambda a: _dxr_sr_bounded(a[0], a[1])
+    t["Ljava/util/Collections;->shuffle(Ljava/util/List;Ljava/util/Random;)V"] = _dxr_shuffle
+    t["Ljava/util/Arrays;->asList([Ljava/lang/Object;)Ljava/util/List;"] = lambda a: _dxr_list(a[0])
+
+    def al_init(a):
+        a[0].f["l"] = _DxArr()
+        a[0].f["l"].t = "Ljava/lang/Object;"
+        return None
+    t[AL + "-><init>()V"] = t[AL + "-><init>(I)V"] = al_init
+    for lt in ("Ljava/util/List;", AL, "Ljava/util/Collection;"):
+        t[lt + "->add(Ljava/lang/Object;)Z"] = lambda a: (_dxr_list(a[0]).append(a[1]), 1)[1]
+        t[lt + "->size()I"] = lambda a: len(_dxr_list(a[0]))
+        t[lt + "->get(I)Ljava/lang/Object;"] = lambda a: _dxr_list(a[0])[a[1]] if 0 <= a[1] < len(_dxr_list(a[0])) \
+            else (_ for _ in ()).throw(_DxAbort)
+    t[f"{U}->nameUUIDFromBytes([B){U}"] = _dxr_uuid
+    t[f"{U}->toString(){S}"] = lambda a: "{0[0:8]}-{0[8:12]}-{0[12:16]}-{0[16:20]}-{0[20:32]}".format(
+        format(_dxr_uv(a[0]), "032x"))
+    t[f"{U}->getMostSignificantBits()J"] = lambda a: _dxe_w64(_dxr_uv(a[0]) >> 64)
+    t[f"{U}->getLeastSignificantBits()J"] = lambda a: _dxe_w64(_dxr_uv(a[0]))
+    t[f"{U}->hashCode()I"] = lambda a: _dxe_w32((_dxr_uv(a[0]) >> 64) ^ _dxr_uv(a[0]))
+    return t
+
+
+def _dxr_sr_bounded(o, bound):
+    """SplittableRandom.nextInt(bound) = RandomSupport.boundedNextInt: r = nextInt(); pow2 -> r & m; else the u >>> 1
+    rejection loop (u + m - (u % bound) < 0 as int)."""
+    if not isinstance(bound, int) or bound <= 0:
+        raise _DxAbort
+    r, m = _dxr_mix32(_dxr_seed(o)), bound - 1
+    if not bound & m:
+        return r & m
+    u = (r & 0xFFFFFFFF) >> 1
+    for _ in range(1 << 16):
+        r = u % bound
+        if _dxe_w32(u + m - r) >= 0:
+            return r
+        u = (_dxr_mix32(_dxr_seed(o)) & 0xFFFFFFFF) >> 1
+    raise _DxAbort
+
+
+_DXR_INTR = _dxr_intrinsics()
+
+
+def _dxr_call(vm, ref, raw):
+    """Run one _DXR_INTR entry with _DxVM.invoke's argument layout; an unseeded source marks vm.nondet and aborts."""
+    if ref in _DXR_NONDET:
+        vm.nondet = "non-deterministic"
+        raise _DxAbort
+    ps = _dxe_params(ref)
+    args, i = [], 0
+    if len(raw) != sum(2 if p in "JD" else 1 for p in ps):
+        args.append(raw[0])
+        i = 1
+    for p in ps:
+        args.append(raw[i] if i < len(raw) else None)
+        i += 2 if p in "JD" else 1
+    if any(a is _DXE_UNK for a in args):
+        raise _DxAbort
+    return _DXR_INTR[ref](args)
 
 
 # --- pure static fns of a v2 chain, compiled once to per-instruction closures and memoised (coverage atlas:
@@ -9779,6 +10189,51 @@ def _dxp_pure(dx, ref):
 
 def _dxp_abort(r):
     raise _DxAbort
+
+
+def _dxp_binop_fn(k, wide):
+    """_dxe_binop(k, ., ., wide) specialised for one compiled instruction (same type check / Java wrap, no opcode
+    dispatch per step: the mixer loops of a v2 set run ~50k binops)."""
+    if wide:
+        def wrap(r):
+            return ((r + (1 << 63)) & 0xFFFFFFFFFFFFFFFF) - (1 << 63)
+        m = 63
+    else:
+        def wrap(r):
+            return ((r + 0x80000000) & 0xFFFFFFFF) - 0x80000000
+        m = 31
+    ops = {0: lambda a, b: a + b, 1: lambda a, b: a - b, 2: lambda a, b: a * b, 5: lambda a, b: a & b,
+           6: lambda a, b: a | b, 7: lambda a, b: a ^ b}
+    if k in ops:
+        g = ops[k]
+        if k == 7 and not wide:
+            def f(a, b):
+                if not isinstance(a, int) or not isinstance(b, int):
+                    raise _DxAbort
+                return (((a ^ b) + 0x80000000) & 0xFFFFFFFF) - 0x80000000
+            return f
+    elif k == 8:
+        def g(a, b):
+            return a << (b & m)
+    elif k == 9:
+        def g(a, b):
+            return a >> (b & m)
+    elif k == 10:
+        msk = (1 << (m + 1)) - 1
+
+        def g(a, b):
+            return (a & msk) >> (b & m)
+    else:
+        return lambda a, b: _dxe_binop(k, a, b, wide)
+
+    def f(a, b):
+        if not isinstance(a, int) or not isinstance(b, int):
+            raise _DxAbort
+        return wrap(g(a, b))
+    return f
+
+
+_DXP_BINOPS = {(k, w): _dxp_binop_fn(k, w) for k in range(12) for w in (False, True)}
 
 
 def _dxp_compile(dx, ref):  # noqa: C901 - one table of instruction closures
@@ -9916,12 +10371,12 @@ def _dxp_compile(dx, ref):  # noqa: C901 - one table of instruction closures
             k, wide = (op - lo, False) if op <= lo + 0xA else (op - lo - 0xB, True)
             d_, x_, y_ = (b1, ins[p + 2], ins[p + 3]) if lo == 0x90 else (A, A, B)
             if wide:
-                def f(r, k=k, d_=d_, x_=x_, y_=y_, nx=nx):
-                    r[d_], r[d_ + 1] = binop(k, r[x_], r[y_], True), None
+                def f(r, o=_DXP_BINOPS[k, True], d_=d_, x_=x_, y_=y_, nx=nx):
+                    r[d_], r[d_ + 1] = o(r[x_], r[y_]), None
                     return nx
             else:
-                def f(r, k=k, d_=d_, x_=x_, y_=y_, nx=nx):
-                    r[d_] = binop(k, r[x_], r[y_], False)
+                def f(r, o=_DXP_BINOPS[k, False], d_=d_, x_=x_, y_=y_, nx=nx):
+                    r[d_] = o(r[x_], r[y_])
                     return nx
         elif 0xD0 <= op <= 0xE2:
             if op <= 0xD7:
@@ -9929,12 +10384,12 @@ def _dxp_compile(dx, ref):  # noqa: C901 - one table of instruction closures
             else:
                 k, d_, s_, lit = op - 0xD8, b1, ins[p + 2], (ins[p + 3] ^ 0x80) - 0x80
             if k == 1:
-                def f(r, d_=d_, s_=s_, lit=lit, nx=nx):
-                    r[d_] = binop(1, lit, r[s_], False)
+                def f(r, o=_DXP_BINOPS[1, False], d_=d_, s_=s_, lit=lit, nx=nx):
+                    r[d_] = o(lit, r[s_])
                     return nx
             else:
-                def f(r, k=k, d_=d_, s_=s_, lit=lit, nx=nx):
-                    r[d_] = binop(k, r[s_], lit, False)
+                def f(r, o=_DXP_BINOPS[k, False], d_=d_, s_=s_, lit=lit, nx=nx):
+                    r[d_] = o(r[s_], lit)
                     return nx
         elif op in (0x71, 0x77):
             ref2 = dx.mref(u16(p + 2))
@@ -9988,7 +10443,8 @@ _NLB_ABI = {"EM_X86_64": ("UC_ARCH_X86", "UC_MODE_64", "x86_const", "UC_X86_REG_
             "EM_386": ("UC_ARCH_X86", "UC_MODE_32", "x86_const", "UC_X86_REG_", (), "EAX", "ESP", "EIP", 4,
                        b"\xc3\xc3\xc3\xc3")}
 _NLB_ABI_ORDER = ("x86_64", "arm64-v8a", "armeabi-v7a", "x86")
-_NLB_REF = re.compile(r"L([^;]+);->([^(]+)\(((?:[ZBCSIJ]|Ljava/lang/String;)*)\)([ZBCSIJ]|Ljava/lang/String;)")
+_NLB_REF = re.compile(r"L([^;]+);->([^(]+)\(((?:\[?[ZBCSIJ]|Ljava/lang/String;)*)\)(\[?[ZBCSIJ]|Ljava/lang/String;)")
+_NLB_ESZ = {"Z": 1, "B": 1, "C": 2, "S": 2, "I": 4, "J": 8}  # primitive array element sizes (no F / D)
 _NLB_JNI_HANDLE = {6: 0x50000040, 21: 0x50000050, 31: 0x50000040, 33: 0x50000060, 113: 0x50000070}  # FindClass ...
 _NLB_JNI_SLOTS, _NLB_MAX_IMPORTS = 0x140, 0x200
 _NLB_FMT = re.compile(rb"%([-+ #0]*)(\d*|\*)(?:\.(\d*|\*))?(hh|h|ll|l|z|j|t|q)?([diouxXcsp%])")
@@ -10026,9 +10482,12 @@ def _nlb_relocs(elf):
     return rel, imp
 
 
-def _nlb_call(elf, va, args, ret):
-    """Run the JNI function at `va` with `args` = [(kind, value)] (kind 'w' 32-bit word, 'q' 64-bit, 's' str) after
-    (env, jclass/jobject); `ret` = the Java return descriptor. The masked value / str, or None (fault, trap, budget)."""
+def _nlb_call(elf, va, args, ret, vm=None, depth=0):
+    """Run the JNI function at `va` with `args` = [(kind, value)] (kind 'w' 32-bit word, 'q' 64-bit, 's' str, 'o' a
+    primitive _DxArr) after (env, jclass/jobject); `ret` = the Java return descriptor. The masked value / str / array,
+    or None (fault, trap, budget). `vm` (the calling _DxVM) lets the env call back into the dex: FindClass /
+    GetStatic{Field,Method}ID handles, GetStatic<T>Field / SetStatic<T>Field on vm.statics (after <clinit>),
+    CallStatic<T>Method[V|A] re-entering vm.invoke (64-bit ABIs), primitive-array Get/Release elements and regions."""
     import unicorn as U
     ua, um, cm, rp, aregs, retr, spr, pcr, W, ret_insn = _NLB_ABI[elf.arch]
     C = getattr(U, cm)
@@ -10071,12 +10530,114 @@ def _nlb_call(elf, va, args, ret):
             except U.UcError:
                 pass
     libn = {v: k for k, v in lib.items()}
-    strs, hnd = {}, [0x51000000]
+    strs, hnd, objs, ids, pins = {}, [0x51000000], {}, {}, {}  # jstring bytes, jarray / jclass / IDs, elems
 
     def new_str(b):
         hnd[0] += 16
         strs[hnd[0]] = bytes(b)
         return hnd[0]
+
+    def new_obj(o):
+        hnd[0] += 16
+        objs[hnd[0]] = o
+        return hnd[0]
+
+    def new_id(key):  # a stable non-zero handle per class / field / method key
+        if key not in ids:
+            ids[key] = new_obj(key)
+        return ids[key]
+
+    def to_java(h, t):  # a jobject handle -> the VM value for descriptor t
+        if t == "Ljava/lang/String;":
+            b = strs.get(h)
+            return None if b is None else b.decode("utf-8", "replace")
+        o = objs.get(h)
+        if h and not isinstance(o, _DxArr):
+            raise _DxAbort
+        return o
+
+    def to_jni(v):  # a VM value -> a jobject handle
+        if v is None:
+            return 0
+        if isinstance(v, str):
+            return new_str(v.encode("utf-8", "surrogatepass"))
+        if isinstance(v, _DxArr):
+            return next((h for h, o in objs.items() if o is v), None) or new_obj(v)
+        raise _DxAbort
+
+    def jarr(h):
+        a = objs.get(h)
+        if not isinstance(a, _DxArr) or getattr(a, "t", None) not in _NLB_ESZ:
+            raise _DxAbort
+        return a
+
+    def arr_bytes(a, lo, n):
+        z = _NLB_ESZ[a.t]
+        return b"".join((int(x) & ((1 << 8 * z) - 1)).to_bytes(z, "little") for x in a[lo:lo + n])
+
+    def arr_store(a, lo, b):
+        z = _NLB_ESZ[a.t]
+        for k in range(len(b) // z):
+            x = int.from_bytes(b[k * z:(k + 1) * z], "little")
+            a[lo + k] = int(x != 0) if a.t == "Z" else x if a.t == "C" else \
+                ((x + (1 << (8 * z - 1))) & ((1 << 8 * z) - 1)) - (1 << (8 * z - 1))
+
+    def member(i):  # (env, jclass, name, sig) -> the field / method key, None when the class is not the dex's
+        k, name, sig = objs.get(arg(1)), cstr(arg(2), 256).decode("latin-1"), cstr(arg(3), 256).decode("latin-1")
+        if vm is None or not isinstance(k, tuple) or k[0] != "class":
+            return None
+        return ("field", k[1], name, sig) if i == 144 else ("method", "%s->%s%s" % (k[1], name, sig))
+
+    def static_key(fid):
+        f = objs.get(fid)
+        if vm is None or not isinstance(f, tuple) or f[0] != "field":
+            raise _DxAbort
+        vm.init_class(f[1])
+        return "%s->%s" % (f[1], f[2]), f[3]
+
+    def call_static(i):  # CallStatic<T>Method / V / A (env, jclass, jmethodID, ...) -> back into the dex
+        m = objs.get(arg(2))
+        if vm is None or W != 8 or not isinstance(m, tuple) or m[0] != "method":
+            raise _DxAbort
+        form, ps = (i - 114) % 3, _dxe_params(m[1])
+        if form == 1:  # va_list: x86_64 {gp_offset, fp_offset, overflow_arg_area, reg_save_area}; arm64 AAPCS64
+            vl = arg(3)
+            st = list(struct.unpack("<IIQQ" if elf.arch == "EM_X86_64" else "<QQQii", bytes(uc.mem_read(vl, 32))[
+                :24 if elf.arch == "EM_X86_64" else 32]))
+        raw, k = [], 3
+        for n, p in enumerate(ps):
+            if p in "FD":
+                raise _DxAbort
+            if form == 0:
+                w = arg(k)
+                k += 1
+            elif form == 2:
+                w = int.from_bytes(uc.mem_read(arg(3) + 8 * n, 8), "little")
+            elif elf.arch == "EM_X86_64":
+                if st[0] < 48:
+                    w, st[0] = int.from_bytes(uc.mem_read(st[3] + st[0], 8), "little"), st[0] + 8
+                else:
+                    w, st[2] = int.from_bytes(uc.mem_read(st[2], 8), "little"), st[2] + 8
+            else:
+                if st[3] < 0:
+                    w, st[3] = int.from_bytes(uc.mem_read(st[1] + st[3], 8), "little"), st[3] + 8
+                else:
+                    w, st[0] = int.from_bytes(uc.mem_read(st[0], 8), "little"), st[0] + 8
+            if p == "J":
+                raw += [_dxe_w64(w), None]
+            elif len(p) == 1:
+                raw.append({"Z": lambda x: int(x & 0xFF != 0), "B": lambda x: ((x + 0x80) & 0xFF) - 0x80,
+                            "S": lambda x: ((x + 0x8000) & 0xFFFF) - 0x8000,
+                            "C": lambda x: x & 0xFFFF}.get(p, _dxe_w32)(w))
+            else:
+                raw.append(to_java(w, p))
+        v = vm.invoke(m[1], raw, depth + 1)
+        rt = m[1][m[1].index(")") + 1:]
+        if rt == "V":
+            return 0
+        if rt in ("F", "D") or v is None and len(rt) == 1:
+            raise _DxAbort
+        return to_jni(v) if len(rt) > 1 else int(v)
 
     def alloc(n):
         p = heap[0]
@@ -10197,6 +10758,60 @@ def _nlb_call(elf, va, args, ret):
         return 0
 
     def jni(i):
+        if vm is not None and i in (6, 113, 144):  # FindClass(env, "a/b/C") / GetStatic{Method,Field}ID
+            if i == 6:
+                return new_id(("class", "L%s;" % cstr(arg(1), 256).decode("latin-1").strip("L;")))
+            key = member(i)
+            return _NLB_JNI_HANDLE.get(i, 0) if key is None else new_id(key)
+        if 114 <= i <= 143:
+            return call_static(i)
+        if 145 <= i <= 151 or 154 <= i <= 160:  # GetStatic<T>Field (env, jclass, fid) / SetStatic<T>Field (.., v)
+            key, t = static_key(arg(2))
+            if i >= 154:
+                v = arg(3)
+                vm.statics[key] = to_java(v, t) if len(t) > 1 else _dxe_w64(v) if t == "J" else _dxe_w32(v)
+                return 0
+            if key not in vm.statics:
+                raise _DxAbort
+            v = vm.statics[key]
+            if len(t) > 1:
+                return to_jni(v)
+            if not isinstance(v, int):
+                raise _DxAbort
+            return int(v)
+        if i == 171:  # GetArrayLength
+            return len(jarr(arg(1)))
+        if 175 <= i <= 180:  # New<T>Array(env, n)
+            a = _DxArr([0] * min(arg(1) & 0xFFFFFFFF, 1 << 20))
+            a.t = "ZBCSIJ"[i - 175]
+            return new_obj(a)
+        if 183 <= i <= 188 or i == 222:  # Get<T>ArrayElements(env, arr, isCopy) / GetPrimitiveArrayCritical
+            a = jarr(arg(1))
+            b = arr_bytes(a, 0, len(a))
+            p = alloc(len(b) + 1)
+            uc.mem_write(p, b)
+            pins[p] = a
+            return p
+        if 191 <= i <= 196 or i == 223:  # Release<T>ArrayElements(env, arr, elems, mode): copy back unless JNI_ABORT
+            a, p = jarr(arg(1)), arg(2)
+            if pins.get(p) is a and arg(3) & 0xFFFFFFFF != 2:
+                arr_store(a, 0, bytes(uc.mem_read(p, len(a) * _NLB_ESZ[a.t])))
+            return 0
+        if 199 <= i <= 204 or 207 <= i <= 212:  # Get / Set<T>ArrayRegion(env, arr, start, len, buf)
+            a, lo, n = jarr(arg(1)), arg(2) & 0xFFFFFFFF, arg(3) & 0xFFFFFFFF
+            if lo + n > len(a):
+                raise _DxAbort
+            if i <= 204:
+                uc.mem_write(arg(4), arr_bytes(a, lo, n))
+            else:
+                arr_store(a, lo, bytes(uc.mem_read(arg(4), n * _NLB_ESZ[a.t])))
+            return 0
+        if i == 221:  # GetStringUTFRegion(env, str, start, len, buf)
+            b = strs.get(arg(1), b"")
+            uc.mem_write(arg(4), b[arg(2) & 0xFFFF:(arg(2) & 0xFFFF) + (arg(3) & 0xFFFF)] + b"\0")
+            return 0
+        if i in (21, 25) and vm is not None and (arg(1) in objs or arg(1) in strs):  # New{Global,Local}Ref
+            return arg(1)
         if i == 167:  # NewStringUTF(env, const char*)
             return new_str(cstr(arg(1)))
         if i in (164, 168):  # GetStringLength / GetStringUTFLength
@@ -10231,6 +10846,8 @@ def _nlb_call(elf, va, args, ret):
     for kind, v in args[1:] if this else args:
         if kind == "s":
             words.append(new_str(v.encode("utf-8", "surrogatepass")))
+        elif kind == "o":
+            words.append(to_jni(v))
         elif kind == "q" and W == 4:
             if elf.arch == "EM_ARM" and len(words) % 2:
                 words.append(0)
@@ -10257,6 +10874,9 @@ def _nlb_call(elf, va, args, ret):
     if ret == "Ljava/lang/String;":
         b = strs.get(lo)
         return None if b is None else b.decode("utf-8", "replace")
+    if ret[0] == "[":
+        a = objs.get(lo)
+        return a if isinstance(a, _DxArr) and a.t == ret[1:] else None
     if ret == "J":
         if W == 4:
             hi = uc.reg_read(C.UC_X86_REG_EDX if elf.arch == "EM_386" else C.UC_ARM_REG_R1)
@@ -10316,7 +10936,7 @@ def _nlb_resolver(z):
         ps, rt = _dxe_params(ref), m.group(4)
         nslots = sum(2 if p == "J" else 1 for p in ps)
 
-        def fn(raw, elf=hit[0], va=hit[1]):
+        def fn(raw, vm=None, depth=0, elf=hit[0], va=hit[1]):
             if len(raw) not in (nslots, nslots + 1):
                 return None
             i, args = len(raw) - nslots, []
@@ -10328,13 +10948,17 @@ def _nlb_resolver(z):
                     if not isinstance(v, str):
                         return None
                     args.append(("s", v))
+                elif p[0] == "[":
+                    if not isinstance(v, _DxArr) or getattr(v, "t", None) != p[1:]:
+                        return None
+                    args.append(("o", v))
                 elif isinstance(v, int) and not isinstance(v, bool) or isinstance(v, bool):
                     args.append(("q" if p == "J" else "w", int(v)))
                 else:
                     return None
                 i += 2 if p == "J" else 1
             try:
-                return _nlb_call(elf, va, args, rt)
+                return _nlb_call(elf, va, args, rt, vm, depth)
             except Exception:  # noqa: BLE001 - unmapped access / bad opcode / trap: cannot answer
                 return None
         cache[ref] = fn
@@ -10404,6 +11028,7 @@ def _dex_eval_deep(apk, entry_only=False):
     """dex_eval_scan(deep=True): returned ANS tokens of every static String-returning app method under _DxeDeepVM.
     entry_only=True: only the methods _eav_reached() reaches from ChallengeActivity / MainActivity ([] without one)."""
     rets, seen = [], []
+    shadow, keep, dflt = set(), set(), {}  # reflectively invoked refs, their callers' tokens, defaulted-param runs
     deadline = time.time() + _DXE_DEEP_BUDGET_S
     try:
         with zipfile.ZipFile(apk) as z:
@@ -10446,12 +11071,21 @@ def _dex_eval_deep(apk, entry_only=False):
                 except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
                         RecursionError, struct.error):
                     continue
+                got = [m for s in vm.seen if isinstance(s, str) for m in ANS_RE_T.findall(s)]
                 if isinstance(r, str):
                     rets += ANS_RE_T.findall(r)
-                seen += [m for s in vm.seen if isinstance(s, str) for m in ANS_RE_T.findall(s)]
+                    if ps:
+                        dflt[ref] = ANS_RE_T.findall(r) + got
+                    if getattr(vm, "rinv", None) and ANS_RE_T.search(r):
+                        shadow |= vm.rinv
+                        keep.update(ANS_RE_T.findall(r))
+                seen += got
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
-    return list(dict.fromkeys(rets + seen))
+    # A method the app only reaches via Method.invoke(.., realArgs) also ran stand-alone on default (0 / "") params: its
+    # tokens there are artefacts of the defaults (D18 v2 `h.q(long)` -> ANS-0000000000000000), not app values.
+    drop = {t for ref, toks in dflt.items() if ref in shadow for t in toks} - keep
+    return [t for t in dict.fromkeys(rets + seen) if t not in drop]
 
 
 
@@ -10502,6 +11136,38 @@ def _wbt_inputs(z):
             except ValueError:
                 pass
     return out
+
+
+_DEB_SET_S, _DEB_TOTAL_S, _DEB_MAX_MEMBERS = 0.4, 3.0, 64
+
+
+def deep_eval_bench(bundle, set_s=_DEB_SET_S, total_s=_DEB_TOTAL_S):
+    """Mastery-scaling bench (coverage atlas row 96: +1 v2 set per day, D31 ~15 sets incl. JNI/unicorn sets inside the
+    6-7 s clock): runs dex_eval_scan(deep=True) on every member `*.apk` of the zip `bundle` (a synthetic N-set Mastery
+    bundle) in name order and returns their ANS tokens ONLY when every set finishes inside `set_s` and the bundle inside
+    `total_s` of CPU time on one core; [] when one set is slow (its name and time go to `deep_eval_bench.last`), when no member
+    yields a token, or for a non-zip. Offline gate helper (tests/data/android_fixtures/deep-eval-bench-*); never raises."""
+    deep_eval_bench.last = timings = []
+    try:
+        with zipfile.ZipFile(bundle) as z:
+            members = sorted((i for i in z.infolist() if i.filename.lower().endswith(".apk")
+                              and 0 < i.file_size <= 64 << 20), key=lambda i: i.filename)[:_DEB_MAX_MEMBERS]
+            blobs = [(i.filename, z.read(i)) for i in members]
+    except Exception:  # noqa: BLE001 - not a bundle
+        return []
+    out, t_all = [], time.process_time()
+    for name, b in blobs:
+        t0 = time.process_time()  # CPU seconds: parallel workers on the host must not flake the gate
+        try:
+            got = dex_eval_scan(io.BytesIO(b), deep=True)
+        except Exception:  # noqa: BLE001
+            got = []
+        dt = time.process_time() - t0
+        timings.append((name, round(dt, 3)))
+        if dt > set_s:
+            return []
+        out += [t for t in got if t not in out]
+    return out if out and time.process_time() - t_all <= total_s else []
 
 
 def whitebox_table_scan(apk):
@@ -12407,6 +13073,23 @@ _CTX_PREF = ("Landroid/content/SharedPreferences;", "Landroid/content/SharedPref
 _CTX_BYTEORDER = {"Ljava/nio/ByteOrder;->LITTLE_ENDIAN": "LITTLE_ENDIAN", "Ljava/nio/ByteOrder;->BIG_ENDIAN": "BIG_ENDIAN"}
 # (kind, argument, stub answer) of the last context_chain_scan() call
 CONTEXT_STUB_HITS = []
+# App-private SQLite on a fresh install (coverage atlas rows 16-18, 100): Context.openOrCreateDatabase /
+# SQLiteDatabase.openOrCreateDatabase / create(null) / an app SQLiteOpenHelper subclass (first getWritableDatabase runs
+# its onCreate, then onOpen) over a python sqlite3 :memory: db per name (shared by the runs of one pass, like prefs);
+# execSQL / rawQuery / query / insert / update / delete / ContentValues / compileStatement / DatabaseUtils, Cursor
+# moves and typed getters with SQLite's coercions. ATTACH / VACUUM / load_extension abort; the deadline interrupts.
+_SQL_DB, _SQL_CUR = "Landroid/database/sqlite/SQLiteDatabase;", "Landroid/database/Cursor;"
+_SQL_HELPER = "Landroid/database/sqlite/SQLiteOpenHelper;"
+_SQL_STMT, _SQL_CV = "Landroid/database/sqlite/SQLiteStatement;", "Landroid/content/ContentValues;"
+_SQL_TYPES = frozenset((_SQL_DB, _SQL_CUR, _SQL_STMT, _SQL_CV, "Landroid/database/sqlite/SQLiteCursor;",
+                        "Landroid/database/AbstractCursor;", "Landroid/database/CursorWrapper;",
+                        "Landroid/database/sqlite/SQLiteProgram;", "Landroid/database/sqlite/SQLiteClosable;",
+                        "Landroid/database/DatabaseUtils;"))
+_SQL_EXC = ("Landroid/database/sqlite/SQLiteException;", "Landroid/database/SQLException;", "Ljava/lang/RuntimeException;")
+_SQL_IOOB = ("Landroid/database/CursorIndexOutOfBoundsException;", "Ljava/lang/IndexOutOfBoundsException;",
+             "Ljava/lang/RuntimeException;")
+_SQL_DENY = re.compile(r"\b(?:attach|detach|vacuum|load_extension)\b", re.I)
+_SQL_MAX_ROWS = 4096
 
 
 def _ctx_facts(apk):
@@ -12419,12 +13102,23 @@ def _ctx_facts(apk):
         with zipfile.ZipFile(apk) as z:
             b = z.read("AndroidManifest.xml") if z.getinfo("AndroidManifest.xml").file_size < 1 << 22 else b""
         for kind, tag, attrs, _ in (_axml_events(b) if b[:2] == b"\x03\x00" else ()):
-            if kind == "start" and tag == "manifest" and attrs:
+            if kind == "start" and tag in ("manifest", "uses-sdk", "application") and attrs is not None:
                 at = {k.split(":")[-1]: v for k, v in attrs.items()}
-                vc = at.get("versionCode")
-                f["vc"] = vc if isinstance(vc, int) and not isinstance(vc, bool) else int(vc) if str(vc).isdigit() else 1
-                f["vn"] = at.get("versionName") if isinstance(at.get("versionName"), str) else None
-                break
+                if tag == "manifest":
+                    vc = at.get("versionCode")
+                    f["vc"] = vc if isinstance(vc, int) and not isinstance(vc, bool) else int(vc) if str(vc).isdigit() else 1
+                    f["vn"] = at.get("versionName") if isinstance(at.get("versionName"), str) else None
+                elif tag == "uses-sdk":
+                    t = str(at.get("targetSdkVersion", at.get("minSdkVersion", "")))
+                    f["tsdk"] = int(t) if t.isdigit() else f.get("tsdk")
+                else:  # first-install ApplicationInfo bits (row 100): allowBackup default true, cleartext by targetSdk
+                    tsdk = f.get("tsdk") or 1
+                    bk, ct = str(at.get("allowBackup", "true")).lower(), at.get("usesCleartextTraffic")
+                    f["backup"] = bk not in ("false", "0")
+                    f["cleartext"] = tsdk < 28 if ct is None else str(ct).lower() not in ("false", "0")
+                    n = str(at.get("networkSecurityConfig", ""))
+                    f["nsc"] = int(n) if n.isdigit() else None
+                    break
     except Exception:  # noqa: BLE001 - unreadable manifest: versionCode 1, no versionName
         pass
     return f
@@ -12562,6 +13256,7 @@ def _x5_rfc2253(name):
 
 class _CtxVM(_DxeDeepVM, _EnvVM):
     """_DxeDeepVM on the clean Pixel (_EnvVM) holding a Context whose assets / resources / package facts are the APK's."""
+    prng = False
 
     def __init__(self, dx, deadline, facts, z, prefs):
         _EnvVM.__init__(self, dx, deadline)
@@ -12569,7 +13264,7 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
         self.statics.update(_CTX_BYTEORDER)
 
     def new_instance(self, t):
-        if t in _CTX_JSON or t == "Ljava/io/ByteArrayInputStream;":
+        if t in _CTX_JSON or t in ("Ljava/io/ByteArrayInputStream;", _SQL_CV):
             return _DxObj(t)
         return super().new_instance(t)
 
@@ -12752,6 +13447,18 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
                 r = _DxArr(certs)
                 r.t = "Ljava/security/cert/Certificate;"
                 return r
+            # a fresh install's AndroidKeyStore holds no generated key (row 31): size 0, no aliases, getKey null
+            if name == "size":
+                return self.log_probe("KeyStore.size", "", 0)
+            if name == "aliases":
+                e = _DxObj("Ljava/util/Enumeration;")
+                e.f["sl"] = []
+                self.log_probe("KeyStore.aliases", "", "[]")
+                return e
+            if name in ("getKey", "getEntry", "isKeyEntry", "getCreationDate") and a and isinstance(a[0], str):
+                return self.log_probe("KeyStore." + name, a[0], 0 if name == "isKeyEntry" else None)
+            if name == "deleteEntry" and a and isinstance(a[0], str):
+                return None
             raise _DxAbort
         if o is not None and "X" in f:
             c, der = f["c"], f["X"]
@@ -12917,6 +13624,19 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
             return _dxe_barr(out)
         if t in _CTX_PREF or cls in _CTX_PREF:
             return self.pref_call(name, sig, o, a)
+        if t in _SQL_TYPES or cls in _SQL_TYPES or name == "openOrCreateDatabase" or t is not None and (
+                cls == _SQL_HELPER or self.sql_helper(t)) and name in ("<init>", "getWritableDatabase",
+                                                                      "getReadableDatabase", "close", "getDatabaseName"):
+            v = self.sql_call(cls, name, sig, o, a)
+            if v is not _ENV_UNSET:
+                return v
+        if cls == "Landroid/security/NetworkSecurityPolicy;" or t == cls == "Landroid/security/NetworkSecurityPolicy;":
+            if name == "getInstance" and o is None:
+                return _DxObj(cls)
+            if name == "isCleartextTrafficPermitted" and o is not None and (not a or isinstance(a[0], str)):
+                host = a[0] if a else None
+                return self.log_probe("NetworkSecurityPolicy." + name, host or "", int(self.nsc_permitted(host)))
+            raise _DxAbort
         if cls == "Ljava/lang/String;" and name == "<init>" and sig in (
                 "[BIILjava/lang/String;)V", "[BIILjava/nio/charset/Charset;)V") and len(a) == 4 and isinstance(a[0], list):
             off, n = a[1], a[2]
@@ -13014,6 +13734,371 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
         if cls == "Ljava/lang/System;" and name == "lineSeparator":
             return "\n"
         return _ENV_UNSET
+
+    def invoke(self, ref, raw, depth):
+        self.depth = depth
+        return super().invoke(ref, raw, depth)
+
+    def app_info(self):
+        ai = super().app_info()
+        f, A = self.apk, "Landroid/content/pm/ApplicationInfo;->flags"
+        if f is not None and "backup" in f:  # the manifest's FLAG_ALLOW_BACKUP / FLAG_USES_CLEARTEXT_TRAFFIC
+            ai.f[A] = ai.f[A] & ~0x08008000 | (0x8000 if f["backup"] else 0) | (0x08000000 if f["cleartext"] else 0)
+        return ai
+
+    def nsc_permitted(self, host):
+        """NetworkSecurityPolicy.isCleartextTrafficPermitted([host]) from the manifest's networkSecurityConfig xml
+        (most specific <domain> of a <domain-config>, inherited attribute, else base-config, else the targetSdk default),
+        or the usesCleartextTraffic flag without one. An unreadable config aborts."""
+        f = self.apk or {}
+        if f.get("nsc") is None:
+            return bool(f.get("cleartext", True))
+        path = self.res(f["nsc"])
+        i = self.z.NameToInfo.get(path) if isinstance(path, str) else None
+        if i is None or i.file_size > 1 << 20:
+            raise _DxAbort
+        b = self.z.read(i)
+        if b[:2] != b"\x03\x00":
+            raise _DxAbort
+        flag = lambda at, d: d if at.get("cleartextTrafficPermitted") is None else str(  # noqa: E731
+            at["cleartextTrafficPermitted"]).lower() not in ("false", "0")
+        base = (f.get("tsdk") or 1) < 28
+        stack, doms, dom, root = [], [], None, False
+        for kind, tag, attrs, text in _axml_events(b):
+            at = {k.split(":")[-1]: v for k, v in (attrs or {}).items()}
+            if kind == "start":
+                root = root or tag == "network-security-config"
+                if tag == "base-config":
+                    base = flag(at, base)
+                elif tag == "domain-config":
+                    stack.append(at)
+                elif tag == "domain" and stack:
+                    dom = [str(at.get("includeSubdomains", "false")).lower() in ("true", "1"), list(stack), ""]
+            elif kind == "text" and dom is not None:
+                dom[2] += text or ""
+            elif kind == "end":
+                if tag == "domain" and dom is not None:
+                    doms.append(dom)
+                    dom = None
+                elif tag == "domain-config" and stack:
+                    stack.pop()
+        if not root:
+            raise _DxAbort
+        if host is None:
+            return base
+        h, best = host.strip().lower().rstrip("."), None
+        for sub, cfgs, d in doms:
+            d = d.strip().lower().rstrip(".")
+            if d and (h == d or sub and h.endswith("." + d)):
+                rank = (len(d), h == d)
+                if best is None or rank > best[0]:
+                    best = (rank, cfgs)
+        if best is None:
+            return base
+        v = None
+        for at in best[1]:  # outer -> inner: an inner domain-config's attribute wins
+            v = flag(at, v)
+        return base if v is None else v
+
+    def sql_helper(self, t):
+        sup, c = _dxx_supers(self.dx), t
+        for _ in range(8):
+            c = sup.get(c)
+            if c is None:
+                return False
+            if c == _SQL_HELPER:
+                return True
+        return False
+
+    def sql_db(self, n):
+        """The SQLiteDatabase object of db file `n` (created empty on first open of this pass)."""
+        import sqlite3
+        key = ("db", n)
+        if key not in self.prefs:
+            con = sqlite3.connect(":memory:", isolation_level=None, check_same_thread=False)
+            con.set_authorizer(lambda act, *_: sqlite3.SQLITE_DENY if act in (24, 25) else sqlite3.SQLITE_OK)
+            con.set_progress_handler(lambda: int(time.time() > self.deadline), 2000)
+            self.prefs[key] = [con, 0]
+        d = _DxObj(_SQL_DB)
+        d.f.update(db=self.prefs[key], dn=n, tx=[])
+        return d
+
+    def sql_exec(self, d, q, args=(), rows=False):
+        import sqlite3
+        if not isinstance(q, str) or _SQL_DENY.search(q):
+            raise _DxAbort
+        if args is None or args == 0:
+            args = ()
+        if not isinstance(args, (list, tuple)) or any(not isinstance(x, (str, int, float, bytes, type(None)))
+                                                      or isinstance(x, bool) for x in args):
+            raise _DxAbort
+        try:
+            c = d.f["db"][0].execute(q, tuple(args))
+            out = (c.fetchmany(_SQL_MAX_ROWS + 1), [x[0] for x in c.description or ()]) if rows else c
+        except sqlite3.Error as e:
+            if time.time() > self.deadline or "interrupt" in str(e):
+                raise _DxAbort from None
+            self.log_probe("SQLiteDatabase", q[:64], f"SQLiteException {e}")
+            raise _DxThrow(*_SQL_EXC) from None
+        except (OverflowError, ValueError):
+            raise _DxAbort from None
+        if rows and len(out[0]) > _SQL_MAX_ROWS:
+            raise _DxAbort
+        return out
+
+    def sql_cursor(self, d, q, args):
+        rows, cols = self.sql_exec(d, q, args, rows=True)
+        self.log_probe("SQLiteDatabase.rawQuery", q[:64], f"{len(rows)} row(s)")
+        c = _DxObj("Landroid/database/sqlite/SQLiteCursor;")
+        c.f.update(rows=rows, cols=cols, pos=-1, closed=0)
+        return c
+
+    def sql_call(self, cls, name, sig, o, a):  # noqa: C901 - SQLiteDatabase / Cursor / ContentValues / helper models
+        t = o.t if o is not None else None
+        ident = lambda x: '"' + _dxe_str(x).replace('"', '""') + '"'  # noqa: E731
+        if name == "openOrCreateDatabase" and a and isinstance(a[0], str) and (o is not None or cls == _SQL_DB):
+            return self.sql_db(a[0].rsplit("/", 1)[-1])
+        if cls == _SQL_DB and o is None and name == "create":
+            return self.sql_db(f"\0mem{len(self.prefs)}")
+        if t is not None and t not in _SQL_TYPES and (cls == _SQL_HELPER or self.sql_helper(t)):
+            if name == "<init>":
+                if len(a) < 4 or not (a[1] is None or a[1] == 0 or isinstance(a[1], str)) or not isinstance(a[3], int):
+                    raise _DxAbort
+                o.f.update(hn=a[1] if isinstance(a[1], str) else f"\0mem{len(self.prefs)}", hv=a[3])
+                return None
+            if "hn" not in o.f:
+                raise _DxAbort
+            if name == "getDatabaseName":
+                return None if o.f["hn"].startswith("\0") else o.f["hn"]
+            if name == "close":
+                return None
+            d = self.sql_db(o.f["hn"])
+            st = d.f["db"]
+            if st[1] != o.f["hv"]:
+                cb = "onCreate" if st[1] == 0 else "onUpgrade" if st[1] < o.f["hv"] else "onDowngrade"
+                if cb != "onCreate":
+                    raise _DxAbort  # a fresh install only ever creates
+                for hook in ("onConfigure", "onCreate"):
+                    ref = _env_resolve(self.dx, f"{t}->{hook}(Landroid/database/sqlite/SQLiteDatabase;)V")
+                    if ref in self.dx.code:
+                        self.log_probe("SQLiteOpenHelper." + hook, o.f["hn"], "called")
+                        self.run(ref, [o, d], getattr(self, "depth", 0) + 1)
+                    elif hook == "onCreate":
+                        raise _DxAbort
+                st[1] = o.f["hv"]
+            ref = _env_resolve(self.dx, f"{t}->onOpen(Landroid/database/sqlite/SQLiteDatabase;)V")
+            if ref in self.dx.code:
+                self.run(ref, [o, d], getattr(self, "depth", 0) + 1)
+            return d
+        if cls == "Landroid/database/DatabaseUtils;":
+            a, o = ([o] if o is not None else []) + list(a), None  # static: ctx() took arg 0 for a receiver
+            if name in ("longForQuery", "stringForQuery") and len(a) >= 2 and isinstance(a[0], _DxObj) and "db" in a[0].f:
+                rows, _ = self.sql_exec(a[0], a[1], a[2] if len(a) > 2 else (), rows=True)
+                if not rows or not rows[0]:
+                    raise _DxThrow("Landroid/database/sqlite/SQLiteDoneException;", *_SQL_EXC)
+                return self.sql_val(rows[0][0], "J" if name == "longForQuery" else "S")
+            if name == "queryNumEntries" and len(a) >= 2 and isinstance(a[0], _DxObj) and "db" in a[0].f:
+                w = f" WHERE {a[2]}" if len(a) > 2 and isinstance(a[2], str) and a[2] else ""
+                return self.sql_exec(a[0], f"SELECT COUNT(*) FROM {ident(a[1])}{w}", a[3] if len(a) > 3 else (),
+                                     rows=True)[0][0][0]
+            raise _DxAbort
+        if cls == _SQL_CV or t == _SQL_CV:
+            if name == "<init>":
+                o.f["cv"] = {}
+                return None
+            cv = o.f.get("cv") if o is not None else None
+            if cv is None:
+                raise _DxAbort
+            if name == "put" and len(a) >= 2 and isinstance(a[0], str):
+                v = a[1]
+                if isinstance(v, _DxObj) or isinstance(v, list) and not getattr(v, "t", None) == "B":
+                    raise _DxAbort
+                cv[a[0]] = _dxe_bytes(v) if isinstance(v, list) else v
+                return None
+            if name == "putNull" and a:
+                cv[a[0]] = None
+                return None
+            if name in ("size", "isEmpty", "containsKey", "clear", "remove"):
+                if name == "containsKey":
+                    return int(a[0] in cv)
+                if name in ("clear", "remove"):
+                    cv.clear() if name == "clear" else cv.pop(a[0], None)
+                    return None
+                return len(cv) if name == "size" else int(not cv)
+            raise _DxAbort
+        if o is not None and "db" in o.f:
+            q, tx = o.f["db"], o.f["tx"]
+            if name == "execSQL" and a:
+                self.sql_exec(o, a[0], a[1] if len(a) > 1 else ())
+                self.log_probe("SQLiteDatabase.execSQL", str(a[0])[:64], "ok")
+                return None
+            if name == "rawQuery" and a:
+                return self.sql_cursor(o, a[0], a[1] if len(a) > 1 else ())
+            if name == "query" and sig.startswith("Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;"
+                                                  "[Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+                                                  "Ljava/lang/String;") and len(a) >= 7:
+                tb, cols, wh, wa, gb, hv, ob = a[:7]
+                lim = a[7] if len(a) > 7 else None
+                if cols not in (None, 0) and not (isinstance(cols, list) and all(isinstance(x, str) for x in cols)):
+                    raise _DxAbort
+                sql = f"SELECT {', '.join(cols) if isinstance(cols, list) and cols else '*'} FROM {_dxe_str(tb)}"
+                for kw, v in ((" WHERE ", wh), (" GROUP BY ", gb), (" HAVING ", hv), (" ORDER BY ", ob), (" LIMIT ", lim)):
+                    if isinstance(v, str) and v:
+                        sql += kw + v
+                    elif v not in (None, 0):
+                        raise _DxAbort
+                return self.sql_cursor(o, sql, wa)
+            if name in ("insert", "insertOrThrow", "replace", "replaceOrThrow", "insertWithOnConflict") and len(a) >= 3 \
+                    and isinstance(a[2], _DxObj) and "cv" in a[2].f:
+                cv = a[2].f["cv"]
+                verb = "INSERT OR REPLACE" if name.startswith("replace") else "INSERT"
+                if name == "insertWithOnConflict":
+                    alg = ["", " OR ROLLBACK", " OR ABORT", " OR FAIL", " OR IGNORE", " OR REPLACE"]
+                    if not (len(a) > 3 and isinstance(a[3], int) and 0 <= a[3] < 6):
+                        raise _DxAbort
+                    verb += alg[a[3]]
+                if cv:
+                    sql = f"{verb} INTO {ident(a[0])} ({','.join(map(ident, cv))}) VALUES ({','.join('?' * len(cv))})"
+                elif isinstance(a[1], str):
+                    sql = f"{verb} INTO {ident(a[0])} ({ident(a[1])}) VALUES (NULL)"
+                else:
+                    raise _DxAbort
+                try:
+                    c = self.sql_exec(o, sql, list(cv.values()))
+                except _DxThrow:
+                    if name.endswith("OrThrow"):
+                        raise
+                    return -1
+                return c.lastrowid if c.rowcount > 0 else -1
+            if name in ("update", "updateWithOnConflict") and len(a) >= 2 and isinstance(a[1], _DxObj) \
+                    and a[1].f.get("cv"):
+                cv = a[1].f["cv"]
+                wh = f" WHERE {a[2]}" if len(a) > 2 and isinstance(a[2], str) and a[2] else ""
+                wa = a[3] if len(a) > 3 and isinstance(a[3], list) else []
+                c = self.sql_exec(o, f"UPDATE {ident(a[0])} SET {','.join(ident(k) + '=?' for k in cv)}{wh}",
+                                  list(cv.values()) + list(wa))
+                return c.rowcount
+            if name == "delete" and a:
+                wh = f" WHERE {a[1]}" if len(a) > 1 and isinstance(a[1], str) and a[1] else ""
+                wa = a[2] if len(a) > 2 and isinstance(a[2], list) else []
+                return self.sql_exec(o, f"DELETE FROM {ident(a[0])}{wh}", list(wa)).rowcount
+            if name == "compileStatement" and a and isinstance(a[0], str):
+                s = _DxObj(_SQL_STMT)
+                s.f.update(sq=a[0], d=o, b={})
+                return s
+            if name == "getVersion":
+                return q[1]
+            if name == "setVersion" and a and isinstance(a[0], int):
+                q[1] = a[0]
+                return None
+            if name == "beginTransaction" or name.startswith("beginTransaction"):
+                self.sql_exec(o, f"SAVEPOINT tx{len(tx)}")
+                tx.append(False)
+                return None
+            if name == "setTransactionSuccessful" and tx:
+                tx[-1] = True
+                return None
+            if name == "endTransaction" and tx:
+                ok, n = tx.pop(), len(tx)
+                if not ok:
+                    self.sql_exec(o, f"ROLLBACK TO tx{n}")
+                self.sql_exec(o, f"RELEASE tx{n}")
+                return None
+            if name in ("inTransaction", "isOpen", "isReadOnly", "close", "getPath", "isDatabaseIntegrityOk"):
+                return {"inTransaction": int(bool(tx)), "isOpen": 1, "isReadOnly": 0, "close": None,
+                        "isDatabaseIntegrityOk": 1, "getPath": f"/data/user/0/{self.apk.get('pkg') or 'app'}/databases/"
+                        f"{o.f['dn']}"}[name]
+            raise _DxAbort
+        if o is not None and "sq" in o.f:  # SQLiteStatement
+            b = o.f["b"]
+            if name in ("bindLong", "bindString", "bindDouble", "bindNull", "bindBlob") and a and isinstance(a[0], int):
+                v = None if name == "bindNull" else _dxe_bytes(a[1]) if name == "bindBlob" else a[1]
+                if name == "bindString" and not isinstance(v, str) or name == "bindLong" and not isinstance(v, int):
+                    raise _DxAbort
+                b[a[0]] = v
+                return None
+            if name == "clearBindings":
+                b.clear()
+                return None
+            if name == "close":
+                return None
+            n = o.f["sq"].count("?")
+            args = [b.get(i + 1) for i in range(n)]
+            if name in ("simpleQueryForLong", "simpleQueryForString"):
+                rows, _ = self.sql_exec(o.f["d"], o.f["sq"], args, rows=True)
+                if not rows or not rows[0]:
+                    raise _DxThrow("Landroid/database/sqlite/SQLiteDoneException;", *_SQL_EXC)
+                return self.sql_val(rows[0][0], "J" if name.endswith("Long") else "S")
+            if name in ("execute", "executeInsert", "executeUpdateDelete"):
+                c = self.sql_exec(o.f["d"], o.f["sq"], args)
+                return None if name == "execute" else c.rowcount if name == "executeUpdateDelete" else (
+                    c.lastrowid if c.rowcount > 0 else -1)
+            raise _DxAbort
+        if o is not None and "rows" in o.f:  # Cursor
+            f = o.f
+            rows, cols, pos = f["rows"], f["cols"], f["pos"]
+            n = len(rows)
+            moves = {"moveToFirst": 0, "moveToLast": n - 1, "moveToNext": pos + 1, "moveToPrevious": pos - 1}
+            if name in moves or name in ("moveToPosition", "move") and a and isinstance(a[0], int):
+                p = moves[name] if name in moves else a[0] if name == "moveToPosition" else pos + a[0]
+                f["pos"] = max(-1, min(n, p))
+                return int(0 <= p < n)
+            simple = {"getCount": n, "getPosition": pos, "isAfterLast": int(n == 0 or pos >= n),
+                      "isBeforeFirst": int(n == 0 or pos < 0), "isFirst": int(n > 0 and pos == 0),
+                      "isLast": int(n > 0 and pos == n - 1), "getColumnCount": len(cols), "isClosed": f["closed"]}
+            if name in simple and not a:
+                return simple[name]
+            if name in ("close", "deactivate"):
+                f["closed"] = 1
+                return None
+            if name in ("getColumnIndex", "getColumnIndexOrThrow") and a and isinstance(a[0], str):
+                k = a[0].rsplit(".", 1)[-1].lower()
+                i = next((j for j, c in enumerate(cols) if c.lower() == k), -1)
+                if i < 0 and name.endswith("OrThrow"):
+                    raise _DxThrow("Ljava/lang/IllegalArgumentException;", "Ljava/lang/RuntimeException;")
+                return i
+            if name == "getColumnName" and a and isinstance(a[0], int) and 0 <= a[0] < len(cols):
+                return cols[a[0]]
+            if name == "getColumnNames":
+                r = _DxArr(cols)
+                r.t = "Ljava/lang/String;"
+                return r
+            kinds = {"getLong": "J", "getInt": "I", "getShort": "H", "getString": "S", "getBlob": "B", "isNull": "N",
+                     "getType": "T"}
+            if name in kinds and a and isinstance(a[0], int):
+                if not 0 <= pos < n:
+                    raise _DxThrow(*_SQL_IOOB)
+                if not 0 <= a[0] < len(cols):
+                    raise _DxAbort
+                return self.sql_val(rows[pos][a[0]], kinds[name])
+            raise _DxAbort
+        return _ENV_UNSET
+
+    @staticmethod
+    def sql_val(v, k):
+        """A SQLite cell read through Cursor.getX (SQLite's column coercions; REAL and odd reads abort)."""
+        if k == "N":
+            return int(v is None)
+        if k == "T":
+            return 0 if v is None else 1 if isinstance(v, int) else 2 if isinstance(v, float) else 3 if isinstance(
+                v, str) else 4
+        if isinstance(v, float):
+            raise _DxAbort
+        if k == "S":
+            if isinstance(v, bytes):
+                raise _DxAbort
+            return None if v is None else str(v)
+        if k == "B":
+            return None if v is None else _dxe_barr(v if isinstance(v, bytes) else str(v).encode())
+        if isinstance(v, str):
+            m = re.match(r"\s*([-+]?\d+)", v)
+            v = int(m[1]) if m and not re.match(r"\s*[-+]?\d+\s*[.eE]", v) else 0 if not m else _ENV_UNSET
+            if v is _ENV_UNSET:
+                raise _DxAbort
+        if isinstance(v, bytes):
+            raise _DxAbort
+        v = v or 0
+        return _dxe_w64(v) if k == "J" else _dxe_w32(v) if k == "I" else ((v + 0x8000) & 0xFFFF) - 0x8000
 
     def pref_file(self, n):
         p = _DxObj("Landroid/content/SharedPreferences;")
@@ -13120,13 +14205,288 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
         raise _DxAbort
 
 
+# --- a v2 chain calling into a SECOND dex (coverage atlas rows 42, 100, 101; D20 "Loaded Later" as a v2 set) ---------
+# Release.code(Context) copies getAssets().open("payload.dex") into getCodeCacheDir() (FileOutputStream) or a
+# ByteArrayOutputStream (+ an in-code unxor), then new DexClassLoader(path, odir, null, parent) / PathClassLoader /
+# InMemoryDexClassLoader(ByteBuffer.wrap(b), parent) -> loadClass("..payload.Module") / Class.forName(n, b, loader) ->
+# getMethod / getDeclaredMethod(name, long.class..).invoke(null, Long.valueOf(v)) / getField(n).getLong(null) /
+# newInstance. _DxlVM is _CtxVM with an in-memory app-data filesystem (files written there read back), the loaded dex
+# bytes (plain, a jar/zip's classes*.dex, or a payload_unwrap'd wrapper) parsed into extra class tables consulted
+# parent-first (host classes win a name clash, row 84), and evaluation continuing INSIDE the payload (its own string /
+# type / field tables, <clinit>s, static fields, calls between its classes and back to the host).
+_DXL_PRE = re.compile(rb"Ldalvik/system/(?:InMemoryDex|Dex|Path)ClassLoader;")
+_DXL_LOADERS = frozenset(("Ldalvik/system/DexClassLoader;", "Ldalvik/system/PathClassLoader;",
+                          "Ldalvik/system/InMemoryDexClassLoader;"))
+_DXL_NEW = _DXL_LOADERS | {"Ljava/io/FileOutputStream;", "Ljava/io/ByteArrayOutputStream;"}
+_DXL_DIRS = {"getCodeCacheDir": "code_cache", "getCacheDir": "cache", "getFilesDir": "files",
+             "getNoBackupFilesDir": "no_backup", "getDataDir": ""}
+_DXL_CNF = ("Ljava/lang/ClassNotFoundException;", "Ljava/lang/ReflectiveOperationException;")
+_DXL_NSM = ("Ljava/lang/NoSuchMethodException;", "Ljava/lang/ReflectiveOperationException;")
+_DXL_NSF = ("Ljava/lang/NoSuchFieldException;", "Ljava/lang/ReflectiveOperationException;")
+_DXL_MAX_DEXES = 4
+
+
+def _dxl_dexes(b, deadline, depth=0):
+    """_DxDex tables of loaded bytes: a dex, a jar / zip's classes*.dex, else payload_unwrap's plaintext (once)."""
+    if not b or len(b) > _DXE_MAX_DEX:
+        return []
+    if b[:4] == b"dex\n":
+        return [_DxDex(b)]
+    if b[:4] == b"PK\x03\x04":
+        with zipfile.ZipFile(io.BytesIO(b)) as z:
+            return [_DxDex(z.read(i)) for i in z.infolist() if re.fullmatch(r"classes\d*\.dex", i.filename)
+                    and i.file_size <= _DXE_MAX_DEX][:_DXL_MAX_DEXES]
+    u = payload_unwrap(b, min(deadline, time.time() + 0.4)) if depth == 0 else None
+    return _dxl_dexes(u[1], deadline, 1) if u and u[0] in ("dex", "zip") else []
+
+
+class _DxlVM(_CtxVM):
+    """_CtxVM plus dalvik.system class loaders over the APK's own bytes (see the block comment above)."""
+
+    def __init__(self, dx, deadline, facts, z, prefs):
+        super().__init__(dx, deadline, facts, z, prefs)
+        self.host, self.vfs, self.loaded = dx, {}, []
+        for k, p in _DXE_PRIM_TYPES.items():
+            self.statics[k] = self.klass(p)
+
+    def owner(self, ct):
+        if ct in self.host.sfields:
+            return self.host
+        return next((d for d in self.loaded if ct in d.sfields), None)
+
+    def within(self, d, fn, *a):
+        if d is self.dx:
+            return fn(*a)
+        saved, self.dx = self.dx, d
+        try:
+            return fn(*a)
+        finally:
+            self.dx = saved
+
+    def klass(self, desc):
+        c = super().klass(desc)
+        d = self.owner(desc) if self.loaded else None
+        if d is not None and d is not self.host:
+            c.f["ldx"] = d
+        return c
+
+    def const_class(self, t):
+        return self.klass(t) if self.owner(t) is not None else super().const_class(t)
+
+    def new_instance(self, t):
+        if t in _DXL_NEW:
+            return _DxObj(t)
+        d = self.owner(t) if self.loaded else None
+        if d is not None and d is not self.dx:
+            self.init_class(t)
+            return _DxObj(t)
+        return super().new_instance(t)
+
+    def init_class(self, ct):
+        d = self.owner(ct) if self.loaded and ct not in self.inited else None
+        if d is not None and d is not self.dx:
+            return self.within(d, super().init_class, ct)
+        return super().init_class(ct)
+
+    def invoke(self, ref, raw, depth):
+        cls, rest = ref.split("->", 1)
+        if self.loaded:
+            d = self.owner(cls)
+            if d is not None and d is not self.dx and ref in d.code:  # parent-first / payload -> host and back
+                return self.within(d, super().invoke, ref, raw, depth)
+        name, sig = rest.split("(", 1)
+        o = raw[0] if raw and isinstance(raw[0], _DxObj) else None
+        v = self.dxl(cls, name, sig, o, raw[1:] if o is not None else raw, depth)
+        return super().invoke(ref, raw, depth) if v is _ENV_UNSET else v
+
+    def appdir(self, sub):
+        base = f"/data/user/0/{self.apk.get('pkg') or 'app'}"
+        return base + ("/" + sub if sub else "")
+
+    def load(self, kind, arg, b):
+        got = []
+        for d in _dxl_dexes(b, self.deadline):
+            same = next((x for x in self.loaded if x.d == d.d), None)
+            if same is None and len(self.loaded) < _DXL_MAX_DEXES:
+                self.loaded.append(same := d)
+            if same is not None:
+                got.append(same)
+        if not got:
+            raise _DxAbort
+        self.log_probe(kind, arg, f"{sum(len(x.sfields) for x in got)} classes")
+        return got
+
+    def dxl(self, cls, name, sig, o, a, depth):  # noqa: C901 - one table of loader / reflection / file models
+        t = o.t if o is not None else None
+        f = o.f if o is not None else {}
+        if name in _DXL_DIRS and sig == ")Ljava/io/File;" or name == "getDir" and sig.endswith(")Ljava/io/File;") \
+                and a and isinstance(a[0], str):
+            fo = _DxObj("Ljava/io/File;")
+            fo.f["p"] = self.appdir(_DXL_DIRS[name] if name != "getDir" else "app_" + a[0])
+            return fo
+        if t == "Ljava/io/File;" and isinstance(f.get("p"), str) and f["p"].startswith(self.appdir("")):
+            p = f["p"]
+            if name in ("exists", "isFile", "canRead"):
+                return int(p in self.vfs)
+            if name == "length":
+                return len(self.vfs.get(p, b""))
+            if name == "delete":
+                return int(self.vfs.pop(p, None) is not None)
+            if name == "createNewFile":
+                new = p not in self.vfs
+                self.vfs.setdefault(p, bytearray())
+                return int(new)
+            if name in ("setReadOnly", "setWritable", "setReadable", "setExecutable", "mkdir", "mkdirs",
+                        "setLastModified"):
+                return 1
+        if cls in ("Ljava/io/FileOutputStream;", "Ljava/io/ByteArrayOutputStream;", "Ljava/io/FileInputStream;") \
+                and name == "<init>" and o is not None:
+            if cls == "Ljava/io/ByteArrayOutputStream;":
+                f["W"] = bytearray()
+                return None
+            p = a[0].f.get("p") if a and isinstance(a[0], _DxObj) else a[0] if a else None
+            if not isinstance(p, str) or not p.startswith(self.appdir("")):
+                return _ENV_UNSET
+            if cls == "Ljava/io/FileInputStream;":
+                if p not in self.vfs:
+                    return _ENV_UNSET
+                f.update(B=bytes(self.vfs[p]), pos=0)
+                return None
+            buf = self.vfs.get(p) if len(a) > 1 and a[1] else None
+            f["W"] = self.vfs[p] = buf if buf is not None else bytearray()
+            return None
+        if "W" in f:
+            w = f["W"]
+            if name == "write" and sig == "I)V" and isinstance(a[0], int):
+                w.append(a[0] & 0xFF)
+                return None
+            if name == "write" and a and isinstance(a[0], list):
+                off, n = (a[1], a[2]) if len(a) >= 3 else (0, len(a[0]))
+                if not (isinstance(off, int) and isinstance(n, int) and 0 <= off and 0 <= n and off + n <= len(a[0])):
+                    raise _DxAbort
+                if len(w) + n > _CTX_MAX_ASSET:
+                    raise _DxAbort
+                w += _dxe_bytes(a[0][off:off + n])
+                return None
+            if name in ("flush", "close"):
+                return None
+            if name == "toByteArray":
+                return _dxe_barr(w)
+            if name == "size":
+                return len(w)
+            if name == "reset":
+                del w[:]
+                return None
+            raise _DxAbort
+        if cls in _DXL_LOADERS and name == "<init>" and o is not None and a:
+            if cls == "Ldalvik/system/InMemoryDexClassLoader;":
+                bufs = a[0] if isinstance(a[0], list) else [a[0]]
+                bs = []
+                for bb in bufs:
+                    if not isinstance(bb, _DxObj) or "bb" not in bb.f:
+                        raise _DxAbort
+                    bs.append(_dxe_bytes(bb.f["bb"][bb.f["pos"]:bb.f["lim"]]))
+                f["L"] = [x for b in bs for x in self.load("InMemoryDexClassLoader", f"{len(bs)} buffer(s)", b)]
+                return None
+            if not isinstance(a[0], str):
+                raise _DxAbort
+            f["L"] = [x for p in a[0].split(":") if p
+                      for x in self.load(cls[15:-1], p, bytes(self.vfs[p]) if p in self.vfs else b"")]
+            return None
+        if (name == "loadClass" and "L" in f) or (cls == "Ljava/lang/Class;" and name == "forName" and len(a) == 3
+                                                    and isinstance(a[2], _DxObj) and "L" in a[2].f):
+            if not isinstance(a[0], str) or not 0 < len(a[0]) < 256:
+                raise _DxAbort
+            desc = "L" + a[0].replace(".", "/") + ";"
+            if desc in self.host.sfields:
+                return self.klass(desc)
+            loader = f if name == "loadClass" else a[2].f
+            d = next((x for x in loader["L"] if desc in x.sfields), None)
+            if d is None:
+                self.log_probe("ClassLoader.loadClass", a[0], "ClassNotFoundException")
+                raise _DxThrow(*_DXL_CNF)
+            return self.klass(desc)
+        if "ldx" not in f:
+            return _ENV_UNSET
+        d = f["ldx"]
+        if t == "Ljava/lang/Class;":
+            desc = f["d"]
+            if name == "getName":
+                return desc[1:-1].replace("/", ".")
+            if name in ("getMethod", "getDeclaredMethod") and len(a) == 2 and isinstance(a[0], str):
+                ps = [c.f.get("d") if isinstance(c, _DxObj) else None for c in (a[1] or [])]
+                r = next((m for m in d.code if m.startswith(f"{desc}->{a[0]}(") and _dxe_params(m) == ps), None)
+                if r is None:
+                    raise _DxThrow(*_DXL_NSM)
+                m = _DxObj("Ljava/lang/reflect/Method;")
+                m.f.update(m=r, ldx=d)
+                return m
+            if name in ("getField", "getDeclaredField") and a and isinstance(a[0], str):
+                fk = f"{desc}->{a[0]}"
+                if not any(d.fref(fi)[1] == fk for fi in d.sfields.get(desc, ((), 0))[0]):
+                    raise _DxThrow(*_DXL_NSF)
+                fo = _DxObj("Ljava/lang/reflect/Field;")
+                fo.f.update(fk=fk, ldx=d)
+                return fo
+            if name in ("getDeclaredConstructor", "getConstructor") and (not a or not a[0]):
+                c = _DxObj("Ljava/lang/reflect/Constructor;")
+                c.f.update(m=f"{desc}-><init>()V", ldx=d)
+                return c
+            if name == "newInstance" and not a:
+                c = _DxObj("Ljava/lang/reflect/Constructor;")
+                c.f.update(m=f"{desc}-><init>()V", ldx=d)
+                o, f, t, a = c, c.f, c.t, [[]]
+            else:
+                raise _DxAbort
+        if name == "setAccessible":
+            return None
+        if t == "Ljava/lang/reflect/Field;" and name.startswith("get") and len(a) == 1:
+            ct = f["fk"].split("->")[0]
+            self.init_class(ct)
+            if f["fk"] not in self.statics:
+                raise _DxAbort
+            return self.note(self.statics[f["fk"]])
+        if depth >= _DXE_DEPTH:
+            raise _DxAbort
+        ref = f["m"]
+        ct = ref.split("->")[0]
+        if t == "Ljava/lang/reflect/Constructor;" and name == "newInstance":
+            obj = _DxObj(ct)
+            self.init_class(ct)
+            if ref in d.code:
+                self.within(d, self.run, ref, [obj], depth + 1)
+            return obj
+        if t == "Ljava/lang/reflect/Method;" and name == "invoke" and len(a) == 2:
+            args = a[1] if isinstance(a[1], list) else []
+            ps = _dxe_params(ref)
+            if len(args) != len(ps):
+                raise _DxAbort
+            call = [] if d.code[ref][3] & 0x8 else [a[0]]
+            for p, x in zip(ps, args):
+                call += [x] + ([None] if p in "JD" else [])
+            self.init_class(ct)
+            return self.note(self.within(d, self.run, ref, call, depth + 1))
+        if t == "Ljava/lang/reflect/Method;" and name == "getName":
+            return ref.split("->")[1].split("(")[0]
+        raise _DxAbort
+
+
+# An anti-debug gate in the chain (row 41, D21 "Debug Me If You Can": debuggable="true" manifests) branches on
+# ApplicationInfo.flags & FLAG_DEBUGGABLE beside Debug / TracerPid probes: the intended app flow is the non-debugged one,
+# so the chain runs first with the bit clear, then with the manifest's own bit (both reported, clean first).
+_CTX_DBG_GATE = re.compile(rb"Landroid/os/Debug;|TracerPid|Ldalvik/system/VMDebug;")
+
+
 def context_chain_scan(apk):
     """ANS tokens of app methods handed a Context (D23-style `Release.code(Context)` and its v2 successors), run by the
     deep evaluator on a clean retail Pixel whose Context answers from the APK's own bytes: assets (AssetManager.open ->
     zip entry, InputStream read / available / readAllBytes, readers), org.json JSONObject / JSONArray accessors,
     resources.arsc strings by id / getIdentifier, package name, PackageInfo (signer cert, versionCode / versionName,
     install times), ApplicationInfo.flags (manifest debuggable), ZipFile(sourceDir).getInputStream (the shipped dex /
-    asset bytes), ByteBuffer wrap / getLong / order, SharedPreferences (defaults; put + apply read back),
+    asset bytes), ByteBuffer wrap / getLong / order, SharedPreferences (defaults; put + apply read back), a fresh
+    install's app SQLite (openOrCreateDatabase / SQLiteOpenHelper.onCreate, execSQL / rawQuery / Cursor over sqlite3
+    :memory:), an empty AndroidKeyStore (containsAlias false, size 0), FLAG_ALLOW_BACKUP / FLAG_USES_CLEARTEXT_TRAFFIC
+    from the manifest and NetworkSecurityPolicy.isCleartextTrafficPermitted from its networkSecurityConfig xml,
     Settings.Secure ANDROID_ID (a fixed 16-hex id), System.getProperty (ART's values), plus clean_device_scan's root /
     emulator / hook / installer / tamper / Build / clock tables. Returned values first, then strings the run built.
     CONTEXT_STUB_HITS logs every stub answer. [] when absent; never raises; < 1.5 s."""
@@ -13142,41 +14502,45 @@ def context_chain_scan(apk):
                 return []
             facts = _ctx_facts(apk) or {"pkg": None, "dbg": False, "certs": [], "ent": {}, "vc": 1, "vn": None,
                                         "path": "/data/app/app-1/base.apk"}
-            prefs, runs = {}, 0
-            for d in dexes:
-                if time.time() > deadline:
-                    break
-                try:
-                    dx = _DxDex(d)
-                except Exception:  # noqa: BLE001 - malformed dex contributes nothing
-                    continue
-                todo = []
-                for ref in dx.order:
-                    nreg, nin, _ins, acc = dx.code[ref]
-                    ps = _dxe_params(ref)
-                    if not any(p in _CTX_TYPES for p in ps) or len(ps) > 4 or nin > nreg or _DXE_LIB.match(ref):
-                        continue
-                    todo.append((not ref.endswith(")Ljava/lang/String;"), not acc & 0x8, ref, ps, acc))
-                todo.sort(key=lambda x: x[:2])
-                for _, _, ref, ps, acc in todo:
-                    if time.time() > deadline or runs >= _CTX_MAX_RUNS:
+            passes = [facts]
+            if facts.get("dbg") and any(_CTX_DBG_GATE.search(d) for d in dexes):
+                passes = [dict(facts, dbg=False), facts]  # D21 debuggable manifest: intended (clean) flow first
+            for fx in passes:
+                prefs, runs = {}, 0
+                for d in dexes:
+                    if time.time() > deadline:
                         break
-                    runs += 1
-                    vm = _CtxVM(dx, deadline, facts, z, prefs)
-                    raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
-                    for p in ps:
-                        raw += [_DxObj(p) if p in _CTX_TYPES else _dxe_default(p)] + ([None] if p in "JD" else [])
-                    r = None
                     try:
-                        vm.init_class(ref.split("->")[0])
-                        r = vm.run(ref, raw)
-                    except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
-                            RecursionError, struct.error, UnicodeError):
-                        pass
-                    if isinstance(r, str):
-                        rets += ANS_RE_T.findall(r)
-                    seen += [m for s in vm.seen if isinstance(s, str) for m in ANS_RE_T.findall(s)]
-                    CONTEXT_STUB_HITS.extend(x for x in vm.probe_log if x not in CONTEXT_STUB_HITS)
+                        dx = _DxDex(d)
+                    except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                        continue
+                    todo = []
+                    for ref in dx.order:
+                        nreg, nin, _ins, acc = dx.code[ref]
+                        ps = _dxe_params(ref)
+                        if not any(p in _CTX_TYPES for p in ps) or len(ps) > 4 or nin > nreg or _DXE_LIB.match(ref):
+                            continue
+                        todo.append((not ref.endswith(")Ljava/lang/String;"), not acc & 0x8, ref, ps, acc))
+                    todo.sort(key=lambda x: x[:2])
+                    for _, _, ref, ps, acc in todo:
+                        if time.time() > deadline or runs >= _CTX_MAX_RUNS:
+                            break
+                        runs += 1
+                        vm = (_DxlVM if _DXL_PRE.search(d) else _CtxVM)(dx, deadline, fx, z, prefs)
+                        raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
+                        for p in ps:
+                            raw += [_DxObj(p) if p in _CTX_TYPES else _dxe_default(p)] + ([None] if p in "JD" else [])
+                        r = None
+                        try:
+                            vm.init_class(ref.split("->")[0])
+                            r = vm.run(ref, raw)
+                        except (_DxAbort, IndexError, KeyError, TypeError, ValueError, AttributeError, OverflowError,
+                                RecursionError, struct.error, UnicodeError):
+                            pass
+                        if isinstance(r, str):
+                            rets += ANS_RE_T.findall(r)
+                        seen += [m for s in vm.seen if isinstance(s, str) for m in ANS_RE_T.findall(s)]
+                        CONTEXT_STUB_HITS.extend(x for x in vm.probe_log if x not in CONTEXT_STUB_HITS)
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(rets + seen))
@@ -15269,6 +16633,8 @@ class _DxeRflVM(_DxeDeepVM, _RflVM):
                     call += [a] + ([None] if p in "JD" else [])
                 if depth >= _DXE_DEPTH:
                     raise _DxAbort
+                if o.ps:
+                    self.rinv = getattr(self, "rinv", set()) | {mref}
                 self.init_class(o.t)
                 return self.note(self.invoke(mref, call, depth))
             raise _DxAbort
@@ -15276,10 +16642,12 @@ class _DxeRflVM(_DxeDeepVM, _RflVM):
 
 
 def _dxe_reflective(dx):
-    """True when the dex references Class.getDeclaredMethod / getMethod (a reflected mixer chain)."""
+    """True when the dex references Class.getDeclaredMethod / getMethod (a reflected mixer chain) or getDeclaredField /
+    getField (a D18 v2 chain: decryptByte'd class + field names -> Field.get, fixtures strdec_*)."""
     for mi in range(dx.n_met):
         c, _, n = struct.unpack_from("<HHI", dx.d, dx.o_met + 8 * mi)
-        if dx.typ(c) == "Ljava/lang/Class;" and dx.s(n) in ("getDeclaredMethod", "getMethod"):
+        if dx.typ(c) == "Ljava/lang/Class;" and dx.s(n) in ("getDeclaredMethod", "getMethod", "getDeclaredField",
+                                                            "getField"):
             return True
     return False
 

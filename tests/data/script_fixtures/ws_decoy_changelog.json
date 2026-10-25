@@ -1,0 +1,11 @@
+{
+ "decoy": true,
+ "material": "CHANGELOG\n- removed the eval() and system() helpers from the admin page\n- python helper now uses subprocess.run instead of os.system(\"ls\")\n",
+ "rep": "webshell",
+ "transform": "live",
+ "key": null,
+ "expected": null,
+ "note": "webshell-request-primitive-model decoy: a changelog that only NAMES eval()/system() -- no server code, no request read",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ws_gen.py tests/data/script_fixtures/ws_src  (stdlib; literal shell sources)",
+ "oracle_cmd": "file tests/data/script_fixtures/ws_src/ws_decoy_notes.txt -> ASCII text; grep -cE '<\\?php|<%|\\$_(GET|POST)|request\\.get' -> 0 (not a web shell)"
+}

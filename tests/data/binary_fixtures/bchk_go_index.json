@@ -1,0 +1,29 @@
+{
+ "family": "bounds_check_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "bchk_go_index_a.bin",
+ "file_b": "bchk_go_index_b.bin",
+ "expected_facts": {
+  "bounds_check_calls_a": "0",
+  "bounds_check_calls_b": "1",
+  "bounds_compares_a": "0",
+  "bounds_compares_b": "1",
+  "unchecked_accesses_a": "1",
+  "unchecked_accesses_b": "0",
+  "bounds_check_twin": "b",
+  "bounds_check_kind": "go_panic_index",
+  "bounds_check_sink": "runtime.panicIndex",
+  "bounds_limit": "7",
+  "buffer_length": "8",
+  "buffer_object": "buf8",
+  "buffer_object_size": "8",
+  "bounds_check_function": "get",
+  "bounds_check_added": "true"
+ },
+ "generator_cmd": "bash bchk_gen.sh OUT   # gcc asm-label runtime.panicIndex guard (synthetic Go-shaped)",
+ "oracle_cmd": "python3 bchk_oracle.py bchk_go_index_a.bin bchk_go_index_b.bin   # binutils objdump -d -C -M intel + readelf -sW + nm",
+ "decoy": false,
+ "note": "lib.binary.bounds_check_field(a, b, key); bounds_check_kind vocabulary SPECULATIVE (no GM label yet)"
+}

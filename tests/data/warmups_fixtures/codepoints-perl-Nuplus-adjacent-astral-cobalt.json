@@ -1,0 +1,9 @@
+{
+ "codec": "codepoints-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17 😀",
+ "encoded": "\\N{U+004E}\\N{U+0069}\\N{U+0063}\\N{U+0065}\\N{U+0020}\\N{U+0077}\\N{U+006F}\\N{U+0072}\\N{U+006B}\\N{U+0020}\\N{U+0064}\\N{U+0065}\\N{U+0063}\\N{U+006F}\\N{U+0064}\\N{U+0069}\\N{U+006E}\\N{U+0067}\\N{U+0020}\\N{U+0074}\\N{U+0068}\\N{U+0069}\\N{U+0073}\\N{U+0020}\\N{U+0077}\\N{U+0061}\\N{U+0072}\\N{U+006D}\\N{U+0075}\\N{U+0070}\\N{U+0021}\\N{U+0020}\\N{U+0054}\\N{U+006F}\\N{U+0020}\\N{U+0073}\\N{U+006F}\\N{U+006C}\\N{U+0076}\\N{U+0065}\\N{U+002C}\\N{U+0020}\\N{U+0073}\\N{U+0075}\\N{U+0062}\\N{U+006D}\\N{U+0069}\\N{U+0074}\\N{U+0020}\\N{U+0074}\\N{U+0068}\\N{U+0069}\\N{U+0073}\\N{U+0020}\\N{U+0065}\\N{U+0078}\\N{U+0061}\\N{U+0063}\\N{U+0074}\\N{U+0020}\\N{U+0061}\\N{U+006E}\\N{U+0073}\\N{U+0077}\\N{U+0065}\\N{U+0072}\\N{U+0020}\\N{U+0074}\\N{U+006F}\\N{U+0020}\\N{U+0074}\\N{U+0068}\\N{U+0065}\\N{U+0020}\\N{U+0047}\\N{U+0061}\\N{U+006D}\\N{U+0065}\\N{U+0020}\\N{U+004D}\\N{U+0061}\\N{U+0073}\\N{U+0074}\\N{U+0065}\\N{U+0072}\\N{U+003A}\\N{U+0020}\\N{U+0063}\\N{U+006F}\\N{U+0062}\\N{U+0061}\\N{U+006C}\\N{U+0074}\\N{U+002D}\\N{U+006F}\\N{U+0074}\\N{U+0074}\\N{U+0065}\\N{U+0072}\\N{U+002D}\\N{U+0031}\\N{U+0037}\\N{U+0020}\\N{U+1F600}",
+ "generator_cmd": "printf %s \"$plain\" | perl -CSD -0777 -ne 'print join(\"\", map { sprintf(\"\\\\N{U+%04X}\", ord) } split //)'",
+ "oracle_cmd": "perl -CSD -e 'print eval(qq{\"$ENV{encoded}\"})'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-otter-17 😀",
+ "expected": "match"
+}

@@ -1,0 +1,151 @@
+"""Stdlib struct writer for multi-hive evidence zips (cross-hive synthesis fixtures). The regf cell writer is the one of
+tests/data/meta_fixtures/regf/GENERATOR_regf_keys.py.txt (nk/lh/vk/value-list cells), extended with seq1 != seq2,
+a base-block FileName and version knobs. Usage: python3 -I GENERATOR_regf_hivekit.py.txt <outdir>
+  hivekit_a.zip: D25 flavor -- renamed hive-NNN.hiv members, root values Marker "HUNTRESS-HIVE-<host>" + Ordinal,
+    FileName = tail of the kebab-cased root name; the planted hive carries host 1001's marker but a FileName that
+    belongs to another hive; plus a README.txt (not regf).
+  hivekit_b.zip: SYSTEM-style hives, host label from ControlSet001\\Control\\ComputerName\\ComputerName : ComputerName;
+    the planted hive is labelled WS-ALPHA like two others, but its last written is 3 years off and seq1 != seq2.
+  hivekit_decoy.zip: renamed impostors (text with a .hiv name, an "rgef" magic) -- no regf member."""
+import io
+import re
+import struct
+import sys
+import zipfile
+
+out = sys.argv[1]
+
+
+class Hive:
+    def __init__(self):
+        self.cells = bytearray()
+
+    def alloc(self, payload):
+        off = 0x20 + len(self.cells)
+        size = (len(payload) + 4 + 7) & ~7
+        self.cells += struct.pack("<i", -size) + payload + b"\0" * (size - 4 - len(payload))
+        return off
+
+    def patch(self, off, at, fmt, *vals):
+        struct.pack_into(fmt, self.cells, off - 0x20 + 4 + at, *vals)
+
+
+def utf16(s):
+    return s.encode("utf-16-le")
+
+
+def build(seq1, seq2, base_ts, root, fname, minor=5):
+    """root = (name, ts, [values], [children]); value = (name, type, data bytes)."""
+    h = Hive()
+    nks = []     # the root nk is the FIRST cell of the first hbin (as Windows writes it; regipy relies on that)
+
+    def key(node, parent):
+        name, ts, values, children = node
+        nm = name.encode("latin-1")
+        flags = 0x20 | (0x2C if parent is None else 0)
+        nk = h.alloc(b"nk" + struct.pack("<HQIIIIIIIIIIIIIIIHH", flags, ts, 0, parent or 0, 0, 0, 0xFFFFFFFF,
+                                         0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 0, 0, 0, 0, len(nm), 0) + nm)
+        nks.append(nk)
+        offs = [key(c, nk) for c in children]
+        if offs:
+            def lhash(n):
+                v = 0
+                for c in n.upper():
+                    v = (v * 37 + ord(c)) & 0xFFFFFFFF
+                return v
+            lst = h.alloc(b"lh" + struct.pack("<H", len(offs)) + b"".join(
+                struct.pack("<II", o, lhash(c[0])) for o, c in zip(offs, children)))
+            h.patch(nk, 0x14, "<I", len(offs))
+            h.patch(nk, 0x1C, "<I", lst)
+        if values:
+            vks = []
+            for vn, vt, vd in values:
+                vnb = vn.encode("latin-1")
+                if len(vd) <= 4:
+                    size, doff = 0x80000000 | len(vd), struct.unpack("<I", vd.ljust(4, b"\0"))[0]
+                else:
+                    size, doff = len(vd), h.alloc(vd)
+                vks.append(h.alloc(b"vk" + struct.pack("<HIIIHH", len(vnb), size, doff, vt, 1, 0) + vnb))
+            vl = h.alloc(b"".join(struct.pack("<I", o) for o in vks))
+            h.patch(nk, 0x24, "<II", len(vks), vl)
+        return nk
+
+    root_off = key(root, None)
+    sd = struct.pack("<BBHIIII", 1, 0, 0x8004, 0, 0, 0, 0)
+    sk = h.alloc(b"sk\0\0" + struct.pack("<IIII", 0, 0, len(nks), len(sd)) + sd)
+    h.patch(sk, 4, "<II", sk, sk)
+    for nk in nks:
+        h.patch(nk, 0x2C, "<I", sk)
+    body = bytes(h.cells)
+    hbin_size = (0x20 + len(body) + 8 + 0xFFF) & ~0xFFF
+    free = hbin_size - 0x20 - len(body)
+    hbin = b"hbin" + struct.pack("<IIQQI", 0, hbin_size, 0, base_ts, 0) + body + struct.pack("<i", free) + b"\0" * (free - 4)
+    fn = utf16(fname[-31:])[:64].ljust(64, b"\0")      # Windows keeps the last 31 UTF-16 chars of the path
+    base = b"regf" + struct.pack("<IIQIIIIIII", seq1, seq2, base_ts, 1, minor, 0, 1, root_off, hbin_size, 1) + fn
+    base = base.ljust(508, b"\0")
+    ck = 0
+    for i in range(0, 508, 4):
+        ck ^= struct.unpack_from("<I", base, i)[0]
+    base += struct.pack("<I", ck)
+    return base.ljust(0x1000, b"\0") + hbin
+
+
+def sz(s):
+    return utf16(s + "\0")
+
+
+def ft(unix):
+    return (unix + 11644473600) * 10000000
+
+
+def kebab(s):
+    return re.sub(r"(?<!^)(?=[A-Z])", "-", s).lower() + ".hiv"
+
+
+def d25(root, marker, ordinal, ts, fname=None, seq=(2, 2)):
+    r = (root, ts - 15, [("Marker", 1, sz(marker)), ("Ordinal", 4, struct.pack("<I", ordinal))], [])
+    return build(seq[0], seq[1], ts, r, fname or kebab(root))
+
+
+def write_zip(path, members):
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for n, b in members:
+            zi = zipfile.ZipInfo(n, (2026, 1, 1, 0, 0, 0))
+            zi.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(zi, b)
+
+
+T = ft(1792800000)     # 2026-10-24T00:00:00Z
+write_zip(out + "/hivekit_a.zip", [
+    ("hive-001.hiv", d25("HuntressArtifactAssemblyLine", "HUNTRESS-HIVE-1001", 4203, T + 600)),
+    ("hive-002.hiv", d25("QuietHarborLedgerArchive", "HUNTRESS-HIVE-2002", 4204, T + 120)),
+    ("hive-003.hiv", d25("CopperLanternSignalRelay", "HUNTRESS-HIVE-1001", 4205, T + 300)),
+    ("hive-004.hiv", d25("NorthwindPayrollShadow", "HUNTRESS-HIVE-2002", 4206, T + 900)),
+    ("hive-005.hiv", d25("VelvetCipherOrchardKeep", "HUNTRESS-HIVE-1001", 4207, T + 450,
+                         fname=kebab("QuietHarborLedgerArchive"))),
+    ("README.txt", b"Hives exported from two workstations. Host labels were removed.\n"),
+])
+
+T2 = ft(1760000000)    # 2025-10-09T08:53:20Z
+
+
+def system(host, ts, seq=(5, 5)):
+    cn = ("ComputerName", ts - 40, [("ComputerName", 1, sz(host))], [])
+    ctl = ("Control", ts - 30, [], [("ComputerName", ts - 35, [], [cn])])
+    r = ("ROOT", ts - 10, [], [("ControlSet001", ts - 20, [], [ctl]), ("Select", ts - 25, [("Current", 4, b"\1\0\0\0")], [])])
+    return build(seq[0], seq[1], ts, r, "\\SystemRoot\\System32\\Config\\SYSTEM")
+
+
+write_zip(out + "/hivekit_b.zip", [
+    ("evidence/sys_a.bin", system("WS-ALPHA", T2 + 7200)),
+    ("evidence/sys_b.bin", system("WS-BRAVO", T2 + 3600)),
+    ("evidence/sys_c.bin", system("WS-ALPHA", T2 + 5400)),
+    ("evidence/sys_d.bin", system("WS-BRAVO", T2 + 1800)),
+    ("evidence/sys_e.bin", system("WS-ALPHA", T2 - 94608000, seq=(9, 8))),   # 3 years earlier, dirty
+])
+
+write_zip(out + "/hivekit_decoy.zip", [
+    ("hive-001.hiv", b"regf? no: a text file renamed to .hiv\n" * 4),
+    ("hive-002.hiv", b"rgef" + b"\0" * 4092),
+    ("notes.txt", b"nothing here\n"),
+])

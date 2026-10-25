@@ -1,0 +1,9 @@
+{
+ "codec": "delta-chain",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "U+004E U+001B U+10FFFA U+0002 U+10FFBB U+0057 U+10FFF8 U+0003 U+10FFF9 U+10FFB5 U+0044 U+0001 U+10FFFE U+000C U+10FFF5 U+0005 U+0005 U+10FFF9 U+10FFB9 U+0054 U+10FFF4 U+0001 U+000A U+10FFAD U+0057 U+10FFEA U+0011 U+10FFFB U+0008 U+10FFFB U+10FFB1 U+10FFFF U+0034 U+001B U+10FFB1 U+0053 U+10FFFC U+10FFFD U+000A U+10FFEF U+10FFC7 U+10FFF4 U+0053 U+0002 U+10FFED U+000B U+10FFFC U+000B U+10FFAC U+0054 U+10FFF4 U+0001 U+000A U+10FFAD U+0045 U+0013 U+10FFE9 U+0002 U+0011 U+10FFAC U+0041 U+000D U+0005 U+0004 U+10FFEE U+000D U+10FFAE U+0054 U+10FFFB U+10FFB1 U+0054 U+10FFF4 U+10FFFD U+10FFBB U+0027 U+001A U+000C U+10FFF8 U+10FFBB U+002D U+0014 U+0012 U+0001 U+10FFF1 U+000D U+10FFC8 U+10FFE6 U+0043 U+000C U+10FFF3 U+10FFFF U+000B U+0008 U+10FFB9 U+003B U+10FFFD U+000D U+10FFFD U+10FFFF U+10FFBF U+0004 U+0006",
+ "generator_cmd": "node -e 'let p=0; process.stdout.write([...process.argv[1]].map(c=>{const o=c.codePointAt(0); const d=((o-p)%0x110000+0x110000)%0x110000; p=o; return \"U+\"+d.toString(16).toUpperCase().padStart(4,\"0\")}).join(\" \"))' \"$plain\"",
+ "oracle_cmd": "ruby -e 'a=0; print ENV[\"encoded\"].split.map { |t| a=(a+t.sub(\"U+\",\"\").hex)%0x110000; a }.pack(\"U*\")'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

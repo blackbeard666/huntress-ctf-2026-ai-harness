@@ -1,0 +1,8 @@
+{
+ "field": "wal.checkpoint_sequence",
+ "expected": "1",
+ "generator_cmd": "python3 -c 'sqlite3: page_size=512, WAL, 40-row txn, PRAGMA wal_checkpoint(PASSIVE) -> (0,18,18), then 2 small txns restart the WAL at frame 1 (new salts, 16 stale frames left); copy -wal/-shm'",
+ "oracle_cmd": "od -An -tu4 --endian=big -j12 -N4 snap-wal -> 1",
+ "decoy": false,
+ "member": "app.db-wal"
+}

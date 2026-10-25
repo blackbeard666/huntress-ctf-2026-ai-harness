@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_sha256",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> decoy_string.png",
+ "oracle_cmd": "as above: no valid SQLite header -> none",
+ "decoy": true,
+ "member": "panel-004.png"
+}

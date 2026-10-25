@@ -437,17 +437,53 @@ def _rep_candidates(rep, material):
 
 # ------------------------------------------------------------------------------------------------ transforms
 
+_XOR_TABLES = {}
+
+
+def _xor_table(k):
+    """bytes.translate table for a single-byte XOR key (built once per key)."""
+    t = _XOR_TABLES.get(k)
+    if t is None:
+        t = _XOR_TABLES[k] = bytes(x ^ k for x in range(256))
+    return t
+
+
 def _xor(b, k):
-    return bytes(x ^ k[i % len(k)] for i, x in enumerate(b)) if k else b
+    # same bytes as `bytes(x ^ k[i % len(k)] for i, x in enumerate(b))`, via translate / one big-int XOR (fast path)
+    if not k:
+        return b
+    b = bytes(b)
+    if len(k) == 1:
+        return b.translate(_xor_table(k[0]))
+    n = len(b)
+    if not n:
+        return b""
+    ks = (bytes(k) * (n // len(k) + 1))[:n]
+    return (int.from_bytes(b, "big") ^ int.from_bytes(ks, "big")).to_bytes(n, "big")
+
+
+_PREFIX_XOR = {}
 
 
 def _rolling(b, k0, flavour):
-    out, prev = bytearray(), k0
-    for x in b:
-        p = x ^ prev
-        out.append(p)
-        prev = x if flavour == "cipher" else p
-    return bytes(out)
+    # cipher: p[i] = b[i] ^ b[i-1] (b[-1] = k0) -> one big-int XOR; plain: p[i] = k0 ^ b[0] ^ .. ^ b[i] -> the
+    # key-0 prefix XOR (memoised per input, the caller sweeps 256 keys) translated by k0. Same bytes as the byte loop.
+    b = bytes(b)
+    n = len(b)
+    if not n:
+        return b""
+    if flavour == "cipher":
+        return (int.from_bytes(b, "big") ^ int.from_bytes(bytes([k0]) + b[:-1], "big")).to_bytes(n, "big")
+    px = _PREFIX_XOR.get(b)
+    if px is None:
+        out, prev = bytearray(n), 0
+        for i, x in enumerate(b):
+            prev ^= x
+            out[i] = prev
+        if len(_PREFIX_XOR) > 32:
+            _PREFIX_XOR.clear()
+        px = _PREFIX_XOR[b] = bytes(out)
+    return px.translate(_xor_table(k0)) if k0 else px
 
 
 def _transform_candidates(transform, key, data):
@@ -619,9 +655,14 @@ def decode(material, rep, transform, key=None):
     if re.sub(r"[^a-z]", "", rep.lower()) in ("asar", "electronasar", "appasar", "squirrel", "squirrelnupkg", "nupkg",
                                               "squirrelsetup", "electronapp"):   # electron-asar-squirrel-route
         return _electron_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("rpa", "renpy", "renpyarchive", "rpyc", "renpycompiled", "unityfs",
+                                              "unitybundle", "gamearchive", "love", "lovearchive"):   # game-archive-carriers
+        return _game_decode(material, transform, key)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("deb", "rpm", "apk", "ipk", "pkgscripts", "maintainerscripts",
                                               "linuxpackage", "rpmspec", "pkgbuild", "apkbuild"):   # linux-package-maintainer-scripts
         return _pkg_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("webshell", "webshellmodel", "webshellprimitives"):   # webshell-request-primitive-model
+        return _ws_decode(material, transform, key)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -1032,6 +1073,8 @@ def wsh_decode(src):
 # (`| base64 -d | sh`, `xxd -r -p`, gunzip ...) and RUN heredoc bodies. Each candidate is peeled name-agnostically
 # (peel_plan); descriptor variables first, then the continued `#` marker, echo payloads, other variables. Only
 # consulted when nothing earlier yielded a plan.
+# A Mix project (`mix.exs`, target eex-heex-template-carrier) reads its `aliases:` task strings `"cmd .."` (the
+# `--cd`/`--app` options dropped) as the RUN commands: build-time shell execution like a Dockerfile RUN.
 _BH_DOCKER = re.compile(r"(?im)^[ \t]*(?:FROM|ARG|ENV|RUN|LABEL)[ \t]+\S")
 _BH_MAKE = re.compile(r"(?m)^\t[^\n]*\S|^(?:override[ \t]+|export[ \t]+)*[A-Za-z_][\w.-]*[ \t]*(?:::?=|:::=|\?=|\+=|!=)"
                       r"|^define[ \t]+\w")
@@ -1043,6 +1086,7 @@ _BH_ENV_PAIR = re.compile(r"""(?P<name>[A-Za-z_]\w*)=(?P<val>"(?:[^"\\]|\\.)*"|'
 _BH_VAR = re.compile(r"\$(?:\((?P<p>[A-Za-z_][\w.-]*)\)|\{(?P<b>[A-Za-z_][\w.-]*)(?::?[-+](?P<d>[^}]*))?\}|(?P<s>[A-Za-z_]\w*))")
 _BH_ECHO = re.compile(r"""(?:^|[\s;&|(`"'\[,])(?:/(?:usr/)?bin/)?(?P<cmd>echo|printf)\b(?P<args>(?:\\.|"[^"]*"|'[^']*'|[^|;&<>)`\n])*)""")
 _BH_HEREDOC = re.compile(r"""<<-?[ \t]*(["']?)(?P<tag>[A-Za-z_]\w*)\1[^\n]*\n(?P<body>.*?)\n[ \t]*(?P=tag)[ \t]*(?:\n|$)""", re.S)
+_MIX_CMD = re.compile(r"""(?<![\w"'])(?:"cmd[ \t]+(?P<c>(?:[^"\\\r\n]|\\.)+)"|'cmd[ \t]+(?P<c2>(?:[^'\\\r\n]|\\.)+)')""")
 
 
 def _bh_lines(src, docker):
@@ -1130,11 +1174,15 @@ def _build_host_codecs(src, budget=0.6):
             return []
         docker = bool(_BH_DOCKER.search(src))
         make = bool(_BH_MAKE.search(src))
-        if not (docker or make):
+        mix = not (docker or make) and "Mix.Project" in src
+        if not (docker or make or mix):
             return []
         end = time.time() + budget
         env, order, run_cmds, marks = {}, [], [], []
-        lines = _bh_lines(src, docker and not make)
+        lines = [] if mix else _bh_lines(src, docker and not make)
+        if mix:                                   # mix.exs `aliases:` task strings: `cmd ..` is a build-time shell run
+            run_cmds = [re.sub(r"^(?:--(?:cd|app)[ \t]+\S+[ \t]+)+", "", _cl_unescape(m.group("c") or m.group("c2")))
+                        for m in _MIX_CMD.finditer(src[:1 << 20])]
         k = 0
         while k < len(lines):
             ln = lines[k]
@@ -1419,6 +1467,34 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _gm_codecs(src) if c["plain"] not in have and (not have or any(
             c["plain"] != p and c["plain"].startswith(p) for p in have))]
         out = x + out
+    if _depth < 2 and isinstance(src, str) and _BEAM_CUE.search(src[:1 << 18]) and \
+            re.search(r"(?i)descriptor", src[:1 << 20]):
+        # Erlang / Elixir folded descriptor (binaries, charlists, sigils, `++` / `<>`, Base.decode64!): a gap, or the
+        # full plan ahead of a first-piece reading it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _beam_codecs(src) if c["plain"] not in have and (not have or any(
+            c["plain"] != p and c["plain"].startswith(p) for p in have))]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and _TFH_CUE.search(src[:1 << 18]) and \
+            re.search(r"(?i)descriptor", src[:1 << 20]):
+        # Terraform descriptor folded over locals / var defaults / heredocs / join / format / base64decode: a gap, the
+        # full plan ahead of a piece reading it contains, else after every earlier reading
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _tfh_codecs(src) if c["plain"] not in have]
+        ext = [c for c in x if not have or any(c["plain"] != p and p in c["plain"] for p in have)]
+        out = ext + out + [c for c in x if c not in ext]
+    if _depth < 1 and isinstance(src, str) and (_JSP_CUE.search(src[:1 << 16]) or (
+            "\\u" in src and "String" in src and _JAVA_CUE.search(src[:1 << 16]))):
+        # JSP / JSPX / .tag / Java / .war: a gap, or -- when unicode escapes, includes or constant concatenations can
+        # hide a dead (commented) decoy -- the live reading ahead of readings it disagrees with entirely
+        have = [c.get("plain") for c in out if c.get("plain")]
+        if not have or "\\u" in src or src[:4] == "PK\x03\x04" or _JSP_INCL.search(src[:1 << 20]) or \
+                re.search(r"=\s*[A-Za-z_]\w*\s*\+", src[:1 << 20]):
+            x = _jsp_codecs(src, raw)
+            if not have:
+                out = out + x
+            elif x and not set(have) & {c["plain"] for c in x}:
+                out = x + out
     return out
 
 
@@ -1882,7 +1958,7 @@ def _ahk_literals(src, limit=16):
 # binders the wider set misses (Zig `: []const u8 =`, Nim `descriptor_x* =`, Dart `const String x =`) and Dart / C
 # adjacent-literal concatenation `'a'\n 'b';`. Read only as a gap (no plan elsewhere) or, when an escape / adjacency
 # reading extends an existing plan, ahead of that lossy prefix reading. Pure regex, bounded, never raises.
-_CL_DESC = re.compile(r"""descriptor[_-](?P<id>\w+)[ \t]*\*?[ \t]*(?::[ \t]*(?:&'[A-Za-z_]\w*|[^=\r\n;{}()"'`]){1,48}?[ \t]*)?(?::=|=)[ \t]*""", re.I)
+_CL_DESC = re.compile(r"""descriptor[_-](?P<id>\w+)[ \t]*\*?[ \t]*(?::[ \t]*(?:&'[A-Za-z_]\w*|\[[^\]\r\n=]{1,24}\]|[^=\r\n;{}()"'`]){1,48}?[ \t]*)?(?::=|=)[ \t]*""", re.I)
 _CL_ESC = re.compile(r"""\\(u\{[0-9A-Fa-f]{1,6}\}|u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|\r?\n[ \t]*|.)""", re.S)
 _CL_SIMPLE = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "\\": "\\", '"': '"', "'": "'", "`": "`", "$": "$"}
 
@@ -1948,6 +2024,73 @@ def _cl_literal(src, i):
     return None, i, False
 
 
+# Rust value expressions (target rust-cargo-buildrs-route): `concat!("a", r#"b"#, 'c', 1)`, byte strings `b".."` /
+# `br#".."#`, `[u8; N]` / `&[118, 61, 0x33]` arrays, `vec![..]`, `String::from(..)` / `String::from_utf8(vec![..])` /
+# `str::from_utf8(&[..])` / `_lossy` wrappers and a trailing `.to_string()` / `.unwrap()`. Statically folded, never run.
+_RS_WRAP = re.compile(r"""\s*(?:(?:(?:std|core|alloc)::)?(?:(?:string|str)::)?(?:String|str)::from(?:_utf8(?:_lossy)?)?\s*\(|"""
+                      r"""(?:std::)?concat!\s*[(\[{]|vec!\s*(?=\[)|&(?:'static\s+)?|\*)""")
+_RS_INT = re.compile(r"\s*(0x[0-9A-Fa-f_]+|0o[0-7_]+|0b[01_]+|\d[\d_]*)(?:_?u8)?\s*(,|\])")
+
+
+def _rs_value(src, i):
+    """(text, end) of one Rust descriptor value expression at src[i] (see above), else (None, i)."""
+    try:
+        cat, depth = False, 0
+        while depth < 6:
+            w = _RS_WRAP.match(src, i, i + 200)
+            if not w or w.end() == i:
+                break
+            cat, i, depth = cat or "concat!" in w.group(0), w.end(), depth + 1
+        pieces, j = [], i
+        while len(pieces) < 256:
+            k = j + len(re.match(r"\s*", src[j:j + 200]).group(0))
+            if src[k:k + 1] == "[":                                     # byte array
+                vals, p = [], k + 1
+                while len(vals) < 1 << 16:
+                    m = _RS_INT.match(src, p, p + 64)
+                    if not m:
+                        break
+                    s = m.group(1).replace("_", "").lower()
+                    vals.append(int(s, 0) if s[:2] in ("0x", "0o", "0b") else int(s))
+                    p = m.end()
+                    if m.group(2) == "]":
+                        break
+                    if re.match(r"\s*\]", src[p:p + 64]):
+                        p += len(re.match(r"\s*\]", src[p:p + 64]).group(0))
+                        break
+                if not vals or max(vals) > 255 or src[p - 1] != "]":
+                    return None, i
+                b = bytes(vals)
+                try:
+                    t = b.decode("utf-8")
+                except UnicodeDecodeError:
+                    t = b.decode("latin-1")
+                pieces.append(t)
+                j = p
+            elif cat and re.match(r"-?\d[\d_.]*\b", src[k:k + 40]):    # concat! numeric / bool literal
+                n = re.match(r"-?\d[\d_.]*\b|true\b|false\b", src[k:k + 40]).group(0)
+                pieces.append(n)
+                j = k + len(n)
+            else:
+                b0 = k + 1 if src[k:k + 2] in ('b"', "b'") else k
+                lit, e, _ = _cl_literal(src, b0)
+                if lit is None:
+                    break
+                pieces.append(lit)
+                j = e
+            if not cat:
+                break
+            c = re.match(r"\s*,", src[j:j + 200])
+            if not c:
+                break
+            j += c.end()
+        if not pieces or (cat and not re.match(r"\s*,?\s*[)\]}]", src[j:j + 200])):
+            return None, i
+        return "".join(pieces), j
+    except Exception:  # noqa: BLE001
+        return None, i
+
+
 def _cl_dedent(body):
     """Swift / Dart multi-line literal: drop the opening newline and the closing delimiter's indentation."""
     body = re.sub(r"^[ \t]*\r?\n", "", body)
@@ -1969,7 +2112,10 @@ def _cl_literals(src, limit=24):
             break
         lit, end, novel = _cl_literal(src, m.end())
         if lit is None:
-            continue
+            lit, end = _rs_value(src, m.end())                      # Rust concat! / b"" / [u8] / from_utf8(vec![..])
+            if lit is None:
+                continue
+            novel = True
         pieces, ext = [lit], novel
         while len(pieces) < 64:                    # "a" + "b" / ++ / & / .. / ~, Dart/C adjacent 'a' 'b' (then ; or ))
             c = re.match(r"""\s*(\+\+|\+|&|\.\.|~)?\s*(?=b?r#*["']|#+["']|["']|[ \t]*\\\\)""", src[end:end + 200])
@@ -2160,16 +2306,23 @@ def _marker_continued(src, am):
 _ANALYSIS_BARE_RE = re.compile(r"HUNTRESS_ANALYSIS_V(\d+):(?:([A-Za-z0-9_]+)-)?[ \t]*\r?\n")
 
 
+# An EEx `<%#` / HEEx `<%!--` / HTML `<!--` block comment opened on the marker line (target eex-heex-template-carrier)
+# stays open over bare material lines up to its `%>` / `--%>` / `-->` closer, which no material token matches.
+_MARK_BLOCK_OPEN = ("<%!--", "<%#", "<!--")
+
+
 def _marker_lines(src, start, end):
-    """Material tokens of the comment lines after the marker line [start:end) sharing its leader; [] when none."""
+    """Material tokens of the comment lines after the marker line [start:end) sharing its leader (or any bare line
+    inside a still-open EEx/HEEx/HTML block comment); [] when none."""
     ls = src.rfind("\n", 0, start) + 1
     lead = src[ls:start].strip()
-    if not lead or len(lead) > 4:
+    block = lead in _MARK_BLOCK_OPEN
+    if not lead or (len(lead) > 4 and not block):
         return []
     parts = []
     for line in src[end:end + (1 << 16)].lstrip("\r").split("\n")[1:65]:
         s = line.strip()
-        m = _MARK_CONT_RE.match(line) if s.startswith(lead) else None
+        m = _MARK_CONT_RE.match(line) if block or s.startswith(lead) else None
         if not m or not m.group(1):
             break
         parts.append(m.group(1))
@@ -2398,7 +2551,7 @@ def _peel_children(b, tag):
             k = bytes.fromhex(m.group(1))
             yield bytes(c ^ k[i % len(k)] for i, c in enumerate(b))
         for k in range(1, 256):
-            x = bytes(c ^ k for c in b)
+            x = bytes(b).translate(_xor_table(k))
             if x[:2] == b"v=" or x[:1] == b"{" or _d._printable(x):
                 yield x
 
@@ -3202,11 +3355,551 @@ def _psv3_lossy(full, part):
     return sq(full) == sq(part)
 
 
+# ------------------------------------------------------------------------------------------------ BEAM (Erlang / Elixir)
+# Target beam-erlang-elixir-route: Erlang `.erl` / escript and Elixir `.ex`/`.exs` descriptors beyond the D25
+# `descriptor_x = ".."` shape: `-define(DESCRIPTOR_X, ..).`, `descriptor_x() -> ..`, `@descriptor_x ..` attributes,
+# `defp descriptor, do: ..`, `%{descriptor: ..}` / `#{descriptor => ..}` map values, binaries `<<"..">>` /
+# `<<118,61,51>>`, charlists `[118,61,51]` / `'..'` / `$v`, sigils `~s(..)` `~S"""..""""` `~c".."`, `++` / `<>` concat,
+# `|>` pipes, `?MACRO` / `@attr` / `part()` / variable references, and the constant calls Base.decode64! / :base64.decode
+# / Base.decode16! / binary:decode_hex / reverse / list_to_binary / Enum.join. _beam_codecs() folds them statically
+# (never runs anything); consulted by find_codecs() only behind _BEAM_CUE + a `descriptor` name. Never raises.
+_BEAM_CUE = re.compile(r"""-module\(|-define\(|escript|defmodule\s|\bdefp?\s+\w|<<|~[sScC][(\[{<"'|/]|\s(?:<>|\+\+)\s|"""
+                       r"""@descriptor|Base\.decode|\bbase64[:.]|\|>""")
+_BEAM_DEF = re.compile(r"""(?m)-define\(\s*(?P<d>\w+)\s*,|^[ \t]*(?P<f>[a-z]\w*)\(\s*\)\s*->|"""
+                       r"""^[ \t]*defp?\s+(?P<x>\w+[?!]?)(?:\(\s*\))?(?:\s*,\s*do:|\s+do\b)|"""
+                       r"""^[ \t]*@(?P<a>\w+)[ \t]+(?=\S)|(?<![\w.:@?])(?P<v>[A-Za-z_]\w*)[ \t]*=(?![=>~])[ \t]*|"""
+                       r"""(?<![\w.])(?P<k>descriptor\w*)(?::[ \t]+|\s*=>\s*)""")
+_BEAM_ESC = {"n": "\n", "t": "\t", "r": "\r", "s": " ", "e": "\x1b", "d": "\x7f", "b": "\b", "f": "\f", "v": "\v",
+             "0": "\0", "a": "\a"}
+_BEAM_ID = {"list_to_binary", "binary_to_list", "iolist_to_binary", "characters_to_binary", "characters_to_list",
+            "to_string", "to_charlist", "iodata_to_binary", "chardata_to_string", "flatten", "trim", "concat",
+            "list_to_bitstring", "bitstring_to_list", "unicode_characters_to_binary", "to_binary", "append", "join",
+            "iolist_to_iovec", "string"}
+
+
+class _BeamFail(Exception):
+    pass
+
+
+class _Beam:
+    def __init__(self, src, env, end):
+        self.s, self.env, self.end, self.seen = src, env, end, set()
+        self.erl = "-module(" in src or "escript" in src[:256]
+
+    def ws(self, i, nl=True):
+        s = self.s
+        while i < len(s):
+            c = s[i]
+            if c in " \t\r" or (nl and c == "\n"):
+                i += 1
+            elif nl and c in "%#" and (c == "#" or s[i + 1:i + 2] in ("%", " ", "\t", "\n", "")) and \
+                    s[i + 1:i + 2] != "{":
+                j = s.find("\n", i)
+                i = len(s) if j < 0 else j + 1
+            else:
+                break
+        return i
+
+    def expr(self, i):
+        v, i = self.term(i)
+        while True:
+            if time.time() > self.end:
+                raise _BeamFail
+            j = self.ws(i)
+            op = self.s[j:j + 2]
+            if self.erl and op[:1] == '"':                           # Erlang adjacent literals `"a" "b"`
+                w, i = self.term(j)
+                v = self.text(v) + self.text(w)
+            elif op in ("++", "<>"):
+                w, i = self.term(self.ws(j + 2))
+                v = self.text(v) + self.text(w)
+            elif op == "|>":
+                k = self.ws(j + 2)
+                m = re.compile(r"[:\w.]+[!?]?").match(self.s, k)
+                if not m:
+                    raise _BeamFail
+                k = self.ws(m.end(), False)
+                args = []
+                if self.s[k:k + 1] == "(":
+                    args, k = self.args(k + 1, ")")
+                v, i = self.call(m.group(0), [v] + args), k
+            else:
+                return v, i
+
+    def text(self, v):
+        if isinstance(v, int):
+            if not 0 <= v < 0x110000:
+                raise _BeamFail
+            return chr(v)
+        if isinstance(v, list):
+            return "".join(self.text(x) for x in v)
+        return v
+
+    def args(self, i, close):
+        out = []
+        i = self.ws(i)
+        while self.s[i:i + 1] != close:
+            km = re.compile(r"\w+:\s").match(self.s, i)          # keyword arg `case: :lower` -- skipped
+            if km:
+                vm = re.compile(r"\s*:?[\w\"]+").match(self.s, km.end())
+                i = self.ws(vm.end() if vm else km.end())
+            else:
+                v, i = self.expr(i)
+                out.append(v)
+                i = self.ws(i)
+            if self.s[i:i + 1] == ",":
+                i = self.ws(i + 1)
+            elif self.s[i:i + 1] != close:
+                raise _BeamFail
+        return out, i + 1
+
+    def quoted(self, i, close, esc, heredoc=False):
+        s, out = self.s, []
+        while True:
+            if i >= len(s) or time.time() > self.end:
+                raise _BeamFail
+            if heredoc and s.startswith(close, i):
+                body = "".join(out)
+                ind = body[body.rfind("\n") + 1:]
+                if ind.strip():
+                    raise _BeamFail
+                lines = body[:len(body) - len(ind)].split("\n")
+                lines = lines[1:] if lines and not lines[0].strip() else lines
+                return "\n".join(ln[len(ind):] if ln.startswith(ind) else ln.lstrip() for ln in lines), i + len(close)
+            c = s[i]
+            if not heredoc and c == close:
+                return "".join(out), i + 1
+            if c == "\\" and esc:
+                n = s[i + 1:i + 2]
+                hm = re.compile(r"x\{([0-9A-Fa-f]{1,6})\}|x([0-9A-Fa-f]{2})|u\{([0-9A-Fa-f]{1,6})\}|u([0-9A-Fa-f]{4})|"
+                                r"([0-7]{1,3})").match(s, i + 1)
+                if hm:
+                    out.append(chr(int(next(g for g in hm.groups()[:4] if g), 16) if not hm.group(5)
+                                   else int(hm.group(5), 8)))
+                    i = hm.end()
+                elif n == "\n":
+                    i += 2
+                else:
+                    out.append(_BEAM_ESC.get(n, n))
+                    i += 2
+            elif c == "\\" and not esc and s[i + 1:i + 2] == close and not heredoc:
+                out.append(close)
+                i += 2
+            elif c == "#" and esc and s[i + 1:i + 2] == "{":
+                raise _BeamFail                                  # runtime interpolation
+            else:
+                out.append(c)
+                i += 1
+
+    def term(self, i):
+        s = self.s
+        i = self.ws(i)
+        if s.startswith('"""', i) or s.startswith("'''", i):
+            return self.quoted(i + 3, s[i:i + 3], True, True)
+        c = s[i:i + 1]
+        if c in "\"'":
+            return self.quoted(i + 1, c, True)
+        if c == "~":
+            m = re.compile(r"~([sScC])").match(s, i)
+            if not m:
+                raise _BeamFail
+            j, esc = m.end(), m.group(1).islower()
+            if s.startswith('"""', j) or s.startswith("'''", j):
+                v, j = self.quoted(j + 3, s[j:j + 3], esc, True)
+            else:
+                o = s[j:j + 1]
+                close = {"(": ")", "[": "]", "{": "}", "<": ">"}.get(o, o)
+                if not o or o not in "([{<\"'|/":
+                    raise _BeamFail
+                v, j = self.quoted(j + 1, close, esc)
+            while j < len(s) and s[j].isalpha():
+                j += 1
+            return v, j
+        if s.startswith("<<", i):
+            out, j = [], self.ws(i + 2)
+            while not s.startswith(">>", j):
+                v, j = self.term(j)
+                j = self.ws(j)
+                tm = re.compile(r"(?::\d+)?(?:/[\w-]+)?").match(s, j)  # `:8` size / `/utf8` type spec
+                j = self.ws(tm.end())
+                out.append(self.text(v))
+                if s[j:j + 1] == ",":
+                    j = self.ws(j + 1)
+                elif not s.startswith(">>", j):
+                    raise _BeamFail
+            return "".join(out), j + 2
+        if c == "[":
+            out, j = self.args(i + 1, "]")
+            return out, j
+        if c == "(":
+            v, j = self.expr(i + 1)
+            j = self.ws(j)
+            if s[j:j + 1] != ")":
+                raise _BeamFail
+            return v, j + 1
+        if c == "$" and i + 1 < len(s):                           # Erlang `$v`
+            if s[i + 1] == "\\":
+                return _BEAM_ESC.get(s[i + 2:i + 3], s[i + 2:i + 3]), i + 3
+            return ord(s[i + 1]), i + 2
+        m = re.compile(r"(\d+)#([0-9A-Za-z]+)|0x([0-9A-Fa-f_]+)|0o([0-7_]+)|0b([01_]+)|(\d[\d_]*)").match(s, i)
+        if m:
+            g = m.groups()
+            v = int(g[1], int(g[0])) if g[0] else int((g[2] or g[3] or g[4] or g[5]).replace("_", ""),
+                                                      16 if g[2] else 8 if g[3] else 2 if g[4] else 10)
+            return v, m.end()
+        if c == "?" and i + 1 < len(s):
+            mm = re.compile(r"\?(\w+)").match(s, i)
+            if mm and mm.group(1) in self.env:
+                return self.ref(mm.group(1)), mm.end()
+            return ord(s[i + 1]), i + 2                           # Elixir `?v`
+        m = re.compile(r"(@)?(:?[A-Za-z_][\w.:]*[!?]?)").match(s, i)
+        if not m:
+            raise _BeamFail
+        name, j = m.group(2), self.ws(m.end(), False)
+        if m.group(1):
+            return self.ref(name), m.end()
+        if s[j:j + 1] == "(":
+            args, j = self.args(j + 1, ")")
+            if not args and name in self.env:
+                return self.ref(name), j
+            return self.call(name, args), j
+        if name in self.env:
+            return self.ref(name), m.end()
+        raise _BeamFail
+
+    def ref(self, name):
+        if name in self.seen or name not in self.env:
+            raise _BeamFail
+        self.seen.add(name)
+        try:
+            return self.expr(self.env[name])[0]
+        finally:
+            self.seen.discard(name)
+
+    def call(self, name, args):
+        f = re.split(r"[.:]", name.lstrip(":"))[-1].rstrip("!?").lower()
+        mod = name.lstrip(":").lower()
+        if not args:
+            raise _BeamFail
+        a = args[0]
+        if f in ("reverse",):
+            return a[::-1] if isinstance(a, (list, str)) else _fail()
+        if f == "join" and isinstance(a, list):
+            sep = self.text(args[1]) if len(args) > 1 else ""
+            return sep.join(self.text(x) for x in a)
+        t = self.text(a)
+        if f in _BEAM_ID:
+            return t.strip() if f == "trim" else t
+        if f in ("decode64", "decode", "decode_to_string", "mime_decode", "url_decode64", "mime_decode_to_string") \
+                and ("base64" in mod or "decode64" in f):
+            t = re.sub(r"\s+", "", t)
+            raw = base64.urlsafe_b64decode(t + "=" * (-len(t) % 4)) if "url" in f else \
+                base64.b64decode(t + "=" * (-len(t) % 4))
+        elif f in ("decode16", "decode_hex") or (f == "decode" and "hex" in mod):
+            raw = bytes.fromhex(re.sub(r"\s+", "", t))
+        elif f == "decode32":
+            raw = base64.b32decode(t.upper() + "=" * (-len(t) % 8))
+        else:
+            raise _BeamFail
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return raw.decode("latin-1")
+
+
+def _fail():
+    raise _BeamFail
+
+
+def _beam_literals(src, budget=0.4):
+    """[(name, folded value)] for every `descriptor`-named BEAM binding / map value, else []."""
+    end = time.time() + budget
+    env, keys = {}, []
+    for m in _BEAM_DEF.finditer(src):
+        g = m.lastgroup
+        name = m.group(g)
+        if g == "k":
+            keys.append((name, m.end()))
+        elif name not in env:
+            env[name] = m.end()
+    ev, out = _Beam(src, env, end), []
+    for name, pos in [(n, p) for n, p in env.items() if "descriptor" in n.lower()] + keys:
+        if time.time() > end:
+            break
+        try:
+            v = ev.text(ev.expr(pos)[0])
+        except Exception:
+            continue
+        if v and (name, v) not in out:
+            out.append((name, v))
+    return out
+
+
+def _beam_codecs(src, budget=0.5):
+    """Codec entries for BEAM descriptors whose folded value peels to a plan (marker TAG as the layer hint)."""
+    try:
+        lits = _beam_literals(src)
+        am = _ANALYSIS_RE.search(src) if lits else None
+        end, out = time.time() + budget, []
+        for ident, lit in lits:
+            if time.time() > end:
+                break
+            plain = None
+            for cand in (lit, re.sub(r"\s+", "", lit)):
+                plain = peel_plan(cand, am.group("tag") if am else "", budget=min(0.3, max(0.05, end - time.time())))
+                if plain:
+                    break
+            if plain:
+                out.append({"id": re.sub(r"(?i)^descriptor_?", "", ident) or ident, "rep": "descriptor",
+                            "transform": "identity", "key": "", "material": lit, "plain": plain})
+        return out
+    except Exception:
+        return []
+
+
+# ------------------------------------------------------------------------------------------- JSP / JSPX carrier twists
+# Target jsp-jspx-unicode-carrier: javac reads `\uXXXX` escapes before it lexes, so `\u002f\u002f String DESCRIPTOR_X =
+# ".."` is a dead comment (a decoy) and `// note \u000a String descriptor_x = ".."` is live code; JSPX bodies are XML
+# (entities decoded outside CDATA, then the unicode escapes); `<%@ include file=..%>` / `<jsp:directive.include ../>` /
+# `<jsp:include page=..>` / web.xml `<include-prelude>` splice another member (.war/.jar zip, .jspf/.tag/.tagx); and a
+# descriptor may be `A + ".."` over other String constants. jsp_text() gives the normalised live Java text per entry
+# page (comments stripped, constant concatenations folded into one literal); _jsp_codecs() reads it through
+# find_codecs at depth 1. Gated on JSP/JSPX/Java cues (cheap substring tests); never raises.
+_JSP_CUE = re.compile(r"<%|<jsp:|xmlns:jsp\b|\.jspf?\b|\.tagx?\b")
+_JAVA_CUE = re.compile(r"\bimport\s+java\.|\bclass\s+\w+|\bstatic\s+final\s+String\b")
+_JSP_UESC = re.compile(r"(?<!\\)((?:\\\\)*)\\u+([0-9a-fA-F]{4})")
+_JSP_INCL = re.compile(r"""<%@\s*include\s+file\s*=\s*["']([^"']+)["']\s*%>|"""
+                       r"""<jsp:(?:directive\.)?include\s+(?:file|page)\s*=\s*["']([^"']+)["'][^>]*>""")
+_JSP_REGION = re.compile(r"<%(?!--)[!=]?(.*?)%>|<jsp:(declaration|scriptlet|expression)\b[^>]*>(.*?)</jsp:\2\s*>", re.S)
+_JSP_LIT = r'"(?:[^"\\\n]|\\.)*"'
+_JSP_CAT = re.compile(r"(?:%s|[A-Za-z_]\w*)(?:\s*\+\s*(?:%s|[A-Za-z_]\w*))+" % (_JSP_LIT, _JSP_LIT))
+_JSP_DEF = re.compile(r"\b([A-Za-z_]\w*)\s*=\s*((?:%s|[A-Za-z_]\w*)(?:\s*\+\s*(?:%s|[A-Za-z_]\w*))*)\s*;"
+                      % (_JSP_LIT, _JSP_LIT))
+_JSP_JESC = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "s": " ", "0": "\0", '"': '"', "'": "'", "\\": "\\"}
+
+
+def _jsp_uesc(s):
+    return _JSP_UESC.sub(lambda m: m.group(1) + chr(int(m.group(2), 16)), s)
+
+
+def _jsp_xml(s):
+    """XML text of a JSPX body: entities decoded outside CDATA, CDATA sections kept verbatim."""
+    import html
+    out, pos = [], 0
+    for m in re.finditer(r"<!\[CDATA\[(.*?)\]\]>", s, re.S):
+        out.append(html.unescape(s[pos:m.start()]))
+        out.append(m.group(1))
+        pos = m.end()
+    return "".join(out) + html.unescape(s[pos:])
+
+
+def _jsp_strip_comments(s):
+    """Java code with `//` and `/* */` comments removed (string / char literals respected)."""
+    out, i, n = [], 0, len(s)
+    while i < n:
+        c = s[i]
+        if c == '"':
+            m = re.compile(_JSP_LIT).match(s, i)
+            j = m.end() if m else i + 1
+            out.append(s[i:j])
+            i = j
+        elif c == "'":
+            m = re.compile(r"'(?:[^'\\\n]|\\[^\n]{1,6}?)'").match(s, i)
+            j = m.end() if m else i + 1
+            out.append(s[i:j])
+            i = j
+        elif s.startswith("//", i):
+            j = s.find("\n", i)
+            i = n if j < 0 else j
+        elif s.startswith("/*", i):
+            j = s.find("*/", i + 2)
+            out.append(" ")
+            i = n if j < 0 else j + 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def _jsp_lit_val(lit):
+    return re.sub(r"\\(.)", lambda m: _JSP_JESC.get(m.group(1), m.group(1)), lit[1:-1])
+
+
+def _jsp_fold(java):
+    """Fold `NAME = "a" + OTHER + "b";` String-constant concatenations into one literal (bounded, in source order)."""
+    env = {}
+    for m in list(_JSP_DEF.finditer(java))[:256]:
+        parts, ok = re.findall(r'%s|[A-Za-z_]\w*' % _JSP_LIT, m.group(2)), True
+        val = []
+        for p in parts:
+            if p.startswith('"'):
+                val.append(_jsp_lit_val(p))
+            elif p in env:
+                val.append(env[p])
+            else:
+                ok = False
+                break
+        if ok and (len(parts) > 1 or parts[0].startswith('"') or parts[0] in env):
+            env[m.group(1)] = "".join(val)[:1 << 20]
+
+    def cat(m):
+        parts = re.findall(r'%s|[A-Za-z_]\w*' % _JSP_LIT, m.group(0))
+        if not all(p.startswith('"') or p in env for p in parts):
+            return m.group(0)
+        v = "".join(_jsp_lit_val(p) if p.startswith('"') else env[p] for p in parts)
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+    if not env:
+        return java
+    java = _JSP_CAT.sub(cat, java)
+    # a bare `DESCRIPTOR_X = OTHER;` alias of a folded constant
+    return re.sub(r"\b((?i:descriptor)\w*)\s*=\s*([A-Za-z_]\w*)\s*;",
+                  lambda m: f'{m.group(1)} = "{env[m.group(2)]}";' if m.group(2) in env and '"' not in env[m.group(2)]
+                  and "\\" not in env[m.group(2)] else m.group(0), java)
+
+
+def _jsp_members(data):
+    """{name: text} of a .war/.jar zip (bytes via zipfile; a lossy-decoded str of a STORED zip by its local headers),
+    JSP-family / Java / web.xml members only; {} when it is not a zip."""
+    import io
+    import zipfile
+    keep = re.compile(r"(?i)\.(?:jspx?|jspf|tagx?|java|xml|txt)$")
+    out = {}
+    try:
+        if isinstance(data, (bytes, bytearray)) and bytes(data[:4]) == b"PK\x03\x04":
+            with zipfile.ZipFile(io.BytesIO(bytes(data))) as z:
+                for zi in z.infolist()[:2000]:
+                    if keep.search(zi.filename) and zi.file_size < (4 << 20):
+                        out[zi.filename] = z.read(zi).decode("utf-8", "replace")
+                    if len(out) >= 200:
+                        break
+        elif isinstance(data, str) and data[:4] == "PK\x03\x04":
+            body = data.split("PK\x01\x02", 1)[0]
+            for chunk in body.split("PK\x03\x04")[1:201]:
+                for p in range(22, 41):                 # u16 name length + u16 extra length (0) survive the decode
+                    ln = ord(chunk[p - 4]) + 256 * ord(chunk[p - 3]) if len(chunk) > p else 0
+                    if 0 < ln < 512 and chunk[p - 2:p] == "\x00\x00" and keep.search(chunk[p:p + ln]) and \
+                            re.fullmatch(r"[\w$./-]+", chunk[p:p + ln]):
+                        out[chunk[p:p + ln]] = chunk[p + ln:]
+                        break
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
+def _jsp_resolve(ref, cur, members):
+    import posixpath
+    ref = ref.strip()
+    base = posixpath.dirname(cur)
+    for cand in (ref.lstrip("/"), posixpath.normpath(posixpath.join(base, ref)).lstrip("/")):
+        if cand in members:
+            return cand
+    tail = [k for k in members if k.endswith("/" + ref.lstrip("/").split("/")[-1]) or k == ref.split("/")[-1]]
+    return tail[0] if len(tail) == 1 else None
+
+
+def _jsp_page(name, text, members, depth=0, seen=()):
+    """Page text with its includes spliced in (bounded depth, cycle-safe)."""
+    if depth > 4 or not members:
+        return text
+
+    def sub(m):
+        ref = _jsp_resolve(m.group(1) or m.group(2), name, members)
+        if not ref or ref in seen:
+            return m.group(0)
+        return _jsp_page(ref, members[ref], members, depth + 1, seen + (ref,))
+    return _JSP_INCL.sub(sub, text)
+
+
+def _jsp_java(text, xml=None):
+    """Live Java of one JSP/JSPX/tag/Java text: XML entities (JSPX), unicode escapes, comments, constant folds."""
+    if xml is None:
+        xml = bool(re.search(r"<jsp:root\b|xmlns:jsp\b|<jsp:(?:declaration|scriptlet|expression)\b", text[:1 << 16]))
+    text = re.sub(r"<%--.*?--%>", " ", text, flags=re.S)
+    regions, bare = [], False
+    for m in _JSP_REGION.finditer(text):
+        if m.group(3) is not None:
+            body = _jsp_xml(m.group(3)) if xml else m.group(3)
+            kind = {"declaration": "!", "expression": "="}.get(m.group(2), "")
+        else:
+            body = m.group(1)
+            kind = text[m.start() + 2:m.start() + 3] if text[m.start() + 2:m.start() + 3] in "!=" else ""
+        regions.append((kind, body))
+    if not regions:
+        if not _JAVA_CUE.search(text[:1 << 16]):
+            return None
+        regions, bare = [("", text)], True
+    java = "\n".join(_jsp_strip_comments(_jsp_uesc(b)) if bare else f"<%{k}{_jsp_strip_comments(_jsp_uesc(b))}%>"
+                     for k, b in regions)
+    return _jsp_fold(java)
+
+
+def jsp_text(data, members=None):
+    """[(entry, normalised live Java text)] of a JSP / JSPX / .tag(x) / Java source, or of every entry page of a
+    .war/.jar zip (includes and web.xml include-prelude/-coda spliced from the other members). [] when nothing reads.
+    Never raises."""
+    try:
+        zm = _jsp_members(data)
+        if zm:
+            members = zm
+        if not members:
+            text = data.decode("utf-8", "replace") if isinstance(data, (bytes, bytearray)) else (data or "")
+            j = _jsp_java(text)
+            return [("", j)] if j else []
+        wx = next((v for k, v in members.items() if k.lower().endswith("web-inf/web.xml")), "")
+        pre = re.findall(r"<include-prelude>\s*([^<\s]+)\s*</include-prelude>", wx)
+        coda = re.findall(r"<include-coda>\s*([^<\s]+)\s*</include-coda>", wx)
+        included = set()
+        for k, v in members.items():
+            for m in _JSP_INCL.finditer(v):
+                r = _jsp_resolve(m.group(1) or m.group(2), k, members)
+                if r:
+                    included.add(r)
+        for p in pre + coda:
+            r = _jsp_resolve(p, "", members)
+            if r:
+                included.add(r)
+        pages = [k for k in members if re.search(r"(?i)\.(?:jspx?|tagx?|java)$", k) and k not in included] or \
+            [k for k in members if re.search(r"(?i)\.(?:jspx?|jspf|tagx?|java)$", k)]
+        out = []
+        for k in pages[:64]:
+            parts = [members[r] for r in (_jsp_resolve(p, "", members) for p in pre) if r]
+            parts.append(_jsp_page(k, members[k], members, 0, (k,)))
+            parts += [members[r] for r in (_jsp_resolve(p, "", members) for p in coda) if r]
+            xml = k.lower().endswith(("x", ".tagx"))
+            j = "\n".join(filter(None, (_jsp_java(t, xml or None) for t in parts)))
+            if j:
+                out.append((k, j))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _jsp_codecs(src, raw=None, budget=0.6):
+    """Codecs read from the normalised live Java of a JSP-family source / .war (see jsp_text). Never raises."""
+    out, end = [], time.time() + budget
+    try:
+        for name, j in jsp_text(raw if raw is not None and raw[:4] == b"PK\x03\x04" else src):
+            if time.time() > end:
+                break
+            if not name and j.strip() == (src or "").strip():
+                continue                                # nothing normalised: the plain reading already ran
+            for c in find_codecs(j, 1):
+                if c.get("plain"):
+                    out.append(dict(c, id=f"{c['id']}@jsp{':' + name if name else ''}"))
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
 def v3_plan(src):
     """The v=3 plan text of a source (str or bytes, UTF-16/BOM'd sources too), else None. Never raises."""
     try:
         if isinstance(src, (bytes, bytearray)):
             b = bytes(src)
+            if b[:4] == b"PK\x03\x04" and re.search(rb"\.(?:jspx?|jspf|tagx?)\b", b[:1 << 22]):
+                for c in _jsp_codecs(None, b):          # .war / .jar: deflated members, includes across members
+                    if c["plain"].lstrip().startswith("v=3"):
+                        return c["plain"]
             u = _utf16(b[:1 << 22]) if (b[:2] in (b"\xff\xfe", b"\xfe\xff") or b[1:64:2].count(0) > 20
                                          or b[0:64:2].count(0) > 20) else None
             src = (u or b).decode("utf-8", "ignore").lstrip("﻿")
@@ -3806,7 +4499,8 @@ def _bat_codecs(src, budget=0.4):
 _ONE_FDSO = bytes.fromhex("e716e3bd65261145a4c48d4d0b7a9eac")      # {BDE316E7-2665-4511-A4C4-8D4D0B7A9EAC}
 _MAGICS = (b"PK\x03\x04", b"\xd0\xcf\x11\xe0", b"\x1f\x8b", b"L\x00\x00\x00\x01\x14\x02\x00",
            bytes.fromhex("e4525c7b8cd8a74daeb15378d02996d3"), b"ITSF",
-           b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d", b"\x0a\x0d\x0d\x0a")
+           b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4", b"\x4d\x3c\xb2\xa1", b"\xa1\xb2\x3c\x4d", b"\x0a\x0d\x0d\x0a",
+           b"RPA-", b"RENPY RPC2", b"UnityFS\x00")
 _U16_RUN = re.compile(rb"(?:[\t\n\r\x20-\x7e]\x00){12,}")
 _U16_RUN_S = re.compile(r"(?:[\t\n\r\x20-\x7e]\x00){12,}")
 _MAT_TOKEN = re.compile(r"[A-Za-z0-9+/=_\-:%.]{24,}")
@@ -4288,6 +4982,347 @@ def _godot_codecs(src, raw=None, depth=0):
     return []
 
 
+# ------------------------------------------------------------------------------------------------ game archive carriers
+# Target game-archive-carriers: a script riding in a game archive. Ren'Py `.rpa` (`RPA-3.0 <hex index offset> <hex
+# key>\n`, RPA-3.2 `RPA-3.2 <off> <v> <key..>` (key = XOR of the fields after the offset), RPA-2.0 `RPA-2.0 <off>\n`
+# no key): the index at <off> is zlib(pickle {path: [(offset ^ key, length ^ key[, prefix])]}), member data stored raw
+# (prefix bytes first). The index is read by a RESTRICTED hand-rolled pickle reader (_pk_load: dict/list/tuple/str/
+# bytes/int/None/bool + memo; the only GLOBALs are the protocol-2 bytes builders `_codecs.encode` / `__builtin__.bytes`,
+# applied as data, never imported; any other opcode -> None). Ren'Py `.rpyc` (`RENPY RPC2`, slot table {u32 slot, u32
+# start, u32 len} until slot 0, each slot zlib(pickle of the AST)): the AST is NEVER unpickled -- _pk_strings walks the
+# opcodes and keeps the string literals only. `.love` = zip (the zip walk); UnityFS bundles (u32 BE version, unity
+# version/revision, u64 size, u32 csize/usize/flags of the blocks info, LZ4/LZ4HC/none blocks) -> each node's bytes plus
+# its long printable runs (TextAsset `m_Script` is u32 len + utf-8). game_members(data) -> [(path, text)].
+_PK_FIXED = {0x80: 1, 0x95: 8, 0x47: 8, 0x4a: 4, 0x4b: 1, 0x4d: 2, 0x68: 1, 0x6a: 4, 0x71: 1, 0x72: 4, 0x82: 1,
+             0x83: 2, 0x84: 4}
+_PK_COUNTED = {0x54: (4, "s"), 0x55: (1, "s"), 0x58: (4, "u"), 0x42: (4, "b"), 0x43: (1, "b"), 0x8c: (1, "u"),
+               0x8d: (8, "u"), 0x8e: (8, "b"), 0x96: (8, "b"), 0x8a: (1, "l"), 0x8b: (4, "l")}
+_PK_LINE = {0x49: 1, 0x4c: 1, 0x46: 1, 0x53: 1, 0x56: 1, 0x50: 1, 0x67: 1, 0x70: 1, 0x63: 2, 0x69: 2}
+_PK_NOARG = set(b"(.012NRabdelostu}])Q") | set(range(0x81, 0x82)) | set(range(0x85, 0x8a)) | set(range(0x8f, 0x95)) | \
+    {0x97, 0x98}
+_RPA_HDR = re.compile(rb"\ARPA-(2\.0|3\.0|3\.2) ([0-9A-Fa-f]{1,16})((?: [0-9A-Fa-f]{1,16})*)[ \t]*\r?\n")
+
+
+class _PkG:
+    __slots__ = ("mod", "name")
+
+    def __init__(self, mod, name):
+        self.mod, self.name = mod, name
+
+
+def _pk_load(data, max_ops=400000):
+    """Restricted pickle reader -> the object, or None (any opcode outside the data subset, or malformed)."""
+    st, marks, memo, i, n, ops = [], [], {}, 0, len(data), 0
+
+    def pop_mark():
+        k = marks.pop()
+        items = st[k:]
+        del st[k:]
+        return items
+    try:
+        while i < n and ops < max_ops:
+            op, i, ops = data[i], i + 1, ops + 1
+            if op == 0x80:
+                i += 1
+            elif op == 0x95:
+                i += 8
+            elif op == 0x7d:                                     # }
+                st.append({})
+            elif op == 0x5d:                                     # ]
+                st.append([])
+            elif op == 0x29:                                     # )
+                st.append(())
+            elif op == 0x28:                                     # (
+                marks.append(len(st))
+            elif op in (0x58, 0x8c, 0x8d, 0x54, 0x55, 0x42, 0x43, 0x8e):
+                w, kind = _PK_COUNTED[op]
+                ln = int.from_bytes(data[i:i + w], "little", signed=op == 0x54)
+                if ln < 0 or i + w + ln > n:
+                    return None
+                raw, i = data[i + w:i + w + ln], i + w + ln
+                st.append(raw.decode("utf-8", "surrogatepass") if kind == "u" else bytes(raw))
+            elif op == 0x4a:                                     # BININT
+                st.append(int.from_bytes(data[i:i + 4], "little", signed=True))
+                i += 4
+            elif op == 0x4b:
+                st.append(data[i])
+                i += 1
+            elif op == 0x4d:
+                st.append(int.from_bytes(data[i:i + 2], "little"))
+                i += 2
+            elif op in (0x8a, 0x8b):                             # LONG1 / LONG4
+                w = 1 if op == 0x8a else 4
+                ln = int.from_bytes(data[i:i + w], "little", signed=True)
+                if ln < 0 or ln > 64:
+                    return None
+                st.append(int.from_bytes(data[i + w:i + w + ln], "little", signed=True))
+                i += w + ln
+            elif op == 0x74:                                     # t
+                st.append(tuple(pop_mark()))
+            elif op in (0x85, 0x86, 0x87):
+                k = op - 0x84
+                t = tuple(st[-k:])
+                del st[-k:]
+                st.append(t)
+            elif op == 0x73:                                     # s
+                v, k = st.pop(), st.pop()
+                st[-1][k] = v
+            elif op == 0x75:                                     # u
+                items = pop_mark()
+                d = st[-1]
+                for j in range(0, len(items) - 1, 2):
+                    d[items[j]] = items[j + 1]
+            elif op == 0x61:                                     # a
+                v = st.pop()
+                st[-1].append(v)
+            elif op == 0x65:                                     # e
+                items = pop_mark()
+                st[-1].extend(items)
+            elif op == 0x94:
+                memo[len(memo)] = st[-1]
+            elif op in (0x71, 0x72):                             # BINPUT / LONG_BINPUT
+                w = 1 if op == 0x71 else 4
+                memo[int.from_bytes(data[i:i + w], "little")] = st[-1]
+                i += w
+            elif op in (0x68, 0x6a):                             # BINGET / LONG_BINGET
+                w = 1 if op == 0x68 else 4
+                st.append(memo[int.from_bytes(data[i:i + w], "little")])
+                i += w
+            elif op == 0x4e:
+                st.append(None)
+            elif op in (0x88, 0x89):
+                st.append(op == 0x88)
+            elif op == 0x63:                                     # GLOBAL: data builders only, never imported
+                j = data.index(b"\n", i)
+                k = data.index(b"\n", j + 1)
+                st.append(_PkG(data[i:j].decode("ascii"), data[j + 1:k].decode("ascii")))
+                i = k + 1
+            elif op == 0x93:                                     # STACK_GLOBAL
+                name, mod = st.pop(), st.pop()
+                st.append(_PkG(mod, name))
+            elif op == 0x52:                                     # REDUCE
+                args, fn = st.pop(), st.pop()
+                if not isinstance(fn, _PkG) or not isinstance(args, tuple):
+                    return None
+                if (fn.mod, fn.name) == ("_codecs", "encode") and args and isinstance(args[0], str):
+                    st.append(args[0].encode("latin-1"))
+                elif fn.name == "bytes" and fn.mod in ("__builtin__", "builtins") and not args:
+                    st.append(b"")
+                else:
+                    return None
+            elif op == 0x2e:                                     # STOP
+                return None if isinstance(st[-1], _PkG) else st[-1]
+            else:
+                return None
+    except Exception:  # noqa: BLE001 - malformed pickle
+        return None
+    return None
+
+
+def _pk_strings(data, max_ops=400000, limit=4000):
+    """String literals of a pickle stream, walking its opcodes without building or importing anything."""
+    out, i, n, ops = [], 0, len(data), 0
+    try:
+        while i < n and ops < max_ops and len(out) < limit:
+            op, i, ops = data[i], i + 1, ops + 1
+            if op in _PK_COUNTED:
+                w, kind = _PK_COUNTED[op]
+                ln = int.from_bytes(data[i:i + w], "little", signed=w == 4 and kind in "sl")
+                if ln < 0 or i + w + ln > n:
+                    break
+                raw, i = data[i + w:i + w + ln], i + w + ln
+                if kind in "usb" and len(raw) >= 2:
+                    try:
+                        out.append(raw.decode("utf-8"))
+                    except UnicodeDecodeError:
+                        pass
+            elif op in _PK_FIXED:
+                i += _PK_FIXED[op]
+            elif op in _PK_LINE:
+                for _ in range(_PK_LINE[op]):
+                    j = data.index(b"\n", i)
+                    if op == 0x56:
+                        out.append(data[i:j].decode("raw_unicode_escape"))
+                    elif op == 0x53:
+                        s = data[i:j].decode("latin-1").strip()
+                        if s[:1] in "'\"" and s[-1:] == s[:1]:
+                            out.append(s[1:-1].encode("latin-1").decode("unicode_escape"))
+                    i = j + 1
+            elif op == 0x2e:
+                if i < n and data[i] == 0x80:                     # pickles back to back
+                    continue
+                break
+            elif op not in _PK_NOARG:
+                break
+    except Exception:  # noqa: BLE001 - truncated stream: keep what was read
+        return out
+    return out
+
+
+def _zinflate(b, cap=8 << 20):
+    import zlib
+    try:
+        return zlib.decompressobj().decompress(b, cap)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def rpa_members(b):
+    """[(path, bytes)] of a Ren'Py RPA-2.0/3.0/3.2 archive, or [] (impostor / bad index)."""
+    m = _RPA_HDR.match(b[:200])
+    if not m:
+        return []
+    off, key = int(m.group(2), 16), 0
+    fields = m.group(3).split()
+    for f in (fields[1:] if m.group(1) == b"3.2" else fields) if m.group(1) != b"2.0" else ():
+        key ^= int(f, 16)
+    if not 0 < off < len(b):
+        return []
+    idx = _zinflate(b[off:])
+    idx = _pk_load(idx) if idx else None
+    out = []
+    if not isinstance(idx, dict):
+        return out
+    for path, ents in list(idx.items())[:2000]:
+        if not isinstance(path, (str, bytes)) or not isinstance(ents, (list, tuple)):
+            continue
+        path = path if isinstance(path, str) else path.decode("utf-8", "replace")
+        data = b""
+        for e in ents[:64]:
+            if not isinstance(e, (list, tuple)) or len(e) < 2 or not all(isinstance(x, int) for x in e[:2]):
+                break
+            o, ln = e[0] ^ key, e[1] ^ key
+            pre = e[2] if len(e) > 2 and isinstance(e[2], (bytes, str)) else b""
+            pre = pre.encode("latin-1") if isinstance(pre, str) else pre
+            if o < 0 or ln < len(pre) or o + ln - len(pre) > len(b) or ln > (8 << 20):
+                break
+            data += pre + b[o:o + ln - len(pre)]
+        out.append((path, data))
+    return out
+
+
+def rpyc_strings(b):
+    """String literals of a Ren'Py compiled script (RENPY RPC2 slots, or a legacy bare zlib pickle), or []."""
+    import struct
+    chunks = []
+    if b[:10] == b"RENPY RPC2":
+        p = 10
+        while p + 12 <= len(b) and len(chunks) < 16:
+            slot, start, ln = struct.unpack_from("<III", b, p)
+            if slot == 0:
+                break
+            if start + ln <= len(b):
+                chunks.append(b[start:start + ln])
+            p += 12
+    elif b[:1] == b"\x78":
+        chunks.append(b)
+    out = []
+    for c in chunks:
+        d = _zinflate(c)
+        if d and d[:1] == b"\x80":
+            out.extend(_pk_strings(d))
+    return out
+
+
+def unityfs_nodes(b, end=None):
+    """[(node path, bytes)] of a UnityFS asset bundle (LZ4 / LZ4HC / uncompressed blocks), or []."""
+    import struct
+    end = end or time.time() + 0.5
+    if b[:8] != b"UnityFS\x00":
+        return []
+    ver = struct.unpack_from(">I", b, 8)[0]
+    p = 12
+    for _ in range(2):
+        p = b.index(b"\x00", p) + 1
+    _size, csz, usz, flags = struct.unpack_from(">QIII", b, p)
+    p += 20
+    if ver >= 7:
+        p = (p + 15) & ~15
+    if flags & 0x80:
+        info, data_at = b[len(b) - csz:], p
+    else:
+        info, data_at = b[p:p + csz], p + csz
+    if flags & 0x200:
+        data_at = (data_at + 15) & ~15
+
+    def unpack(blob, kind, size):
+        if kind == 0:
+            return blob[:size]
+        if kind in (2, 3):
+            import lz4.block
+            return lz4.block.decompress(blob, uncompressed_size=size)
+        return None                                        # LZMA blocks: not read
+    info = unpack(info, flags & 0x3F, usz)
+    if not info:
+        return []
+    q = 16
+    nb = struct.unpack_from(">I", info, q)[0]
+    q += 4
+    stream, at = bytearray(), data_at
+    for _ in range(min(nb, 4096)):
+        bu, bc, bf = struct.unpack_from(">IIH", info, q)
+        q += 10
+        if time.time() > end or bu > (16 << 20) or len(stream) > (32 << 20):
+            return []
+        blk = unpack(b[at:at + bc], bf & 0x3F, bu)
+        if blk is None:
+            return []
+        stream += blk
+        at += bc
+    nn = struct.unpack_from(">I", info, q)[0]
+    q += 4
+    out = []
+    for _ in range(min(nn, 1024)):
+        o, sz, _nf = struct.unpack_from(">QQI", info, q)
+        q += 20
+        e = info.index(b"\x00", q)
+        out.append((info[q:e].decode("utf-8", "replace"), bytes(stream[o:o + sz])))
+        q = e + 1
+    return out
+
+
+_GAME_RUN = re.compile(rb"[\t\n\r\x20-\x7e\x80-\xff]{32,}")
+
+
+def game_members(data, budget=0.5):
+    """[(path, text)] of a game archive carrier: Ren'Py .rpa members, .rpyc string literals, UnityFS node runs
+    (TextAsset strings). [] when it is none of these. Never raises, never unpickles a class."""
+    out = []
+    try:
+        b = _gd_bytes(data)
+        end = time.time() + budget
+        if b[:4] == b"RPA-":
+            for p, fb in rpa_members(b):
+                if p.lower().endswith(".rpyc") or fb[:10] == b"RENPY RPC2":
+                    out.append((p + "#strings", "\n".join(rpyc_strings(fb))))
+                else:
+                    out.append((p, fb.decode("utf-8", "ignore")))
+        elif b[:10] == b"RENPY RPC2":
+            out.append(("#strings", "\n".join(rpyc_strings(b))))
+        elif b[:8] == b"UnityFS\x00":
+            for p, fb in unityfs_nodes(b, end):
+                out.extend((f"{p}@{m.start()}", m.group(0).decode("utf-8", "ignore"))
+                           for m in _GAME_RUN.finditer(fb[:16 << 20]))
+    except Exception:  # noqa: BLE001 - truncated / impostor: keep what was read
+        return out
+    return out
+
+
+def _game_decode(material, transform=None, key=None):
+    """decode() route for rep rpa / rpyc / renpy / unityfs / game_archive: the material is the archive itself (base64,
+    hex or latin-1 bytes). The plan of its first plan-bearing member, or None."""
+    try:
+        m = (material or "").strip()
+        for b in (b64(m), hex_bytes(m) if re.fullmatch(r"[0-9a-fA-F\s]+", m) else None, m.encode("latin-1", "ignore")):
+            if b and (b[:4] in (b"RPA-", b"PK\x03\x04") or b[:10] == b"RENPY RPC2" or b[:8] == b"UnityFS\x00"):
+                hits = _carrier_codecs(None, b)
+                if hits:
+                    return hits[0]["plain"]
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
 def _carrier_blobs(b, name="", depth=0, budget=None):
     """(member name, bytes) of every stream inside a container, recursively (zip / OLE+VBA / gzip / OneNote)."""
     import io
@@ -4301,6 +5336,9 @@ def _carrier_blobs(b, name="", depth=0, budget=None):
         if b[:4] in (b"GDPC", b"GDSC", b"RSCC") or b[-4:] == b"GDPC":   # Godot pack / tokenized script / resource
             for p, fb in godot_members(b, budget=max(0.05, min(0.5, budget - time.time()))):
                 yield f"{name}!{p}", fb
+        elif b[:4] == b"RPA-" or b[:10] == b"RENPY RPC2" or b[:8] == b"UnityFS\x00":   # game archives
+            for p, t in game_members(b, budget=max(0.05, min(0.5, budget - time.time()))):
+                yield f"{name}!{p}", t.encode("utf-8")
         elif b[:4] == b"PK\x03\x04":
             import zipfile
             z = zipfile.ZipFile(io.BytesIO(b))
@@ -20350,3 +21388,942 @@ def stage_outlier(plans, edges=None, members=None):
         return best[0][0]
     except Exception:  # noqa: BLE001
         return None
+
+
+# Target terraform-hcl-function-fold (cloud-iac-userdata-route reads script bodies; this reads the HCL side): a
+# Terraform descriptor folded through `locals { .. }` / `variable "x" { default = .. }` references, `"${local.a}${..}"`
+# interpolation, heredocs (`<<EOT`, `<<-EOT` indent strip), and `join` / `format` / `replace` / `base64decode` /
+# `jsonencode` / `concat` / `lower` / `upper` / `trimspace` / `chomp` / `reverse` / `substr` / `split` / `element` /
+# `lookup` / `coalesce` / `try` calls, under `#` / `//` / `/* */` comments, in either grammar (native HCL or `.tf.json`
+# where every string is a template). Values resolve statically (no terraform init/plan); every `descriptor`-named local,
+# variable, attribute or object key (a `null_resource` `triggers = {..}` map, a `provisioner "local-exec"` `command`,
+# a `data "external"` `program` list) is folded, then peeled with the marker TAG. Bounded, never raises.
+_TFH_CUE = re.compile(r"""(?m)^[ \t]*(?:locals|variable|resource|data|output|terraform|module)\b[^\n{=]*\{|"""
+                      r""""(?:locals|variable|resource)"[ \t]*:""")
+_TFH_ESC = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}
+
+
+class _TfhFail(Exception):
+    pass
+
+
+class _Tfh:
+    def __init__(self, s, env, end, depth=0):
+        self.s, self.n, self.env, self.end, self.depth = s, len(s), env, end, depth
+
+    def sub(self, s):
+        if self.depth > 12:
+            raise _TfhFail
+        return _Tfh(s, self.env, self.end, self.depth + 1)
+
+    def ws(self, i, nl=True):
+        s, n = self.s, self.n
+        while i < n:
+            c = s[i]
+            if c in " \t\r" or (nl and c == "\n"):
+                i += 1
+            elif c == "#" or s.startswith("//", i):
+                k = s.find("\n", i)
+                i = n if k < 0 else (k + 1 if nl else k)
+            elif s.startswith("/*", i):
+                k = s.find("*/", i + 2)
+                i = n if k < 0 else k + 2
+            else:
+                break
+        return i
+
+    def ident(self, i):
+        m = re.compile(r"[A-Za-z_][\w-]*").match(self.s, i)
+        return (m.group(0), m.end()) if m else (None, i)
+
+    # --- templates ---------------------------------------------------------------------------------------------------
+    def tpl(self, i, quoted):
+        """(text, end) of a template at s[i] (after the opening quote when quoted, else to the end of s)."""
+        s, n, buf, strip = self.s, self.n, [], False
+        while i < n:
+            if time.time() > self.end:
+                raise _TfhFail
+            c = s[i]
+            if quoted and c == '"':
+                return "".join(buf), i + 1
+            if quoted and c == "\n":
+                raise _TfhFail
+            if quoted and c == "\\":
+                x = s[i + 1:i + 2]
+                if x in "uU" and x:
+                    w = 4 if x == "u" else 8
+                    buf.append(chr(int(s[i + 2:i + 2 + w], 16)))
+                    i += 2 + w
+                    continue
+                buf.append(_TFH_ESC.get(x, "\\" + x))
+                i += 2
+                continue
+            if s.startswith(("$${", "%%{"), i):
+                buf.append(c + "{")
+                i += 3
+                continue
+            if s.startswith("%{", i):
+                raise _TfhFail                     # template directives: not folded
+            if s.startswith("${", i):
+                i += 2
+                if s.startswith("~", i):
+                    i += 1
+                    if buf:
+                        buf[-1] = buf[-1].rstrip()
+                v, i = self.expr(i)
+                i = self.ws(i)
+                if s.startswith("~", i):
+                    i, strip = i + 1, True
+                if not s.startswith("}", i):
+                    raise _TfhFail
+                buf.append(self.text(v))
+                i += 1
+                continue
+            j = i + 1
+            while j < n and s[j] not in '"\\$%\n':
+                j += 1
+            if not quoted and j < n and s[j] in '"\\\n':
+                j += 1
+            piece = s[i:j]
+            if strip:
+                piece, strip = piece.lstrip(), False
+            buf.append(piece)
+            i = j
+        if quoted:
+            raise _TfhFail
+        return "".join(buf), n
+
+    @staticmethod
+    def text(v):
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, (int, float)):
+            return str(int(v)) if float(v).is_integer() else repr(v)
+        if isinstance(v, str):
+            return v
+        raise _TfhFail
+
+    # --- expressions -------------------------------------------------------------------------------------------------
+    def expr(self, i):
+        v, i = self.postfix(i)
+        j = self.ws(i)
+        if self.s.startswith("?", j):                # cond ? a : b
+            a, j = self.expr(j + 1)
+            j = self.ws(j)
+            if not self.s.startswith(":", j):
+                raise _TfhFail
+            b, j = self.expr(j + 1)
+            return (a if v not in (False, None, "false") else b), j
+        return v, i
+
+    def postfix(self, i):
+        v, i = self.primary(i)
+        s = self.s
+        while True:
+            j = self.ws(i)
+            if s.startswith("[", j):
+                k, j = self.expr(j + 1)
+                j = self.ws(j)
+                if not s.startswith("]", j):
+                    raise _TfhFail
+                v, i = self.index(v, k), j + 1
+            elif s.startswith(".", j) and not s.startswith("..", j):
+                name, j2 = self.ident(j + 1)
+                if name is None:
+                    m = re.compile(r"\d+").match(s, j + 1)
+                    if not m:
+                        return v, i
+                    name, j2 = int(m.group(0)), m.end()
+                v, i = self.index(v, name), j2
+            else:
+                return v, i
+
+    @staticmethod
+    def index(v, k):
+        try:
+            if isinstance(v, list):
+                return v[int(k)]
+            if isinstance(v, dict):
+                return v[_Tfh.text(k)]
+        except Exception:
+            pass
+        raise _TfhFail
+
+    def primary(self, i):
+        s = self.s
+        i = self.ws(i)
+        if i >= self.n or time.time() > self.end:
+            raise _TfhFail
+        c = s[i]
+        if c == '"':
+            return self.tpl(i + 1, True)
+        m = re.compile(r"<<(-?)[ \t]*([A-Za-z_]\w*)[ \t]*\r?\n").match(s, i)
+        if m:
+            st = m.end()
+            e = re.compile(r"(?m)^[ \t]*" + re.escape(m.group(2)) + r"[ \t]*\r?$").search(s, st)
+            if not e:
+                raise _TfhFail
+            lines = s[st:e.start()].replace("\r\n", "\n").split("\n")[:-1]
+            if m.group(1):
+                ind = min((len(x) - len(x.lstrip(" \t")) for x in lines if x.strip()), default=0)
+                lines = [x[ind:] for x in lines]
+            body = "".join(x + "\n" for x in lines)
+            return self.sub(body).tpl(0, False)[0], e.end()
+        if c == "(":
+            v, j = self.expr(i + 1)
+            j = self.ws(j)
+            if not s.startswith(")", j):
+                raise _TfhFail
+            return v, j + 1
+        if c == "[":
+            out, j = [], i + 1
+            while True:
+                j = self.ws(j)
+                if s.startswith("]", j):
+                    return out, j + 1
+                if len(out) > 4096:
+                    raise _TfhFail
+                v, j = self.expr(j)
+                out.append(v)
+                j = self.ws(j)
+                if s.startswith(",", j):
+                    j += 1
+                elif not s.startswith("]", j):
+                    raise _TfhFail
+        if c == "{":
+            out, j = {}, i + 1
+            while True:
+                j = self.ws(j)
+                if s.startswith("}", j):
+                    return out, j + 1
+                if s.startswith('"', j):
+                    k, j = self.tpl(j + 1, True)
+                else:
+                    k, j = self.ident(j)
+                    if k is None:
+                        raise _TfhFail
+                j = self.ws(j)
+                if not s.startswith(("=", ":"), j):
+                    raise _TfhFail
+                out[k], j = self.expr(j + 1)
+                j = self.ws(j)
+                if s.startswith(",", j):
+                    j += 1
+                if len(out) > 4096:
+                    raise _TfhFail
+        m = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?").match(s, i)
+        if m:
+            t = m.group(0)
+            return (float(t) if any(x in t for x in ".eE") else int(t)), m.end()
+        name, j = self.ident(i)
+        if name is None:
+            raise _TfhFail
+        if name in ("true", "false"):
+            return name == "true", j
+        if name == "null":
+            return None, j
+        k = self.ws(j, nl=False)
+        if s.startswith("(", k):
+            return self.call(name, k + 1)
+        if name in ("local", "var") and s.startswith(".", j):
+            ref, j2 = self.ident(j + 1)
+            if ref is None:
+                raise _TfhFail
+            return self.ref(name, ref), j2
+        raise _TfhFail                             # resource / data / path / count references: unknown
+
+    def ref(self, kind, name):
+        key = (kind, name)
+        ent = self.env.get(key)
+        if ent is None:
+            raise _TfhFail
+        if ent[0] == "done":
+            return ent[1]
+        if ent[0] == "busy":
+            raise _TfhFail
+        self.env[key] = ("busy",)
+        try:
+            p, pos = ent[1], ent[2]
+            v = p.expr(pos)[0] if isinstance(pos, int) else p.json_val(pos)
+        except Exception:
+            self.env[key] = ent
+            raise _TfhFail
+        self.env[key] = ("done", v)
+        return v
+
+    def json_val(self, v):
+        """A `.tf.json` value: every string is a template."""
+        if isinstance(v, str):
+            return self.sub(v).tpl(0, False)[0]
+        if isinstance(v, list):
+            return [self.json_val(x) for x in v]
+        if isinstance(v, dict):
+            return {k: self.json_val(x) for k, x in v.items()}
+        return v
+
+    def call(self, name, i):
+        s, args = self.s, []
+        expand = False
+        while True:
+            i = self.ws(i)
+            if s.startswith(")", i):
+                break
+            if len(args) > 64:
+                raise _TfhFail
+            if name in ("try", "can"):
+                try:
+                    v, i = self.expr(i)
+                except _TfhFail:
+                    v, i = _TfhFail, self.skip(i)
+            else:
+                v, i = self.expr(i)
+            args.append(v)
+            i = self.ws(i)
+            if s.startswith("...", i):
+                expand, i = True, self.ws(i + 3)
+            if s.startswith(",", i):
+                i += 1
+            elif not s.startswith(")", i):
+                raise _TfhFail
+        if expand and args and isinstance(args[-1], list):
+            args = args[:-1] + args[-1]
+        return self.fn(name.lower(), args), i + 1
+
+    def skip(self, i):
+        """End of the (unreadable) expression at s[i]: balanced to the next `,` / `)` at depth 0."""
+        s, d = self.s, 0
+        while i < self.n:
+            c = s[i]
+            if c == '"':
+                k = i + 1
+                while k < self.n and s[k] != '"':
+                    k += 2 if s[k] == "\\" else 1
+                i = k
+            elif c in "([{":
+                d += 1
+            elif c in ")]}":
+                if d == 0:
+                    return i
+                d -= 1
+            elif c == "," and d == 0:
+                return i
+            i += 1
+        raise _TfhFail
+
+    def fn(self, f, a):
+        t, n = self.text, len(a)
+        if f in ("try", "coalesce"):
+            for x in a:
+                if x is not _TfhFail and x is not None and not (f == "coalesce" and x == ""):
+                    return x
+            raise _TfhFail
+        if _TfhFail in a:
+            raise _TfhFail
+        if f in ("tostring", "sensitive", "nonsensitive", "one") and n == 1:
+            return a[0][0] if f == "one" and isinstance(a[0], list) and a[0] else a[0]
+        if f == "join" and n >= 2:
+            items = []
+            for x in a[1:]:
+                items += x if isinstance(x, list) else [x]
+            return t(a[0]).join(t(x) for x in items)
+        if f == "concat":
+            return [y for x in a for y in (x if isinstance(x, list) else [x])]
+        if f == "flatten" and n == 1:
+            out = []
+
+            def walk(x):
+                for y in x:
+                    walk(y) if isinstance(y, list) else out.append(y)
+            walk(a[0])
+            return out
+        if f == "compact" and n == 1:
+            return [x for x in a[0] if x not in (None, "")]
+        if f == "format" and n >= 1:
+            return self.fmt(t(a[0]), a[1:])
+        if f == "formatlist" and n >= 1:
+            ls = [x for x in a[1:] if isinstance(x, list)]
+            m = len(ls[0]) if ls else 1
+            return [self.fmt(t(a[0]), [x[k] if isinstance(x, list) else x for x in a[1:]]) for k in range(m)]
+        if f == "replace" and n == 3:
+            src, old, new = t(a[0]), t(a[1]), t(a[2])
+            if len(old) > 1 and old[0] == "/" and old[-1] == "/":
+                return re.sub(old[1:-1], re.sub(r"\$\{?(\d+)\}?", r"\\g<\1>", new.replace("\\", "\\\\")), src)
+            return src.replace(old, new)
+        if f in ("base64decode", "textdecodebase64") and n >= 1:
+            try:
+                b = base64.b64decode(t(a[0]), validate=True)
+                return b.decode("utf-16-le" if n > 1 and "16" in t(a[1]) else "utf-8")
+            except Exception:
+                raise _TfhFail
+        if f == "base64encode" and n == 1:
+            return base64.b64encode(t(a[0]).encode("utf-8")).decode()
+        if f == "jsonencode" and n == 1:
+            import json
+            r = json.dumps(a[0], separators=(",", ":"), sort_keys=True, ensure_ascii=False)
+            for x, y in (("<", "\\u003c"), (">", "\\u003e"), ("&", "\\u0026"), ("\u2028", "\\u2028"),
+                         ("\u2029", "\\u2029")):
+                r = r.replace(x, y)
+            return r
+        if f == "jsondecode" and n == 1:
+            import json
+            return json.loads(t(a[0]))
+        if f == "lower" and n == 1:
+            return t(a[0]).lower()
+        if f == "upper" and n == 1:
+            return t(a[0]).upper()
+        if f == "trimspace" and n == 1:
+            return t(a[0]).strip()
+        if f == "chomp" and n == 1:
+            return re.sub(r"[\r\n]+$", "", t(a[0]))
+        if f == "trim" and n == 2:
+            return t(a[0]).strip(t(a[1]))
+        if f == "trimprefix" and n == 2:
+            x, p = t(a[0]), t(a[1])
+            return x[len(p):] if p and x.startswith(p) else x
+        if f == "trimsuffix" and n == 2:
+            x, p = t(a[0]), t(a[1])
+            return x[:-len(p)] if p and x.endswith(p) else x
+        if f == "strrev" and n == 1:
+            return t(a[0])[::-1]
+        if f == "reverse" and n == 1 and isinstance(a[0], list):
+            return a[0][::-1]
+        if f == "split" and n == 2:
+            return t(a[1]).split(t(a[0])) if t(a[0]) else list(t(a[1]))
+        if f == "substr" and n == 3:
+            x, o, ln = t(a[0]), int(a[1]), int(a[2])
+            o = o + len(x) if o < 0 else o
+            return x[o:] if ln < 0 else x[o:o + ln]
+        if f == "element" and n == 2 and isinstance(a[0], list) and a[0]:
+            return a[0][int(a[1]) % len(a[0])]
+        if f == "lookup" and n >= 2 and isinstance(a[0], dict):
+            if t(a[1]) in a[0]:
+                return a[0][t(a[1])]
+            if n > 2:
+                return a[2]
+        if f == "indent" and n == 2:
+            return t(a[1]).replace("\n", "\n" + " " * int(a[0]))
+        if f == "length" and n == 1:
+            return len(a[0]) if isinstance(a[0], (list, dict)) else len(t(a[0]))
+        if f == "urlencode" and n == 1:
+            from urllib.parse import quote
+            return quote(t(a[0]), safe="-._~")
+        raise _TfhFail
+
+    def fmt(self, f, args):
+        out, k, i = [], 0, 0
+        while i < len(f):
+            c = f[i]
+            if c != "%":
+                out.append(c)
+                i += 1
+                continue
+            m = re.compile(r"%(?:\[(\d+)\])?([-+# 0]*)(\d*)(?:\.(\d+))?([%svdqtfxX])").match(f, i)
+            if not m:
+                raise _TfhFail
+            i = m.end()
+            if m.group(5) == "%":
+                out.append("%")
+                continue
+            if m.group(1):
+                k = int(m.group(1)) - 1
+            if k >= len(args):
+                raise _TfhFail
+            v, k = args[k], k + 1
+            verb = m.group(5)
+            if verb in "sv":
+                r = self.text(v)
+            elif verb == "q":
+                import json
+                r = json.dumps(self.text(v), ensure_ascii=False)
+            elif verb == "d":
+                r = str(int(v))
+            elif verb in "xX":
+                r = format(int(v), verb) if isinstance(v, (int, float)) else self.text(v).encode().hex()
+                r = r.upper() if verb == "X" else r
+            elif verb == "t":
+                r = "true" if v is True else "false"
+            else:
+                r = ("%." + (m.group(4) or "6") + "f") % float(v)
+            w = int(m.group(3) or 0)
+            if len(r) < w:
+                pad = "0" if "0" in m.group(2) and "-" not in m.group(2) and verb not in "sq" else " "
+                r = r + " " * (w - len(r)) if "-" in m.group(2) else pad * (w - len(r)) + r
+            out.append(r)
+        return "".join(out)
+
+    # --- bodies ------------------------------------------------------------------------------------------------------
+    def body(self, i, path, out, closing):
+        """Walk the HCL body at s[i]: register locals / variable defaults in env, collect (path, attr, pos)."""
+        s = self.s
+        while True:
+            i = self.ws(i)
+            if i >= self.n:
+                if closing:
+                    raise _TfhFail
+                return i
+            if s.startswith("}", i):
+                if not closing:
+                    raise _TfhFail
+                return i + 1
+            if len(out) > 2048 or time.time() > self.end:
+                raise _TfhFail
+            name, j = self.ident(i)
+            if name is None:
+                raise _TfhFail
+            j = self.ws(j, nl=False)
+            if s.startswith("=", j) and not s.startswith("==", j):
+                pos = j + 1
+                if path and path[0] == "locals" and len(path) == 1:
+                    self.env.setdefault(("local", name), ("todo", self, pos))
+                elif len(path) == 2 and path[0] == "variable" and name == "default":
+                    self.env.setdefault(("var", path[1]), ("todo", self, pos))
+                out.append((path, name, pos))
+                try:
+                    i = self.expr(pos)[1]
+                except _TfhFail:
+                    i = self.skip_line(pos)
+                continue
+            labels = []
+            while True:
+                if s.startswith('"', j):
+                    lab, j = self.tpl(j + 1, True)
+                    labels.append(lab)
+                else:
+                    lab, j2 = self.ident(j)
+                    if lab is None:
+                        break
+                    labels.append(lab)
+                    j = j2
+                j = self.ws(j, nl=False)
+            if not s.startswith("{", j):
+                raise _TfhFail
+            i = self.body(j + 1, path + (name,) + tuple(labels), out, True)
+
+    def skip_line(self, i):
+        """Resume after an unreadable attribute value: balanced brackets / strings / heredoc to its line end."""
+        s, d = self.s, 0
+        m = re.compile(r"[ \t]*<<-?[ \t]*([A-Za-z_]\w*)[ \t]*\r?\n").match(s, i)
+        if m:
+            e = re.compile(r"(?m)^[ \t]*" + re.escape(m.group(1)) + r"[ \t]*\r?$").search(s, m.end())
+            return e.end() if e else self.n
+        while i < self.n:
+            c = s[i]
+            if c == '"':
+                k = i + 1
+                while k < self.n and s[k] not in '"\n':
+                    k += 2 if s[k] == "\\" else 1
+                i = k
+            elif c in "([{":
+                d += 1
+            elif c in ")]}":
+                if d == 0:
+                    return i
+                d -= 1
+            elif c == "\n" and d == 0:
+                return i
+            i += 1
+        return i
+
+
+def _tfh_walk(v, name, out, depth=0):
+    if depth > 8 or len(out) > 64:
+        return
+    if isinstance(v, str):
+        if "descriptor" in name.lower() and (name, v) not in out:
+            out.append((name, v))
+    elif isinstance(v, dict):
+        for k, x in v.items():
+            _tfh_walk(x, k if "descriptor" in str(k).lower() else name, out, depth + 1)
+    elif isinstance(v, list):
+        for x in v:
+            _tfh_walk(x, name, out, depth + 1)
+
+
+def _tfh_literals(src, budget=0.5):
+    """[(name, folded value)] for every `descriptor`-named Terraform local / variable / attribute / object key."""
+    end, env, attrs = time.time() + budget, {}, []
+    p = _Tfh(src, env, end)
+    head = src.lstrip("\ufeff \t\r\n")
+    if head[:1] == "{":
+        import json
+        try:
+            doc = json.loads(head)
+        except Exception:
+            doc = None
+        if not isinstance(doc, dict):
+            return []
+        for blk in (doc.get("locals") if isinstance(doc.get("locals"), list) else [doc.get("locals") or {}]):
+            for k, x in (blk.items() if isinstance(blk, dict) else ()):
+                env.setdefault(("local", k), ("todo", p, x))
+        for k, x in (doc.get("variable") or {}).items() if isinstance(doc.get("variable"), dict) else ():
+            if isinstance(x, dict) and "default" in x:
+                env.setdefault(("var", k), ("todo", p, x["default"]))
+        out = []
+        for key, ent in list(env.items()):
+            try:
+                _tfh_walk(p.ref(*key), key[1], out)
+            except Exception:
+                continue
+        for sect in ("resource", "data", "output", "module"):
+            try:
+                _tfh_walk(p.json_val(doc.get(sect) or {}), sect, out)
+            except Exception:
+                continue
+        return out
+    try:
+        p.body(0, (), attrs, False)
+    except Exception:
+        pass                                      # a partial walk still registers the locals read so far
+    out = []
+    for path, name, pos in attrs:
+        if time.time() > end:
+            break
+        try:
+            v = p.expr(pos)[0]
+        except Exception:
+            continue
+        label = name
+        if "descriptor" not in name.lower() and path[:1] == ("variable",) and len(path) > 1:
+            label = path[1]
+        _tfh_walk(v, label, out)
+    return out
+
+
+def _tfh_codecs(src, budget=0.6):
+    """Codec entries for Terraform descriptors whose statically folded value peels to a plan (marker TAG as the hint)."""
+    try:
+        end, out = time.time() + budget, []
+        lits = _tfh_literals(src, budget=budget * 0.6)
+        am = _ANALYSIS_RE.search(src) if lits else None
+        seen = set()
+        for ident, lit in lits:
+            for cand in (lit, re.sub(r"\s+", "", lit)):
+                if not cand or cand in seen or time.time() > end:
+                    continue
+                seen.add(cand)
+                plain = peel_plan(cand, am.group("tag") if am else "", budget=min(0.3, max(0.05, end - time.time())))
+                if plain:
+                    if not any(c["plain"] == plain for c in out):
+                        out.append({"id": re.sub(r"(?i)^descriptor_?", "", ident) or ident, "rep": "descriptor",
+                                    "transform": "identity", "key": "", "material": lit, "plain": plain})
+                    break
+        return out
+    except Exception:
+        return []
+
+
+# ------------------------------------------------------------------------------------------------ webshell model
+# Target webshell-request-primitive-model (D24 prompt "recover the order of requests and stages, then separate the inert
+# fixture behavior from the lines that would be real execution primitives"; D8 PHP / D19 ASPX / D20 ASP / D24 JSP shells).
+# webshell_model(text, lang) lexes the server-side code regions (<?php ?>, <% %>, <script runat=server>, CFML), marks
+# comments / string literals / markup, folds `if (false)` / `If False Then` dead branches and the rest of a block after
+# an unconditional `return` (PHP also exit/die), then lists request reads (param/header names in source order) and
+# primitives (line, api, kind, live). decode(src, rep='webshell', transform=None|json|requests|stages|live|inert|kinds|
+# attack) serialises it; None when the text reads no request and calls no primitive (not a web shell).
+_WS_REQ = {
+    "php": [(r"\$_(GET|POST|REQUEST|COOKIE|FILES)\s*\[\s*['\"]([^'\"]+)['\"]", None),
+            (r"\$_SERVER\s*\[\s*['\"](HTTP_[A-Z0-9_]+)['\"]", None),
+            (r"\bgetallheaders\s*\(\s*\)\s*\[\s*['\"]([^'\"]+)['\"]", None),
+            (r"\bfile_get_contents\s*\(\s*['\"]php://input['\"]", "php://input")],
+    "jsp": [(r"\brequest\s*\.\s*(?:getParameter|getHeader|getParameterValues)\s*\(\s*\"([^\"]*)\"", None),
+            (r"\brequest\s*\.\s*(getInputStream|getReader)\s*\(", "body"),
+            (r"\brequest\s*\.\s*getCookies\s*\(", "cookies")],
+    "aspx": [(r"\bRequest\s*(?:\.\s*(?:Form|QueryString|Headers|Params|Cookies|ServerVariables))?\s*[\[(]\s*\"([^\"]*)\"",
+              None),
+             (r"\bRequest\s*\.\s*(InputStream|BinaryRead|Files)\b", "body")],
+    "cfm": [(r"(?i)\b(?:form|url)\s*\.\s*([A-Za-z_]\w*)", None), (r"(?i)\bcgi\s*\.\s*(http_\w+)", None)],
+}
+_WS_REQ["asp"] = _WS_REQ["aspx"]
+_WS_PRIM = {
+    "php": [(r"(?<![\w$>:\\])(system|exec|passthru|shell_exec|proc_open|popen|pcntl_exec)\s*\(", None, "exec"),
+            (r"(?<![\w$>:\\])(eval|assert|create_function)\s*\(", None, "eval"),
+            (r"(?<![\w$>:\\])preg_replace\s*\(\s*(['\"])(.).*?\2[a-df-zA-Z]*e[a-zA-Z]*\1", "preg_replace/e", "eval"),
+            (r"(?<![\w$>:\\])(include|require)(?:_once)?\b", None, "eval"),
+            (r"(?<![\w$>:\\])(file_put_contents|fwrite|fputs|move_uploaded_file)\s*\(", None, "file_write"),
+            (r"(?<![\w$>:\\])(unserialize)\s*\(", None, "deserialize"),
+            (r"(?<![\w$>:\\])(fsockopen|curl_exec|stream_socket_client)\s*\(", None, "net")],
+    "jsp": [(r"\bRuntime\s*\.\s*getRuntime\s*\(\s*\)\s*\.\s*exec\s*\(", "Runtime.exec", "exec"),
+            (r"\bnew\s+(?:java\.lang\.)?ProcessBuilder\b", "ProcessBuilder.start", "exec"),
+            (r"\bgetEngineByName\s*\([^;]*?\)\s*\.\s*eval\s*\(", "ScriptEngine.eval", "eval"),
+            (r"\bdefineClass\s*\(", "ClassLoader.defineClass", "class_load"),
+            (r"\bClass\s*\.\s*forName\s*\(", "Class.forName", "class_load"),
+            (r"\bnew\s+(?:java\.net\.)?URLClassLoader\b", "URLClassLoader", "class_load"),
+            (r"\.\s*readObject\s*\(", "ObjectInputStream.readObject", "deserialize"),
+            (r"\bnew\s+(?:java\.io\.)?(?:FileOutputStream|FileWriter)\b", "FileOutputStream", "file_write"),
+            (r"\bnew\s+(?:java\.net\.)?Socket\s*\(|\.\s*openConnection\s*\(", "Socket/URLConnection", "net")],
+    "aspx": [(r"\bProcess\s*\.\s*Start\s*\(", "Process.Start", "exec"),
+             (r"\bAssembly\s*\.\s*Load(?:From|File)?\s*\(", "Assembly.Load", "class_load"),
+             (r"\.\s*(?:SaveAs|WriteAllBytes|WriteAllText)\s*\(", "File.Write", "file_write"),
+             (r"\.\s*Deserialize\s*\(", "Deserialize", "deserialize"),
+             (r"\bnew\s+(?:System\.Net\.)?WebClient\b|\bWebRequest\s*\.\s*Create\s*\(", "WebClient", "net"),
+             (r"\beval\s*\(", "eval", "eval")],
+    "asp": [(r"(?i)\.\s*(Run|Exec)\b", "WScript.Shell.{}", "exec"),
+            (r"(?i)\b(ExecuteGlobal|Execute|Eval)\b", None, "eval"),
+            (r"(?i)\.\s*SaveToFile\b", "ADODB.Stream.SaveToFile", "file_write")],
+    "cfm": [(r"(?i)<\s*cfexecute\b", "cfexecute", "exec"), (r"(?i)<\s*cffile\b[^>]*action\s*=\s*.write", "cffile", "file_write"),
+            (r"(?i)<\s*cfhttp\b", "cfhttp", "net"), (r"(?i)\bEvaluate\s*\(", "Evaluate", "eval")],
+}
+
+
+def _ws_lang(text):
+    if re.search(r"<\?php|<\?=|\$_(?:GET|POST|REQUEST|COOKIE)\b", text):
+        return "php"
+    if re.search(r"(?i)<cf(?:execute|set|output|file|if)\b", text):
+        return "cfm"
+    m = re.search(r"(?i)<%@\s*Page\b[^%]*Language\s*=\s*\"?(\w+)", text)
+    if m:
+        return "jsp" if m.group(1).lower() == "java" else "aspx"
+    if re.search(r"\brequest\s*\.\s*get(?:Parameter|Header|InputStream)\b|Runtime\s*\.\s*getRuntime", text):
+        return "jsp"
+    if re.search(r"(?i)<%@\s*(?:Language|Import)|Process\s*\.\s*Start|Assembly\s*\.\s*Load", text):
+        return "aspx" if re.search(r"Process\s*\.\s*Start|Assembly\s*\.\s*Load|;\s*$", text, re.M) else "asp"
+    if re.search(r"(?i)\bRequest\s*(?:\.\s*(?:Form|QueryString))?\s*\(|WScript\.Shell", text):
+        return "asp"
+    return None
+
+
+def _ws_mask(text, lang, vb):
+    """Per-char class: c code, m comment, s string literal, h markup (outside server code). `vb` = VBScript lexing."""
+    n, cls = len(text), ["h"] * len(text)
+    if lang == "cfm":
+        cls = ["c"] * n
+        for m in re.finditer(r"<!---.*?(?:--->|\Z)", text, re.S):
+            cls[m.start():m.end()] = ["m"] * (m.end() - m.start())
+        return cls
+    if lang == "php":
+        opens = list(re.finditer(r"<\?(?:php\b|=)?", text))
+    else:
+        opens = list(re.finditer(r"<%(?!@)=?|<script\b[^>]*runat\s*=\s*\"?server\"?[^>]*>", text, re.I))
+    if not opens and not re.search(r"<%|<\?", text):
+        regions = [(0, n)] if lang != "php" or re.search(r"\$\w+\s*(?:=|\[)", text) else []   # tagless PHP = output
+    else:
+        regions, pos = [], 0
+        for m in opens:
+            if m.start() < pos:
+                continue
+            if text.startswith("<%--", m.start()):
+                e = text.find("--%>", m.end())
+                e = n if e < 0 else e + 4
+                cls[m.start():e] = ["m"] * (e - m.start())
+                pos = e
+                continue
+            close = "?>" if lang == "php" else ("</script>" if m.group(0).lower().startswith("<script") else "%>")
+            e = text.lower().find(close, m.end())
+            e = n if e < 0 else e
+            regions.append((m.end(), e))
+            pos = e + len(close)
+    for a, b in regions:
+        i = a
+        while i < b:
+            ch = text[i]
+            two = text[i:i + 2]
+            if vb:
+                if ch == "'" or re.match(r"(?i)rem\b", text[i:i + 4]) and (i == a or not text[i - 1].isalnum()):
+                    e = text.find("\n", i, b)
+                    e = b if e < 0 else e
+                    cls[i:e] = ["m"] * (e - i)
+                    i = e
+                    continue
+                if ch == '"':
+                    j = i + 1
+                    while j < b and not (text[j] == '"' and text[j + 1:j + 2] != '"') and text[j] != "\n":
+                        j += 2 if text[j] == '"' else 1
+                    j = min(j + 1, b)
+                    cls[i:j] = ["s"] * (j - i)
+                    i = j
+                    continue
+            else:
+                if two == "//" or (lang == "php" and ch == "#" and text[i + 1:i + 2] != "["):
+                    e = text.find("\n", i, b)
+                    e = b if e < 0 else e
+                    cls[i:e] = ["m"] * (e - i)
+                    i = e
+                    continue
+                if two == "/*":
+                    e = text.find("*/", i + 2, b)
+                    e = b if e < 0 else e + 2
+                    cls[i:e] = ["m"] * (e - i)
+                    i = e
+                    continue
+                if ch in "\"'" or (lang == "php" and ch == "`"):
+                    j = i + 1
+                    while j < b and text[j] != ch:
+                        j += 2 if text[j] == "\\" else 1
+                    j = min(j + 1, b)
+                    cls[i:j] = ["x" if ch == "`" else "s"] * (j - i)   # x: PHP backtick = shell exec
+                    i = j
+                    continue
+            cls[i] = "c"
+            i += 1
+    return cls
+
+
+def _ws_dead(code, vb, lang):
+    """Dead [a, b) ranges of the code-only text: constant-false branches and the block tail after a return."""
+    dead = []
+    if vb:
+        for m in re.finditer(r"(?im)^[ \t]*If\s+(?:False|0|1\s*=\s*0)\s+Then[ \t]*(\S[^\n]*)?$", code):
+            if m.group(1):
+                dead.append((m.start(1), m.end(1)))
+                continue
+            depth, e = 1, len(code)
+            for k in re.finditer(r"(?im)^[ \t]*(?:(End\s+If)|(Else)\b|If\b.*\bThen[ \t]*$)", code[m.end():]):
+                if k.group(1):
+                    depth -= 1
+                elif k.group(2) and depth == 1:
+                    e = m.end() + k.start()
+                    break
+                else:
+                    depth += 1
+                if depth == 0:
+                    e = m.end() + k.start()
+                    break
+            dead.append((m.end(), e))
+        return dead
+
+    def block_end(i):
+        depth = 0
+        for j in range(i, len(code)):
+            if code[j] == "{":
+                depth += 1
+            elif code[j] == "}":
+                depth -= 1
+                if depth < 0:
+                    return j
+        return len(code)
+
+    for m in re.finditer(r"\b(?:if|while)\s*\(\s*(?:false|FALSE|False|0|null|NULL)\s*\)\s*", code):
+        e = m.end()
+        if code[e:e + 1] == "{":
+            dead.append((e, block_end(e + 1)))
+        else:
+            k = code.find(";", e)
+            dead.append((e, len(code) if k < 0 else k + 1))
+    ret = r"\b(?:return|exit|die)\b" if lang == "php" else r"\breturn\b"
+    for m in re.finditer(ret, code):
+        prev = code[:m.start()].rstrip()[-1:]
+        if prev not in ("", ";", "{", "}"):
+            continue                                      # `if (x) return;` / `case 1: return;` -- conditional
+        k = code.find(";", m.end())
+        if k < 0:
+            continue
+        dead.append((k + 1, block_end(k + 1)))
+    return dead
+
+
+def webshell_model(text, lang=None):
+    """{lang, requests, request_reads, stages, primitives: [(line, api, kind, live)], why, attack} or None (not a shell)."""
+    try:
+        if isinstance(text, (bytes, bytearray)):
+            text = bytes(text).decode("utf-8", "ignore")
+        if not isinstance(text, str) or not text.strip():
+            return None
+        text = text[:400000].lstrip("﻿")
+        lang = (lang or "").lower().strip(". ") or _ws_lang(text)
+        lang = {"java": "jsp", "jspx": "jsp", "ashx": "aspx", "asmx": "aspx", "cs": "aspx", "vbs": "asp",
+                "cfml": "cfm", "cfc": "cfm", "php5": "php", "phtml": "php"}.get(lang, lang)
+        if lang not in _WS_PRIM:
+            return None
+        vb = lang == "asp" and not re.search(r"(?i)<%@[^%]*Language\s*=\s*\"?(?:C#|CSharp|JScript)", text)
+        if lang == "aspx" and re.search(r"(?i)<%@[^%]*Language\s*=\s*\"?VB", text):
+            vb = True
+        cls = _ws_mask(text, lang, vb)
+        code = "".join(ch if c == "c" or ch == "\n" else " " for ch, c in zip(text, cls))
+        dead = _ws_dead(code, vb, lang)
+        starts = [0] + [m.end() for m in re.finditer("\n", text)]
+
+        def line_of(p):
+            lo, hi = 0, len(starts) - 1
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                if starts[mid] <= p:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            return lo + 1
+
+        def state(p):
+            c = cls[p] if p < len(cls) else "h"
+            if c != "c":
+                return {"m": "comment", "s": "string", "h": "markup", "x": "string"}[c]
+            for a, b in dead:
+                if a <= p < b:
+                    return "dead_branch" if not re.search(r"(?:return|exit|die)\b\s*[^;]*;\s*$",
+                                                          code[max(0, a - 200):a]) else "after_return"
+            return None
+
+        reads, prims, why, seen = [], [], {}, set()
+        for pat, fixed in _WS_REQ.get(lang, []):
+            for m in re.finditer(pat, text):
+                name = fixed or m.group(m.lastindex)
+                reads.append((m.start(), line_of(m.start()), name, state(m.start()) is None))
+        hits = []
+        for pat, api, kind in _WS_PRIM[lang]:
+            if lang == "asp" and kind == "exec" and not re.search(r"(?i)WScript\.Shell", text):
+                continue
+            if lang == "jsp" and api == "ObjectInputStream.readObject" and "ObjectInputStream" not in text:
+                continue
+            for m in re.finditer(pat, text, re.S if api == "preg_replace/e" else 0):
+                g = m.group(1) if m.lastindex and api is None else None
+                name = api.format(m.group(1).capitalize()) if api and "{}" in api else (api or g.lower())
+                hits.append((m.start(), name, kind))
+        if lang == "php":
+            for m in re.finditer(r"`[^`]*`", text):
+                if cls[m.start()] == "x":
+                    hits.append((m.start(), "backtick", "exec"))
+        for p, name, kind in sorted(hits):
+            ln = line_of(p)
+            if (ln, name) in seen:
+                continue
+            seen.add((ln, name))
+            st = state(p) if not (name == "backtick" and cls[p] == "x") else None
+            if name == "backtick" and any(a <= p < b for a, b in dead):
+                st = "dead_branch"
+            prims.append((p, ln, name, kind, st is None))
+            if st:
+                why[f"{ln}:{name}"] = st
+        if not prims and not reads:
+            return None
+        reads.sort()
+        requests = []
+        for _, _, name, live in reads:
+            if live and name not in requests:
+                requests.append(name)
+        stages = []
+        for ev in sorted([(ln, 0, p, f"input:{n}") for p, ln, n, lv in reads if lv] +     # same line: the read nests
+                         [(ln, 1, p, f"{k}:{a}") for p, ln, a, k, lv in prims if lv]):    # inside the call, so first
+            if not stages or stages[-1] != ev[3]:
+                stages.append(ev[3])
+        return {"lang": lang, "requests": requests,
+                "request_reads": [[ln, n, lv] for _, ln, n, lv in reads],
+                "stages": stages, "primitives": [[ln, a, k, lv] for _, ln, a, k, lv in prims],
+                "why": why, "attack": ["T1505.003"]}
+    except Exception:
+        return None
+
+
+def _ws_decode(material, transform=None, key=None):
+    """decode() hook for rep 'webshell': material = shell source; key = lang/extension hint; transform = None|json
+    (model) | requests | stages | live | inert | kinds | attack (comma-joined; live/inert as `line:api`)."""
+    import json
+    m = webshell_model(material, key)
+    if not m:
+        return None
+    t = re.sub(r"[^a-z]", "", (transform or "json").lower())
+    if t in ("json", "model", "none", "identity", ""):
+        return json.dumps(m, sort_keys=True, separators=(",", ":"))
+    if t in ("requests", "request", "params", "inputs"):
+        vals = m["requests"]
+    elif t in ("stages", "order", "stageorder"):
+        vals = m["stages"]
+    elif t in ("live", "primitives", "real", "execution", "executionprimitives"):
+        vals = [f"{ln}:{a}" for ln, a, k, lv in m["primitives"] if lv]
+    elif t in ("inert", "fixture", "dead", "inertlines"):
+        vals = [f"{ln}:{a}" for ln, a, k, lv in m["primitives"] if not lv]
+    elif t in ("kinds", "kind"):
+        vals = list(dict.fromkeys(k for _, _, k, lv in m["primitives"] if lv))
+    elif t in ("attack", "technique", "mitre"):
+        vals = m["attack"]
+    else:
+        return None
+    return ",".join(str(v) for v in vals) if vals else "none"

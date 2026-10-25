@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.host_magic_prefix_hex_16",
+ "expected": "4d5a0000000000000000000000000000",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> agent.exe",
+ "oracle_cmd": "head -c16 agent.exe | od -An -tx1 | tr -d ' \\n' -> 4d5a0000000000000000000000000000",
+ "decoy": false,
+ "member": "agent-001.exe"
+}

@@ -1,0 +1,17 @@
+{
+ "family": "binary_patch_file",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "base": "bpatch_base.bin",
+ "expected_facts": {
+  "patch_format": "ips",
+  "target_size": "16120",
+  "target_sha256": "5b52aedff6d84bdcf824c8f9a944bf5686b9bbe2e8c832cec008cbe01cc79644",
+  "changed_byte_count": "48",
+  "changed_sections": "[]"
+ },
+ "generator_cmd": "bash bpatch_gen.sh   # stdlib IPS writer in bpatch_gen.sh (RLE for runs >= 4 equal bytes)",
+ "oracle_cmd": "PYTHONPATH=../../../tools/pypatch python3 bpatch_oracle.py   # python-ips ips.apply(patch, copy_of_base); cmp -l / readelf -SW / nm -S",
+ "decoy": false
+}

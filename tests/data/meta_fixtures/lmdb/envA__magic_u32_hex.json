@@ -1,0 +1,8 @@
+{
+ "field": "lmdb.magic_u32_hex",
+ "expected": "0xbeefc0de",
+ "generator_cmd": "python3 -c \"import lmdb; lmdb.open('envA', map_size=3145728)\"",
+ "oracle_cmd": "python3 -c \"import lmdb; lmdb.open(copy_dir, readonly=True, lock=False, map_size=0)\" opens it (mdb_env_read_header rejects mm_magic != MDB_MAGIC 0xBEEFC0DE, mdb.c); xxd -s 16 -l 4 data.mdb -> de c0 ef be",
+ "decoy": false,
+ "member": "data.mdb"
+}

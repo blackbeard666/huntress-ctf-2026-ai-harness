@@ -1,0 +1,8 @@
+{
+ "entry": "cert_spki_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY near-miss: NSC pin = sha256 of the WHOLE cert DER (not SPKI), so no cert matches; data still AES-256-ECB keyed by the SPKI digest",
+ "generator_cmd": "bash tests/data/android_fixtures/spkipin_src/gen_spkipin.sh spkipin_decoy_wholecert  # openssl req -x509 certs; pin = openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64; DECOY near-miss: NSC pin = sha256 of the WHOLE cert DER (not SPKI), so no cert matches; data still AES-256-ECB keyed by the SPKI digest; NSC + smali via apktool b (aapt2 binary XML)",
+ "oracle_cmd": "bash tests/data/android_fixtures/spkipin_src/oracle.sh tests/data/android_fixtures/spkipin_decoy_wholecert.apk  # openssl SPKI pin of each shipped cert vs aapt dump xmltree / strings dex pins -> matching digest decrypts data (openssl enc -d / python3 xor) -> none"
+}

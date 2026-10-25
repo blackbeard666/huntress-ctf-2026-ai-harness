@@ -1,0 +1,82 @@
+"""Independent oracle for the cross-hive synthesis fixtures: regipy 6.x (RegistryHive header / root / get_key) per zip
+member, then the atlas-row rules (host groups, planted hive criteria, last-written order, root map) written from the
+spec. Usage: .venv/bin/python -I ORACLE_regf_hivekit.py.txt <zip> <key>  -> the compact-JSON / text answer."""
+import json
+import os
+import re
+import sys
+import tempfile
+import zipfile
+from collections import Counter
+
+from regipy.registry import RegistryHive
+
+zpath, key = sys.argv[1], sys.argv[2]
+hv = {}
+with zipfile.ZipFile(zpath) as z, tempfile.TemporaryDirectory() as td:
+    for n in z.namelist():
+        p = os.path.join(td, "m.bin")
+        open(p, "wb").write(z.read(n))
+        try:
+            h = RegistryHive(p)
+        except Exception:  # noqa: BLE001 - not a hive
+            continue
+        hd = h.header
+        if hd.signature != b"regf":
+            continue
+        vals = {v.name.lower(): v.value for v in h.root.iter_values()}
+        host = vals.get("marker") or vals.get("computername") or vals.get("hostname")
+        if not host:
+            try:
+                host = {v.name: v.value for v in
+                        h.get_key("\\ControlSet001\\Control\\ComputerName\\ComputerName").iter_values()}.get("ComputerName")
+            except Exception:  # noqa: BLE001
+                host = None
+        hv[n] = {"root": h.root.name, "ts": hd.last_modification_time, "seq": hd.primary_sequence_num == hd.secondary_sequence_num,
+                 "fn": hd.file_name, "host": host, "ver": (hd.major_version, hd.minor_version, hd.file_type, hd.file_format)}
+
+if not hv:
+    print("none")
+    sys.exit()
+g = {}
+for n, p in hv.items():
+    if p["host"]:
+        g.setdefault(p["host"], []).append(n)
+norm = lambda s: re.sub(r"[^0-9a-z]", "", s.lower())  # noqa: E731
+
+
+def planted():
+    names = sorted(hv)
+    singles = [v[0] for v in g.values() if len(v) == 1]
+    if any(len(v) > 1 for v in g.values()) and len(singles) == 1:
+        return singles[0]
+    dis = [n for n in names if not (norm(hv[n]["root"]).endswith(norm(re.sub(r"\.hiv$", "", hv[n]["fn"]))) or
+                                    norm(re.sub(r"\.hiv$", "", hv[n]["fn"])).endswith(norm(hv[n]["root"])))]
+    if len(dis) == 1:
+        return dis[0]
+    for v in g.values():
+        if len(v) >= 3:
+            c = Counter(hv[n]["root"] for n in v).most_common(1)[0]
+            if c[1] == len(v) - 1:
+                return next(n for n in v if hv[n]["root"] != c[0])
+    for v in g.values():
+        if len(v) >= 3:
+            for n in v:
+                rest = [hv[m]["ts"] for m in v if m != n]
+                if min(abs(hv[n]["ts"] - t) for t in rest) > max(10 * (max(rest) - min(rest)), 864000000000):
+                    return n
+    bad = [n for n in names if not hv[n]["seq"]]
+    return bad[0] if len(bad) == 1 else "none"
+
+
+if key == "host_groups":
+    out = sorted(sorted(v) for v in g.values()) or "none"
+elif key in ("planted_hive", "odd_one_out"):
+    out = planted()
+elif key == "order_by_last_written":
+    out = [n for _, n in sorted((p["ts"], n) for n, p in hv.items())]
+elif key == "root_names_by_member":
+    out = {n: hv[n]["root"] for n in sorted(hv)}
+else:
+    raise SystemExit("unknown key " + key)
+print(out if isinstance(out, str) else json.dumps(out, separators=(",", ":")))

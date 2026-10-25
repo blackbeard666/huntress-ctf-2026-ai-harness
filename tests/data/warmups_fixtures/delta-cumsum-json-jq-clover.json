@@ -1,0 +1,9 @@
+{
+ "codec": "delta-chain",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-88",
+ "encoded": "[78,183,282,383,415,534,645,759,866,898,998,1099,1198,1309,1409,1514,1624,1727,1759,1875,1979,2084,2199,2231,2350,2447,2561,2670,2787,2899,2932,2964,3048,3159,3191,3306,3417,3525,3643,3744,3788,3820,3935,4052,4150,4259,4364,4480,4512,4628,4732,4837,4952,4984,5085,5205,5302,5401,5517,5549,5646,5756,5871,5990,6091,6205,6237,6353,6464,6496,6612,6716,6817,6849,6920,7017,7126,7227,7259,7336,7433,7548,7664,7765,7879,7937,7969,8068,8176,8287,8405,8506,8620,8665,8763,8860,8960,9063,9164,9278,9323,9379,9435]",
+ "generator_cmd": "printf %s \"$plain\" | jq -Rc 'explode | reduce .[] as $c ([]; . + [((.[-1] // 0) + $c)])'",
+ "oracle_cmd": "python3 -I -c \"import os,json,numpy as np; v=np.array(json.loads(os.environ['encoded'])); print(''.join(map(chr, np.diff(v, prepend=0))), end='')\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-88",
+ "expected": "match"
+}

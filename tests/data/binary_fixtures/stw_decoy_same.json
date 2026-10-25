@@ -1,0 +1,18 @@
+{
+ "family": "stripped_twin_match",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "stw_decoy_same_a.bin",
+ "file_b": "stw_decoy_same_b.bin",
+ "file_sym": null,
+ "expected_facts": {
+  "changed_function_count": "0",
+  "changed_function": "none",
+  "patched_function": "none"
+ },
+ "generator_cmd": "sh stw_gen.sh .   # gcc -O2 [-no-pie] stw_src.c (-DFIXED bounds guard in store / -DMIXK constant in mix), strip -s",
+ "oracle_cmd": "python3 stw_oracle.py stw_decoy_same_a.bin stw_decoy_same_b.bin stw_pie_const_sym.bin   # binutils objdump -d split at readelf --debug-dump=frames FDE starts, readelf -lW / -sW  (no-sym run: changed_function = 'sub_' + oracle va)",
+ "decoy": true,
+ "note": "lib.binary.stripped_twin_field(a, b, key, sym); two identical-source builds: nothing changed; field vocabulary SPECULATIVE (no GM label yet)"
+}

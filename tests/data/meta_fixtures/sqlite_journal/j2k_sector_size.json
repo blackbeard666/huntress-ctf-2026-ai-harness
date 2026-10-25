@@ -1,0 +1,8 @@
+{
+ "field": "sqlite_journal.journal_sector_size",
+ "expected": "512",
+ "generator_cmd": "python3 -c 'sqlite3: page_size=2048 journal_mode=DELETE synchronous=OFF; 60-row commit; BEGIN; UPDATE id%7=0; copy app.db-journal before COMMIT'",
+ "oracle_cmd": "od -An -tx1 -j20 -N4 snap-journal -> 00 00 02 00; file -> 'SQLite Rollback Journal'",
+ "decoy": false,
+ "member": "app.db-journal"
+}

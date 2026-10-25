@@ -1317,3 +1317,34 @@ for _p24 in sorted(_meta14.PREBUILT_DIR.glob("*.py")):
                  and any(isinstance(t, _ast24.Name) and t.id == "FIELDS" for t in n.targets)), {})
     assert _meta14._prebuilt_fields(_p24) == (_f24 if isinstance(_f24, dict) else {}), _p24.name
 print("ok  lib.meta: prebuilt FIELDS fast read == full parse")
+
+# Day 25 "You Have a Point": warmups line codec = one `U+XXXX` code point per character (exact encoder; decode_chunk
+# branch); Mastery line 25 goes through DAYS positionally (D25: a pre-decoded plain last line was re-"decoded" -> -07)
+_s25 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: brave-beacon-wizard-34"
+_u25 = _wc.day_codec(25)[1](_s25)
+assert _u25.startswith("U+004E U+0069 U+0063 U+0065 U+0020") and _u25.endswith("U+0033 U+0034")
+assert _wc.day_codec(25)[2](_u25) == _s25 and _wc.day_codec(25)[3] is False and _dc(_u25) == _s25
+_c25 = [_s25[i * len(_s25) // 25:(i + 1) * len(_s25) // 25] for i in range(25)]
+_m25 = "\n".join("%02d\t%s" % (k, _wc.day_codec(k)[1](p)) for k, p in enumerate(_c25, 1))
+from lib import decode as _dec25  # noqa: E402
+assert _dec25.decode_chunked(_m25) == _s25, _dec25.decode_chunked(_m25)
+print("ok  warmups_codecs: D25 U+XXXX exact encoder + decode_chunk + Mastery line 25")
+
+# Day 25 "Hive Mind": registry.hive_root_name = the ROOT nk cell's name (base block root cell offset @0x24), not the
+# base-block file name
+def _regf25(name, fname="renamed.hiv"):
+    b = bytearray(0x2000)
+    b[:4] = b"regf"
+    _st17.pack_into("<I", b, 0x24, 0x20)
+    b[48:48 + 2 * len(fname)] = fname.encode("utf-16-le")
+    b[0x1000:0x1004] = b"hbin"
+    p = 0x1020
+    _st17.pack_into("<i2sH", b, p, -0x60, b"nk", 0x2C)
+    _st17.pack_into("<H", b, p + 0x4C, len(name))
+    b[p + 0x50:p + 0x50 + len(name)] = name.encode("latin-1")
+    return bytes(b)
+assert _meta14.lookup("registry", "hive_root_name")[0].tier == _meta14.VERIFIED
+assert _meta14.answer("d25-registry-001-registry-hive-root-name", {}, _regf25("HuntressArtifactAssemblyLine")) \
+    == ("HuntressArtifactAssemblyLine", _meta14.VERIFIED)
+assert _meta14.answer("d25-registry-001-registry-hive-root-name", {}, b"CREG" + b"\0" * 600)[0] is None
+print("ok  lib.meta: registry.hive_root_name verified D25 (root nk cell name)")

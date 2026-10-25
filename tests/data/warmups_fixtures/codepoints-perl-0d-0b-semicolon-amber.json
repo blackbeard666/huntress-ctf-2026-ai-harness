@@ -1,0 +1,9 @@
+{
+ "codec": "codepoints-any",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wolf-31",
+ "encoded": "0d78;0b1101001;0d99;0b1100101;0d32;0b1110111;0d111;0b1110010;0d107;0b100000;0d100;0b1100101;0d99;0b1101111;0d100;0b1101001;0d110;0b1100111;0d32;0b1110100;0d104;0b1101001;0d115;0b100000;0d119;0b1100001;0d114;0b1101101;0d117;0b1110000;0d33;0b100000;0d84;0b1101111;0d32;0b1110011;0d111;0b1101100;0d118;0b1100101;0d44;0b100000;0d115;0b1110101;0d98;0b1101101;0d105;0b1110100;0d32;0b1110100;0d104;0b1101001;0d115;0b100000;0d101;0b1111000;0d97;0b1100011;0d116;0b100000;0d97;0b1101110;0d115;0b1110111;0d101;0b1110010;0d32;0b1110100;0d111;0b100000;0d116;0b1101000;0d101;0b100000;0d71;0b1100001;0d109;0b1100101;0d32;0b1001101;0d97;0b1110011;0d116;0b1100101;0d114;0b111010;0d32;0b1100001;0d109;0b1100010;0d101;0b1110010;0d45;0b1110111;0d111;0b1101100;0d102;0b101101;0d51;0b110001",
+ "generator_cmd": "printf %s \"$plain\" | perl -CSD -0777 -ne 'my $i = 0; print join(\";\", map { $i++ % 2 ? sprintf(\"0b%b\", ord) : sprintf(\"0d%d\", ord) } split //)'",
+ "oracle_cmd": "python3 -I -c 'import os; print(\"\".join(chr(int(x[2:], 10 if x[1] == \"d\" else 2)) for x in os.environ[\"encoded\"].split(\";\")), end=\"\")'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-wolf-31",
+ "expected": "match"
+}

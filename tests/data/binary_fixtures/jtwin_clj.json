@@ -1,0 +1,20 @@
+{
+ "family": "jvm_patch_diff_gensym",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "jtwin_clj_a.bin",
+ "jar_b": "jtwin_clj_b.bin",
+ "expected_facts": {
+  "changed_classes": "[\"twin/vulnerable001$parse_frame\"]",
+  "changed_class_count": "1",
+  "changed_vars": "[\"parse-frame\"]",
+  "changed_methods": "[\"invokeStatic(Ljava/lang/Object;)Ljava/lang/Object;\",\"<clinit>()V\"]",
+  "added_constants": "[\"-1\"]",
+  "added_invokes": "[\"clojure/lang/RT.count\"]"
+ },
+ "generator_cmd": "bash jtwin_gen.sh   # Clojure 1.12 AOT (clojure.lang.Compile) twins, B side compiled after a pad ns -> every fn__N / loading__N__auto____M gensym shifted (fn__269->fn__282, checksum$fn__271->fn__284); parse-frame gains (if (< 4 (count v)) (nth v 4) -1)",
+ "oracle_cmd": "python3 jtwin_oracle.py jtwin_clj_a.bin jtwin_clj_b.bin vulnerable corrected   # zipfile + JDK javap -c -p -s, own role/gensym normalisation",
+ "decoy": false,
+ "note": "lib.binary.jvm_patch_diff_field(a, b, key). Clojure twins whose gensyms differ: only the parse-frame Var's fn class changes (RT.count + lcmp/ifge guard, -1 constant)"
+}

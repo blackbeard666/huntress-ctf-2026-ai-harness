@@ -1,0 +1,9 @@
+{
+ "codec": "mojibake-latin1",
+ "plain": "“Nice work decoding this warmup!” To solve, submit this exact answer to the Game Master: ‘jade-otter-17’",
+ "encoded": "âNice work decoding this warmup!â To solve, submit this exact answer to the Game Master: âjade-otter-17â",
+ "generator_cmd": "node -e \"const l=s=>Buffer.from(s,'utf8').toString('latin1');process.stdout.write(l(process.env.plain))\"  # Node Buffer latin1 (ISO-8859-1, C1 controls kept) over the UTF-8 of a smart-quoted sentence",
+ "oracle_cmd": "printf %s \"$encoded\" | iconv -f UTF-8 -t ISO-8859-1 | uconv -f utf-8 -t utf-8 -x '::NFKC;'  # glibc iconv back to latin-1 bytes (= UTF-8), ICU NFKC",
+ "oracle_plain": "“Nice work decoding this warmup!” To solve, submit this exact answer to the Game Master: ‘jade-otter-17’",
+ "expected": "match"
+}

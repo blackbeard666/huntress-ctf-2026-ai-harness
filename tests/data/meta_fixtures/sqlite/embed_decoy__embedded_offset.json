@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_offset",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> host.png",
+ "oracle_cmd": "LC_ALL=C grep -obUaP 'SQLite format 3\\x00' host.png | head -1 | cut -d: -f1 -> (no match) -> none",
+ "decoy": true,
+ "member": "panel-003.png"
+}

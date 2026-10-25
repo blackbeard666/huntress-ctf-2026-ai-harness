@@ -1,0 +1,8 @@
+{
+ "field": "objects_data.consumer_names",
+ "expected": "none",
+ "generator_cmd": "python3 tests/data/meta_fixtures/wmi/GENERATOR_wmi.py.txt <outdir> -> objects_clean.data",
+ "oracle_cmd": "strings -a objects_clean.data | grep -cE 'EventConsumer|__EventFilter|__FilterToConsumerBinding'; strings -a -el objects_clean.data | grep -cE 'EventConsumer|__EventFilter' -> 0 and 0 (no WMI persistence classes: field absent)",
+ "decoy": true,
+ "member": "OBJECTS.DATA"
+}

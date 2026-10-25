@@ -1,0 +1,29 @@
+{
+ "family": "bounds_check_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "file_a": "bchk_ubsan_a.bin",
+ "file_b": "bchk_ubsan_b.bin",
+ "expected_facts": {
+  "bounds_check_calls_a": "0",
+  "bounds_check_calls_b": "1",
+  "bounds_compares_a": "0",
+  "bounds_compares_b": "1",
+  "unchecked_accesses_a": "1",
+  "unchecked_accesses_b": "0",
+  "bounds_check_twin": "b",
+  "bounds_check_kind": "ubsan",
+  "bounds_check_sink": "__ubsan_handle_out_of_bounds",
+  "bounds_limit": "15",
+  "buffer_length": "16",
+  "buffer_object": "table",
+  "buffer_object_size": "64",
+  "bounds_check_function": "get",
+  "bounds_check_added": "true"
+ },
+ "generator_cmd": "bash bchk_gen.sh OUT   # gcc -O2 vs gcc -O2 -fsanitize=bounds",
+ "oracle_cmd": "python3 bchk_oracle.py bchk_ubsan_a.bin bchk_ubsan_b.bin   # binutils objdump -d -C -M intel + readelf -sW + nm",
+ "decoy": false,
+ "note": "lib.binary.bounds_check_field(a, b, key); bounds_check_kind vocabulary SPECULATIVE (no GM label yet)"
+}

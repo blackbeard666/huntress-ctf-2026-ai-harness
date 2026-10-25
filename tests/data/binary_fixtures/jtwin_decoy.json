@@ -1,0 +1,17 @@
+{
+ "family": "jvm_patch_diff_gensym",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "jar_a": "jtwin_decoy_a.bin",
+ "jar_b": "jtwin_decoy_b.bin",
+ "expected_facts": {
+  "changed_classes": "[]",
+  "changed_class_count": "0",
+  "changed_vars": "none"
+ },
+ "generator_cmd": "bash jtwin_gen.sh   # identical source in twin.old002 / twin.new002, B compiled after a pad ns so only gensym numbers (and the role word) differ",
+ "oracle_cmd": "python3 jtwin_oracle.py jtwin_decoy_a.bin jtwin_decoy_b.bin old new   # zipfile + JDK javap -c -p -s, own role/gensym normalisation",
+ "decoy": true,
+ "note": "lib.binary.jvm_patch_diff_field(a, b, key). DECOY: no code change at all, only role token + gensym numbers differ -> nothing changed, changed_vars none"
+}

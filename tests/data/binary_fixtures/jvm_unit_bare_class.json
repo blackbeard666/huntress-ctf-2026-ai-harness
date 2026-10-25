@@ -1,0 +1,25 @@
+{
+ "kind": "jvm_facts",
+ "decoy": false,
+ "member": null,
+ "question": "In delivery 1: evidence.zip, Use all d26-- members in ZIP central-directory order; the Day 26 unit is Beacon.java. For Day 7 use the manifest Main-Class classfile; for Day 26 use the primary classfile named by that unit. Submit its classfile method-table count in base 10.",
+ "expected": {
+  "method_count": "5",
+  "methods": "[\"<init>\",\"cfg\",\"beat\",\"sleep\",\"main\"]",
+  "this_class": "Beacon",
+  "primary_classfile": "Beacon.class",
+  "primary_method_count": "5",
+  "primary_methods": "[\"<init>\",\"cfg\",\"beat\",\"sleep\",\"main\"]",
+  "hcfg_found": "true",
+  "hcfg_version": "1",
+  "xor_key_hex": "0x5a",
+  "crc32_hex": "0x3dffe5ee",
+  "config_campaign": "BARE-26",
+  "config_domain": "bare26.example.invalid",
+  "config_mutex": "Global\\HBARE26",
+  "config_url": "https://bare26.example.invalid/c"
+ },
+ "generator_cmd": "bash jvmunit_gen.sh   # javac --release 11 (OpenJDK 21) + jar --create; HCFG record by python3 stdlib struct/zlib.crc32/base64",
+ "oracle_cmd": "python3 jvmunit_oracle.py jvm_unit_bare_class.bin Beacon.java   # javap -v -p (via jvm_oracle.py) + javap constant-pool Utf8 lines -> stdlib base64/crc32",
+ "note": "bare javac .class (CAFEBABE, no zip): primary = the class whose this_class/SourceFile matches the unit; HCFG base64 Utf8 in its constant pool"
+}

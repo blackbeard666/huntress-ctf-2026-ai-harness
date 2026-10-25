@@ -1,0 +1,39 @@
+# python3 GENERATOR_wmi.py.txt <outdir> -- stdlib WRITER of OBJECTS.DATA-shaped CIM repositories (8 KiB pages; class
+# names + instance property strings separated by NULs / small binary headers, the layout PyWMIPersistenceFinder carves).
+# objects_ascii.data stores strings as ASCII (WMI "compressed" strings); objects_utf16.data stores them UTF-16LE.
+import os, random, sys
+out = sys.argv[1]
+rnd = random.Random(7)
+def noise(n):   # binary filler without printable runs (0x80-0xff and NULs)
+    return bytes(rnd.choice([0, 0x81, 0x9c, 0xa7, 0xc3, 0xfe]) for _ in range(n))
+def recs(enc):
+    s = lambda t: t.encode(enc) + b"\x00" * (2 if enc == "utf-16-le" else 1)
+    pre = lambda: noise(12)
+    r = []
+    # __EventFilter instances
+    r.append(pre() + s("__EventFilter") + pre() + s("SCM Event Log Filter") + pre() + s("root\\cimv2") + pre()
+             + s("SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System' AND TargetInstance.SystemUpTime >= 240") + s("WQL"))
+    r.append(pre() + s("__EventFilter") + pre() + s("UpdaterFilter") + pre() + s("root\\cimv2") + pre()
+             + s("SELECT * FROM __InstanceCreationEvent WITHIN 5 WHERE TargetInstance ISA 'Win32_LogonSession'") + s("WQL"))
+    # consumers
+    r.append(pre() + s("CommandLineEventConsumer") + pre() + s("UpdaterConsumer") + pre()
+             + s("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -nop -w hidden -enc SQBFAFgA") + pre() + s("C:\\Windows\\Temp"))
+    r.append(pre() + s("ActiveScriptEventConsumer") + pre() + s("SCM Event Log Consumer") + pre() + s("VBScript") + pre()
+             + s("Set o = CreateObject(\"WScript.Shell\")"))
+    # bindings
+    r.append(pre() + s("__FilterToConsumerBinding") + pre()
+             + s('CommandLineEventConsumer.Name="UpdaterConsumer"') + s('__EventFilter.Name="UpdaterFilter"'))
+    r.append(pre() + s("__FilterToConsumerBinding") + pre()
+             + s('ActiveScriptEventConsumer.Name="SCM Event Log Consumer"') + s('__EventFilter.Name="SCM Event Log Filter"'))
+    return r
+for name, enc in (("objects_ascii.data", "ascii"), ("objects_utf16.data", "utf-16-le")):
+    page = b""
+    data = bytearray()
+    for rec in recs(enc):
+        data += noise(rnd.randrange(64, 512)) + rec
+    data += noise((-len(data)) % 8192)
+    open(os.path.join(out, name), "wb").write(bytes(data))
+# decoy: an OBJECTS.DATA-sized page set with ordinary classes only (no event consumers / filters / bindings)
+d = bytearray(noise(300) + b"Win32_Service\x00" + noise(40) + b"Spooler\x00C:\\Windows\\System32\\spoolsv.exe\x00" + noise(500))
+d += noise((-len(d)) % 8192)
+open(os.path.join(out, "objects_clean.data"), "wb").write(bytes(d))

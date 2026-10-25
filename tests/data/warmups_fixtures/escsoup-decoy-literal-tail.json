@@ -1,0 +1,12 @@
+{
+ "codec": "escsoup",
+ "decoder": "escsoup_dec(encoded)",
+ "plain": null,
+ "encoded": "&#78;\\u{69}&#99;&#101;U+0020&#119;&#111;\\u{72}%u006Bjade-otter-13",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl escsoup_gen.pl '7' 'char' '' <<< 'Nice work' + literal unescaped tail 'jade-otter-13'",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/escsoup_oracle.py",
+ "oracle_plain": "Nice workjade-otter-13",
+ "oracle_note": "oracle leaves the literal tail as plain letters: the text is NOT all escapes (a partial soup, not this codec)"
+}

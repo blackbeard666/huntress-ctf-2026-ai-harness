@@ -1,0 +1,8 @@
+{
+ "field": "customdestinations.category_count",
+ "expected": "2",
+ "generator_cmd": "/usr/bin/python3 -I GENERATOR_customdestinations.py.txt $TMPDIR/cd/stage  (pylnk3 0.4.3 LNK writer; container packed per libyal Jump lists format / plaso custom_destinations.yaml) -> tasks.bin",
+ "oracle_cmd": "CDJ=$TMPDIR/cd/dl .venv/bin/python -I tests/data/meta_fixtures/customdestinations/ORACLE_customdestinations_plaso_dtfabric.py.txt tests/data/meta_fixtures/customdestinations/custom_tasks__category_count.bin 5d696d521de238c3.customDestinations-ms  (dtfabric-20260506 + plaso-20260720 custom_destinations.yaml container walk, pylnk3 LNK extent, LnkParse3 1.6.0 link_info) -> key category_count",
+ "decoy": false,
+ "member": "5d696d521de238c3.customDestinations-ms"
+}

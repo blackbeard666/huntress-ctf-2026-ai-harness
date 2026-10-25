@@ -1,0 +1,30 @@
+{
+ "family": "overflow_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "vulnerable_function": "vuln",
+  "unsafe_call": "gets",
+  "frame_size": "64",
+  "buffer_offset": "64",
+  "distance_to_return": "72",
+  "read_length": "none",
+  "canary": "false",
+  "distance_to_canary": "none",
+  "nx": "false",
+  "pie": "false",
+  "relro": "none",
+  "binary_canary": "false",
+  "ret_overwrite_length": "72",
+  "canary_trip_length": "none",
+  "cyclic_offset": "72",
+  "crash_length": "72",
+  "vulnerable": "true"
+ },
+ "generator_cmd": "bash ovf_gen.sh   # gcc -O0 -fno-stack-protector -no-pie -z execstack -Wl,-z,norelro gets.c   # char buf[64]; gets(buf)",
+ "oracle_cmd": "python3 ovf_oracle.py ovf_gets_nossp.bin  # objdump -d -Mintel / readelf -lW -dW -sW / gdb -batch runs of the real binary with a de Bruijn input",
+ "oracle_output": "{\"vulnerable_function\": \"vuln\", \"unsafe_call\": \"gets\", \"frame_size\": 64, \"buffer_offset\": 64, \"distance_to_return\": 72, \"read_length\": null, \"canary\": false, \"distance_to_canary\": null, \"nx\": false, \"pie\": false, \"relro\": \"none\", \"binary_canary\": false, \"ret_overwrite_length\": 72, \"canary_trip_length\": null, \"cyclic_offset\": 72, \"crash_length\": 72, \"vulnerable\": true}",
+ "decoy": false,
+ "note": "lib.binary.overflow_field(data, key) per expected_facts key; vocabulary SPECULATIVE (GM label not seen)"
+}

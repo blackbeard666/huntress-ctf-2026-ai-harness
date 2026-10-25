@@ -1,0 +1,8 @@
+{
+ "field": "chrome.download_target_paths",
+ "expected": "[\"C:\\\\Users\\\\jdoe\\\\Downloads\\\\invoice.zip\",\"C:\\\\Users\\\\jdoe\\\\Downloads\\\\update.exe\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_history.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_history.db \"select distinct target_path from downloads order by target_path\" list -> [\"C:\\\\Users\\\\jdoe\\\\Downloads\\\\invoice.zip\",\"C:\\\\Users\\\\jdoe\\\\Downloads\\\\update.exe\"]",
+ "decoy": false,
+ "member": "History"
+}

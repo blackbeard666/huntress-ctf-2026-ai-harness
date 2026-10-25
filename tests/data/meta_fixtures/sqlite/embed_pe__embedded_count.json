@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_count",
+ "expected": "1",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> agent.exe",
+ "oracle_cmd": "LC_ALL=C grep -obUaP 'SQLite format 3\\x00' agent.exe | wc -l -> 1",
+ "decoy": false,
+ "member": "agent-001.exe"
+}

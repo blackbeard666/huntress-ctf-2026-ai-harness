@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.freelist_page_count_walked",
+ "expected": "184",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_deleted.sh.txt <outdir>  (sqlite3 CLI 3.46.1 + coreutils printf/dd) -> freelist.sqlite",
+ "oracle_cmd": "sh tests/data/meta_fixtures/sqlite/ORACLE_sqlite_deleted.sh.txt <db>  (od/dd/strings -n 6/LC_ALL=C sort -u + sqlite3 dbstat/pragma): 2 trunks + 182 leaves; pragma freelist_count 184",
+ "decoy": false,
+ "member": "freelist.sqlite"
+}

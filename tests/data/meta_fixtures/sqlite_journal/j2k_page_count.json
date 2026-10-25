@@ -1,0 +1,8 @@
+{
+ "field": "sqlite_journal.journal_page_count",
+ "expected": "7",
+ "generator_cmd": "python3 -c 'sqlite3: page_size=2048 journal_mode=DELETE synchronous=OFF; 60-row commit; BEGIN; UPDATE id%7=0; copy app.db-journal before COMMIT'",
+ "oracle_cmd": "od -An -tx1 -N28 snap-journal -> nRec ff ff ff ff (no-sync); stat -c%s 14904 -> (14904-512)/(2048+8) = 7",
+ "decoy": false,
+ "member": "app.db-journal"
+}

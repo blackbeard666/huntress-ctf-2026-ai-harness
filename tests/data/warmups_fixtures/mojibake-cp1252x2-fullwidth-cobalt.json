@@ -1,0 +1,9 @@
+{
+ "codec": "mojibake-cp1252x2",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "encoded": "Ã¯Â¼Â®Ã¯Â½â€°Ã¯Â½Æ’Ã¯Â½â€¦Ã£â‚¬â‚¬Ã¯Â½â€”Ã¯Â½ÂÃ¯Â½â€™Ã¯Â½â€¹Ã£â‚¬â‚¬Ã¯Â½â€žÃ¯Â½â€¦Ã¯Â½Æ’Ã¯Â½ÂÃ¯Â½â€žÃ¯Â½â€°Ã¯Â½Å½Ã¯Â½â€¡Ã£â‚¬â‚¬Ã¯Â½â€Ã¯Â½Ë†Ã¯Â½â€°Ã¯Â½â€œÃ£â‚¬â‚¬Ã¯Â½â€”Ã¯Â½ÂÃ¯Â½â€™Ã¯Â½ÂÃ¯Â½â€¢Ã¯Â½ÂÃ¯Â¼ÂÃ£â‚¬â‚¬Ã¯Â¼Â´Ã¯Â½ÂÃ£â‚¬â‚¬Ã¯Â½â€œÃ¯Â½ÂÃ¯Â½Å’Ã¯Â½â€“Ã¯Â½â€¦Ã¯Â¼Å’Ã£â‚¬â‚¬Ã¯Â½â€œÃ¯Â½â€¢Ã¯Â½â€šÃ¯Â½ÂÃ¯Â½â€°Ã¯Â½â€Ã£â‚¬â‚¬Ã¯Â½â€Ã¯Â½Ë†Ã¯Â½â€°Ã¯Â½â€œÃ£â‚¬â‚¬Ã¯Â½â€¦Ã¯Â½ËœÃ¯Â½ÂÃ¯Â½Æ’Ã¯Â½â€Ã£â‚¬â‚¬Ã¯Â½ÂÃ¯Â½Å½Ã¯Â½â€œÃ¯Â½â€”Ã¯Â½â€¦Ã¯Â½â€™Ã£â‚¬â‚¬Ã¯Â½â€Ã¯Â½ÂÃ£â‚¬â‚¬Ã¯Â½â€Ã¯Â½Ë†Ã¯Â½â€¦Ã£â‚¬â‚¬Ã¯Â¼Â§Ã¯Â½ÂÃ¯Â½ÂÃ¯Â½â€¦Ã£â‚¬â‚¬Ã¯Â¼Â­Ã¯Â½ÂÃ¯Â½â€œÃ¯Â½â€Ã¯Â½â€¦Ã¯Â½â€™Ã¯Â¼Å¡Ã£â‚¬â‚¬Ã¯Â½Æ’Ã¯Â½ÂÃ¯Â½â€šÃ¯Â½ÂÃ¯Â½Å’Ã¯Â½â€Ã¯Â¼ÂÃ¯Â½Ë†Ã¯Â½â€¦Ã¯Â½â€™Ã¯Â½ÂÃ¯Â½Å½Ã¯Â¼ÂÃ¯Â¼â€”Ã¯Â¼â€”",
+ "generator_cmd": "node -e \"const fw=s=>[...s].map(c=>c===' '?'\\u3000':String.fromCharCode(c.charCodeAt(0)+0xFEE0)).join('');const w=s=>new TextDecoder('windows-1252').decode(Buffer.from(s,'utf8'));process.stdout.write(w(w(fw(process.env.plain))))\"  # double-encoded: windows-1252 misread applied twice",
+ "oracle_cmd": "printf %s \"$encoded\" | uconv -f utf-8 -t windows-1252 | uconv -f utf-8 -t windows-1252 | uconv -f utf-8 -t utf-8 -x '::NFKC;'  # ICU uconv twice, then ICU NFKC",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-77",
+ "expected": "match"
+}

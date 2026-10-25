@@ -1,0 +1,8 @@
+{
+ "field": "sqlite_wal.valid_frame_count",
+ "expected": "11",
+ "generator_cmd": "python3 -c 'sqlite3: PRAGMA page_size=4096; journal_mode=WAL; wal_autocheckpoint=0; CREATE TABLE + 3 insert txns; copy app.db-wal/-shm while the connection is open' (stdlib sqlite3 = libsqlite3 3.53 writer)",
+ "oracle_cmd": "cp app.db app.db-wal chk/ && sqlite3 chk/app.db 'PRAGMA wal_checkpoint;' -> 0|11|11 (log frames); file app.db-shm -> '11 frames'",
+ "decoy": false,
+ "member": "app.db-wal"
+}

@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "jsp",
+ "what": ".war DECOY: the included head.jspf member is absent -> PART_A unresolved, no full plan (javac: cannot find symbol)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvm3_gen.py  (run inside tests/data/script_fixtures; stdlib base64 writer; members zipped with `zip -q -0 -X -r`)",
+ "oracle_cmd": "d=$(mktemp -d) && (unzip -p tests/data/script_fixtures/jvm3_war_decoy_missing_include.war WEB-INF/jspf/head.jspf index.jsp) | perl -0ne 'print \"class O {\"; print $1 while /<%!(.*?)%>/sg; print \" public static void main(String[] a){System.out.print(new String(java.util.Base64.getDecoder().decode(DESCRIPTOR_5a6b7c8d)));}}\"' > $d/O.java && java $d/O.java   # decoy: javac fails (PART_A cannot find symbol) -> no plan"
+}

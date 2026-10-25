@@ -1,0 +1,8 @@
+{
+ "field": "minidump.flags_u64_hex",
+ "expected": "0x0000000000061907",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> app_crash.dmp",
+ "oracle_cmd": "file app_crash.dmp -> '..., 0x61907 type'",
+ "decoy": false,
+ "member": "app_crash.dmp"
+}

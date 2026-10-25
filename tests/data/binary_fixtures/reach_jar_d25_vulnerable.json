@@ -1,0 +1,41 @@
+{
+ "family": "reachability",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "target_fn": null,
+ "expected_facts": {
+  "call_path": [
+   "-main",
+   "parse-frame"
+  ],
+  "gate_env_vars": [
+   "HUNTRESS_HOST_MODEL",
+   "HUNTRESS_TRIGGER_FAULT"
+  ],
+  "gate_values": {
+   "HUNTRESS_HOST_MODEL": [
+    "workstation",
+    "analysis",
+    "sandbox"
+   ],
+   "HUNTRESS_TRIGGER_FAULT": [
+    "1"
+   ]
+  },
+  "trigger_condition": "HUNTRESS_TRIGGER_FAULT == \"1\"",
+  "trigger_env_var": "HUNTRESS_TRIGGER_FAULT",
+  "trigger_value": "1",
+  "input_size_on_trigger": "2",
+  "input_size_safe": "5",
+  "host_model_env_var": "HUNTRESS_HOST_MODEL",
+  "host_model_default": "workstation",
+  "reachable_for_workstation": "true",
+  "reachable_for_analysis": "true",
+  "reachable_for_sandbox": "true"
+ },
+ "decoy": false,
+ "generator_cmd": "GM D25 evidence.zip member d25--sample-vulnerable.jar (bytes unchanged)",
+ "oracle_cmd": "javap -c -p -constants -cp <jar> '<main fn class>' (getenv ldc names in order, String.equals/Util.equiv literals, <clinit> Tuple.create arity, invoke edges via RT.var/getstatic MODULE$)",
+ "note": "lib.binary.reachability_field(data, key, target_fn) per expected_facts key; null expected_facts = reachability_facts() returns None. Field vocabulary SPECULATIVE (GM label not seen; D25 'trace its reachability' was unasked)."
+}

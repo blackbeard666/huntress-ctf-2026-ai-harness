@@ -1,0 +1,8 @@
+{
+ "field": "sqlite_wal.salt1_u32_hex",
+ "expected": "0xe4672679",
+ "generator_cmd": "python3 -c 'sqlite3: PRAGMA page_size=4096; journal_mode=WAL; wal_autocheckpoint=0; CREATE TABLE + 3 insert txns; copy app.db-wal/-shm while the connection is open' (stdlib sqlite3 = libsqlite3 3.53 writer)",
+ "oracle_cmd": "od -An -tx1 -j16 -N4 app.db-wal -> e4 67 26 79",
+ "decoy": false,
+ "member": "app.db-wal"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "escsoup",
+ "decoder": "escsoup_dec(encoded)",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-58",
+ "encoded": "\\x4e\\x69\\x63\\x65\\x20\\167\\157\\162\\153\\040&#100;&#101;&#99;&#111;&#100;&#105;&#110;&#103;&#32;&#116;&#104;&#105;&#115;&#32;\\U00000077\\U00000061\\U00000072\\U0000006D\\U00000075\\U00000070\\U00000021\\U00000020U+0054U+006FU+0020&#x73;&#x6f;&#x6c;&#x76;&#x65;&#x2c;&#x20;&#x73;&#x75;&#x62;&#x6d;&#x69;&#x74;&#x20;\\U00000074\\U00000068\\U00000069\\U00000073\\U00000020\\u0065\\u0078\\u0061\\u0063\\u0074\\u0020&#97;&#110;&#115;&#119;&#101;&#114;&#32;%u0074%u006F%u0020%74%68%65%20\\u{47}\\u{61}\\u{6D}\\u{65}\\u{20}%u004D%u0061%u0073%u0074%u0065%u0072%u003A%u0020\\143\\157\\142\\141\\154\\164\\055\\154\\171\\156\\170\\055\\065\\070",
+ "generator_cmd": "printf %s \"$plain\" | perl tests/data/warmups_fixtures/escsoup_gen.pl '3' 'word' ''  # perl sprintf writer, srand-seeded notation per word",
+ "oracle_cmd": "printf %s \"$encoded\" | python3 -I tests/data/warmups_fixtures/escsoup_oracle.py  # stdlib html.unescape + urllib.parse.unquote + codecs unicode_escape (+ re.sub for U+ / 0x / %u / \\u{})",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-lynx-58",
+ "expected": "match"
+}

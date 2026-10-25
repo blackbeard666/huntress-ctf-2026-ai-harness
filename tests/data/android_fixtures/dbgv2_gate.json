@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-A5DD70B22D9D6FCE",
+ "decoy": false,
+ "_why": "v2 chain (Release.code(Context)) with the d21 mechanic as code: DebuggerGate.debuggerGate(ctx, seed) = int state machine `while (state != 0x7E) switch (state)` (cap 64) over Debug.isDebuggerConnected / waitingForDebugger, getApplicationInfo().flags & FLAG_DEBUGGABLE, /proc/self/status TracerPid via BufferedReader(FileReader), a SystemClock.elapsedRealtime delta; any 'debugged' answer jumps to trap state 0x66 which still emits a full ANS (honeypot)",
+ "generator_cmd": "python3 tests/data/android_fixtures/dbgv2_src/gen_dbgv2.py gate tests/data/android_fixtures/dbgv2_gate.apk  # javac --release 8 (app + android.os.Debug/SystemClock, android.content.Context/pm.ApplicationInfo stubs) -> dex2jar d2j-jar2dex.sh -> zipfile (+ assets/huntress_puzzle.json v2 codec analysis, no data)",
+ "oracle_cmd": "same generator: the host JVM (java -cp <javac out> <pkg>.Oracle) runs Release.code(new Context()) on CLEAN stubs (Debug false, ApplicationInfo.flags 0, real /proc/self/status TracerPid, SystemClock = System.nanoTime) -> 'oracle=ANS-A5DD70B22D9D6FCE'; `gen_dbgv2.py gate /dev/null --debugged` (DEBUGGED stubs) -> 'oracle=ANS-8A149F208776D9FC' (the trap state's honeypot)"
+}

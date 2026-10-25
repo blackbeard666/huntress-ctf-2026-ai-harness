@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-moose-34",
+ "encoded": "Ｎｉｃｅ＀ｗｏｒｋ＀ｄｅｃｏｄｉｎｇ＀ｔｈｉｓ＀ｗａｒｍｕｐ！＀Ｔｏ＀ｓｏｌｖｅ，＀ｓｕｂｍｉｔ＀ｔｈｉｓ＀ｅｘａｃｔ＀ａｎｓｗｅｒ＀ｔｏ＀ｔｈｅ＀Ｇａｍｅ＀Ｍａｓｔｅｒ：＀ａｍｂｅｒ－ｍｏｏｓｅ－３４",
+ "generator_cmd": "perl -CSA -e 'my $o = join q(), map { my $c = $_; chr(ord($c)+0xFEE0) } split //, $ARGV[0]; print $o;' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];t=t.strip('\\\\U000E0001\\\\U000E007F');print(''.join(chr(ord(c)-0xFEE0) for c in t),end='')\" \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-moose-34",
+ "expected": "match"
+}

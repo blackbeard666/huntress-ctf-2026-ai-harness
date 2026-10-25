@@ -1,0 +1,11 @@
+{
+ "description": "standalone Ren'Py 8 .rpyc (RENPY RPC2 slot 1, zlib pickle protocol 2 of renpy.ast nodes): the python block source string carries the descriptor hex",
+ "material": "UkVOUFkgUlBDMgEAAAAiAAAApwIAAAAAAAAAAAAAAAAAAHicfVTLctMwFE3TJ6ahvJ+FhrIJm+BIlhQvWDBtF9AOdFoGvOkwtizjTPOonISSRWZg029myblKhvQ1LDy+V/fonHOvLP8qj22pFi2XSqUfpui3el079+HPl71SNI+lYzOy5WgF0bDb7uljk9r54ZFdqOnCdE9G9bg/8PbixLQ9u/j6t10a2+VatAB4N+4YuxItIuwP4mJgb7g4IRLrHdmbjjRrtY1DrkZrSL8jfNPXRetkUC9ORrYSeVhtt7qmO+wkprC3dueGyTnp/dEg73U9uwbt22N7Z6Kte6mxdy/AtrDk2XuA3R/bB7VoiXz1hoU29mG0gU63dw63Dt7vf/508G1LbDN/J3xXfVvdVJKnnCsttWxII5USeCspeKqYFNIoX4VKI86AoFWugglCBiKTXDaRhcBpJaUALkAGjEMKPD7leDKXQUUFjoHLhKci4A3uc8FDqmBvA3oB8fBUNgmpfKeiwUBuAuCa4IKCyIAlXxK1894M8WAlQyQUvZmUpA4eqJMXaa7Z7bsZhFSDhlBN9PSv2+vUCIuapqok11AAJnQ9ZIpB2zgemtSV+cJVAzsuqcAjJkWd4lzYtCbAyLEDEdXpPUGCkfyAVbFZb4zOS2BWtGr+h4RDzERS79S5cuhQQluwQARG+CJkqeQcp80Z9+E7xG7tWPTsjOAuZhnLZt/M1V2ywRvMzWOqiLkhp29HuvOCLstms4C36axp9s5zk6dABLSb4Ywmc3K9csXZuS8WXswV/Us5MzOtTc8+cvcVtzce0C/icV7ZLZ/ZJ+6+dei+PXWh+Wm0fTZM8tW8kt/aLU9/AL3C2PV8/cLdPYxHnn2OG/libDdq7m9zmvds9aMjOs3jgX0ZVRB+NW3d65hqEuvjut2cUi8ME3NmX9X/AmyNMMg=",
+ "rep": "rpyc",
+ "transform": "identity",
+ "key": "",
+ "expected": "v=3|language=renpy|role=staged_chain|verdict=suspicious|attack=T1059|adapter=http_client|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=bash|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=RENPY-c5d20e9a|url=https://renpy-c5d20e9aa1.example.invalid/stage|file_path=/tmp/huntress-renpy/.c5d20e9ac5d20e9a.stage",
+ "decoy": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/renpy_gen.py  (stdlib pickle/zlib/struct writer of the Ren'Py format -> renpy_rpyc_rpc2.json material, base64)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/renpy_oracle.py tests/data/script_fixtures/renpy_rpyc_rpc2.json  (stdlib pickle.loads index / pickletools.genops strings, hex -> plan; prints 'v=3|language=renpy|role=staged_chain|ver'...)"
+}

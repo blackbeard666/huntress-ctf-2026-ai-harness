@@ -1,0 +1,12 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "language": "elixir",
+ "role": "decoy",
+ "id_single": "polyglot-elixir-decoy-<field>",
+ "id_timed": "polyglot-elixir-<6hex>-<field>",
+ "target": "beam-erlang-elixir-route",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/beam_gen.py  (stdlib base64/binascii encode of the plan into Erlang/Elixir descriptor syntax)",
+ "oracle_cmd": "PATH=tools/erlang-dl/root/usr/lib/erlang/bin:tools/elixir/bin:$PATH elixir tests/data/script_fixtures/beam_oracle.exs tests/data/script_fixtures/beam_ex_decoy_status.exs | tr -d ' \\\\n' | xxd -r -p | base64 -d  (real Elixir 1.18 parser + Code.eval_quoted of the descriptor_* expression only)",
+ "oracle_stdout": "status=ok;inert-analysis-fixture;no plan here"
+}

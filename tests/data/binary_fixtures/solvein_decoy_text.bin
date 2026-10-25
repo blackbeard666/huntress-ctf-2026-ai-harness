@@ -1,0 +1,1 @@
+check(const char *s) { return 1; } /* not an ELF */

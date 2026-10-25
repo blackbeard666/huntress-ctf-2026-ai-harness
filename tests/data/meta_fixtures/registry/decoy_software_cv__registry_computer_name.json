@@ -1,0 +1,8 @@
+{
+ "field": "registry.computer_name",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/registry/GENERATOR_registry_values.py.txt <outdir>  (software_cv.bin: a SOFTWARE hive, no Select/ControlSet)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/registry/ORACLE_registry_values.py.txt <bin> computer_name -> python-registry raises RegistryKeyNotFoundException (Select absent) => field absent -> none",
+ "decoy": true,
+ "member": "SOFTWARE"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "mojibake-latin1x2",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-badger-31",
+ "encoded": "Ã¯Â¼Â®Ã¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â¼ÂÃ£ÂÂÃ¯Â¼Â´Ã¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â¼ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â¼Â§Ã¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ£ÂÂÃ¯Â¼Â­Ã¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â¼ÂÃ£ÂÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â¼ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â½ÂÃ¯Â¼ÂÃ¯Â¼ÂÃ¯Â¼Â",
+ "generator_cmd": "node -e \"const fw=s=>[...s].map(c=>c===' '?'\\u3000':String.fromCharCode(c.charCodeAt(0)+0xFEE0)).join('');const l=s=>Buffer.from(s,'utf8').toString('latin1');process.stdout.write(l(l(fw(process.env.plain))))\"  # double latin-1 misread (0x80-0x9F stay C1 controls: differs from cp1252)",
+ "oracle_cmd": "printf %s \"$encoded\" | iconv -f UTF-8 -t ISO-8859-1 | iconv -f UTF-8 -t ISO-8859-1 | uconv -f utf-8 -t utf-8 -x '::NFKC;'  # glibc iconv twice, ICU NFKC",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-badger-31",
+ "expected": "match"
+}

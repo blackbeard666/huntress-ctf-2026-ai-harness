@@ -1,0 +1,8 @@
+{
+ "field": "timeline.earliest_start_time_utc",
+ "expected": "2024-10-25T09:36:40Z",
+ "generator_cmd": "python3 tests/data/meta_fixtures/timeline/GENERATOR_timeline.py.txt <outdir>  (stdlib sqlite3 writer, CPython sqlite 3.53.1)",
+ "oracle_cmd": "sqlite3 -readonly ActivitiesCache.db \"select strftime('%Y-%m-%dT%H:%M:%SZ', min(StartTime), 'unixepoch') from Activity where StartTime>0\"  (SQLite 3.53.1 CLI, JSON1)",
+ "decoy": false,
+ "member": "ActivitiesCache.db"
+}

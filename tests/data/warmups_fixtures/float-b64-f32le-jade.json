@@ -1,0 +1,9 @@
+{
+ "codec": "float-b64-f32le",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-17",
+ "encoded": "AACcQgAA0kIAAMZCAADKQgAAAEIAAO5CAADeQgAA5EIAANZCAAAAQgAAyEIAAMpCAADGQgAA3kIAAMhCAADSQgAA3EIAAM5CAAAAQgAA6EIAANBCAADSQgAA5kIAAABCAADuQgAAwkIAAORCAADaQgAA6kIAAOBCAAAEQgAAAEIAAKhCAADeQgAAAEIAAOZCAADeQgAA2EIAAOxCAADKQgAAMEIAAABCAADmQgAA6kIAAMRCAADaQgAA0kIAAOhCAAAAQgAA6EIAANBCAADSQgAA5kIAAABCAADKQgAA8EIAAMJCAADGQgAA6EIAAABCAADCQgAA3EIAAOZCAADuQgAAykIAAORCAAAAQgAA6EIAAN5CAAAAQgAA6EIAANBCAADKQgAAAEIAAI5CAADCQgAA2kIAAMpCAAAAQgAAmkIAAMJCAADmQgAA6EIAAMpCAADkQgAAaEIAAABCAADUQgAAwkIAAMhCAADKQgAANEIAAN5CAADoQgAA6EIAAMpCAADkQgAANEIAAERCAABcQg==",
+ "generator_cmd": "/home/testpwn/huntress-2026/tools/node/bin/node -e \"process.stdout.write(Buffer.from(new Float32Array([...process.env.plain].map(c=>c.codePointAt(0))).buffer).toString('base64'))\"  # Node Float32Array (x86 = LE) packed, base64",
+ "oracle_cmd": "printf %s \"$encoded\" | base64 -d | perl -CO -0777 -ne 'print join \"\", map { chr int($_ + 0.5) } unpack(\"f<*\", $_)'  # coreutils base64 -d, perl unpack f<*",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-otter-17",
+ "expected": "match"
+}

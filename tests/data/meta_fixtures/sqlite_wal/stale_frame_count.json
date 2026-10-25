@@ -1,0 +1,8 @@
+{
+ "field": "sqlite_wal.frame_count",
+ "expected": "18",
+ "generator_cmd": "python3 -c 'sqlite3: page_size=512, WAL, 40-row txn, PRAGMA wal_checkpoint(PASSIVE) -> (0,18,18), then 2 small txns restart the WAL at frame 1 (new salts, 16 stale frames left); copy -wal/-shm'",
+ "oracle_cmd": "stat -c%s snap-wal -> 9680 = 32 + 18*(24+512)",
+ "decoy": false,
+ "member": "app.db-wal"
+}

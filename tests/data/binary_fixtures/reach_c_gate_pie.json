@@ -1,0 +1,40 @@
+{
+ "family": "reachability",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "target_fn": null,
+ "expected_facts": {
+  "call_path": [
+   "main",
+   "handle",
+   "copy_frame",
+   "memcpy"
+  ],
+  "vulnerable_call": "memcpy",
+  "gate_env_vars": [
+   "HUNTRESS_HOST_MODEL",
+   "HUNTRESS_TRIGGER_FAULT"
+  ],
+  "gate_values": {
+   "HUNTRESS_HOST_MODEL": [
+    "sandbox",
+    "analysis"
+   ],
+   "HUNTRESS_TRIGGER_FAULT": [
+    "1"
+   ]
+  },
+  "trigger_condition": "HUNTRESS_TRIGGER_FAULT == \"1\"",
+  "input_size_on_trigger": "2",
+  "input_size_safe": "5",
+  "host_model_default": "workstation",
+  "reachable_for_workstation": "true",
+  "reachable_for_analysis": "true",
+  "reachable_for_sandbox": "false"
+ },
+ "decoy": false,
+ "generator_cmd": "sh reach_gen.sh  # gcc -O0 -fno-stack-protector reach_gate.c (PIE)",
+ "oracle_cmd": "sh reach_oracle.sh <bin>   # gdb -batch: env -i HUNTRESS_HOST_MODEL=m HUNTRESS_TRIGGER_FAULT=t, break copy_frame, $rsi = memcpy size, bt = call path; + reach_gate.c source",
+ "note": "lib.binary.reachability_field(data, key, target_fn) per expected_facts key; null expected_facts = reachability_facts() returns None. Field vocabulary SPECULATIVE (GM label not seen; D25 'trace its reachability' was unasked)."
+}

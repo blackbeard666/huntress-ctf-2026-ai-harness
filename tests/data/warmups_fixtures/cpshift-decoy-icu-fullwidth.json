@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": null,
+ "encoded": "Ｎｉｃｅ　ｗｏｒｋ　ｄｅｃｏｄｉｎｇ　ｔｈｉｓ　ｗａｒｍｕｐ！　Ｔｏ　ｓｏｌｖｅ，　ｓｕｂｍｉｔ　ｔｈｉｓ　ｅｘａｃｔ　ａｎｓｗｅｒ　ｔｏ　ｔｈｅ　Ｇａｍｅ　Ｍａｓｔｅｒ：　ａｍｂｅｒ－ｆａｌｃｏｎ－４２",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "fullwidth-amber.json encoded (uconv -x Halfwidth-Fullwidth, space -> U+3000): unistyle's, not a constant K",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];k=ord(t[0])-ord('N');print(''.join(chr(ord(c)-k) for c in t)[:20])\" \"$encoded\"  # NFKC folds it (unistyle)"
+}

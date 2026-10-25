@@ -1,0 +1,8 @@
+{
+ "field": "minidump.main_module",
+ "expected": "\\Device\\HarddiskVolume3\\Tools\\updater.exe",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> x86_hang.dmp",
+ "oracle_cmd": ".venv/bin/python -I -c 'from minidump.minidumpfile import MinidumpFile as M; mf=M.parse_bytes(open(\"x86_hang.dmp\",\"rb\").read()); print(mf.modules.modules[0].name)'  (skelsec minidump reader)",
+ "decoy": false,
+ "member": "x86_hang.dmp"
+}

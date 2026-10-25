@@ -1,0 +1,11 @@
+{
+ "description": "DECOY: renamed impostor (`UnityFX` magic) of a bundle whose TextAsset carries a plan",
+ "material": "VW5pdHlGWAAAAAAHNS54LngAMjAyMi4zLjEwZjEAAAAAAAAABFoAAABBAAAAWwAAAEMAAAAAAAAAAAAAAAAAAB4AAQCyAQAAFsQAAAPZAAMOAAgdAAAaAPAYAARDQUItNWQxZjBlMmE5YzdiNGUzMWEwZjJkNmM4YjllMWEzZjQAHAABAP/wAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoOEhYaHiImKi4yNjo+QkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr/AwcLDxMXGx8jJysvMzc7P0NHS09TV1tfY2drb3N3e3+Dh4uPk5ebn6Onq6+zt7u/w8fLz9PX29/j5+vv8/f7/AAH////////z8VMNAAAAbG9hZGVyX2NvbmZpZwAAAJsGAAAvLyBIVU5UUkVTU19BTkFMWVNJU19WMTpIRVgtNzYzZDMzN2M2YzYxNmU2Nzc1NjE2NzY1M2Q2MzczNjg2MTcyNzA3YzcyNmY2YxgA8Ag0NmY3NzZlNmM2ZjYxNjQ2NTcyN2M3NggA8AM2NDY5NjM3NDNkNzM3NTczNzAQAEE2OTZmDgDxDGM2MTc0NzQ2MTYzNmIzZDU0MzEzMTMwMzU3Y0oAQTE3MDdQAEAzZDY4KgDxDzcwNWY2MzZjNjk2NTZlNzQ3YzY4NmY3Mzc0NWY3MJQAMjY2OZgAITczWgAQZUgAAZwAIGU2WABQZjYyNjZ+ACA2M34AAIwALzZlPgAAETACARA5HACDNjg2NTc4N2NSAD83NjVuAAEALAAgNjcOACE1ZgYBcTM2MzcyNjnEABBmFAEBggAQOKwADl4BYDcwNzk3NM4AKjZlagAgNjMuAQDuAEMzZDMyHABRNTcwNzN8ARA1IAAkNjQqACE2ZZQAIDc3fgEF4AAQMrABMTU3NBYAH2UqAAkgN2MYARA2AAEA/gARNy4A8AM5NjQzZDU1NGU0OTU0NTkyZDamAXA5NjMzMzY2SQEhN2NGABZjqAFxNzMzYTJmMroAXzY5NzQ3NgAAUTYxMzEyFAEDcgBQYzY1MmVIASE3NrQBVjk2NDJmDAEkN2NwAQCAAQG0AHA4M2QyZjc0PgBCMmY2OCgBAewAVzM3MzJkfgA/ZjJlgAAACRAAJjJlbADxEwp1c2luZyBVbml0eUVuZ2luZTsKcHVibGljIGNsYXNzIExZA/AZYTA5YzNmNjYgOiBNb25vQmVoYXZpb3VyIHsKICAgIGNvbnN0IHN0ckwA/whERVNDUklQVE9SX0EwOUMzRjY2ID0gInID///3XyI7Cn0KtA7/////////8FD7/P3+/w==",
+ "rep": "unityfs",
+ "transform": "identity",
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/unityfs_gen.py  (stdlib struct + lz4.block writer of the UnityFS layout -> unityfs_decoy_badmagic.json material, base64)",
+ "oracle_cmd": "PYTHONPATH=tools/unitypy python3 tests/data/script_fixtures/unityfs_oracle.py tests/data/script_fixtures/unityfs_decoy_badmagic.json  (UnityPy BundleFile reader -> node bytes, hex -> plan; prints 'None'...)"
+}

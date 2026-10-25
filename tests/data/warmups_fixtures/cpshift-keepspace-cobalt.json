@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-finch-76",
+ "encoded": "ぎどっづ ぷはひに つづっはつどので ぴとどび ぷちひねふば〡 ごは びはぬぶづ〬 びふぢねどぴ ぴとどび づへちっぴ ちのびぷづひ ぴは ぴとづ ぇちねづ きちびぴづひ〺 っはぢちぬぴ〭てどのっと〭〷〶",
+ "generator_cmd": "perl -CSA -e 'my $o = join q(), map { my $c = $_; $c eq q( ) ? $c : chr(ord($c)+0x3000) } split //, $ARGV[0]; print $o;' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];t=t.strip('\\\\U000E0001\\\\U000E007F');print(''.join(c if c==' ' else chr(ord(c)-0x3000) for c in t),end='')\" \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-finch-76",
+ "expected": "match"
+}

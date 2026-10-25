@@ -1,0 +1,41 @@
+# Independent reader: plaso-20260720 custom_destinations.yaml read with dtfabric-20260506 (container walk, same loop
+# as plaso CustomDestinationsParser.ParseFileObject), pylnk3 0.4.3 parse for each LNK's extent (stream offset after
+# parse), LnkParse3 1.6.0 link_info local_base_path+common_path_suffix for the target. Usage: oracle.py FILE MEMBER
+import sys, os, json, io
+R = os.environ["HCTF_ROOT"]; J = os.environ["CDJ"]
+sys.path[:0] = [R + "/tools/pylib", J + "/dtfabric-20260506"]
+import pylnk3, LnkParse3
+from dtfabric import reader, registry
+from dtfabric.runtime import data_maps
+reg = registry.DataTypeDefinitionsRegistry()
+reader.YAMLDataTypeDefinitionsFileReader().ReadFileObject(reg, open(J + "/plaso_x/plaso/parsers/custom_destinations.yaml"))
+fac = data_maps.DataTypeMapFactory(reg)
+def rd(name, d, off):
+    c = data_maps.DataTypeMapContext(); v = fac.CreateDataTypeMap(name).MapByteStream(d[off:], context=c); return v, c.byte_size
+f, member = sys.argv[1:3]; d = open(f, "rb").read()
+LNKG = bytes.fromhex("0114020000000000c000000000000046"); FOOT = b"\xab\xfb\xbf\xba"
+out = {"app_id": member.split(".")[0].lower()}
+try:
+    h, off = rd("custom_file_header", d, 0)
+except Exception as e:
+    print(json.dumps({"app_id": "none", "error": str(e)})); sys.exit()
+names, types, paths, ntask, footer_ok = [], [], [], 0, True
+for _ in range(h.number_of_categories):
+    ch, n = rd("custom_category_header", d, off); off += n
+    v, n = rd("custom_category_header_type_%d" % ch.category_type, d, off); off += n
+    types.append(ch.category_type)
+    if ch.category_type == 0: names.append(v.category_name)
+    ne = getattr(v, "number_of_entries", 0) if ch.category_type in (0, 2) else 0
+    for _ in range(ne):
+        eh, n = rd("custom_entry_header", d, off)
+        assert eh.guid == LNKG; off += 16
+        s = io.BytesIO(d[off:]); pylnk3.Lnk(s); size = s.tell()
+        li = LnkParse3.lnk_file(io.BytesIO(d[off:off + size])).get_json()["link_info"]
+        paths.append(li.get("local_base_path", "") + li.get("common_path_suffix", ""))
+        if ch.category_type == 2: ntask += 1
+        off += size
+    ft, n = rd("custom_category_footer", d, off); footer_ok = bytes(ft.signature) == FOOT; off += 4
+out.update(format_version=h.format_version, category_count=h.number_of_categories, category_types=types,
+           category_names=sorted(names), entry_count=len(paths), task_count=ntask, lnk_target_paths=paths,
+           first_target_path=paths[0] if paths else "none", has_footer=footer_ok and off == len(d) and d.endswith(FOOT))
+print(json.dumps(out, separators=(",", ":"), ensure_ascii=False))

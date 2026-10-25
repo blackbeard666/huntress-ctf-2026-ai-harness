@@ -1,0 +1,44 @@
+# python3 GENERATOR_timeline.py.txt <outdir>   -- stdlib sqlite3 WRITER of a Windows-10-shaped ActivitiesCache.db
+import json, os, sqlite3, sys
+out = sys.argv[1]
+db = os.path.join(out, "ActivitiesCache.db")
+if os.path.exists(db):
+    os.remove(db)
+c = sqlite3.connect(db)
+c.execute("CREATE TABLE [Activity]([Id] GUID PRIMARY KEY NOT NULL, [AppId] TEXT NOT NULL, [PackageIdHash] TEXT, "
+          "[AppActivityId] TEXT, [ActivityType] INT NOT NULL, [ActivityStatus] INT NOT NULL, [ParentActivityId] GUID, "
+          "[Tag] TEXT, [Group] TEXT, [MatchId] TEXT, [LastModifiedTime] DATETIME NOT NULL, [ExpirationTime] DATETIME NOT NULL, "
+          "[Payload] BLOB, [Priority] INT, [IsLocalOnly] INT, [PlatformDeviceId] TEXT, [CreatedInCloud] DATETIME, "
+          "[StartTime] DATETIME, [EndTime] DATETIME, [LastModifiedOnClient] DATETIME, [GroupAppActivityId] TEXT, "
+          "[ClipboardPayload] BLOB, [EnterpriseId] TEXT, [OriginalPayload] BLOB, [OriginalLastModifiedOnClient] DATETIME, "
+          "[ETag] INT NOT NULL)")
+c.execute("CREATE TABLE [ActivityOperation]([OperationOrder] INTEGER PRIMARY KEY ASC NOT NULL, [Id] GUID NOT NULL, "
+          "[AppId] TEXT NOT NULL, [ActivityType] INT NOT NULL, [StartTime] DATETIME, [EndTime] DATETIME)")
+def app(*pairs):
+    return json.dumps([{"application": a, "platform": p} for p, a in pairs])
+rows = [
+    (app(("packageId", "Microsoft.Windows.Explorer"), ("windows_win32", "Microsoft.Windows.Explorer"), ("alternateId", "Explorer")),
+     5, 1729850000, 1729850400, {"displayText": "Q3-report.xlsx", "appDisplayName": "File Explorer", "activationUri": "x"}),
+    (app(("x_exe_path", "C:\\Users\\bob\\AppData\\Local\\Temp\\svc.exe"), ("windows_win32", "{6D809377-6AF0-444B-8957-A3773F02200E}\\Windows\\System32\\cmd.exe")),
+     5, 1729851000, 1729851060, {"displayText": "Command Prompt"}),
+    (app(("windows_win32", "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\notepad.exe")), 6, 1729849000, 1729852000,
+     {"type": "UserEngaged", "reportingApp": "ShellActivityMonitor", "activeDurationSeconds": 40}),
+    (app(("x_exe_path", "C:\\Users\\bob\\AppData\\Local\\Temp\\svc.exe"), ("windows_win32", "{6D809377-6AF0-444B-8957-A3773F02200E}\\Windows\\System32\\cmd.exe")),
+     6, 1729853000, 1729853900, {"type": "UserEngaged"}),
+    (app(("windows_universal", "Microsoft.MicrosoftEdge_8wekyb3d8bbwe!MicrosoftEdge")), 5, 1729854000, 0,
+     {"displayText": "Microsoft Edge", "description": "http://exfil.example/upload"}),
+]
+for i, (a, t, st, et, pl) in enumerate(rows):
+    c.execute("INSERT INTO Activity(Id, AppId, ActivityType, ActivityStatus, LastModifiedTime, ExpirationTime, Payload, "
+              "StartTime, EndTime, ETag) VALUES (?,?,?,?,?,?,?,?,?,?)",
+              (bytes([i + 1] * 16), a, t, 1, st, st + 2592000, json.dumps(pl).encode(), st, et or None, i + 1))
+c.execute("INSERT INTO ActivityOperation(Id, AppId, ActivityType, StartTime) VALUES (?,?,?,?)",
+          (b"\x99" * 16, app(("windows_win32", "decoy_op.exe")), 5, 1600000000))
+c.commit(); c.close()
+# decoys: no Activity table (plain app db) and a renamed non-SQLite impostor
+d2 = os.path.join(out, "noactivity.db")
+if os.path.exists(d2):
+    os.remove(d2)
+c = sqlite3.connect(d2); c.execute("CREATE TABLE notes(id INTEGER PRIMARY KEY, body TEXT)")
+c.execute("INSERT INTO notes(body) VALUES ('Activity StartTime displayText')"); c.commit(); c.close()
+open(os.path.join(out, "impostor.db"), "wb").write(b"MZ\x90\x00" + b"ActivitiesCache Activity table" + b"\x00" * 200)

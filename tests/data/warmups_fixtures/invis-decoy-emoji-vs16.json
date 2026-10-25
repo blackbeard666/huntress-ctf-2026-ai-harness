@@ -1,0 +1,13 @@
+{
+ "codec": "invisible-vs",
+ "plain": null,
+ "encoded": "Great job \u2764\ufe0f \u2600\ufe0f \u270c\ufe0f score: 1\ufe0f\u20e30\ufe0f\u20e3 \ud83c\udff3\ufe0f\u200d\ud83c\udf08 \u2603\ufe0e \u2764\ufe0f",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -I -c 'import unicodedata as u; L = u.lookup; v = chr(0xfe0f); print(\"Great job \" + L(\"HEAVY BLACK HEART\") + v + \" \" + L(\"BLACK SUN WITH RAYS\") + v + \" \" + L(\"VICTORY HAND\") + v + \" score: 1\" + v + chr(0x20e3) + \"0\" + v + chr(0x20e3) + \" \" + L(\"WAVING WHITE FLAG\") + v + chr(0x200d) + L(\"RAINBOW\") + \" \" + L(\"SNOWMAN\") + chr(0xfe0e) + \" \" + L(\"HEAVY BLACK HEART\") + v * 1, end=\"\")'  # real RGI VS16 emoji",
+ "generator_env": {},
+ "oracle_cmd": "python3 -I -c 'import sys, unicodedata as u, collections as c; print(dict(c.Counter(u.name(x, hex(ord(x))) for x in sys.argv[1] if ord(x) > 0xFDFF)))' \"$encoded\"  # stdlib: every non-BMP-letter char by name",
+ "oracle_plain": null,
+ "oracle_names": "{'VARIATION SELECTOR-16': 7, 'WAVING WHITE FLAG': 1, 'RAINBOW': 1, 'VARIATION SELECTOR-15': 1}",
+ "note": "real emoji presentation sequences: lone U+FE0F / U+FE0E only -> no payload"
+}

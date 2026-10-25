@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": "ANS-033F4824BA0FDC95",
+ "decoy": false,
+ "note": "Synthetic 15-set v2 `analysis` Mastery bundle (D25 9-set bundle incl. the d19 reflection + d16 gated-native sets, plus D23 sets 1-6 incl. the d15 JNI-hop set). deep_eval_bench returns tokens only if every set < 0.4 s and the bundle < 3 s on one core; the gate also caps the call at 2 s.",
+ "generator_cmd": "for i in 1..9: cp \"challenges/day25/mobile-integrity-signals/solver/cases/auto-mastery-5b4cdb60/artifacts/delivery $i: integrity_signals_mastery_0$i.apk\" a/set0$i.apk; for i in 1..6: cp \"challenges/day23/mobile-hook-line-and-signal/solver/cases/mastery-1d39aa76/artifacts/delivery $i: hook_line_and_signal_mastery_0$i.apk\" a/set1$i.apk; cd a && zip -q -X -0 ../deep-eval-bench-15set-mixed.zip set*.apk",
+ "oracle_cmd": "python3 -c \"import json; print(json.load(open('challenges/day25/mobile-integrity-signals/solver/cases/auto-mastery-5b4cdb60/expected.json'))['set6.answer'])\"  # GM-verified (CORRECT) answer of set06 = delivery 6 (d16 gated nativeShare(long,int) set)"
+}

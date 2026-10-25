@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": "ANS-3d90c7e1a25b48f6",
+ "decoy": false,
+ "note": "set01: class name from char[] (int-to-char e[i]-7-i) -> String.valueOf -> toCharArray -> new String(char[]) -> Class.forName; field name via decryptByte xor -> UTF_8 -> getBytes() -> new String(byte[], StandardCharsets.ISO_8859_1) -> getDeclaredField -> Field.get; the field is set in <clinit> by (b - K[i%5]) & 0xff -> new String(byte[], Charset.forName(\"ISO-8859-1\")); sibling static fields hold literal decoy tokens. set02 = strdec_xor_method.",
+ "generator_cmd": "python3 tests/data/android_fixtures/strdec_src/gen_strdec.py sub_field tests/data/android_fixtures/strdec_sub_field.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile; python3 tests/data/android_fixtures/strdec_src/gen_strdec.py xor_method tests/data/android_fixtures/strdec_xor_method.apk  # javac --release 8 + dex2jar d2j-jar2dex.sh + zipfile; cp strdec_sub_field.apk b/set01.apk; cp strdec_xor_method.apk b/set02.apk; cd b && zip -q -X -0 ../deep-eval-bench-strdec-field.zip set*.apk",
+ "oracle_cmd": "sh tests/data/android_fixtures/strdec_src/oracle.sh tests/data/android_fixtures/strdec_sub_field.apk  # d2j-dex2jar back to JVM classes, RUN Locator.reveal() on the JVM (real decryptByte / Charset / reflection) -> reveal -> ANS-3d90c7e1a25b48f6"
+}

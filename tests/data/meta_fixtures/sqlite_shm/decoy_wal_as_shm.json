@@ -1,0 +1,8 @@
+{
+ "field": "sqlite_shm.mx_frame",
+ "expected": "none",
+ "generator_cmd": "python3 -c 'sqlite3: PRAGMA page_size=4096; journal_mode=WAL; wal_autocheckpoint=0; CREATE TABLE + 3 insert txns; copy app.db-wal/-shm while the connection is open' (stdlib sqlite3 = libsqlite3 3.53 writer) -- the WAL renamed .shm",
+ "oracle_cmd": "file app.db-wal -> 'SQLite Write-Ahead Log' (not a wal-index)",
+ "decoy": true,
+ "member": "app.db-shm"
+}

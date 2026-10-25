@@ -1,0 +1,8 @@
+{
+ "field": "browser.httponly_cookie_names",
+ "expected": "[\"SID\",\"sessid\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_chrome_cookies.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_chrome_cookies.db \"select distinct name from cookies where is_httponly=1 order by name\" list -> [\"SID\",\"sessid\"]",
+ "decoy": false,
+ "member": "Cookies"
+}

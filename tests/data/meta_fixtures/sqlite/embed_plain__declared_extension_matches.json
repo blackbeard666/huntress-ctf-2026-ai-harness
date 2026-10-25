@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.declared_extension_matches",
+ "expected": "true",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> data.db",
+ "oracle_cmd": "file data.db -> 'SQLite 3.x database' and the name ends .sqlite -> true",
+ "decoy": false,
+ "member": "database-001.sqlite"
+}

@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-17-reset-expectations",
+  "lane": "web",
+  "name": "🌐 Reset Expectations",
+  "ids": {
+    "single_solve": "web-exploitation-day-17-reset-expectations",
+    "time_trial": "web-exploitation-day-17-reset-expectations/time_trial",
+    "mastery": "web-exploitation-day-17-reset-expectations/mastery"
+  }
+}

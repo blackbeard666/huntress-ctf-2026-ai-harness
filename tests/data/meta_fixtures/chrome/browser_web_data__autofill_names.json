@@ -1,0 +1,8 @@
+{
+ "field": "chrome.autofill_names",
+ "expected": "[\"email\",\"q\",\"username\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_web_data.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_web_data.db \"select distinct name from autofill order by name\" list -> [\"email\",\"q\",\"username\"]",
+ "decoy": false,
+ "member": "Web Data"
+}

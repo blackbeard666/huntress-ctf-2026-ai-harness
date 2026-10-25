@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.login_action_urls",
+ "expected": "[\"https://mail.example.com/auth\",\"https://portal.corp.test/session\"]",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_browser.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer) -> br_login_data.db",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_browser.py.txt br_login_data.db \"select distinct action_url from logins order by action_url\" list -> [\"https://mail.example.com/auth\",\"https://portal.corp.test/session\"]",
+ "decoy": false,
+ "member": "Login Data"
+}

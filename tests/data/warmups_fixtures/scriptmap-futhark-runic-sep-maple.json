@@ -1,0 +1,9 @@
+{
+ "codec": "script-letter-map",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: golden-forest-58",
+ "encoded": "ᚾᛁᚲᛖ᛫ᚹᛟᚱᚲ᛫ᛞᛖᚲᛟᛞᛁᚾᚷ᛫ᛏᚺᛁᛊ᛫ᚹᚨᚱᛗᚢᛈ!᛫ᛏᛟ᛫ᛊᛟᛚᚹᛖ,᛫ᛊᚢᛒᛗᛁᛏ᛫ᛏᚺᛁᛊ᛫ᛖᛉᚨᚲᛏ᛫ᚨᚾᛊᚹᛖᚱ᛫ᛏᛟ᛫ᛏᚺᛖ᛫ᚷᚨᛗᛖ᛫ᛗᚨᛊᛏᛖᚱ:᛫ᚷᛟᛚᛞᛖᚾ-ᚠᛟᚱᛖᛊᛏ-58",
+ "generator_cmd": "printf %s \"$plain\" | sed 'y/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/ᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᚲᚱᛊᛏᚢᚹᚹᛉᛃᛉᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᚲᚱᛊᛏᚢᚹᚹᛉᛃᛉ/; s/ /᛫/g'  # GNU sed y/// letter -> glyph table; runic single punctuation U+16EB as the word divider",
+ "oracle_cmd": "printf %s \"$encoded\" | perl -CSD -Mutf8 -pe 's/᛫/ /g; tr/ᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᛚᛗᚾᛟᛈᚱᛊᛏᚢᚹᛉ/abcdefghijlmnoprstuvx/' | tr A-Z a-z  # perl tr/// inverse table (lowercased; a shared glyph reads as its first letter)",
+ "oracle_plain": "nice vorc decoding this varmup! to solve, submit this exact ansver to the game master: golden-forest-58",
+ "expected": "match"
+}

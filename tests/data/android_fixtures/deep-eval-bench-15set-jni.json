@@ -1,0 +1,8 @@
+{
+ "entry": "deep_eval_bench",
+ "expected": "ANS-FB40A37095232860",
+ "decoy": false,
+ "note": "Synthetic 15-set bundle of ONLY unicorn/JNI sets, fixtures repeated: D25 set 6 (d16 gated native) x8 + D23 set 5 (d15 nativeShare(long)) x7 -- the D31 worst case for per-call Uc construction and .so parsing.",
+ "generator_cmd": "for i in 01 03 05 07 09 11 13 15: cp \"challenges/day25/mobile-integrity-signals/solver/cases/auto-mastery-5b4cdb60/artifacts/delivery 6: integrity_signals_mastery_06.apk\" b/set$i.apk; for i in 02 04 06 08 10 12 14: cp \"challenges/day23/mobile-hook-line-and-signal/solver/cases/mastery-1d39aa76/artifacts/delivery 5: hook_line_and_signal_mastery_05.apk\" b/set$i.apk; cd b && zip -q -X -0 ../deep-eval-bench-15set-jni.zip set*.apk",
+ "oracle_cmd": "python3 -c \"import json; print(json.load(open('challenges/day23/mobile-hook-line-and-signal/solver/cases/mastery-1d39aa76/expected.json'))['set5.answer'])\"  # GM-verified (CORRECT) answer of D23 Mastery set5 = delivery 5"
+}

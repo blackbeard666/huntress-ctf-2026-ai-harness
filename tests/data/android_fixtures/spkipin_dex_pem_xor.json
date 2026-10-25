@@ -1,0 +1,8 @@
+{
+ "entry": "cert_spki_scan",
+ "expected": "ANS-b7e2049c6d13fa85",
+ "decoy": false,
+ "_why": "assets/chain.pem holds 2 EC certs, the 2nd (cert_index 1) matched by the dex OkHttp sha256/ pin; data = base64(token XOR SPKI sha256 repeating)",
+ "generator_cmd": "bash tests/data/android_fixtures/spkipin_src/gen_spkipin.sh spkipin_dex_pem_xor  # openssl req -x509 certs; pin = openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64; assets/chain.pem holds 2 EC certs, the 2nd (cert_index 1) matched by the dex OkHttp sha256/ pin; data = base64(token XOR SPKI sha256 repeating); NSC + smali via apktool b (aapt2 binary XML)",
+ "oracle_cmd": "bash tests/data/android_fixtures/spkipin_src/oracle.sh tests/data/android_fixtures/spkipin_dex_pem_xor.apk  # openssl SPKI pin of each shipped cert vs aapt dump xmltree / strings dex pins -> matching digest decrypts data (openssl enc -d / python3 xor) -> ANS-b7e2049c6d13fa85"
+}

@@ -1,0 +1,11 @@
+{
+ "description": "DECOY: valid RENPY RPC2 .rpyc whose python block is benign (no descriptor)",
+ "material": "UkVOUFkgUlBDMgEAAAAiAAAARQEAAAAAAAAAAAAAAAAAAHicVZC9T8MwEMXT9JPQtHxToECBJSyBkYWJjVYICQm8dHDcA1dN7Fxit2SIBEv/Zkac0IFu705P7/3uvuwcLY80LcuaQ5JOpcDK48/ryCJVs5pBhjZpGaVFKNkMJljVY6x5LAERZz5NlTOiAYQO1q+/sZFj0yM1Yxc0AmyRupGpoonCjVIHRQg6Y9wsQ9+nIZTONuma8cPIm5Ql01j5SZyhSxyzDacChI4CSLAzrOjgX/VzprgUDnZN91aO23/dTE4Ad9ZsD2bl4K6x7eW475FGwSV1wgAPSM8McXF7qkAofy5DHcHgfnDr3zl4WIIabKqK3/S4O7SXeFQWRUXRcSnhExie6IC3ucs7Q3t1uUwA+7y/Bv1CMwdPDcpZjude+eYFlzh4KoMWnCq8IK6RbxAyaUgCymY+Xq6iazqAJV75v3CzfTU=",
+ "rep": "rpyc",
+ "transform": "identity",
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/renpy_gen.py  (stdlib pickle/zlib/struct writer of the Ren'Py format -> renpy_decoy_benign_rpyc.json material, base64)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/renpy_oracle.py tests/data/script_fixtures/renpy_decoy_benign_rpyc.json  (stdlib pickle.loads index / pickletools.genops strings, hex -> plan; prints 'None'...)"
+}

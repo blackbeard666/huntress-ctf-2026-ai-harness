@@ -1,0 +1,10 @@
+{
+ "material": "<?php\n/* fixture: every primitive here is inert\n   system($_GET['c']); */\n$plan = 'eval(base64_decode($x))';\n# shell_exec(\"whoami\");\nif (false) { proc_open($_REQUEST['p'], [], $pipes); }\necho \"ok\";\n?>\n",
+ "rep": "webshell",
+ "transform": "live",
+ "key": null,
+ "expected": "none",
+ "note": "webshell-request-primitive-model: lib.codec.webshell_model -> field 'live' (live = `line:api`, comma-joined); source ws_src/ws_php_inert.php",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/ws_gen.py tests/data/script_fixtures/ws_src  (stdlib; literal shell sources)",
+ "oracle_cmd": "php tests/data/script_fixtures/ws_oracle.php tests/data/script_fixtures/ws_src/ws_php_inert.php  (PHP token_get_all lexer -> none)"
+}

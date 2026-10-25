@@ -1,0 +1,8 @@
+{
+ "field": "kernel_dump.dump_type",
+ "expected": "1",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> MEMORY.DMP",
+ "oracle_cmd": "file MEMORY.DMP -> '..., DumpType (0x1)'",
+ "decoy": false,
+ "member": "MEMORY.DMP"
+}

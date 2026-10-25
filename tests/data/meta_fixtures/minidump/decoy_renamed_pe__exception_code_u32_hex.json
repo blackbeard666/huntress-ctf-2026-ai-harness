@@ -1,0 +1,8 @@
+{
+ "field": "minidump.exception_code_u32_hex",
+ "expected": "none",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> renamed_pe.dmp",
+ "oracle_cmd": ".venv/bin/python -I -c 'from minidump.minidumpfile import MinidumpFile as M; mf=M.parse_bytes(open(\"renamed_pe.dmp\",\"rb\").read()); print(...)'  (skelsec minidump reader) -> MinidumpHeaderSignatureMismatchException (MZ)",
+ "decoy": true,
+ "member": "renamed_pe.dmp"
+}

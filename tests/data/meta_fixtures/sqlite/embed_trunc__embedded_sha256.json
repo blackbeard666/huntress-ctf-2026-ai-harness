@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_sha256",
+ "expected": "077fcd143fc732613e644450cf5a7eba124de27a832452405cc030f4f9745137",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> trunc.png",
+ "oracle_cmd": "tail -c +96 trunc.png | sha256sum -> 077fcd143fc732613e644450cf5a7eba124de27a832452405cc030f4f9745137",
+ "decoy": false,
+ "member": "panel-002.png"
+}

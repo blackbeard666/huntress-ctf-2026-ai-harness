@@ -1,0 +1,8 @@
+{
+ "field": "hiberfil.state",
+ "expected": "hibernated",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> hiberfil_hibr.sys",
+ "oracle_cmd": "od -c -N 4 hiberfil_hibr.sys -> h i b r (Volatility hibernation layer: 'hibr' = valid hibernated image)",
+ "decoy": false,
+ "member": "hiberfil_hibr.sys"
+}

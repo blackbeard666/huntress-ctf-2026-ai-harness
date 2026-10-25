@@ -1,0 +1,41 @@
+# Oracle for lib/meta/prebuilt/sqlite_mobile.py fixtures: Python sqlite3 (the SQLite C library) SQL + SQLite's own
+# strftime() for the epoch conversions. usage: python3 -I ORACLE_sqlite_mobile.py.txt <db> <field>
+import json, sqlite3, sys
+db, field = sys.argv[1], sys.argv[2]
+if open(db, "rb").read(16) != b"SQLite format 3\x00":
+    print("none"); sys.exit()
+c = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
+tabs = {r[0].lower() for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+ISO = "'%Y-%m-%dT%H:%M:%SZ'"
+def one(sql): return c.execute(sql).fetchone()[0]
+def lst(sql): return json.dumps(sorted({r[0] for r in c.execute(sql) if r[0] not in (None, "")}), separators=(",", ":"))
+IM = "(CASE WHEN date > 1000000000000 THEN date/1000000000 ELSE date END) + 978307200"
+Q = {
+ ("message", "message_count"): "SELECT count(*) FROM message",
+ ("message", "first_message_utc"): "SELECT strftime(%s, min(%s), 'unixepoch') FROM message WHERE date > 0" % (ISO, IM),
+ ("message", "last_message_utc"): "SELECT strftime(%s, max(%s), 'unixepoch') FROM message WHERE date > 0" % (ISO, IM),
+ ("message", "sent_message_count"): "SELECT count(*) FROM message WHERE is_from_me = 1",
+ ("handle", "handle_ids"): "L:SELECT id FROM handle",
+ ("message", "services"): "L:SELECT service FROM message",
+ ("zobject", "app_bundle_ids"): "L:SELECT ZVALUESTRING FROM ZOBJECT WHERE ZSTREAMNAME = '/app/inFocus'",
+ ("zobject", "app_usage_count"): "SELECT count(*) FROM ZOBJECT WHERE ZSTREAMNAME = '/app/inFocus'",
+ ("zobject", "last_app_usage_utc"): "SELECT strftime(%s, CAST(max(ZSTARTDATE) AS INTEGER) + 978307200, 'unixepoch') FROM ZOBJECT WHERE ZSTREAMNAME = '/app/inFocus'" % ISO,
+ ("sms", "sms_count"): "SELECT count(*) FROM sms",
+ ("sms", "sms_addresses"): "L:SELECT address FROM sms",
+ ("sms", "sms_sent_count"): "SELECT count(*) FROM sms WHERE type = 2",
+ ("sms", "first_sms_utc"): "SELECT strftime(%s, min(date)/1000, 'unixepoch') FROM sms WHERE date > 0" % ISO,
+ ("sms", "last_message_utc"): "SELECT strftime(%s, max(date)/1000, 'unixepoch') FROM sms WHERE date > 0" % ISO,
+ ("raw_contacts", "contact_display_names"): "L:SELECT display_name FROM raw_contacts WHERE deleted != 1",
+ ("raw_contacts", "contact_count"): "SELECT count(*) FROM raw_contacts WHERE deleted != 1",
+ ("messages", "chat_jids"): "L:SELECT key_remote_jid FROM messages WHERE key_remote_jid != '-1'",
+ ("messages", "message_count"): "SELECT count(*) FROM messages WHERE key_remote_jid != '-1'",
+ ("messages", "last_message_utc"): "SELECT strftime(%s, max(timestamp)/1000, 'unixepoch') FROM messages WHERE key_remote_jid != '-1' AND timestamp > 0" % ISO,
+ ("chat", "chat_jids"): "L:SELECT jid.raw_string FROM chat JOIN jid ON jid._id = chat.jid_row_id",
+ ("chat", "message_count"): "SELECT count(*) FROM message WHERE chat_row_id != -1",
+ ("chat", "first_message_utc"): "SELECT strftime(%s, min(timestamp)/1000, 'unixepoch') FROM message WHERE chat_row_id != -1 AND timestamp > 0" % ISO,
+}
+for (t, f), sql in Q.items():
+    if f == field and t in tabs and not (t == "message" and "chat" in tabs and "handle" not in tabs):
+        print(lst(sql[2:]) if sql.startswith("L:") else one(sql)); break
+else:
+    print("none")

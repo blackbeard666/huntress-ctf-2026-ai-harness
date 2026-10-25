@@ -1,0 +1,8 @@
+{
+ "field": "registry.root_value_marker",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"import sys; open(sys.argv[1],'wb').write(b'CREG'+bytes.fromhex('00000100')+bytes(4088))\" <out>  (Win9x CREG header renamed NTUSER.DAT)",
+ "oracle_cmd": "file -b <bin> -> MS Windows 95/98/ME registry file (CREG, not regf); python-registry raises ParseException (bad regf signature) => not a regf hive -> none",
+ "decoy": true,
+ "member": "NTUSER.DAT"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "cpshift",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-viper-12",
+ "encoded": "乎乩乣乥丠乷乯乲乫丠乤乥乣乯乤乩乮乧丠乴乨乩乳丠乷乡乲乭乵买両丠乔乯丠乳乯乬乶乥丬丠乳乵乢乭乩乴丠乴乨乩乳丠乥乸乡乣乴丠乡乮乳乷乥乲丠乴乯丠乴乨乥丠乇乡乭乥丠乍乡乳乴乥乲为丠乪乡乤乥中乶乩买乥乲中丱串",
+ "generator_cmd": "perl -CSA -e 'my $o = join q(), map { my $c = $_; chr(ord($c)^0x4E00) } split //, $ARGV[0]; print $o;' \"$plain\"",
+ "oracle_cmd": "python3 -I -c \"import sys;t=sys.argv[1];t=t.strip('\\\\U000E0001\\\\U000E007F');print(''.join(chr(ord(c)^0x4E00) for c in t),end='')\" \"$encoded\"",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-viper-12",
+ "expected": "match"
+}

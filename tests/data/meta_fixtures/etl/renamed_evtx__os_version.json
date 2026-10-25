@@ -1,0 +1,8 @@
+{
+ "field": "etl.os_version",
+ "expected": "none",
+ "generator_cmd": "python3 tests/data/meta_fixtures/etl/gen_etl.py OUT  (stdlib struct writer of evntrace.h TRACE_LOGFILE_HEADER + geoffchappell WMI_BUFFER_HEADER / SYSTEM_TRACE_HEADER) -> renamed_evtx.etl (EVTX 'ElfFile' file header renamed .etl)",
+ "oracle_cmd": "dissect.etl ETL(open('renamed_evtx.etl','rb')) -> InvalidBufferError (not an ETW buffer); `file renamed_evtx.etl` -> 'MS Windows Vista-8.1 Event Log, 1 chunks'",
+ "decoy": true,
+ "member": "renamed_evtx.etl"
+}

@@ -98,6 +98,9 @@ _BUILTIN = {
     # D24: EVTX record count = "**\\0\\0" records walked through EVERY physical ElfChnk (not the header's next_record_id)
     # -- prebuilt evtx.record_value promoted via evtx.py: 3 single, 43 TT, 9..119 on all 8 Mastery sets (10/10 cases)
     ("evtx", "record_count"): _v("evtx:record_count", 24),
+    # D25: the ROOT nk cell's name (base block root cell offset @0x24 -> 0x1000 + off), not the base-block file name --
+    # "HuntressArtifactAssemblyLine" single, random names TT and all Mastery sets
+    ("registry", "hive_root_name"): _v("registry:hive_root_name", 25),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

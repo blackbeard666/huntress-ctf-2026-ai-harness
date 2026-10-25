@@ -1,0 +1,8 @@
+{
+ "field": "kernel_dump.bugcheck_code_u32_hex",
+ "expected": "0x0000003b",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> MEMORY.DMP",
+ "oracle_cmd": "od -A x -t x4 -j 0x38 -N 4 MEMORY.DMP -> 0000003b",
+ "decoy": false,
+ "member": "MEMORY.DMP"
+}

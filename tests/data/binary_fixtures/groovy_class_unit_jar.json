@@ -1,0 +1,42 @@
+{
+ "kind": "groovy_facts",
+ "decoy": false,
+ "question": "Primary classfile named by unit Relay.groovy: access_flags / closures?",
+ "expected": {
+  "unit": "Relay.groovy",
+  "groovy_kind": "class",
+  "is_groovy_script": "false",
+  "primary_class": "acme/Relay",
+  "primary_class_dotted": "acme.Relay",
+  "primary_classfile": "acme/Relay.class",
+  "primary_super_class": "java/lang/Object",
+  "source_file": "Relay.groovy",
+  "closures": "[\"acme/Relay$_decode_closure1\",\"acme/Relay$_main_closure2\"]",
+  "closure_count": "2",
+  "closure_names": "[\"_decode_closure1\",\"_main_closure2\"]",
+  "closure_do_call": "{\"acme/Relay$_decode_closure1\":[\"(Ljava/lang/Object;)Ljava/lang/Object;\"],\"acme/Relay$_main_closure2\":[\"(Ljava/lang/Object;)Ljava/lang/Object;\",\"()Ljava/lang/Object;\"]}",
+  "all_closures": "[\"acme/Relay$_decode_closure1\",\"acme/Relay$_main_closure2\"]",
+  "all_closure_count": "2",
+  "call_site_names": "[\"toList\",\"collect\",\"join\",\"()\",\"<init>\",\"decode\",\"println\",\"each\"]",
+  "call_site_count": "8",
+  "script_body_method": "none",
+  "hcfg_class": "acme/Relay",
+  "hcfg_in_primary": "true",
+  "hcfg_cp_index": "11",
+  "hcfg_constant": "SENGRwFaOgDdSd9fIXg5aHhgeDIuLiopYHV1PSg1NSwjdD8iOzcqNj91OD87OTU0eHZ4Mz54YHg+OyNobHc9KDU1LCN4Jw==",
+  "references_groovy_runtime": "true",
+  "has_groovy_runtime": "false",
+  "groovy_class_major": "52",
+  "groovy_indy": "true",
+  "method_count": "10",
+  "methods": "[\"<init>\",\"decode\",\"main\",\"$getStaticMetaClass\",\"getMetaClass\",\"setMetaClass\",\"$getLookup\",\"getCFG\",\"getPort\",\"setPort\"]",
+  "access_flags": "33"
+ },
+ "expected_config": {
+  "c2": "https://groovy.example/beacon",
+  "id": "day26-groovy"
+ },
+ "generator_cmd": "bash groovy_gen.sh   # groovyc 4.0.12 (FileSystemCompiler, groovy-4.0.12.jar from Ghidra) + javac/jar JDK 21; HCFG base64 via coreutils base64 -w0",
+ "oracle_cmd": "python3 groovy_oracle.py groovy_class_unit_jar.bin --unit Relay.groovy   # unzip -Z1/-p + javap -v -p text (OpenJDK 21); HCFG via stdlib base64+crc32",
+ "note": "groovyc 4.0.12 class acme.Relay (GroovyObject) with _decode_closure1/_main_closure2, HCFG base64 static final field"
+}

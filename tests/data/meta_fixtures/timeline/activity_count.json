@@ -1,0 +1,8 @@
+{
+ "field": "timeline.activity_count",
+ "expected": "5",
+ "generator_cmd": "python3 tests/data/meta_fixtures/timeline/GENERATOR_timeline.py.txt <outdir>  (stdlib sqlite3 writer, CPython sqlite 3.53.1)",
+ "oracle_cmd": "sqlite3 -readonly ActivitiesCache.db \"select count(*) from Activity\"  (SQLite 3.53.1 CLI, JSON1)",
+ "decoy": false,
+ "member": "ActivitiesCache.db"
+}

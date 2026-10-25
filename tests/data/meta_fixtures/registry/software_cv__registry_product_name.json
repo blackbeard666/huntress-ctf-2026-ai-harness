@@ -1,0 +1,8 @@
+{
+ "field": "registry.product_name",
+ "expected": "Windows 10 Pro",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/registry/GENERATOR_registry_values.py.txt <outdir>  (software_cv.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib .venv/bin/python -P tests/data/meta_fixtures/registry/ORACLE_registry_values.py.txt <bin> value 'Microsoft\\Windows NT\\CurrentVersion' ProductName  (python-registry 1.3.1) -> Windows 10 Pro",
+ "decoy": false,
+ "member": "SOFTWARE"
+}

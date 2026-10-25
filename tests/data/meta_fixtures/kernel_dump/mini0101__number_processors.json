@@ -1,0 +1,8 @@
+{
+ "field": "kernel_dump.number_processors",
+ "expected": "2",
+ "generator_cmd": "python3 tests/data/meta_fixtures/minidump/gen_dumps.py out  (stdlib struct writer of MSDN minidumpapiset.h MINIDUMP_HEADER/DIRECTORY/SYSTEM_INFO/MODULE/EXCEPTION_STREAM/THREAD/MISC_INFO, DUMP_HEADER64/32, PO_MEMORY_IMAGE signature) -> Mini0101.dmp",
+ "oracle_cmd": "file Mini0101.dmp -> 'MS Windows 32bit crash dump, version 15.2600, 2 processors, PAE, full dump'",
+ "decoy": false,
+ "member": "Mini0101.dmp"
+}

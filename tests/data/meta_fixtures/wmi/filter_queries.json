@@ -1,0 +1,8 @@
+{
+ "field": "wmi.filter_queries",
+ "expected": "[\"SELECT * FROM __InstanceCreationEvent WITHIN 5 WHERE TargetInstance ISA 'Win32_LogonSession'\",\"SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System' AND TargetInstance.SystemUpTime >= 240\"]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/wmi/GENERATOR_wmi.py.txt <outdir>  (stdlib writer, seeded) -> objects_utf16.data",
+ "oracle_cmd": "strings -a -el objects_utf16.data | grep -E '^SELECT ' | sort -u | jq -R . | jq -sc .  (GNU binutils strings 2.x + jq; -el = UTF-16LE)",
+ "decoy": false,
+ "member": "OBJECTS.DATA"
+}

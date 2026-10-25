@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.secure_delete",
+ "expected": "true",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_deleted.sh.txt <outdir>  (sqlite3 CLI 3.46.1 + coreutils printf/dd) -> secure.sqlite",
+ "oracle_cmd": "sh tests/data/meta_fixtures/sqlite/ORACLE_sqlite_deleted.sh.txt <db>  (od/dd/strings -n 6/LC_ALL=C sort -u + sqlite3 dbstat/pragma): pragma secure_delete=on; freelist leaf pages: tr -d '\\0' | wc -c -> 0",
+ "decoy": false,
+ "member": "secure.sqlite"
+}

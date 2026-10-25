@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.deleted_row_candidates",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_deleted.sh.txt <outdir>  (sqlite3 CLI 3.46.1 + coreutils printf/dd) -> sqlite2.db",
+ "oracle_cmd": "sh tests/data/meta_fixtures/sqlite/ORACLE_sqlite_deleted.sh.txt <db>  (od/dd/strings -n 6/LC_ALL=C sort -u + sqlite3 dbstat/pragma): file -b -> 'SQLite 2.x database' (not SQLite 3)",
+ "decoy": true,
+ "member": "sqlite2.db"
+}

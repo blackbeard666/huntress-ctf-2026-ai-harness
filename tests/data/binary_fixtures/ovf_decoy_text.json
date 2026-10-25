@@ -1,0 +1,28 @@
+{
+ "family": "overflow_facts",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "vulnerable_function": "none",
+  "unsafe_call": "none",
+  "frame_size": "none",
+  "buffer_offset": "none",
+  "distance_to_return": "none",
+  "read_length": "none",
+  "canary": "none",
+  "distance_to_canary": "none",
+  "nx": "none",
+  "pie": "none",
+  "relro": "none",
+  "binary_canary": "none",
+  "ret_overwrite_length": "none",
+  "cyclic_offset": "none",
+  "crash_length": "none",
+  "vulnerable": "none"
+ },
+ "generator_cmd": "bash ovf_gen.sh   # printf text mentioning gets/fs:0x28 (not an ELF)",
+ "oracle_cmd": "file ovf_decoy_text.bin   # ASCII text",
+ "oracle_output": "ovf_decoy_text.bin: ASCII text",
+ "decoy": true
+}

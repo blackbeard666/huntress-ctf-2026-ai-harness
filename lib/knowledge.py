@@ -246,6 +246,12 @@ MACHO_CPU_TYPE_SET_REJECTED = ['["arm64"]', '["0x0100000c","0x0000000c","0x00000
 # base-10 int. lib.meta.prebuilt.sqlite.sqlite_value (verified entry in lib.meta._BUILTIN).
 SQLITE_PAGE_SIZE_BYTES = "u16be @16 of 'SQLite format 3\\0', 1 -> 65536, base-10"
 
+# Day 25 "Hive Mind" (metadata-forensics), confirmed 2026-10-25 (single "HuntressArtifactAssemblyLine", TT + Mastery 9 sets
+# random 6-32 char names, all first try): d25-registry-NNN-registry-hive-root-name = the ROOT nk cell's name (base block
+# root cell offset u32 @0x24 -> nk at 0x1000 + off; COMP_NAME 0x20 -> Latin-1 else UTF-16LE), not the base-block file
+# name -- the hives were renamed. lib.meta.registry.hive_root_name (verified entry in lib.meta._BUILTIN).
+REGISTRY_HIVE_ROOT_NAME = "root nk cell name (regf base block root cell offset @0x24), verbatim"
+
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
     "resource_hijacking": "T1496",     # crypto-mining / resource hijacking

@@ -1,0 +1,8 @@
+{
+ "field": "activitiescache.activity_count",
+ "expected": "none",
+ "generator_cmd": "python3 tests/data/meta_fixtures/timeline/GENERATOR_timeline.py.txt <outdir>  (stdlib sqlite3 writer, CPython sqlite 3.53.1)",
+ "oracle_cmd": "file impostor.db -> MS-DOS executable (not SQLite 3.x database); sqlite3 -readonly impostor.db .tables -> \"file is not a database\"",
+ "decoy": true,
+ "member": "ActivitiesCache.db"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.embedded_page_size_bytes",
+ "expected": "2048",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_embedded.sh.txt . <outdir>  (sqlite3 CLI writer + Pillow PNG + cat/head/zip) -> agent.exe",
+ "oracle_cmd": "tail -c +1025 agent.exe > c.db; sqlite3 -readonly c.db 'pragma page_size; pragma page_count' -> 2048 5",
+ "decoy": false,
+ "member": "agent-001.exe"
+}

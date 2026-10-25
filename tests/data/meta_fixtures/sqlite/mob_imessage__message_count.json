@@ -1,0 +1,8 @@
+{
+ "field": "sqlite.message_count",
+ "expected": "5",
+ "generator_cmd": "sh tests/data/meta_fixtures/sqlite/GENERATOR_sqlite_mobile.sh.txt <outdir>  (sqlite3 CLI 3.46.1 writer -> mob_imessage.db)",
+ "oracle_cmd": "python3 -I tests/data/meta_fixtures/sqlite/ORACLE_sqlite_mobile.py.txt mob_imessage.db message_count  (Python sqlite3 / SQLite C library SQL + SQLite strftime epoch conversion)",
+ "decoy": false,
+ "member": "mob_imessage.db"
+}
