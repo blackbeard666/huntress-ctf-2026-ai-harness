@@ -30,6 +30,9 @@ below is the legacy row, `hctf kpi --legacy`: 5 regular lanes from the release l
 | D22 replay-cap30 | 2026-10-22 | 1:07 (15/15) | 1:00 | - | 5/5 (binary, metada, mobile, script, warmup) | 10/10 | 0 / 0 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 2 | 10.11 | 13.03 | - (0/6) |
 | D23 | 2026-10-23 | 28:55 (15/15) | 16:10 | +2.6s (launch +13s) | 4/5 (binary, metada, mobile, script) | 12/16 | 12 / 891 / 320 (script-analysis) | 7 / 0 / 0 | 0 | 25.49 | 0.00 | 7:21 (9/9) |
 | D24 | 2026-10-24 | 2:09 (15/15) | 2:00 | +986.0s | 4/5 (binary, metada, mobile, script) | 14/14 | 1 / 18 / 0 (binary-reverse-engineering) | 1 / 0 / 0 | 0 | 9.11 | 13.90 | 3:32 (6/6) |
+| D24 replay-ab-base | 2026-10-24 | 2:41 (15/15) | 2:09 | - | 4/5 (binary, metada, mobile, script) | 10/10 | 0 / 0 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 0 | 13.91 | 13.90 | - |
+| D24 replay-ab-new | 2026-10-24 | 2:06 (15/15) | 1:42 | - | 4/5 (binary, metada, mobile, script) | 10/10 | 0 / 0 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 0 | 13.91 | 13.90 | - |
+| D24 replay-ab-rf | 2026-10-24 | 1:28 (15/15) | 1:18 | - | 4/5 (binary, metada, mobile, script) | 10/10 | 0 / 0 / 0 (binary-reverse-engineering) | 0 / 0 / 0 | 0 | 13.91 | 13.90 | - |
 
 ## Board v2 (whole board incl. web, T0 = drop; launch when not armed)
 
@@ -40,6 +43,9 @@ below is the legacy row, `hctf kpi --legacy`: 5 regular lanes from the release l
 | D22 | 2026-10-22 | drop 21:00:00 | 8:00 (21/21) | 7:27 | 1:45 (15/15) | 8:00 (6/6) | +2.3s (launch +10s) | web:uploading-expectations | 25.7 / 379 / 59.3 | 166.6 / 267.4 | 0 | 10.11 |
 | D23 | 2026-10-23 | drop 21:00:00 | 29:08 (24/24) | 16:23 | 29:08 (15/15) | 7:34 (9/9) | +2.6s (launch +13s) | script-analysis | 879.8 / 373 / 471.2 | 747.4 / 1100.5 | 1 | 30.63 |
 | D24 | 2026-10-24 | launch 21:16:23 | 3:35 (21/21) | 3:24 | 2:12 (15/15) | 3:35 (6/6) | +986.0s | web:fetch-quest | 46.7 / 147 / 7.3 | 0 / 688.2 | 0 | 11.11 |
+| D24 replay-ab-base | 2026-10-24 | launch 15:58:36 | 2:43 (15/15) | 2:11 | 2:43 (15/15) | - (0/0) | - | binary-reverse-engineering | 66.1 / 9 / 84.9 | 0 / 240.1 | 0 | 13.91 |
+| D24 replay-ab-new | 2026-10-24 | launch 16:02:54 | 2:08 (15/15) | 1:44 | 2:08 (15/15) | - (0/0) | - | binary-reverse-engineering | 46.1 / 1 / 77.9 | 0 / 179 | 0 | 13.91 |
+| D24 replay-ab-rf | 2026-10-24 | launch 16:15:13 | 1:30 (15/15) | 1:20 | 1:30 (15/15) | - (0/0) | - | binary-reverse-engineering | 39.8 / 0 / 47.2 | 0 / 159.9 | 0 | 13.91 |
 
 ## Lanes v2 (T+ from the board's T0; segment s = GM / LLM / harness)
 
@@ -82,3 +88,18 @@ below is the legacy row, `hctf kpi --legacy`: 5 regular lanes from the release l
 | D24 | warmups | 0:05 | 0:36 | 0:53 | 1:14 | 31 = 4.2 / 18 / 8.8 | 17 = 7.9 / 4 / 5.1 | 21 = 8.2 / 0 / 12.8 | 0 / 29.8 | 0 |
 | D24 | web:fetch-quest | 0:14 | 1:38 | 3:04 | 3:35 | 84 = 15.7 / 61 / 7.3 | 86 = 0 / 86 / 0 | 31 = 31 / 0 / 0 | 0 / 110.4 | 0 |
 | D24 | web:the-api-has-opinions | 0:13 | 2:06 | 2:44 | 3:24 | 113 = 32.5 / 61 / 19.5 | 38 = 0 / 38 / 0 | 40 = 0 / 40 / 0 | 0 / 199 | 0 |
+| D24 replay-ab-base | binary-reverse-engineering | 0:03 | 0:23 | 1:40 | 2:43 | 20 = 0 / 0 / 20 | 77 = 11.8 / 9 / 56.2 | 63 = 54.3 / 0 / 8.7 | 0 / 77.9 | 0 |
+| D24 replay-ab-base | metadata-forensics | 0:03 | 0:24 | 1:11 | 1:30 | 21 = 0 / 10 / 11 | 47 = 13.3 / 1 / 32.7 | 19 = 8.1 / 0 / 10.9 | 0 / 34.7 | 0 |
+| D24 replay-ab-base | mobile-android | 0:04 | 0:18 | 0:31 | 1:11 | 14 = 0 / 0 / 14 | 13 = 7.2 / 1 / 4.8 | 40 = 31 / 0 / 9 | 0 / 45.4 | 0 |
+| D24 replay-ab-base | script-analysis | 0:04 | 0:21 | 1:31 | 2:11 | 17 = 0 / 0 / 17 | 70 = 9.8 / 40 / 20.2 | 40 = 19.9 / 0 / 20.1 | 0 / 39.5 | 0 |
+| D24 replay-ab-base | warmups | 0:04 | 1:09 | 1:37 | 2:11 | 65 = 0 / 53 / 12 | 28 = 8 / 4 / 16 | 34 = 26.5 / 0 / 7.5 | 0 / 42.5 | 0 |
+| D24 replay-ab-new | binary-reverse-engineering | 0:03 | 0:36 | 1:27 | 2:08 | 33 = 0 / 0 / 33 | 51 = 11.6 / 1 / 38.4 | 41 = 34.5 / 0 / 6.5 | 0 / 57.7 | 0 |
+| D24 replay-ab-new | metadata-forensics | 0:03 | 0:20 | 0:39 | 0:57 | 17 = 0 / 8 / 9 | 19 = 9.6 / 2 / 7.4 | 18 = 7.9 / 0 / 10.1 | 0 / 27.2 | 0 |
+| D24 replay-ab-new | mobile-android | 0:04 | 0:18 | 0:32 | 0:49 | 14 = 0 / 0 / 14 | 14 = 7.6 / 1 / 5.4 | 17 = 9.3 / 0 / 7.7 | 0 / 24.4 | 0 |
+| D24 replay-ab-new | script-analysis | 0:05 | 0:33 | 1:11 | 1:44 | 28 = 0 / 0 / 28 | 38 = 9 / 7 / 22 | 33 = 17.8 / 0 / 15.2 | 0 / 35.8 | 0 |
+| D24 replay-ab-new | warmups | 0:04 | 0:49 | 1:03 | 1:29 | 45 = 0 / 30 / 15 | 14 = 7.5 / 2 / 4.5 | 26 = 18.8 / 0 / 7.2 | 0 / 33.9 | 0 |
+| D24 replay-ab-rf | binary-reverse-engineering | 0:03 | 0:31 | 0:55 | 1:30 | 28 = 0 / 0 / 28 | 24 = 11.8 / 0 / 12.2 | 35 = 28 / 0 / 7 | 0 / 51.6 | 0 |
+| D24 replay-ab-rf | metadata-forensics | 0:02 | 0:25 | 0:43 | 1:01 | 23 = 0 / 10 / 13 | 18 = 8.8 / 1 / 8.2 | 18 = 11 / 0 / 7 | 0 / 28.6 | 0 |
+| D24 replay-ab-rf | mobile-android | 0:03 | 0:17 | 0:29 | 0:42 | 14 = 0 / 0 / 14 | 12 = 7.4 / 1 / 3.6 | 13 = 8.9 / 0 / 4.1 | 0 / 23.7 | 0 |
+| D24 replay-ab-rf | script-analysis | 0:04 | 0:20 | 0:50 | 1:17 | 16 = 0 / 0 / 16 | 30 = 9 / 7 / 14 | 27 = 14.6 / 0 / 12.4 | 0 / 32.6 | 0 |
+| D24 replay-ab-rf | warmups | 0:03 | 0:50 | 1:08 | 1:20 | 47 = 0 / 33 / 14 | 18 = 7.8 / 2 / 8.2 | 12 = 7.7 / 0 / 4.3 | 0 / 23.3 | 0 |
