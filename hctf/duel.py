@@ -199,6 +199,7 @@ class Duel:
         self.green_res = None
         self._checked = None
         self.copied = threading.Event()
+        self.src = None   # copy the solver from here instead of the live dir (D25 C1: the pre-worker snapshot)
 
     def alive(self):
         return self.thread is not None and self.thread.is_alive()
@@ -246,7 +247,7 @@ class Duel:
                     join = getattr(self.chain, "_join_prior_cases", None)
                     if join:
                         join(self.cid)    # the background prior cases/ copy (stage_prior_cases) must be complete
-                _copy_solver(self.chain.sdir, self.ddir, self.cases)
+                _copy_solver(self.src or self.chain.sdir, self.ddir, self.cases)
                 self.copied.set()
                 log(f"[{self.cid}] duel {self.stage} worker -> local (effort "
                     f"{self.effort or workers.worker_effort(self.chain.lane)}"
@@ -346,12 +347,18 @@ class Duel:
         return self.snap
 
     # ---- generalize: green check on the duel's copy (Chain._watch_green's rule)
-    def watch_green(self, targets, baseline, need_fast, fill, green, log=print):
+    def watch_green(self, targets, baseline, need_fast, fill, green, log=print, reject_free=frozenset(), ready=None):
+        """`reject_free`: unverified cases with GM rejections -- green once complete with none of them (D25 C2).
+        `ready`: blocks until the chain's async baseline (C1) filled targets / fill / reject_free / baseline in place."""
         try:
             while not self.copied.wait(0.5):
                 if self.stop_evt.is_set() or (self.thread is not None and not self.alive()):
                     return
             start, checked = _code_mtimes(self.ddir), None
+            if ready is not None and not ready():
+                return
+            if not (targets or fill or reject_free):
+                return
             while not self.stop_evt.wait(2.0):
                 if green.is_set():
                     return
@@ -362,7 +369,8 @@ class Duel:
                     continue
                 checked = m
                 try:
-                    if not solvers.targets_pass(self.ddir, targets, fill, timeout=GREEN_CASE_TIMEOUT):
+                    if not solvers.targets_pass(self.ddir, targets, fill, timeout=GREEN_CASE_TIMEOUT,
+                                                reject_free=reject_free):
                         continue   # target still failing: no full-corpus replay for this edit
                     res = solvers.test_solver(self.ddir, timeout=GREEN_CASE_TIMEOUT)
                 except Exception:  # noqa: BLE001
@@ -373,9 +381,11 @@ class Duel:
                 ok = {r["case"] for r in res if r.get("ok")}
                 filled = {r["case"] for r in res if r.get("total") and r.get("answered") == r.get("total")
                           and not r.get("error")}
+                rf_ok = {r["case"] for r in res if r.get("reject_free")}
                 fast = all(r.get("seconds", 99) < 2.0 for r in res if r["case"] in (targets | set(fill)))
-                if targets <= ok and set(fill) <= filled and baseline <= ok and (fast or not need_fast):
-                    if fill and not (targets & ok):
+                if (targets <= ok and set(fill) <= filled and set(reject_free) <= rf_ok and baseline <= ok
+                        and (fast or not need_fast)):
+                    if fill and not (targets & ok) and not reject_free:
                         continue   # fill-only evidence never wins (VERIFIED_GREEN, D12)
                     with self.chain.__dict__.setdefault("_gen_lock", threading.Lock()):
                         if green.is_set():
@@ -461,8 +471,8 @@ class DuelGroup:
     def watch_single(self, ready_get, log=print):
         self._fan("watch_single", (ready_get, log))
 
-    def watch_green(self, targets, baseline, need_fast, fill, green, log=print):
-        self._fan("watch_green", (targets, baseline, need_fast, fill, green, log))
+    def watch_green(self, targets, baseline, need_fast, fill, green, log=print, reject_free=frozenset(), ready=None):
+        self._fan("watch_green", (targets, baseline, need_fast, fill, green, log, reject_free, ready))
 
     def wait_snap(self, seconds, log=print):
         end = time.time() + seconds
@@ -479,12 +489,16 @@ class DuelGroup:
         (self._winner() or self.members[0]).adopt_into(sdir, log=log)
 
 
-def make(chain, cid, stage, prompt, timeout, cases, note_extra=""):
+def make(chain, cid, stage, prompt, timeout, cases, note_extra="", src=None):
     """The duel for a chain stage: racer 1 alone when HCTF_DUEL_EXTRA is empty, else a DuelGroup. A strategy note
-    (QUICK_FIX_NOTE) goes to racer 1 only: the extra racers' diversity is the model."""
+    (QUICK_FIX_NOTE) goes to racer 1 only: the extra racers' diversity is the model. `src`: copy the solver from there
+    (a generalize duel started after its worker: the pre-worker snapshot)."""
     first = Duel(chain, cid, stage, prompt, timeout, cases, note_extra=note_extra)
+    first.src = src
     if not EXTRA:
         return first
     extra = [Duel(chain, cid, stage, prompt, timeout, cases, n=i, model=m, effort=e)
              for i, (m, e) in enumerate(EXTRA, start=2)]
+    for m in extra:
+        m.src = src
     return DuelGroup([first, *extra])
