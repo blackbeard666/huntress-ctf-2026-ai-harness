@@ -1,0 +1,46 @@
+{
+ "handler": "day24_web_the_api_has_opinions",
+ "expected": null,
+ "decoy": true,
+ "dispatch_excludes": [
+  "day24_web_the_api_has_opinions"
+ ],
+ "source": "D25 Resolver Revolt (lane-day 18) /api/clues keys from .run/web_race.jsonl: {current_user, feature_route, note, protected_reference}; feature_route is a GraphQL endpoint",
+ "oracle": "protected_reference WITHOUT inventory_route is not Day 14's class (D25 D4 companion routing): the dispatcher must not pick the D14 handler and the handler finds nothing",
+ "routes": [
+  {
+   "method": "GET",
+   "path": "/api/clues",
+   "response": {
+    "current_user": "analyst",
+    "feature_route": "/graphql",
+    "note": "Cases are private to their owner.",
+    "protected_reference": "case-7"
+   }
+  },
+  {
+   "method": "POST",
+   "path": "/graphql",
+   "status": 200,
+   "response": {
+    "errors": [
+     {
+      "message": "field_check_required"
+     }
+    ]
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/graphql",
+   "status": 400,
+   "response": {
+    "errors": [
+     {
+      "message": "query_required"
+     }
+    ]
+   }
+  }
+ ]
+}

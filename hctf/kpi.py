@@ -81,7 +81,8 @@ def compute(day=None, log=None, root=None):
         base, mode = timeline._split(tag)
         if "reuse race WON" in body:
             race.add(base)
-        if body.startswith("passed by the live-answer worker"):
+        if body.startswith(("passed by the live-answer worker", "passed by the live answer",
+                            "passed by the parallel live answer")) or body.startswith("result: correct (live answer"):
             live.add((base, mode))
         if body.startswith("timed: {") and '"resubmit_fixed"' in body and '"result": "correct"' in body:
             inatt.add((base, mode))

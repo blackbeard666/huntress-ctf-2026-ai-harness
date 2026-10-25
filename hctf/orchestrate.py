@@ -286,7 +286,21 @@ WEB_PAR_LIVE = os.environ.get("HCTF_WEB_PAR_LIVE", "1") != "0"
 WEB_CODIFY_IS_GEN = os.environ.get("HCTF_WEB_CODIFY_IS_GEN", "1") != "0"
 WEB_CODIFY_GEN_WAIT = float(os.environ.get("HCTF_WEB_CODIFY_GEN_WAIT", "90"))
 WEB_PAR_LIVE_BIND = float(os.environ.get("HCTF_WEB_PAR_LIVE_BIND", "120"))   # s to wait for the runner's attempt id
-WEB_GEN_WAIT_POLL = 2.0
+# D25 D3: the codify wait polls local files only (submissions.jsonl / the plugin's mtime): 0.5 s, not 2 s, so a live
+# answer's CORRECT requests the Mastery target ~1.5 s sooner on average
+WEB_GEN_WAIT_POLL = float(os.environ.get("HCTF_WEB_GEN_WAIT_POLL", "0.5"))
+# D25 D2 (plugin from the single): the web answer-first worker writes the class plugin as a draft in its $TMPDIR, runs it
+# on the single's live target via `python -m lib.web.plugin` (verify + atomic promote into lib/web/handlers/) and submits
+# the proof it prints -> the plugin exists at the single's CORRECT and the Time Trial's FIRST run dispatches to it (D25:
+# codify landed 84-159 s after CORRECT, always after the TT's live answer). 0 = the old answer-only prompt.
+WEB_SINGLE_PLUGIN = os.environ.get("HCTF_WEB_SINGLE_PLUGIN", "1") != "0"
+# With a verified plugin already promoted at the single's CORRECT, codify runs as an off-critical-path HARDENING pass
+# (re-verify on a fresh target, generalise what the single's target fixed, promote only a verified improvement).
+# 0 = no codify worker when the plugin is already in place.
+WEB_CODIFY_HARDEN = os.environ.get("HCTF_WEB_CODIFY_HARDEN", "1") != "0"
+# D25 D3: the codify-as-generalize wait (+ plugin-landed reconnect) also covers a blocked web MASTERY (D25 shell-company:
+# Mastery's proof-4 blocked 62 s before codify landed; a generalize + live answer ran instead). 0 = Time Trial only.
+WEB_CODIFY_MASTERY = os.environ.get("HCTF_WEB_CODIFY_MASTERY", "1") != "0"
 RESUME_CONTINUES = int(os.environ.get("HCTF_RESUME_CONTINUES", "2"))
 TT_FIX_GATE = os.environ.get("HCTF_TT_FIX_GATE", "1") == "1"
 SINGLE_DUEL_CASES = os.environ.get("HCTF_SINGLE_DUEL_CASES", "1") == "1"
@@ -465,6 +479,7 @@ class LiveAnswer:
         self.stop_evt, self.done = threading.Event(), threading.Event()
         self.passed = self.all_accepted = False
         self._links = []
+        self.on_pass = []   # callables run once by the watcher the moment the GM says CORRECT (D25 D3: Mastery kick)
         tdir = timed.timed_dir(cid)
         try:
             contract = json.loads((tdir / "contract.json").read_text())
@@ -573,6 +588,11 @@ class LiveAnswer:
             if self.passed or self.all_accepted:
                 say(f"[{self.cid}] live-answer: {'mode CORRECT' if self.passed else 'every listed field accepted'} "
                     "-> ending the generalize")
+                for fn in self.on_pass if self.passed else ():
+                    try:
+                        fn()
+                    except Exception:  # noqa: BLE001 - a hook never stops the watcher
+                        pass
                 for e in self._links:
                     e.set()
                 self.stop_evt.set()
@@ -601,13 +621,29 @@ ANSWER_FIRST_LANES = {x.strip() for x in os.environ.get(
     "warmups,metadata-forensics,mobile-android,binary-reverse-engineering,script-analysis,web").split(",") if x.strip()}
 ANSWER_FIRST_EFFORT = os.environ.get("HCTF_ANSWER_FIRST_EFFORT", "medium")
 ANSWER_FIRST_TIMEOUT = float(os.environ.get("HCTF_ANSWER_FIRST_TIMEOUT", "420"))
-ANSWER_FIRST_MAX = int(os.environ.get("HCTF_ANSWER_FIRST_MAX", "3"))          # concurrent answer-first workers
+# Concurrent answer-first workers. D25 D4: the fixed 3 starved reset-expectations (3 web chains + warmups held all
+# three at 21:00:31; its single then waited on the solver worker alone). "auto" (default) = one per chain started this
+# run (web included), never below ANSWER_FIRST_MIN; a number = that fixed cap (3 = the old behaviour). Memory still
+# gates every start: MIN_AVAIL_GB free, plus GB_EACH more per worker already running beyond the old 3.
+_AF_MAX_ENV = os.environ.get("HCTF_ANSWER_FIRST_MAX", "auto").strip()
+ANSWER_FIRST_MAX = int(_AF_MAX_ENV) if _AF_MAX_ENV.isdigit() else 0          # 0 = auto (scale with the day's chains)
+ANSWER_FIRST_MIN = int(os.environ.get("HCTF_ANSWER_FIRST_MIN", "3"))
 ANSWER_FIRST_MIN_AVAIL_GB = float(os.environ.get("HCTF_ANSWER_FIRST_MIN_AVAIL_GB", "2.0"))
+ANSWER_FIRST_GB_EACH = float(os.environ.get("HCTF_ANSWER_FIRST_GB_EACH", "0.3"))
 ANSWER_FIRST_RACE_WAIT = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT", "10"))   # give the reuse race its 3-9 s
 # web (D24 #9): the answer-first worker starts at once beside the race (its live probe and the race's exploits hit the
 # same target; whichever completes first ends the other). 10 = the old wait.
 ANSWER_FIRST_RACE_WAIT_WEB = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT_WEB", "0"))
 _af_live, _af_lock = set(), threading.Lock()
+_af_chains = set()   # chain bases constructed this run (Chain.__init__): the auto answer-first cap
+
+
+def answer_first_cap():
+    """The concurrent answer-first cap now: HCTF_ANSWER_FIRST_MAX when numeric, else max(MIN, chains this run)."""
+    if ANSWER_FIRST_MAX > 0:
+        return ANSWER_FIRST_MAX
+    with _af_lock:
+        return max(ANSWER_FIRST_MIN, len(_af_chains))
 
 
 def answer_first_eligible(lane, n_fields):
@@ -623,11 +659,14 @@ def answer_first_eligible(lane, n_fields):
         avail = _duel._mem_avail_gb()
     except Exception:  # noqa: BLE001
         avail = 99.0
-    if avail < ANSWER_FIRST_MIN_AVAIL_GB:
-        return False, f"only {avail:.1f} GB available"
+    cap = answer_first_cap()
     with _af_lock:
-        if len(_af_live) >= ANSWER_FIRST_MAX:
-            return False, f"{len(_af_live)} answer-first workers already running"
+        running = len(_af_live)
+    if running >= cap:
+        return False, f"{running} answer-first workers already running (cap {cap})"
+    need = ANSWER_FIRST_MIN_AVAIL_GB + max(0, running - 2) * ANSWER_FIRST_GB_EACH
+    if avail < need:
+        return False, f"only {avail:.1f} GB available (need {need:.1f} with {running} running)"
     return True, ""
 
 
@@ -705,6 +744,25 @@ class WebParLive:
         return self.live
 
 
+_KICK_LOCK = threading.Lock()
+
+
+def _kick_once(obj, flag):
+    """Atomically claim a once-per-chain kick (D25 D3: the web Mastery kick now fires from the codify-wait thread, the
+    runner's on_correct and the post-pass path -- check-then-set without a lock could request the target twice)."""
+    with _KICK_LOCK:
+        if getattr(obj, flag, False):
+            return False
+        setattr(obj, flag, True)
+        return True
+
+
+def _codify_modes():
+    """The web modes whose block waits on a running codify worker (+ re-runs when its plugin lands): D24 #11 = the Time
+    Trial; D25 D3 adds Mastery (HCTF_WEB_CODIFY_MASTERY)."""
+    return ("time_trial", "mastery") if WEB_CODIFY_MASTERY else ("time_trial",)
+
+
 class _HeldLive:
     """A LiveAnswer kept in timed_stage's parallel-live slot across a codify reconnect (close() -> it)."""
 
@@ -719,41 +777,42 @@ class WebCodify:
     """Background web codify worker (see WEB_CODIFY): the single's exploit -> `lib/web/handlers/<slug>.py` (KEY_MAP +
     HANDLERS, auto-loaded by lib.web.handlers). One file per challenge, so two web chains never edit the same file."""
 
-    def __init__(self, chain, cid):
+    def __init__(self, chain, cid, prelanded=False):
         self.chain, self.cid = chain, cid
         self.stop_evt, self.done = threading.Event(), threading.Event()
         self.plugin = web_plugin_path(chain.sdir)
         self.name = self.plugin.stem
         self.t0 = time.time()
+        # D25 D2: the single's worker already promoted a verified plugin -> this is a hardening pass (a promote by it is
+        # still `landed`: mtime >= t0)
+        self.prelanded = prelanded
         self.thread = threading.Thread(target=self._run, daemon=True, name=f"codify-{cid}")
 
     def start(self):
-        say(f"[{self.cid}] web codify worker: the single's exploit -> {_rel(self.plugin)} (runs beside the Time Trial)")
+        say(f"[{self.cid}] web codify worker: " + (f"hardening {self.plugin.name} (promoted by the single's worker)"
+                                                   if self.prelanded else
+                                                   f"the single's exploit -> {_rel(self.plugin)}")
+            + " (runs beside the Time Trial)")
         self.thread.start()
         return self
 
     def landed(self, timeout=15):
-        """The plugin was written by this worker and maps its handler on import (checked in a fresh interpreter, so this
-        process never caches a half-written module)."""
-        import subprocess
-        try:
-            if not self.plugin.exists() or self.plugin.stat().st_mtime < self.t0:
-                return False
-            code = (f"from lib.web import handlers as h; import sys; "
-                    f"sys.exit(0 if {self.name!r} in h._HANDLERS and any(n == {self.name!r} for _p, n in h._KEY_MAP) "
-                    f"else 1)")
-            r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, timeout=timeout)
-            return r.returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            return False
+        """This worker promoted the plugin (mtime >= its start) and it maps its handler on import (web_plugin_landed)."""
+        return web_plugin_landed(self.plugin, since=self.t0, timeout=timeout)
 
     def _run(self):
         try:
             tt, ms = self.chain.entries.get("time_trial"), self.chain.entries.get("mastery")
+            harden = ("A VERIFIED plugin is ALREADY in place: `" + _rel(self.plugin) + "` (the single's worker promoted it "
+                      "after it returned the single's proof). This is a HARDENING pass: copy it to your draft, re-run it on "
+                      "the fresh target below, and only fix what a fresh target breaks (per-target values the single's "
+                      "target happened to fix, a missing fallback route/parameter, a too-slow step). If it already "
+                      "returns a proof on the fresh target and you see nothing to harden, STOP without promoting."
+                      ) if self.prelanded else ""
             prompt = workers.render(
                 "codify", persona=workers.lane_persona(self.chain.lane), cid=self.cid, name=self.name,
                 method=single_method_text(cli.cdir(self.cid)) or "(no transcript: re-derive it from /api/clues)",
-                plugin=_rel(self.plugin), budget=int(WEB_CODIFY_TIMEOUT),
+                plugin=_rel(self.plugin), budget=int(WEB_CODIFY_TIMEOUT), harden=harden,
                 tt_cid=tt["id"] if tt else "(no Time Trial)",
                 tt_contract=_rel(cli.cdir(tt["id"]) / "start.json") if tt else "(no Time Trial)",
                 m_contract=_rel(cli.cdir(ms["id"]) / "start.json") if ms else "(no Mastery)")
@@ -809,6 +868,15 @@ class AnswerFirst:
                 "'Mozilla/5.0'` (Cloudflare 403s default library user agents); read the page, its JS and robots.txt first, "
                 "then send only the few targeted requests that evidence points to -- no wordlist scanning, fuzzing or "
                 "brute force.")
+            if WEB_SINGLE_PLUGIN:
+                plug = web_plugin_path(chain.sdir)
+                self.prompt += (
+                    "\n\nPLUGIN FIRST (web lane): the Time Trial and Mastery get FRESH targets, so the proof must come "
+                    "from CODE the timed solver dispatches to. Once your few curl requests showed the exploit, encode it "
+                    "and get the proof BY RUNNING the plugin: " + web_plugin_steps(plug, urls[0] if urls else "<target url>")
+                    + " Submit the `PROOF` it prints. The verifier's promote is the ONE write into lib/ you may make. "
+                    "If two draft fixes still give no proof, submit the proof you derived by hand (never hold the single "
+                    "for the plugin; a codify worker then writes it).")
         self.stop_evt, self.done, self.started = threading.Event(), threading.Event(), threading.Event()
         self.rc = None
         self.seen = set()
@@ -1553,13 +1621,42 @@ def web_plugin_path(sdir):
     return ROOT / "lib" / "web" / "handlers" / f"{name}.py"
 
 
+def web_plugin_landed(plugin, since=0.0, timeout=15):
+    """The plugin file exists (written at/after `since`, epoch s) and maps its handler on import -- checked in a fresh
+    interpreter, so this process never caches a half-written module. Promotion is atomic (lib.web.plugin), so a file
+    that passes is complete."""
+    import subprocess
+    plugin = Path(plugin)
+    try:
+        if not plugin.exists() or plugin.stat().st_mtime < since:
+            return False
+        name = plugin.stem
+        code = (f"from lib.web import handlers as h; import sys; "
+                f"sys.exit(0 if {name!r} in h._HANDLERS and any(n == {name!r} for _p, n in h._KEY_MAP) else 1)")
+        r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, timeout=timeout)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def web_plugin_steps(p, target="<a live target url from the contract's targets[]>"):
+    """How any web worker writes + lands the class plugin `p` (D25 D2): a draft in its own $TMPDIR, verified on a live
+    target and promoted atomically by lib.web.plugin -- never edited in place (D25: a runner imported a plugin mid-edit)."""
+    return (f"(1) write the draft `$TMPDIR/{p.stem}.py`: `KEY_MAP = [(r\"<regex on a /api/clues KEY>\", \"{p.stem}\")]`, "
+            f"`HANDLERS = {{\"{p.stem}\": exploit}}`, `def exploit(base, clues) -> \"proof_...\" or None` re-running the "
+            "exploit end to end (recon what is per-target, then exploit, then read the proof; `lib.websolve.fetch` / "
+            "`PROOF_RE`, short timeouts, browser UA, nothing from your shell session); (2) run "
+            f"`.venv/bin/python -m lib.web.plugin $TMPDIR/{p.stem}.py {target}` -- it imports the draft, checks its "
+            "KEY_MAP dispatches on that target's /api/clues, runs it, prints `PROOF proof_...` and PROMOTES it to "
+            f"`{_rel(p)}` (atomic; exit 1 = no proof, 2 = not a plugin, 3 = KEY_MAP matches no clue key: fix the draft "
+            "and re-run). Never write that path directly.")
+
+
 def web_plugin_note(sdir):
     p = web_plugin_path(sdir)
-    return (f"WEB CLASS LOGIC GOES IN A PLUGIN: `{_rel(p)}` (create it if missing) with `KEY_MAP = [(r\"<regex on a "
-            f"/api/clues KEY>\", \"{p.stem}\")]` and `HANDLERS = {{\"{p.stem}\": fn}}`, `fn(base, clues) -> \"proof_...\" "
-            "or None` re-running the exploit end to end; lib.web.handlers auto-loads it. Never edit solve.py's dispatch "
-            "or lib/web/handlers/__init__.py (two web chains may run at once). Key on a concept clue KEY -- never on "
-            "proof-N or a target slot: Mastery puts today's class on ANY of its 3 targets.")
+    return (f"WEB CLASS LOGIC GOES IN A PLUGIN: `{_rel(p)}` -- " + web_plugin_steps(p) + " lib.web.handlers auto-loads "
+            "it. Never edit solve.py's dispatch or lib/web/handlers/__init__.py (two web chains may run at once). Key on "
+            "a concept clue KEY -- never on proof-N or a target slot: Mastery puts today's class on ANY of its 3 targets.")
 
 
 def web_seed_note(sdir):
@@ -1569,7 +1666,8 @@ def web_seed_note(sdir):
             "and returns the proof_<hex>. It already solves every KNOWN vuln class, so run it FIRST "
             "(`.venv/bin/python solve.py --contract <contract.json> --artifacts <dir>`) and confirm. Do NOT rewrite it. "
             "ONLY if /api/clues shows a brand-new clue key the dispatch does not recognise: submit the proof first, then "
-            + web_plugin_note(sdir) + " (A codify worker also does this right after your CORRECT.)")
+            + web_plugin_note(sdir) + " (The answer-first worker usually promotes it before CORRECT; a codify worker "
+            "hardens it after.)")
 
 
 def stage_prior_cases(prior, sdir):
@@ -2337,6 +2435,8 @@ def wait_until_expired(cid, extra=3):
 class Chain:
     def __init__(self, base, entries, pools, gov, only_modes=None):
         self.base, self.pools, self.gov = base, pools, gov
+        with _af_lock:
+            _af_chains.add(base)   # D25 D4: the auto answer-first cap counts the day's chains (web included)
         self.entries = {e["mode"]: e for e in entries}
         ss = self.entries.get("single_solve") or next(iter(self.entries.values()))
         self.lane, self.name = ss.get("lane", "misc"), ss.get("name", base)
@@ -4915,9 +5015,8 @@ class Chain:
         to this attempt and waits out `preparing` (hb_timed._await_live). No clock: web TT is regular untimed play."""
         from . import webtarget
         tt = self.entries.get("time_trial")
-        if not (WEB_TT_KICK and tt and webtarget.is_live_lane(self.lane)) or getattr(self, "_web_kicked", False):
+        if not (WEB_TT_KICK and tt and webtarget.is_live_lane(self.lane)) or not _kick_once(self, "_web_kicked"):
             return
-        self._web_kicked = True
         if cli.is_complete(tt["id"]) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
             return
         mcid = tt["id"]
@@ -4937,9 +5036,8 @@ class Chain:
         own start reconnects to this attempt. Same rules as _web_tt_kick (the TT is banked here; no clock)."""
         from . import webtarget
         m = self.entries.get("mastery")
-        if not (WEB_TT_KICK and m and webtarget.is_live_lane(self.lane)) or getattr(self, "_web_m_kicked", False):
+        if not (WEB_TT_KICK and m and webtarget.is_live_lane(self.lane)) or not _kick_once(self, "_web_m_kicked"):
             return
-        self._web_m_kicked = True
         if cli.is_complete(m["id"]) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
             return
         mcid = m["id"]
@@ -5331,8 +5429,24 @@ class Chain:
             return
         if all(cli.is_complete(e["id"]) for m, e in self.entries.items() if m in ("time_trial", "mastery")):
             return
+        # D25 D2: the answer-first worker promotes a VERIFIED plugin before it submits (lib.web.plugin: atomic, only after
+        # a proof on a live target), so an existing file is complete and working -- no import check on this path
+        plug = web_plugin_path(self.sdir)
+        pre = self._web_plugin_pre = plug.exists()
+        if pre:
+            try:
+                age = f"{time.time() - plug.stat().st_mtime:.0f}s old"
+            except OSError:
+                age = "?"
+            say(f"[{cid}] web plugin {plug.name} already in place at the single's CORRECT ({age}): the timed modes "
+                "dispatch to it on their first run" + ("; codify hardens it" if WEB_CODIFY_HARDEN else "; no codify"))
+            if not WEB_CODIFY_HARDEN:
+                self._codify = False
+                return
         try:
-            self._codify = WebCodify(self, cid).start()
+            c = WebCodify(self, cid)
+            c.prelanded = pre
+            self._codify = c.start()
         except Exception as e:  # noqa: BLE001 - an optimization only
             self._codify = False
             say(f"[{cid}] web codify not started: {e}")
@@ -5891,7 +6005,7 @@ class Chain:
                 res = "correct"
             if res == "correct" and mode == "time_trial":
                 self._mark("time_trial:correct")
-                self._prefetch_mastery_start()   # the Mastery start + bytes overlap the TT bookkeeping + pre-Mastery block
+                self._tt_pass_kick()   # the Mastery start + bytes (web: its target) overlap the TT bookkeeping + pre-Mastery
                 self._start_pool_rehearsal(cid)  # A2: background, beside the same bookkeeping
             if res == "blocked" and LOCAL_RERUN_SLOW and self._slow_vm_no_clock(cid):
                 # No clock + a CPU-bound solve that ran out of its budget on the slow VM: the attempt is still live, so
@@ -6020,6 +6134,7 @@ class Chain:
                 continue
             got_w, par = self._web_codify_gen_wait(cid, mode, par, last)
             if got_w == "correct":
+                say(f"[{cid}] result: correct (live answer, codify wait)")   # D25 D1: was uncounted by feed/kpi
                 set_state(self.base, **{f"{mode}_result": "correct"})
                 self._live_pass_prefetch(mode)
                 record_timed_case(cid, self.sdir)
@@ -6097,6 +6212,7 @@ class Chain:
                     # The probe's own submits passed this mode (replay run 3 binary TT: it went CORRECT, then the harness
                     # retried anyway and failed again -- 33s wasted after the pass).
                     say(f"[{cid}] the probe attempt itself passed the mode")
+                    say(f"[{cid}] result: correct (probe attempt)")
                     set_state(self.base, **{f"{mode}_result": "correct"})
                     record_timed_case(cid, self.sdir)
                     return True
@@ -6135,6 +6251,10 @@ class Chain:
                 self._end_live(live)
                 say(f"[{cid}] passed during the online resolution"
                     + (" / live answer" if live is not None and live.passed else ""))
+                # D25 D1: one recognised line per timed pass (feed / timeline / kpi / effort_report: TIMED_PASSED)
+                say(f"[{cid}] result: correct ("
+                    + ("live answer, online resolution" if live is not None and live.passed else "online resolution")
+                    + ")")
                 set_state(self.base, **{f"{mode}_result": "correct"})
                 self._live_pass_prefetch(mode)
                 record_timed_case(cid, self.sdir)
@@ -6215,12 +6335,17 @@ class Chain:
 
     def _web_par_live(self, cid, mode, attempt, resumed):
         """D24 #11: start the parallel live-answer binder for the FIRST web TT attempt when the codify plugin hasn't
-        landed (a landed plugin -> the runner's solver dispatches to it first-try). -> WebParLive or None."""
+        landed (a landed plugin -> the runner's solver dispatches to it first-try). D25 D2: nor when the single's worker
+        promoted a verified plugin before CORRECT. -> WebParLive or None."""
         from . import webtarget
         if not (WEB_PAR_LIVE and LIVE_ANSWER and mode == "time_trial" and attempt == 0 and not resumed
                 and webtarget.is_live_lane(getattr(self, "lane", None))):
             return None
         c = getattr(self, "_codify", None)
+        if getattr(self, "_web_plugin_pre", False) or (c and getattr(c, "prelanded", False)):
+            say(f"[{cid}] web plugin from the single in place: no parallel live answer (the runner dispatches to it; "
+                "a block still gets one)")
+            return None
         if c and c.plugin.exists() and c.plugin.stat().st_mtime >= c.t0:
             return None
         try:
@@ -6263,14 +6388,15 @@ class Chain:
     def _codify_alive(self, cid):
         from . import webtarget
         c = getattr(self, "_codify", None)
-        return bool(WEB_CODIFY_IS_GEN and c and not c.done.is_set() and solvers.mode_of(cid) == "time_trial"
+        return bool(WEB_CODIFY_IS_GEN and c and not c.done.is_set() and solvers.mode_of(cid) in _codify_modes()
                     and webtarget.is_live_lane(getattr(self, "lane", None)))
 
     def _web_codify_gen_wait(self, cid, mode, par, last):
-        """D24 #11 (CODIFY_IS_GEN): a blocked web TT while codify is alive waits up to WEB_CODIFY_GEN_WAIT s for the live
-        answer ("correct") or the codify plugin ("restart": reconnect with start, the solver re-dispatches) before any
-        generalize. -> (verdict or None, the parallel live answer to keep for the blocked path)."""
-        if mode != "time_trial" or not self._codify_alive(cid) or WEB_CODIFY_GEN_WAIT <= 0:
+        """D24 #11 (CODIFY_IS_GEN): a blocked web TT (D25 D3: or Mastery) while codify is alive waits up to
+        WEB_CODIFY_GEN_WAIT s for the live answer ("correct") or the codify plugin ("restart": reconnect with start, the
+        solver re-dispatches) before any generalize. A Time Trial's live pass requests the Mastery target AT ONCE
+        (_tt_pass_kick), before the live worker is ended. -> (verdict or None, the parallel live answer to keep)."""
+        if mode not in _codify_modes() or not self._codify_alive(cid) or WEB_CODIFY_GEN_WAIT <= 0:
             return None, par
         c = self._codify
         live = par.close() if par is not None else None
@@ -6287,6 +6413,8 @@ class Chain:
         t0 = time.time()
         while time.time() - t0 < WEB_CODIFY_GEN_WAIT:
             if cli.is_complete(cid) or (live is not None and live._state()[0]):
+                if mode == "time_trial":
+                    self._tt_pass_kick()   # D25 D3: Mastery's target before the live worker's 5 s join + the handoff
                 if live is not None:
                     live.passed = True
                 self._end_live(live)
@@ -6307,7 +6435,7 @@ class Chain:
 
     def _codify_yield(self, cid, mode):
         """No two writers on one plugin file: a generalize past the codify wait ends a still-running codify worker."""
-        if mode == "time_trial" and self._codify_alive(cid):
+        if mode in _codify_modes() and self._codify_alive(cid):
             say(f"[{cid}] web codify worker ended: the generalize takes over {self._codify.plugin.name}")
             self._stop_codify()
 
@@ -6356,10 +6484,23 @@ class Chain:
         """A Time Trial passed off the runner's own path (live answer / online resolution): pre-start Mastery now, as a
         runner pass does (record_timed_case + the bg generalize otherwise sit in front of its start + download)."""
         if mode == "time_trial":
-            try:
+            self._tt_pass_kick()
+
+    def _tt_pass_kick(self):
+        """The Time Trial is CORRECT on the GM (any route): pre-start Mastery (untimed pools) and, on web, request its
+        live target now (D25 D3: a live-answer TT pass requested it only after the 2 s poll, the live worker's join and
+        the stage handoff -- 4-13 s later). Both are once-per-chain; never raises."""
+        try:
+            with _KICK_LOCK:   # the live watcher thread and the timed stage may both get here
                 self._prefetch_mastery_start()
-            except Exception as e:  # noqa: BLE001 - an optimisation only
-                say(f"[{self.base}] Mastery pre-start note: {e}")
+        except Exception as e:  # noqa: BLE001 - an optimisation only
+            say(f"[{self.base}] Mastery pre-start note: {e}")
+        try:
+            from . import webtarget
+            if webtarget.is_live_lane(getattr(self, "lane", None)):
+                self._web_mastery_kick()
+        except Exception as e:  # noqa: BLE001
+            say(f"[{self.base}] web Mastery kick note: {e}")
 
     def _racer_passed(self, cid, live):
         """FAST_LIVE_ACCEPT: the mode passed through a racer on the open attempt -- the live answer, or (C3b) the lib
@@ -6391,7 +6532,11 @@ class Chain:
 
     def _start_live(self, cid, last, fields, wrong, fixed):
         try:
-            return LiveAnswer(self, cid, last, fields, wrong, fixed).start()
+            live = LiveAnswer(self, cid, last, fields, wrong, fixed)
+            from . import webtarget
+            if solvers.mode_of(cid) == "time_trial" and webtarget.is_live_lane(getattr(self, "lane", None)):
+                live.on_pass.append(self._tt_pass_kick)   # D25 D3: the web Mastery target at the GM's CORRECT
+            return live.start()
         except Exception as e:  # noqa: BLE001 - the generalize path stands on its own
             say(f"[{cid}] live-answer not started: {e}")
             return None
@@ -6538,6 +6683,7 @@ class Chain:
         n = len(s.get("rounds") or [])
         if s.get("last_correct") or cli.is_complete(cid):
             say(f"[{cid}] label scouting: a scout round passed the mode ({n} round(s), {time.time() - t0:.0f}s)")
+            say(f"[{cid}] result: correct (label scout)")
             set_state(self.base, **{f"{mode}_result": "correct"})
             record_timed_case(cid, self.sdir)
             return True

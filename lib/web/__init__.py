@@ -37,6 +37,11 @@ UNKNOWN_KEY_BUDGET = float(os.environ.get("HCTF_WEB_UNKNOWN_KEY_BUDGET", "12"))
 KNOWN_BUDGET = float(os.environ.get("HCTF_WEB_KNOWN_BUDGET", "20"))
 # class_known counts only handlers a CONCEPT clue key names (handlers.concept_handlers); 0 = any for_key match (old).
 CONCEPT_KNOWN = os.environ.get("HCTF_WEB_CONCEPT_KNOWN", "1") != "0"
+# Clue keys class_known never counts through the earlier solvers' SOURCE TEXT: plain words those solvers parse as data
+# (D25: Day 18's GraphQL kit {current_user, note, protected_reference} read "known" because current_user / note appear
+# in the D02/D03/D20 solvers -> the 20 s known budget on a never-seen class). Comma list; empty = count every key.
+KNOWN_IGNORE_KEYS = frozenset(k.strip().lower() for k in os.environ.get(
+    "HCTF_WEB_KNOWN_IGNORE_KEYS", "current_user,note").split(",") if k.strip())
 
 
 def _prior_web_solvers():
@@ -138,7 +143,10 @@ def class_known(clues_json, key):
                if k not in websolve.COMMON_KEYS and not (isinstance(v, str) and v.startswith("/"))}
     if key:
         concept.add(str(key).lower())
-    concept = {k for k in concept if len(k) >= 4}
+    # D25 D4: a key that only dispatches beside an absent companion (handlers.KEY_COMPANIONS) or a plain-word key is no
+    # evidence the class was met before
+    concept = {k for k in concept if len(k) >= 4 and k not in KNOWN_IGNORE_KEYS
+               and not handlers.gated_only(k, clues_json)}
     return bool(concept) and any(k in src for src in _prior_sources() for k in concept)
 
 

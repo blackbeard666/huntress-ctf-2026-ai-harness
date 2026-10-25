@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 from .paths import ROOT
-from .timeline import LINE, SINGLE_SOLVED, _split, lane_label
+from .timeline import LINE, SINGLE_SOLVED, TIMED_PASSED, _split, lane_label
 
 LANES = (("warmups", "warmups"), ("metadata-forensics", "metadata"), ("script-analysis", "script"),
          ("binary-reverse-engineering", "binary"), ("mobile-android", "mobile"), ("welcome", "welcome"))
@@ -146,6 +146,9 @@ class Feed:
             out.append(f"{self._t()} ⚠ {lane} {ms} {msg[len('result: '):][:80]}")
         elif msg.startswith("passed by the live-answer worker"):
             out += self._solve(base, mode, " (live-answer)")
+        elif msg.startswith(TIMED_PASSED) and mode != "single_solve":
+            # D25: web TTs passed by the live answer during the codify wait / the online resolution (feed said 22/24)
+            out += self._solve(base, mode, " (live-answer)" if "live answer" in msg else "")
         elif msg.startswith("live-answer worker on attempt"):
             out.append(f"{self._t()} 🏃 {lane} {ms} live-answer started")
         elif msg.startswith("in-attempt localization cut short"):

@@ -1,0 +1,19 @@
+{
+ "targets": [
+  {
+   "id": "cmd-injection-generic",
+   "priority": 1,
+   "goal": "OS command injection, generic over the kit (D25 'Shell Company', lane-day 16, was the plain form: GET feature_route?<input_parameter>=<example_path>%3Bcat%20/run/huntress/objective.txt; a raw ';' is dropped by Go's query parser). Handler: param + example from the clues / the bare route's `<name>_required` error; separators ; | || && %0a $() backticks, percent-encoded; ${IFS} for a space filter; reads cat /run/huntress/objective.txt and cat /run/huntress/*; GET then POST form then POST JSON when 405; proof in stdout/output fields. Key on concept keys only (input_parameter, example_path, command, host, ping, diagnostics). Fixtures: the plain kit, a filtered-separator sequel (only %0a/$() pass), a decoy (no shell: echoes input)."
+  },
+  {
+   "id": "graphql-generic",
+   "priority": 1,
+   "goal": "GraphQL authz abuse, generic (D25 'Resolver Revolt', lane-day 18: clues {current_user, feature_route=/graphql, note, protected_reference}; `case(id:\"<protected_reference>\"){note}` skipped the field check). Handler: POST JSON {query} (then GET ?query=), introspection __schema to list query/mutation fields and their args, query every object-returning field with the protected reference as its id arg asking for every scalar field, aliases + batched arrays when one call is limited, node(id:) / nodes lookups; proof in data. Key on graphql/resolver/schema concept keys; protected_reference only with a graphql companion (KEY_COMPANIONS). Fixtures: introspection on, introspection off (field suggestions in errors), decoy (authz enforced)."
+  },
+  {
+   "id": "reset-token-generic",
+   "priority": 1,
+   "goal": "password-reset / account-recovery token flows, generic (D25 'Reset Expectations', lane-day 17: clues {recovery_guide_route, feature_route, secondary_route}; the guide JSON names request_route, redeem_route, account_parameter, token_parameter, accounts[{id, self_service}]; own token redeemed with the victim account_id). Handler: read the guide (or the bare routes' errors), request a token for the self-service account, redeem it for each other account; also: token leaked in the request response for any account, token = predictable value the app shows (timestamp / md5(email) / sequential) -- never brute force. Key on recovery/reset/forgot concept keys. Fixtures: the D17 flow, a leaked-token variant, decoy (token bound)."
+  }
+ ]
+}
