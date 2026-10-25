@@ -330,6 +330,46 @@ r = subprocess.run([sys.executable, "-c", textwrap.dedent('''
 check("A3 raw D25 blobs, HCTF_CODEC_MAX_DAY=24 (pre-D25 codec table): every set decodes right",
       r.returncode == 0 and json.loads(r.stdout.strip().splitlines()[-1]) == [], (r.stdout[-300:], r.stderr[-300:]))
 
+# ------------------------------------------------------------------------------------------------ A4 today-probe
+from lib import warmups_codecs as W  # noqa: E402
+
+base = TMP / "day24" / "warmups-prev" / "solver" / "cases" / "auto-mastery-x"
+(base / "artifacts").mkdir(parents=True)
+sent = decode.TEMPLATE + "brave-otter-lamp-42"
+k3 = [sent[:30], sent[30:60], sent[60:]]
+blob = "\n".join(f"{k:02d}\t{W.day_codec(k)[1](p)}" for k, p in enumerate(k3, 1))
+buf = io.BytesIO()
+with zipfile.ZipFile(buf, "w") as z:
+    z.writestr("blob-01.txt", blob)
+(base / "artifacts" / "blob-01.txt").write_bytes(buf.getvalue())
+(base / "artifacts" / ".prefetch.json").write_text("{}")     # the D22+ pre-start leftovers add_case copied in
+(base / "artifacts" / ".prefetch.reused").write_text("")
+(base / "contract.json").write_text(json.dumps({"answer_ids": ["set1.message"],
+                                                "questions": [{"id": "set1.message", "artifact": "blob-01.txt"}]}))
+(base / "expected.json").write_text(json.dumps({"set1.message": "brave-otter-lamp-42"}))
+cont, mem = tp._members(base)
+check("A4 _members: dotfiles ignored -> the one zip is the container", cont == "blob-01.txt" and list(mem) == ["blob-01.txt"],
+      (cont, list(mem)))
+made = tp.synth(TMP / "day04" / "warmups-today" / "solver", W.day_codec(4)[1], "binary8", base=base, variants=("even",),
+                out_dir=TMP / "today")
+check("A4 synth: a base case with .prefetch.json still yields its rehearsal case", len(made) == 1, made)
+said = []
+ch6 = orchestrate.Chain.__new__(orchestrate.Chain)
+ch6.sdir, ch6.base, ch6.lane, ch6._today_done = sd, "day25/warmups-x", "warmups", False
+f6 = Future()
+f6.set_result({"status": "no-cases", "codec": "uplus", "base": str(base), "kind": "codec", "results": [], "hard": []})
+ch6._today_fut = f6
+ch6._handoff_join = lambda why: None
+saved_say = orchestrate.say
+orchestrate.say = lambda msg: said.append(msg)
+try:
+    orchestrate.TODAY_PROBE_LANES.add("warmups")
+    ch6._today_pre_result("day25/warmups-x/mastery", wait=True)
+finally:
+    orchestrate.say = saved_say
+check("A4 orchestrator: no-cases although a codec was identified -> a !!! alert line",
+      any(m.startswith("!!! [day25/warmups-x/mastery] today-probe: no-cases although") for m in said), said)
+
 shutil.rmtree(TMP, ignore_errors=True)
 if failures:
     print(f"\n{len(failures)} FAILED: {failures}")

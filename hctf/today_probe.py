@@ -95,7 +95,9 @@ def today_codec(sdir):
 def _members(case):
     """(container file name or None, {member name: bytes}) of a warmups case: ONE zip saved under the first member's
     name (D2-D13 Mastery), or plain per-set files (D4 auto cases)."""
-    files = sorted(f for f in (Path(case) / "artifacts").iterdir() if f.is_file())
+    # dotfiles are harness bookkeeping, not GM bytes: the Mastery pre-start leaves .prefetch.json / .prefetch.reused in
+    # the attempt dir and add_case copies them, so since D22 every base case looked like "3 plain files" -> no-cases
+    files = sorted(f for f in (Path(case) / "artifacts").iterdir() if f.is_file() and not f.name.startswith("."))
     if len(files) == 1 and zipfile.is_zipfile(files[0]):
         with zipfile.ZipFile(files[0]) as z:
             return files[0].name, {Path(n).name: z.read(n) for n in z.namelist() if not n.endswith("/")}

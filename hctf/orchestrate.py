@@ -4511,6 +4511,12 @@ class Chain:
             # attempt went out unprotected (41/63 sets wrong, then a 117 s generalize)
             say(f"!!! [{cid}] today-probe FAILED ({str(res.get('error'))[:200]}) -- the Mastery attempt runs WITHOUT "
                 "its rehearsal")
+        elif st in ("no-cases", "no-base") and res.get("codec"):
+            # D22-D25: a .prefetch.json in the base case's artifacts made every probe `no-cases`, logged as a plain
+            # status line -- the warmups Mastery went out unrehearsed four days running (D25: 123/123 wrong)
+            say(f"!!! [{cid}] today-probe: {st} although today's codec `{res.get('codec')}` was identified "
+                f"(base {Path(res['base']).name if res.get('base') else 'none'}) -- the Mastery attempt runs WITHOUT "
+                "its rehearsal")
         else:
             say(f"[{cid}] today-probe: {st} (codec {res.get('codec')}, {res.get('seconds')}s)")
             self._note_lib_misses(cid, res)
