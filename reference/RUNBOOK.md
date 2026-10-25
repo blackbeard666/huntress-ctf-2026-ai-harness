@@ -59,6 +59,7 @@ hctf submit <id> '{"<answer_id>":"<value>"}'
 hctf timed <id>                       # run one time_trial/mastery end to end
 hctf hb status|on|off|ensure|deploy|setup
 hctf hb exec -- <cmd>                 # run a command on Homebase (inside the CTF network)
+python -m hctf.webharden [--fix]      # off-peak: run the generic web solver on fresh TT practice targets (submits nothing)
 ```
 
 ## Credits (important)

@@ -30,6 +30,8 @@ description: Huntress CTF 2026 "AI Arena" playbook for harness workers. Covers t
 | .apk/.dex/AndroidManifest, intents, deep links, exported components | `mobile-android` |
 | ELF/PE/Mach-O, .NET, Go/Rust, C++ mangled names, packers | `binary-re` |
 | web apps/traffic: source bundles, HAR/pcap, access logs, web shells, minified JS, HTML smuggling, JWT/cookies, a URL target | `web` |
+| welcome / onboarding challenges | `reference/welcome/INDEX.md` (no dedicated skill) |
+| GM contract, start/submit/retry, reading results (CORRECT, accepted + remaining, start_required, ...) | `game-master` |
 | Stuck for about 10 min, a wrong answer, or looping on one idea | `explore-alternatives` |
 | Timed fix job (live deadline) | `timed-run` |
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install the non-apt analysis tools workers' lane skills call for, under the project (tools/) with wrappers/symlinks in
-# bin/ (on every worker's PATH and visible inside the worker sandbox). Idempotent. apt packages: see setup/README or run
+# bin/ (on every worker's PATH and visible inside the worker sandbox). Idempotent. apt packages: see README.md or run
 #   sudo apt-get install -y radare2 qpdf poppler-utils mupdf-tools pngcheck steghide sqlite3 mediainfo yara aapt \
 #        apksigner dotnet-sdk-10.0 cargo rustc foremost ruby tshark   (tshark: web lane; preseed wireshark-common/install-setuid=false)
 set -uo pipefail

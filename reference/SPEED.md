@@ -183,7 +183,7 @@ Fixes from runs 1-3 + a read-only analysis of their logs:
 - Parallel artifact downloads (8); background evidence pulls on their own SSH connection; skip the per-mode GM status
   call when single() just saw the mode start_required; sandbox re-binds project symlink targets (alt .venv/tools).
 
-## Lane solvers: deterministic first (2026-10-07)
+## Lane solvers: deterministic first (2026-10-07; `lib/lanes/*` REMOVED the same day, see "REVERSED" below)
 
 Analysis of the full from-scratch replay (warmups 28/33/116, mobile 55/60/66, script 408/510/738 vs the top team's
 1-7s / 2-6s / 87-94s): the time was all LLM work on lanes whose fields are 100% mechanical. `lib/lanes/<lane>/solve.py`

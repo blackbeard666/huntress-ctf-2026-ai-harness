@@ -112,7 +112,7 @@ started it, then runs `ratchet(day)` and `speed_harden(day)`.
 | Workers | `hctf/workers.py`, `hctf/prompts/{single,generalize,fix,ratchet}.md` | `_worker_cmd` builds `claude -p ... --effort high --output-format stream-json --strict-mcp-config --settings <json> --tools Bash,Read,Write,Edit,Skill,Task`. |
 | Timed | `hctf/timed.py`, `hctf/hb_timed.py`, `hctf/hb_daemon.py`, `hctf/hb_zygote.py`, `hctf/remote.py` | Homebase-first, with a local fallback. A single persistent SSH channel (ControlMaster, `ControlPersist=600`, key `secrets/huntress_homebase`). |
 | GM client | `hctf/gm.py` (stdlib only, keep-alive pool), `hctf/remote.py` `gm()` | `start`/`submit` try `_gm_via_daemon`, then `_gm_submit_hb`, then the public GM. |
-| Labels | `hctf/labels.py`, `hctf/localize.py` (subset-submit bisect) | Candidates come from sibling confirmed labels, artifact terms and `playbook.seed_candidates`. They're probed one at a time and recorded to `lib/vocab.json`. |
+| Labels | `hctf/labels.py`, `hctf/grouptest.py` (parallel group-test bisect), `hctf/hb_timed.py` `_localize` | Candidates come from sibling confirmed labels, artifact terms and `playbook.seed_candidates`. They're probed one at a time and recorded to `lib/vocab.json`. |
 | Probes | `hctf/mutate.py`, `hctf/compound.py`, `hctf/family.py` | These write the `mutation-*`, `compound-dKK-*` and `family-*` regression cases. |
 | Solvers/cases | `hctf/solvers.py` (`add_case`, `reuse_plan`, `test_solver`) | Cases live in `solver/cases/<name>/{artifacts/,contract.json,expected.json}`. |
 | Rehearsal | `hctf/replay_gm.py`, `bin/fair_run.sh` | A local fake GM replays a solved day. A rehearsal copy copy runs "fair" rehearsals. |
@@ -350,6 +350,10 @@ day in about 1:45. We report N/15 first, and an incomplete run never counts as "
 - `reference/SPEED.md`: the speed history and levers. `reference/WARM_DAEMON_PLAN.md`: the daemon/zygote design.
 - `reference/HARDENING.md`: escalation readiness. `reference/MASTERY_COMPOUNDING.md`: the compounding plan.
 - `reference/HOMEBASE.md`: the Homebase VM and credits.
+- `reference/PLAN_SUB2MIN.md` + `reference/KPI.md`: the sub-2-min plan and its daily KPI rows.
+  `reference/D22_POSTMORTEM.md`, `reference/D23_POSTMORTEM.md`: the latest post-mortems (implementation tables).
+  `reference/WEB_SUB2MIN.md`: the web critical-path plan (partly superseded by D22_POSTMORTEM).
+- `reference/archive/`: superseded plans kept for history (e.g. the Day-2 `IMPROVEMENTS.md`).
 - `hctf/prompts/`: the worker role prompts. `skills/`: the solve loop (`huntress-ctf`) and the per-lane skills.
   `reference/techniques/`: the per-lane technique logs.
 - `CLAUDE.md` / `AGENTS.md`: what every worker is told.
