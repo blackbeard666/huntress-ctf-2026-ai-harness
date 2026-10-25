@@ -60,6 +60,7 @@ class _Ctx(__import__("threading").local):
     on_event = None   # hb_daemon (HCTF_EARLY_GENERALIZE): callable(dict) for mid-attempt events
     solver_dir = None  # rel. to HW: the challenge dir next to it holds label_hints.json (shared by its modes)
     t0 = None          # this attempt's start (HCTF_RUNNER_BUDGET is relative to it)
+    spawn = None       # D24 #1: {main, lock} s before _attempt (interpreter start + imports, mode-lock wait)
 
 
 _CTX = _Ctx()
@@ -1257,7 +1258,16 @@ def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None, on_event=
     _CTX.lane, _CTX.opts, _CTX.on_event = _lane_from_solver_dir(solver_dir), dict(opts or {}), on_event
     _CTX.solver_dir = solver_dir
     _CTX.t0 = time.time()
+    spawn = {}
+    try:   # D24 #1: the local route's spawn stamp (workers.run_timed) -> interpreter start + imports
+        ts = float(os.environ.get("HCTF_T_SPAWN") or 0)
+        if ts and 0 <= _CTX.t0 - ts < 120:
+            spawn["main"] = round(_CTX.t0 - ts, 2)
+    except ValueError:
+        pass
     lock = _mode_lock(cid)
+    spawn["lock"] = round(time.time() - _CTX.t0, 2)
+    _CTX.spawn = spawn
     try:
         if lock is None:
             return {"cid": cid, "result": "exec_error", "detail": "another runner holds this mode (mode lock)",
@@ -1266,7 +1276,7 @@ def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None, on_event=
     finally:
         if lock is not None:
             lock.close()
-        _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = _CTX.t0 = None
+        _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = _CTX.t0 = _CTX.spawn = None
 
 
 def _mode_lock(cid):
@@ -1310,11 +1320,12 @@ def _body_attempt_id(body):
     return None
 
 
-def _prestarted_body(cid):
+def _prestarted_body(cid, why=None):
     """The orchestrator's pre-start of THIS mode (start body + downloaded bytes + .prefetch.json in the runner's dir),
     used ONCE instead of a second `start` call when it is fresh, untimed and complete. D22: after a 4-25 s pre-start the
     runner still re-called `start` to reconnect -- another 2-7 s per mode at the drop, on the critical path. A clocked or
-    stale one (HCTF_PRESTART_TRUST_S, 300) falls back to the normal start; HCTF_PRESTART_REUSE=0 disables."""
+    stale one (HCTF_PRESTART_TRUST_S, 300) falls back to the normal start; HCTF_PRESTART_REUSE=0 disables.
+    `why` (a list): the reason a pre-start that EXISTS was not used is appended (D24 #1 instrumentation)."""
     if _opt("HCTF_PRESTART_REUSE", "1") != "1":
         return None
     adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", cid)
@@ -1330,6 +1341,10 @@ def _prestarted_body(cid):
             or not att or str(pj.get("attempt_id")) != att or not pj.get("files")
             or time.time() - float(pj.get("t") or 0) > float(_opt("HCTF_PRESTART_TRUST_S", "300"))
             or not all((adir / n).exists() for n in pj["files"])):
+        if why is not None:
+            why.append("clocked" if isinstance(body, dict) and body.get("deadline") else
+                       "stale" if time.time() - float(pj.get("t") or 0) > float(_opt("HCTF_PRESTART_TRUST_S", "300"))
+                       else "mismatch")
         return None
     try:
         (adir / ".prefetch.reused").write_text(att)
@@ -1345,6 +1360,8 @@ def _attempt(a):
         pool.fresh()            # (hb_daemon: the pool idled since the last attempt -> replace stale sockets)
     t0 = time.time()
     out = {"cid": a.cid, "submitted": {}, "pool_warm": round(t0 - tw, 2)}
+    if _CTX.spawn is not None and _opt("HCTF_TIMING_MARKS", "1") == "1":
+        out["spawn"] = dict(_CTX.spawn, pool=out["pool_warm"])   # D24 #1: where the runner's pre-start seconds went
 
     untimed = a.op == "untimed"
     # resume = reconnect (`start`) to the LIVE attempt the caller knows holds banked ids: never re-roll it short-clock
@@ -1353,7 +1370,10 @@ def _attempt(a):
     resume = a.op == "resume"
     if resume:
         out["resumed_banked"] = True
-    body = _prestarted_body(a.cid) if a.op == "start" and not untimed and not resume else None
+    miss = []
+    body = _prestarted_body(a.cid, miss) if a.op == "start" and not untimed and not resume else None
+    if miss and _opt("HCTF_TIMING_MARKS", "1") == "1":
+        out["prestart_miss"] = miss[0]   # a pre-start existed but could not be used (clocked / stale / mismatch)
     if body is not None:
         out["prestart_reused"] = True    # D22 post-mortem #13: no second `start` after the orchestrator's pre-start
     else:

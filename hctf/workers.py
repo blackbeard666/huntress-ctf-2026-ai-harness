@@ -1056,7 +1056,9 @@ def run_timed(solver_dir, cid, op="start", timeout=60, budget=None, on_event=Non
     on_event: the runner's mid-attempt "solved" event (D23 #2: the generalize starts while the attempt still banks /
     localizes) -- hb_timed writes it to a file, a poller here hands it over with "local" = the bytes' dir."""
     rel = solver_dir.relative_to(ROOT)
+    t_env = time.time()
     env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}", **timed_env(cid))
+    t_env = round(time.time() - t_env, 2)
     if budget:
         env["HCTF_UNTIMED_BUDGET"] = f"{budget:g}"
     poll_stop = _local_event_poller(cid, env, on_event) if on_event is not None else None
@@ -1068,6 +1070,8 @@ def run_timed(solver_dir, cid, op="start", timeout=60, budget=None, on_event=Non
     # hb_timed stops localizing ~15 s before this deadline and prints its result (never killed mid-localization)
     env["HCTF_RUNNER_DEADLINE"] = f"{time.time() + timeout:.3f}"
     t_call = time.time()
+    if TIMING_MARKS:
+        env["HCTF_T_SPAWN"] = f"{t_call:.3f}"   # D24 #1: hb_timed reports interpreter start + imports as spawn.main
     try:
         r = procgov.run([sys.executable, str(ROOT / "hctf" / "hb_timed.py"), cid, str(rel), "--op", op],
                         cwd=ROOT, timeout=timeout, env=env, background=False)
@@ -1081,9 +1085,15 @@ def run_timed(solver_dir, cid, op="start", timeout=60, budget=None, on_event=Non
         if poll_stop is not None:
             poll_stop.set()
     try:
-        return json.loads(r.stdout.strip().splitlines()[-1])
+        res = json.loads(r.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
         return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
+    if TIMING_MARKS and isinstance(res, dict):
+        res["t_env"] = t_env       # timed_env (contract shape, label hints) before the runner even spawned
+    return res
+
+
+TIMING_MARKS = os.environ.get("HCTF_TIMING_MARKS", "1") != "0"   # D24 #1: per-phase handoff/runner timings in the logs
 
 
 def _local_event_poller(cid, env, on_event):
@@ -1365,10 +1375,17 @@ def _homebase_ready(log=print):
     """Non-blocking readiness for a tight timed window: the health thread's latest verdict. Never holds a lock across
     an SSH call and never latches a failure for the run (Day 6: one probe in a VPN gap sent every attempt local).
     Without a fresh verdict (first call / CLI use), probe once synchronously."""
-    start_homebase_health(log)
-    if time.time() - _hb["checked"] > HB_FRESH_S:
-        _hb.update(ok=remote.probe(), checked=time.time())
-    return bool(_hb["ok"] and _hb["provisioned"])
+    t = time.time()
+    try:
+        start_homebase_health(log)
+        if time.time() - _hb["checked"] > HB_FRESH_S:
+            _hb.update(ok=remote.probe(), checked=time.time())
+        return bool(_hb["ok"] and _hb["provisioned"])
+    finally:
+        _route_t.hb_ready = getattr(_route_t, "hb_ready", 0.0) + (time.time() - t)   # D24 #1 (run_timed_auto)
+
+
+_route_t = threading.local()   # per-attempt routing seconds (run_timed_auto -> the `timed:` line's t_hb_ready)
 
 
 def wait_homebase(timeout, log=print):
@@ -1404,6 +1421,17 @@ def _ev(on_event):
 
 
 def run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=None, force_local=False, budget=None):
+    """_run_timed_auto + the seconds its Homebase readiness checks cost (D24 #1: `t_hb_ready` on the `timed:` line;
+    a stale verdict's synchronous SSH probe was 8-13 s on the D24 outliers)."""
+    _route_t.hb_ready = 0.0
+    res = _run_timed_auto(solver_dir, cid, op=op, timeout=timeout, log=log, on_event=on_event, force_local=force_local,
+                          budget=budget)
+    if TIMING_MARKS and isinstance(res, dict) and _route_t.hb_ready >= 0.01:
+        res["t_hb_ready"] = round(_route_t.hb_ready, 2)
+    return res
+
+
+def _run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event=None, force_local=False, budget=None):
     """Dispatch a timed attempt. HOMEBASE-FIRST (user policy): every window <= HCTF_TIGHT_WINDOW seconds (default: all),
     or one not yet known, runs next to the GM on Homebase (prewarmed at run start). Local over the pairing token is the
     fallback (Homebase unavailable / remote exec failure); set HCTF_TIGHT_WINDOW=8 to bring back local-first for

@@ -3756,6 +3756,7 @@ class Chain:
             try:
                 rc = self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy, stop=ready,
                                      warm=warm, warm_task=warm_task)
+                self._mark("after_worker")
             finally:
                 done_evt.set()
                 af = getattr(self, "_af", None)
@@ -4189,6 +4190,7 @@ class Chain:
 
     def _prefetch_tt(self):
         """Never raises: callers sit right before ready.set() at a handoff."""
+        self._mark("ready")
         try:
             self._prefetch_tt_start()
         except Exception as e:  # noqa: BLE001 - a pre-start is an optimisation; the handoff must happen regardless
@@ -4587,6 +4589,7 @@ class Chain:
                             early, spec_n = m, spec_n + (not stamped)
                             self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):
+                    self._mark("correct")
                     self._web_tt_kick()
                     self._record_single_method(cid)
                     self._start_codify(cid)
@@ -4884,6 +4887,7 @@ class Chain:
         if not e:
             return True
         cid = e["id"]
+        self._mark(f"{mode}:stage")
         # This run saw the mode `start_required` minutes ago and nothing else attempts it: skip the GM status call
         # (2-7s per mode on the critical path, replay run 3).
         seen_fresh = getattr(self, "_tstatus", {}).get(mode) == "start_required"
@@ -5035,10 +5039,12 @@ class Chain:
                 say(f"[{cid}] the generalize left the solver unchanged: not re-running it on attempt "
                     f"{str((timed.last_result(cid) or {}).get('attempt_id'))[:8]} (same verdicts) -- straight to the next fix")
             else:
+                self._mark(f"{mode}:run", cid)
                 res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed))
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
             if res == "correct" and mode == "time_trial":
+                self._mark("time_trial:correct")
                 self._prefetch_mastery_start()   # the Mastery start + bytes overlap the TT bookkeeping + pre-Mastery block
             if res == "blocked" and LOCAL_RERUN_SLOW and self._slow_vm_no_clock(cid):
                 # No clock + a CPU-bound solve that ran out of its budget on the slow VM: the attempt is still live, so
@@ -5322,6 +5328,29 @@ class Chain:
                 skip_rerun = True
         set_state(self.base, stage=f"{mode}:blocked")
         return False
+
+    _HANDOFF_MARKS = {"time_trial": ("correct", "ready", "after_worker", "time_trial:stage", "time_trial:run"),
+                      "mastery": ("time_trial:correct", "mastery:stage", "mastery:run")}
+
+    def _mark(self, name, cid=None):
+        """D24 #1: the first time this chain reached `name` (epoch s). A mode's first `<mode>:run` logs one "handoff
+        timing" line: single CORRECT -> verified ready -> worker ended -> timed_stage -> timed.run (TT), or TT CORRECT ->
+        timed_stage -> timed.run (Mastery). Never raises. HCTF_TIMING_MARKS=0: off."""
+        try:
+            if not workers.TIMING_MARKS:
+                return
+            marks = self.__dict__.setdefault("_marks", {})
+            if name in marks:
+                return
+            marks[name] = time.time()
+            mode = name[:-len(":run")] if name.endswith(":run") else None
+            got = [(k, marks[k]) for k in self._HANDOFF_MARKS.get(mode, ()) if k in marks]
+            if cid and len(got) > 1:
+                t_chain = getattr(self, "_chain_t0", None)
+                say(f"[{cid}] handoff timing ({mode}): " + " > ".join(f"{k} +{t - got[0][1]:.1f}s" for k, t in got)
+                    + (f" (chain +{marks[name] - t_chain:.1f}s)" if t_chain else ""))
+        except Exception:  # noqa: BLE001 - instrumentation must never hurt the chain
+            pass
 
     def _live_pass_prefetch(self, mode):
         """A Time Trial passed off the runner's own path (live answer / online resolution): pre-start Mastery now, as a
