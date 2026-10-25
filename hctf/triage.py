@@ -210,9 +210,10 @@ def _sh(args, timeout=8):
 from lib.binary import JVM_LIBRARY as _JVM_LIB  # noqa: E402  (one list: triage recon + solvers' jar_app_classes)
 
 
-def _recon(cid, root):
+def _recon(cid, root, stop=None):
     """Standard-tool recon of the extracted members, per lane (recon, never answers): what each file is and where the
-    interesting bytes sit, so the worker's first turn starts from tool output instead of orientation turns."""
+    interesting bytes sit, so the worker's first turn starts from tool output instead of orientation turns.
+    `stop` (callable): once true, the remaining per-file tool runs are skipped (the single is CORRECT already)."""
     import re as _re
     import shutil as _shutil
     if not root.exists():
@@ -243,6 +244,8 @@ def _recon(cid, root):
             lines.append(f"- (skipped {len(libs)} bundled library .class files: "
                          f"{', '.join(f'{k}/ x{n}' for k, n in sorted(pk.items(), key=lambda kv: -kv[1]))})")
         def _row(f):
+            if stop is not None and stop():
+                return []
             ft = _sh(["file", "-b", str(f)])[:110]
             sha = _sh(["sha256sum", str(f)]).split(" ")[0]
             row = [f"- `{rel[f]}` {f.stat().st_size} B | {ft} | sha256 {sha}"]
@@ -455,12 +458,14 @@ RECON_WAIT = float(os.environ.get("HCTF_TRIAGE_RECON_WAIT", "5"))   # s the go t
 TOOLCHAIN_WAIT = float(os.environ.get("HCTF_TRIAGE_TOOLCHAIN_WAIT", "1.0"))   # s the go text waits for the toolchain scan
 
 
-def triage(cid, defer_recon=None, log=None):
+def triage(cid, defer_recon=None, log=None, stop=None):
     """Write <mode dir>/triage.md from the latest downloaded artifacts. Returns the path or None.
     The toolchain check and recon run in parallel (D9 binary: 2.3 s + 3.6 s, serial before). defer_recon: a callable;
     if it returns True once the toolchain section is ready, triage.md is written WITHOUT recon right away (the worker
     starts now) and rewritten with it when recon finishes -- for cumulative lanes whose prior solver already answers
-    most of today's ids (D9 binary: 89/90; the worker's recon reads came after the delta was found)."""
+    most of today's ids (D9 binary: 89/90; the worker's recon reads came after the delta was found).
+    stop: a callable; once it is true (the single is CORRECT: HCTF_TRIAGE_ABORT_AT_CORRECT) a DEFERRED recon skips its
+    remaining tool runs and the deferred rewrite of triage.md is dropped (nobody reads it any more)."""
     mdir = cli.cdir(cid)
     latest = mdir / "artifacts" / "latest"
     if not latest.exists():
@@ -507,7 +512,7 @@ def triage(cid, defer_recon=None, log=None):
     tm["extract"] = _time.time()
     from concurrent.futures import ThreadPoolExecutor
     pool = ThreadPoolExecutor(max_workers=2)
-    recon_fut = pool.submit(_recon, cid, mdir / "work" / "extracted")   # beside the toolchain check
+    recon_fut = pool.submit(_recon, cid, mdir / "work" / "extracted", **({"stop": stop} if stop else {}))
 
     def toolchain_check():
         # Which toolchain built each member and is its preferred standard tool installed? Missing ones with a recipe
@@ -577,6 +582,10 @@ def triage(cid, defer_recon=None, log=None):
     def finish():
         tcl = tc_lines if tc_lines is not None else tc_fut.result()
         lines = recon_now if recon_now is not None else recon_lines()
+        if stop is not None and stop():
+            if log:
+                log(f"[{cid}] triage: deferred recon/toolchain dropped (the single is CORRECT)")
+            return
         try:
             path.write_text("\n".join(out + tcl + lines + tail), encoding="utf-8")
             if log:
