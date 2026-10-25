@@ -196,7 +196,7 @@ def t_retrieval():
     with mock.patch.object(solvers, "all_solver_dirs", lambda: dirs), \
             mock.patch.object(solvers, "lane_solver_dirs", lambda lane: []), \
             mock.patch.object(solvers, "_lane_of", lambda p: "warmups"), \
-            mock.patch.object(solvers, "run_solver", lambda s, c, a, t: (seen.append(s) or ({}, None, 0.0))):
+            mock.patch.object(solvers, "run_solver", lambda s, c, a, t, **kw: (seen.append(s) or ({}, None, 0.0))):
         solvers.reuse_plan({"answer_ids": ["q"]}, Path("/a"), "warmups", limit=2, by_question=False, rank=rank)
     check("rank picks newest + most similar", sorted(seen) == sorted([dirs[3], dirs[0]]))
 
@@ -422,7 +422,7 @@ def t_generalize_speed():
         # test_solver(cases=...) filters by name / glob (no contract -> one() would raise; filter first)
         (sd / "cases" / "variant-z").mkdir()
         seen = []
-        with mock.patch.object(solvers, "run_solver", lambda s, c, a, t: (seen.append(a.parent.name) or ({}, None, 0.0))):
+        with mock.patch.object(solvers, "run_solver", lambda s, c, a, t, **kw: (seen.append(a.parent.name) or ({}, None, 0.0))):
             for n in ("auto-a", "auto-b", "variant-z"):
                 (sd / "cases" / n / "contract.json").write_text("{}")
             solvers.test_solver(sd, cases=["variant-*"])
