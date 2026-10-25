@@ -271,15 +271,20 @@ existed = snapdir.exists()
 saved_conf = cli.confirmed_answers
 try:
     cli.confirmed_answers = lambda c, att=None: dict(exp13)
-    me = SimpleNamespace(sdir=chal / "solver", root=chal, _carry_gaps=lambda snap: [])   # D22 #11 carry check
+    def _fake_chain(**kw):
+        # the race snapshot's dir/copy helpers (D24 #6 split) run as on a real Chain
+        me = SimpleNamespace(sdir=chal / "solver", root=chal, **kw)
+        me._race_snap_dir = lambda: orchestrate.Chain._race_snap_dir(me)
+        me._race_copy = lambda seed, snap: orchestrate.Chain._race_copy(me, seed, snap)
+        return me
+    me = _fake_chain(_carry_gaps=lambda snap: [])   # D22 #11 carry check
     snap = orchestrate.Chain._race_snapshot(me, cid, LANE, contract13, case13 / "artifacts")
     assert snap == snapdir / "solver" and me._race_snap == snap, snap
     assert (snap / "solve.py").read_bytes() == (LANE / "solve.py").read_bytes() and (snap.parent / "meta.json").exists()
     got, err, _ = solvers.run_solver(snap, contract13, case13 / "artifacts")
     assert not err and got == exp13, (got, err)
     cli.confirmed_answers = lambda c, att=None: {k: "{WRONG}" for k in exp13}
-    assert orchestrate.Chain._race_snapshot(SimpleNamespace(sdir=chal / "solver", root=chal), cid, LANE, contract13,
-                                            case13 / "artifacts") is None
+    assert orchestrate.Chain._race_snapshot(_fake_chain(), cid, LANE, contract13, case13 / "artifacts") is None
 finally:
     cli.confirmed_answers = saved_conf
     if not existed:
