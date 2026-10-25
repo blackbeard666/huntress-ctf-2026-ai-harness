@@ -516,7 +516,8 @@ def ensure_started(cid, log=None):
     return body, None
 
 
-def run(cid, solver_dir, fix=None, log=print, op="start", on_event=None, force_local=False, budget=None):
+def run(cid, solver_dir, fix=None, log=print, op="start", on_event=None, force_local=False, budget=None,
+        on_correct=None):
     """Execute one timed attempt. The clock-critical start->download->solve->submit runs LOCALLY against
     the public GM (pairing token; direct HTTPS is fast enough for the ~6s windows), or on Homebase over SSH
     as a fallback. The solver must already be correct (built/generalised offline).
@@ -524,6 +525,8 @@ def run(cid, solver_dir, fix=None, log=print, op="start", on_event=None, force_l
       correct            -> GM accepted everything
       blocked            -> solver incomplete/wrong for this variant (caller generalises offline, then retries)
       expired            -> the attempt's clock ran out before we could submit a complete answer
+    on_correct(res): called the moment the runner reports CORRECT, BEFORE process_result's bookkeeping (variant capture,
+    label promotion: D24 2-8 s per mode) -- the TT's pass pre-starts Mastery from there. Never raises into the attempt.
     """
     from . import workers
     global _inflight
@@ -535,7 +538,17 @@ def run(cid, solver_dir, fix=None, log=print, op="start", on_event=None, force_l
     finally:
         with _inflight_lock:
             _inflight -= 1
+    if (on_correct is not None and PREFETCH_ON_CORRECT and isinstance(res, dict)
+            and str(res.get("result", "")).lower() == "correct"):
+        try:
+            on_correct(res)
+        except Exception as e:  # noqa: BLE001 - an optimisation must never cost the pass
+            log(f"[{cid}] on-correct note: {e}")
     return process_result(cid, solver_dir, res, log=log)
+
+
+# D24 #4: run() fires on_correct at the runner's CORRECT, before process_result. 0: the caller's post-return path only.
+PREFETCH_ON_CORRECT = __import__("os").environ.get("HCTF_PREFETCH_ON_CORRECT", "1") != "0"
 
 
 # Live timed attempts in this process (any chain): background GM traffic (variant harvest) yields to a running clock.
@@ -585,6 +598,14 @@ def wait_idle(max_wait=None, poll=0.5):
         _t.sleep(poll)
 
 
+_TIMED_KEYS = ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'partial_submit', 'per_set', 'bad_sets',
+               'wrong', 'fixed', 'attempt_id', 'phases', 'kickoff', 'pipelined', 'pipeline_fallback', 'resubmit_fixed')
+if __import__("os").environ.get("HCTF_TIMING_MARKS", "1") != "0":
+    # D24 #1: where a mode's pre-clock seconds went (runner spawn / mode lock / GM pool, pre-start reuse or why not,
+    # timed_env, the Homebase readiness check)
+    _TIMED_KEYS += ('spawn', 'pool_warm', 'prestart_reused', 'prestart_miss', 'prefetched', 't_env', 't_hb_ready')
+
+
 def process_result(cid, solver_dir, res, log=print):
     """Post-attempt bookkeeping shared by run() and the scout: persist last_timed.json, save the variant as a
     regression case, cache GM-verified closed-vocab labels (from ANY attempt, not only correct ones), record a
@@ -594,7 +615,7 @@ def process_result(cid, solver_dir, res, log=print):
     if (r == "exec_error" and "solve.py" in detail and ("timed out" in detail or "TimeoutExpired" in detail)
             and not res.get("clock_short")):
         res["solver_too_slow"] = True  # set BEFORE _remember: the timed stage reads it from last_timed.json
-    log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'partial_submit', 'per_set', 'bad_sets', 'wrong', 'fixed', 'attempt_id', 'phases', 'kickoff', 'pipelined', 'pipeline_fallback', 'resubmit_fixed') if k in res})}")
+    log(f"[{cid}] timed: {json.dumps({k: res.get(k) for k in _TIMED_KEYS if k in res})}")
     pull = res.pop("_pull", None)
 
     def capture():

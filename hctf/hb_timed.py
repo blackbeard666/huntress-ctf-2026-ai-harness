@@ -60,6 +60,7 @@ class _Ctx(__import__("threading").local):
     on_event = None   # hb_daemon (HCTF_EARLY_GENERALIZE): callable(dict) for mid-attempt events
     solver_dir = None  # rel. to HW: the challenge dir next to it holds label_hints.json (shared by its modes)
     t0 = None          # this attempt's start (HCTF_RUNNER_BUDGET is relative to it)
+    spawn = None       # D24 #1: {main, lock} s before _attempt (interpreter start + imports, mode-lock wait)
 
 
 _CTX = _Ctx()
@@ -174,9 +175,44 @@ class _Pool:
         self.host, self.port = u.hostname, u.port
         self.path = u.path or "/"         # inside proxy: /huntress-ctf-proxy (never add a trailing slash)
         self.q = queue.LifoQueue()
+        self.size, self._pending = size, 0
+        first = int(os.environ.get("HCTF_GM_POOL_FIRST", "2"))
+        if os.environ.get("HCTF_GM_POOL_LAZY", "1") != "0" and 0 < first < size:
+            self._open_lazy(size, first)
+            return
         with ThreadPoolExecutor(max_workers=size) as ex:
             for c in ex.map(lambda _: self._new(), range(size)):
                 self.q.put(c)
+
+    def _open_lazy(self, size, first):
+        """D24 #3 (HCTF_GM_POOL_LAZY): return once `first` sockets are connected (or every connect has ended); the rest
+        finish their TCP+TLS on daemon threads and join the pool as they come up. Building all 32 before returning put
+        the slowest handshake (a 6.9 s TLS spike once) in front of every mode's start. Daemon threads, not an executor:
+        an executor's workers are joined at interpreter exit, so a one-shot runner would wait on a stuck connect."""
+        import threading
+        lock, ev = threading.Lock(), threading.Event()
+        st = {"done": 0, "up": 0}
+        self._pending = size
+
+        def one():
+            c = None
+            try:
+                c = self._new()
+                c._hctf_used = time.time()   # idle is counted from the end of the handshake
+            except Exception:  # noqa: BLE001 - a request opens its own socket when the pool is empty
+                c = None
+            finally:
+                with lock:
+                    self._pending -= 1
+                    st["done"] += 1
+                    if c is not None:
+                        self.q.put(c)
+                        st["up"] += c.sock is not None
+                    if st["up"] >= first or st["done"] >= size:
+                        ev.set()
+        for _ in range(size):
+            threading.Thread(target=one, daemon=True, name="gm-pool-connect").start()
+        ev.wait()
 
     def _new(self, connect=True):
         import http.client
@@ -192,8 +228,10 @@ class _Pool:
 
     def fresh(self, want=8):
         """Before a clock: drop sockets idle past IDLE_MAX and pre-open fresh ones (TCP+TLS) up to `want`, in parallel.
-        A one-shot process's pool was just built (no-op); hb_daemon's pool idles between attempts."""
+        A one-shot process's pool was just built (no-op); hb_daemon's pool idles between attempts. Sockets a lazy pool is
+        still connecting count toward `want`, and a pool smaller than `want` (adaptive size) is topped up to its size."""
         import queue
+        want = min(want, getattr(self, "size", want))
         keep = []
         while True:
             try:
@@ -204,7 +242,7 @@ class _Pool:
                 keep.append(c)
             else:
                 c.close()
-        need = max(0, want - len(keep))
+        need = max(0, want - len(keep) - getattr(self, "_pending", 0))
         if need:
             with ThreadPoolExecutor(max_workers=need) as ex:
                 keep += list(ex.map(lambda _: self._new(), range(need)))
@@ -1257,7 +1295,16 @@ def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None, on_event=
     _CTX.lane, _CTX.opts, _CTX.on_event = _lane_from_solver_dir(solver_dir), dict(opts or {}), on_event
     _CTX.solver_dir = solver_dir
     _CTX.t0 = time.time()
+    spawn = {}
+    try:   # D24 #1: the local route's spawn stamp (workers.run_timed) -> interpreter start + imports
+        ts = float(os.environ.get("HCTF_T_SPAWN") or 0)
+        if ts and 0 <= _CTX.t0 - ts < 120:
+            spawn["main"] = round(_CTX.t0 - ts, 2)
+    except ValueError:
+        pass
     lock = _mode_lock(cid)
+    spawn["lock"] = round(time.time() - _CTX.t0, 2)
+    _CTX.spawn = spawn
     try:
         if lock is None:
             return {"cid": cid, "result": "exec_error", "detail": "another runner holds this mode (mode lock)",
@@ -1266,7 +1313,7 @@ def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None, on_event=
     finally:
         if lock is not None:
             lock.close()
-        _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = _CTX.t0 = None
+        _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = _CTX.t0 = _CTX.spawn = None
 
 
 def _mode_lock(cid):
@@ -1310,11 +1357,12 @@ def _body_attempt_id(body):
     return None
 
 
-def _prestarted_body(cid):
+def _prestarted_body(cid, why=None):
     """The orchestrator's pre-start of THIS mode (start body + downloaded bytes + .prefetch.json in the runner's dir),
     used ONCE instead of a second `start` call when it is fresh, untimed and complete. D22: after a 4-25 s pre-start the
     runner still re-called `start` to reconnect -- another 2-7 s per mode at the drop, on the critical path. A clocked or
-    stale one (HCTF_PRESTART_TRUST_S, 300) falls back to the normal start; HCTF_PRESTART_REUSE=0 disables."""
+    stale one (HCTF_PRESTART_TRUST_S, 300) falls back to the normal start; HCTF_PRESTART_REUSE=0 disables.
+    `why` (a list): the reason a pre-start that EXISTS was not used is appended (D24 #1 instrumentation)."""
     if _opt("HCTF_PRESTART_REUSE", "1") != "1":
         return None
     adir = HW / ".run" / "tmp-timed" / re.sub(r"[^A-Za-z0-9]+", "_", cid)
@@ -1330,6 +1378,10 @@ def _prestarted_body(cid):
             or not att or str(pj.get("attempt_id")) != att or not pj.get("files")
             or time.time() - float(pj.get("t") or 0) > float(_opt("HCTF_PRESTART_TRUST_S", "300"))
             or not all((adir / n).exists() for n in pj["files"])):
+        if why is not None:
+            why.append("clocked" if isinstance(body, dict) and body.get("deadline") else
+                       "stale" if time.time() - float(pj.get("t") or 0) > float(_opt("HCTF_PRESTART_TRUST_S", "300"))
+                       else "mismatch")
         return None
     try:
         (adir / ".prefetch.reused").write_text(att)
@@ -1345,6 +1397,8 @@ def _attempt(a):
         pool.fresh()            # (hb_daemon: the pool idled since the last attempt -> replace stale sockets)
     t0 = time.time()
     out = {"cid": a.cid, "submitted": {}, "pool_warm": round(t0 - tw, 2)}
+    if _CTX.spawn is not None and _opt("HCTF_TIMING_MARKS", "1") == "1":
+        out["spawn"] = dict(_CTX.spawn, pool=out["pool_warm"])   # D24 #1: where the runner's pre-start seconds went
 
     untimed = a.op == "untimed"
     # resume = reconnect (`start`) to the LIVE attempt the caller knows holds banked ids: never re-roll it short-clock
@@ -1353,7 +1407,10 @@ def _attempt(a):
     resume = a.op == "resume"
     if resume:
         out["resumed_banked"] = True
-    body = _prestarted_body(a.cid) if a.op == "start" and not untimed and not resume else None
+    miss = []
+    body = _prestarted_body(a.cid, miss) if a.op == "start" and not untimed and not resume else None
+    if miss and _opt("HCTF_TIMING_MARKS", "1") == "1":
+        out["prestart_miss"] = miss[0]   # a pre-start existed but could not be used (clocked / stale / mismatch)
     if body is not None:
         out["prestart_reused"] = True    # D22 post-mortem #13: no second `start` after the orchestrator's pre-start
     else:
@@ -1679,15 +1736,50 @@ def _attempt(a):
     return _emit(out, adir)
 
 
+def _pair_index(ids, qs):
+    """D24 #2: lookup(answer_id) -> question via an exact-id index + the longest boundary suffix, or None when the index
+    can't promise the scan's answer (mirror of hctf.solvers._pair_index -- this file runs standalone on Homebase)."""
+    if not isinstance(ids, list) or not isinstance(qs, list):
+        return None
+    exact = {}
+    for q in qs:
+        if not isinstance(q, dict):
+            return None
+        qid = q.get("id")
+        if qid is None:
+            continue
+        if not isinstance(qid, str) or "\n" in qid:
+            return None
+        exact.setdefault(qid, q)
+    if any(not isinstance(a, str) or "\n" in a for a in ids):
+        return None
+
+    def lookup(aid):
+        q = exact.get(aid)
+        if q is None:
+            for j, c in enumerate(aid):
+                if c in "._-" and j + 1 < len(aid):
+                    q = exact.get(aid[j + 1:])
+                    if q is not None:
+                        break
+        return q
+    return lookup
+
+
 def _paired(ids, qs):
     """{answer_id: question}: exact question id, else the longest question id the answer id ends with, else by position
-    (stdlib mirror of hctf.solvers.paired_questions -- this file runs standalone on Homebase)."""
+    (stdlib mirror of hctf.solvers.paired_questions -- this file runs standalone on Homebase). The per-id scan of every
+    question took 17.8 s of a 12,480-id script Mastery's start phase: indexed now (HCTF_PAIR_INDEX=0: the scan)."""
+    look = _pair_index(ids, qs) if _opt("HCTF_PAIR_INDEX", "1") != "0" else None
     out = {}
     for i, aid in enumerate(ids):
-        q = next((q for q in qs if q.get("id") == aid), None)
-        if q is None:
-            sufs = [q for q in qs if q.get("id") and re.search(rf"(^|[._-]){re.escape(q['id'])}$", aid)]
-            q = max(sufs, key=lambda q: len(q["id"]), default=None)
+        if look is not None:
+            q = look(aid)
+        else:
+            q = next((q for q in qs if q.get("id") == aid), None)
+            if q is None:
+                sufs = [q for q in qs if q.get("id") and re.search(rf"(^|[._-]){re.escape(q['id'])}$", aid)]
+                q = max(sufs, key=lambda q: len(q["id"]), default=None)
         if q is None and i < len(qs):
             q = qs[i]
         out[aid] = q or {}

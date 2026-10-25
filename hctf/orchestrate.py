@@ -3945,6 +3945,7 @@ class Chain:
             try:
                 rc = self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy, stop=ready,
                                      warm=warm, warm_task=warm_task)
+                self._mark("after_worker")
             finally:
                 done_evt.set()
                 # a verified handoff (ready + snapshot): nothing below may hold the timed modes (D24 plan #5). A still
@@ -4457,6 +4458,7 @@ class Chain:
 
     def _prefetch_tt(self):
         """Never raises: callers sit right before ready.set() at a handoff."""
+        self._mark("ready")
         try:
             self._prefetch_tt_start()
         except Exception as e:  # noqa: BLE001 - a pre-start is an optimisation; the handoff must happen regardless
@@ -4880,6 +4882,7 @@ class Chain:
                             self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):
                     self._single_correct(cid, "single")
+                    self._mark("correct")
                     self._web_tt_kick()
                     self._record_single_method(cid)
                     self._start_codify(cid)
@@ -5202,6 +5205,7 @@ class Chain:
         if not e:
             return True
         cid = e["id"]
+        self._mark(f"{mode}:stage")
         # This run saw the mode `start_required` minutes ago and nothing else attempts it: skip the GM status call
         # (2-7s per mode on the critical path, replay run 3).
         seen_fresh = getattr(self, "_tstatus", {}).get(mode) == "start_required"
@@ -5357,11 +5361,14 @@ class Chain:
                     f"{str((timed.last_result(cid) or {}).get('attempt_id'))[:8]} (same verdicts) -- straight to the next fix")
             else:
                 par = par or self._web_par_live(cid, mode, attempt, untimed or live_banked)
-                res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed))
+                self._mark(f"{mode}:run", cid)
+                res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed),
+                                **self._on_correct_kw(mode))
                 res = self._web_par_settle(cid, par, res)
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
             if res == "correct" and mode == "time_trial":
+                self._mark("time_trial:correct")
                 self._prefetch_mastery_start()   # the Mastery start + bytes overlap the TT bookkeeping + pre-Mastery block
             if res == "blocked" and LOCAL_RERUN_SLOW and self._slow_vm_no_clock(cid):
                 # No clock + a CPU-bound solve that ran out of its budget on the slow VM: the attempt is still live, so
@@ -5757,6 +5764,47 @@ class Chain:
         if mode == "time_trial" and self._codify_alive(cid):
             say(f"[{cid}] web codify worker ended: the generalize takes over {self._codify.plugin.name}")
             self._stop_codify()
+
+    _HANDOFF_MARKS = {"time_trial": ("correct", "ready", "after_worker", "time_trial:stage", "time_trial:run"),
+                      "mastery": ("time_trial:correct", "mastery:stage", "mastery:run")}
+
+    def _mark(self, name, cid=None):
+        """D24 #1: the first time this chain reached `name` (epoch s). A mode's first `<mode>:run` logs one "handoff
+        timing" line: single CORRECT -> verified ready -> worker ended -> timed_stage -> timed.run (TT), or TT CORRECT ->
+        timed_stage -> timed.run (Mastery). Never raises. HCTF_TIMING_MARKS=0: off."""
+        try:
+            if not workers.TIMING_MARKS:
+                return
+            marks = self.__dict__.setdefault("_marks", {})
+            if name in marks:
+                return
+            marks[name] = time.time()
+            mode = name[:-len(":run")] if name.endswith(":run") else None
+            got = [(k, marks[k]) for k in self._HANDOFF_MARKS.get(mode, ()) if k in marks]
+            if cid and len(got) > 1:
+                t_chain = getattr(self, "_chain_t0", None)
+                say(f"[{cid}] handoff timing ({mode}): " + " > ".join(f"{k} +{t - got[0][1]:.1f}s" for k, t in got)
+                    + (f" (chain +{marks[name] - t_chain:.1f}s)" if t_chain else ""))
+        except Exception:  # noqa: BLE001 - instrumentation must never hurt the chain
+            pass
+
+    def _on_correct_kw(self, mode):
+        """timed.run kwargs: the Time Trial's pass fires _tt_on_correct BEFORE its bookkeeping (D24 #4)."""
+        return {"on_correct": self._tt_on_correct} if mode == "time_trial" and timed.PREFETCH_ON_CORRECT else {}
+
+    def _tt_on_correct(self, res):
+        """D24 #4: the TT runner just reported CORRECT (the GM judged it: Mastery's prerequisite is banked). Pre-start
+        Mastery now instead of after process_result (variant capture + label promotion: warmups 8 s, metadata 7 s,
+        mobile 3 s); web requests its Mastery target now, whatever HCTF_WEB_LIVE_COMPOUND says. Both are once-per-chain
+        (_prefetch_m_started / _web_m_kicked), and the pre-start holds the runner's mode lock, so the post-return call
+        in timed_stage can't start Mastery a second time. HCTF_RUN_FOR_TIME=1: left to that post-return call (its
+        untimed-pool test reads THIS attempt's last_timed.json, written by process_result)."""
+        self._mark("time_trial:correct")
+        if os.environ.get("HCTF_RUN_FOR_TIME", "auto") != "1":
+            self._prefetch_mastery_start()
+        from . import webtarget
+        if webtarget.is_live_lane(getattr(self, "lane", None)):
+            self._web_mastery_kick()
 
     def _live_pass_prefetch(self, mode):
         """A Time Trial passed off the runner's own path (live answer / online resolution): pre-start Mastery now, as a

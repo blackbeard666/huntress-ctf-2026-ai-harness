@@ -37,16 +37,54 @@ def question_index():
     return idx
 
 
+def _pair_index(ids, qs):
+    """D24 #2: lookup(answer_id) -> question by an exact-id index, else the LONGEST question id the answer id ends with
+    at a `.`/`_`/`-` boundary (the old regex scan's rule), else None (the caller falls back to position). The scan was
+    O(ids x questions): 12,480 script Mastery ids cost 12.9 s here and 17.8 s in hb_timed's start phase. None when the
+    index can't promise the scan's exact answer (a non-dict question, a non-str id, an id with a newline -- `$` also
+    matches before a trailing newline): the caller keeps the scan."""
+    if not isinstance(ids, list) or not isinstance(qs, list):
+        return None
+    exact = {}
+    for q in qs:
+        if not isinstance(q, dict):
+            return None
+        qid = q.get("id")
+        if qid is None:
+            continue
+        if not isinstance(qid, str) or "\n" in qid:
+            return None
+        exact.setdefault(qid, q)          # the scan's next(): the FIRST question with that id
+    if any(not isinstance(a, str) or "\n" in a for a in ids):
+        return None
+
+    def lookup(aid):
+        q = exact.get(aid)
+        if q is None:
+            for j, c in enumerate(aid):   # leftmost boundary first = the longest suffix (an empty id never matches)
+                if c in "._-" and j + 1 < len(aid):
+                    q = exact.get(aid[j + 1:])
+                    if q is not None:
+                        break
+        return q
+    return lookup
+
+
 def paired_questions(contract):
     """[(answer_id, question)]: exact question id, else the question id the answer id ends with (bundles like
-    answer_ids slot0_marker..slot3_marker sharing one 'marker' question), else by position."""
+    answer_ids slot0_marker..slot3_marker sharing one 'marker' question), else by position.
+    HCTF_PAIR_INDEX=0: the old per-id scan of every question (D24 #2)."""
     ids, qs = contract.get("answer_ids", []), contract.get("questions", [])
+    look = _pair_index(ids, qs) if os.environ.get("HCTF_PAIR_INDEX", "1") != "0" else None
     out = []
     for i, aid in enumerate(ids):
-        q = next((q for q in qs if q.get("id") == aid), None)
-        if q is None:
-            sufs = [q for q in qs if q.get("id") and re.search(rf"(^|[._-]){re.escape(q['id'])}$", aid)]
-            q = max(sufs, key=lambda q: len(q["id"]), default=None)
+        if look is not None:
+            q = look(aid)
+        else:
+            q = next((q for q in qs if q.get("id") == aid), None)
+            if q is None:
+                sufs = [q for q in qs if q.get("id") and re.search(rf"(^|[._-]){re.escape(q['id'])}$", aid)]
+                q = max(sufs, key=lambda q: len(q["id"]), default=None)
         if q is None and i < len(qs):
             q = qs[i]
         out.append((aid, q or {}))
