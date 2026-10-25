@@ -211,17 +211,17 @@ from lib.web import handlers as webhandlers  # noqa: E402
 
 UPLOAD = {"feature_route": "/feature", "render_route": "/render", "preview_guide": "png only",
           "upload_policy": "images", "upload_shape": "multipart"}
-with patched({(webhandlers, "for_key"): lambda key, clues: [], (libweb, "_prior_sources"): lambda: ["def answer(): pass"]}):
+with patched({(webhandlers, "concept_handlers"): lambda key, clues: [], (libweb, "_prior_sources"): lambda: ["def answer(): pass"]}):
     check("#7 never-seen class: no handler, no earlier solver names a concept key -> unknown",
           libweb.class_known(UPLOAD, "preview_guide") is False)
-with patched({(webhandlers, "for_key"): lambda key, clues: [],
+with patched({(webhandlers, "concept_handlers"): lambda key, clues: [],
               (libweb, "_prior_sources"): lambda: ["if 'upload_policy' in clues: return upload(base)"]}):
     check("#7 an earlier web solver that names a concept key -> known", libweb.class_known(UPLOAD, "preview_guide"))
-with patched({(webhandlers, "for_key"): lambda key, clues: [], (libweb, "_prior_sources"): lambda: ["feature_route render_route"]}):
+with patched({(webhandlers, "concept_handlers"): lambda key, clues: [], (libweb, "_prior_sources"): lambda: ["feature_route render_route"]}):
     check("#7 route-valued / common kit keys never make a class known",
           libweb.class_known({"feature_route": "/f", "render_route": "/r", "secret_note": "x"}, "secret_note") is False)
-with patched({(webhandlers, "for_key"): lambda key, clues: [("upload", None)], (libweb, "_prior_sources"): lambda: []}):
-    check("#7 a built-in handler for any clue key -> known", libweb.class_known(UPLOAD, "preview_guide"))
+with patched({(webhandlers, "concept_handlers"): lambda key, clues: [("upload", None)], (libweb, "_prior_sources"): lambda: []}):
+    check("#7 a built-in handler a CONCEPT clue key names -> known", libweb.class_known(UPLOAD, "preview_guide"))
 
 budgets = []
 race_log = Path(tempfile.mkdtemp()) / "race.jsonl"
@@ -235,11 +235,12 @@ with patched({**RACE, (libweb, "class_known"): lambda c, k: False}):
     libweb.solve_target({"id": "proof-1"}, {}, clues=UPLOAD)
 with patched({**RACE, (libweb, "class_known"): lambda c, k: True}):
     libweb.solve_target({"id": "proof-2"}, {}, clues=UPLOAD)
-check("#7 unknown class -> race capped at HCTF_WEB_UNKNOWN_KEY_BUDGET (12 s); known -> full 40 s",
-      budgets == [libweb.UNKNOWN_KEY_BUDGET, 40] and libweb.UNKNOWN_KEY_BUDGET == 12, budgets)
+check("#7 unknown class -> race capped at HCTF_WEB_UNKNOWN_KEY_BUDGET (12 s); known -> HCTF_WEB_KNOWN_BUDGET (20 s, D24)",
+      budgets == [libweb.UNKNOWN_KEY_BUDGET, libweb.KNOWN_BUDGET] and libweb.UNKNOWN_KEY_BUDGET == 12
+      and libweb.KNOWN_BUDGET == 20, budgets)
 recs = [json.loads(ln) for ln in race_log.read_text().splitlines()] if race_log.exists() else []
 check("#7 every target race is logged (qid, key, known, budget, winner)",
-      [(r["qid"], r["known"], r["budget"]) for r in recs] == [("proof-1", False, 12.0), ("proof-2", True, 40)], recs)
+      [(r["qid"], r["known"], r["budget"]) for r in recs] == [("proof-1", False, 12.0), ("proof-2", True, 20.0)], recs)
 del os.environ["HCTF_WEB_RACE_LOG"]
 
 rep = {}

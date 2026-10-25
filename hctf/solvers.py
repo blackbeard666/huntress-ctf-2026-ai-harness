@@ -107,10 +107,12 @@ def answer_str(v):
     return str(v)
 
 
-def run_solver(sdir, contract, artifacts, timeout=120, background=None):
+def run_solver(sdir, contract, artifacts, timeout=120, background=None, deadline=None):
     """Run one solver. Returns (answers dict, error string or None, seconds).
     Own process group, killed as a group on timeout (its fork pool too); background=True (or the calling thread's
-    procgov flag) = the low-priority class -- see hctf/procgov.py."""
+    procgov flag) = the low-priority class -- see hctf/procgov.py. deadline = seconds from now: HCTF_SOLVE_DEADLINE
+    (epoch) for the solver, so a partial-emit solver (lib.solverrt / lib.websolve.race) prints what it has by then
+    instead of being killed silent at `timeout`."""
     from . import procgov
     if not (Path(sdir) / "solve.py").exists():
         return {}, f"no solver yet at {Path(sdir).relative_to(ROOT)}/solve.py", 0.0
@@ -120,6 +122,8 @@ def run_solver(sdir, contract, artifacts, timeout=120, background=None):
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # solvers can `import lib.*`
     t0 = time.time()
+    if deadline is not None:
+        env["HCTF_SOLVE_DEADLINE"] = f"{t0 + float(deadline):.3f}"
     try:
         r = procgov.run([py, str(sdir / "solve.py"), "--contract", str(tmp), "--artifacts", str(artifacts)],
                         timeout=timeout, cwd=sdir, env=env, background=background)
@@ -582,3 +586,16 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
         return sum(1 for a, v in merged.items() if got.get(a) == v), _day_key(sdir)
     best = max(cands, key=agree) if merged else None
     return {"high": high, "spec": spec, "source": source, "runs": runs, "best": best, "alts": alts}
+
+
+def lane_race_plan(sdir, contract, artifacts, deadline, timeout=None):
+    """ONE lane-solver run as a reuse_plan()-shaped result (D24 #9, web): challenges/_lane/web/solver already races every
+    plugin, the `default` ladder and every earlier web day's answer() (`prior:` probes) in one process, so running the
+    newest dated web solvers beside it only re-ran the same race 3x against one live target. Its live-exploited proofs
+    count as confident (`high`), as a prior web solver's were (proof-* is in every web solver's cases)."""
+    ids = list(contract.get("answer_ids") or [])
+    got, err, dt = run_solver(Path(sdir), contract, artifacts, timeout=timeout or float(deadline) + 4, deadline=deadline)
+    high = {a: got[a] for a in ids if got.get(a) not in (None, "")}
+    return {"high": high, "spec": {}, "source": {a: Path(sdir) for a in high},
+            "runs": {Path(sdir): (len(high), err, round(dt, 2))}, "best": Path(sdir) if high else None,
+            "alts": {a: [v] for a, v in high.items()}}

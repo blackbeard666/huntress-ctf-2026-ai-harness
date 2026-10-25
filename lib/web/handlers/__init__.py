@@ -41,6 +41,22 @@ def for_key(key, clues):
     return out or furn
 
 
+def concept_handlers(key, clues):
+    """for_key minus the furniture fallback: only handlers a CONCEPT clue key names (a key outside websolve.COMMON_KEYS
+    -- framework / current_role / secondary_route ... are in every kit). What lib.web.class_known counts: D23's
+    all-furniture kits made for_key match a D23/D24 plugin on EVERY such kit, so a never-seen class was "known" and
+    raced the full known budget before its live answer took over. Dispatch (for_key) is unchanged."""
+    out = []
+    keys = [key or ""] + [k for k in (clues if isinstance(clues, dict) else {}) if k != key]
+    for k in keys:
+        if not k or k in websolve.COMMON_KEYS:
+            continue
+        for pat, name in _KEY_MAP:
+            if re.search(pat, k, re.I) and name in _HANDLERS and (name, _HANDLERS[name]) not in out:
+                out.append((name, _HANDLERS[name]))
+    return out
+
+
 def _routes(clues, base):
     """Every path the kit names in /api/clues, plus links scraped from the home page as a fallback."""
     j = clues if isinstance(clues, dict) else {}
