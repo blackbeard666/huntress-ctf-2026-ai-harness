@@ -822,6 +822,12 @@ CARRY_WAIT_UNTIMED = float(os.environ.get("HCTF_CARRY_WAIT_UNTIMED", "6"))
 NEWID_SYNC_SKIP_IDS = int(os.environ.get("HCTF_NEWID_SYNC_SKIP_IDS", "2000"))
 NEWID_SYNC_UNTIMED = float(os.environ.get("HCTF_NEWID_SYNC_UNTIMED", "4"))
 _CLOCKED_PRESTART = []   # a pre-start came back CLOCKED this run -> no untimed evidence for anyone (D24 #7 latch)
+# TT pre-start at the single's FIRST GM CORRECT (D24 plan #7) instead of at the verified handoff: the TT start + bytes
+# overlap the solver verification / holds (warmups + metadata 4-10 s). Only with _untimed_evidence(): the GM gives ONE
+# timed attempt per mode and a clocked pre-start would burn it while the solver is unverified (D18 warmups: 4 s of a
+# 30 s window left). A clocked body latches it off for the run; hb_timed trusts a pre-start for 300 s
+# (HCTF_PRESTART_TRUST_S), then simply reconnects.
+PRESTART_AT_CORRECT = os.environ.get("HCTF_PRESTART_AT_CORRECT", "1") != "0"
 # The single's solver on its OWN case must beat this (local s) or a speed generalize runs BEFORE the first timed attempt:
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
@@ -3974,9 +3980,26 @@ class Chain:
     def _single_correct(self, cid, why):
         """The single's first GM CORRECT, whoever got it (ready-watcher / reuse race / answer-first). Idempotent."""
         ev = getattr(self, "_correct_evt", None)
-        if ev is None or ev.is_set():
-            return
-        ev.set()   # triage's deferred recon stops (TRIAGE_ABORT_AT_CORRECT)
+        with self.__dict__.setdefault("_correct_lock", threading.Lock()):   # 3 callers may race here
+            if ev is None or ev.is_set():
+                return
+            ev.set()   # triage's deferred recon stops (TRIAGE_ABORT_AT_CORRECT)
+        if PRESTART_AT_CORRECT:
+            self._prestart_at_correct(why)
+
+    def _prestart_at_correct(self, why):
+        """PRESTART_AT_CORRECT: the Time Trial's start + download now, on evidence of an untimed pool only. Never raises."""
+        try:
+            if getattr(self, "_prefetch_started", False) or "time_trial" not in self.entries:
+                return
+            if not self._untimed_evidence():
+                say(f"[{self.base}] TT pre-start at the single's CORRECT ({why}): skipped -- no evidence the pool is "
+                    "untimed (list entry without run_for_time_supported / clocked); pre-start at the handoff as before")
+                return
+            if self._prefetch_mode_start("time_trial", f"the single's first GM CORRECT ({why})"):
+                self._prefetch_started = True
+        except Exception as e:  # noqa: BLE001 - an optimisation; the handoff pre-start / the runner start it anyway
+            say(f"[{self.base}] TT pre-start note: {e}")
 
     # -- early handoff (speculative timed attempts while the Single Solve worker is still running)
     def _case_names(self):
@@ -4369,6 +4392,9 @@ class Chain:
                 t_start = time.time()   # D22 post-mortem #14: GM start vs download at the drop (Mastery 20-25 s)
                 body = env.get("body") or {}
                 att = cli.attempt_id(body)
+                if body.get("deadline") and not _CLOCKED_PRESTART:
+                    _CLOCKED_PRESTART.append(mcid)   # D24 #7: this run's plain starts can be clocked -> no early pre-starts
+                    say(f"!!! [{mcid}] {label} pre-start came back CLOCKED: no pre-start at a single's CORRECT this run")
                 if env.get("http") != 200 or body.get("error") or not body.get("answer_ids") or body.get("deadline"):
                     why = body.get("error") or (f"clocked to {body['deadline']}: the runner reconnects to it"
                                                 if body.get("deadline") else "no ids")

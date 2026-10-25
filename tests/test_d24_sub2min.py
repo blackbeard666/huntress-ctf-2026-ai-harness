@@ -8,6 +8,8 @@ Track B (single -> TT handoff):
      join; triage's deferred recon stops at the single's CORRECT; kill switches restore the old path.
 - B6 race path: reuse_plan's outs verify the seed (no re-run); seed snapshot + carry check before the race submit; the
      race snapshot goes first when the worker hasn't edited; untimed-evidence caps on the carry / new-id holds.
+- B7 TT pre-start at the single's first GM CORRECT: once, only on evidence of an untimed pool, never on a clocked one
+     (legacy route / HCTF_RUN_FOR_TIME=1 / clocked TT / a clocked pre-start body latches it off for the run).
 
 Run:  source bin/env.sh && python3 tests/test_d24_sub2min.py      (exit 0 = all pass)
 """
@@ -280,7 +282,8 @@ check("B5_DuelGroup.signal_stop sets every racer's stop event without a join", d
 # ---------------------------------------------------------------- B5 _single_correct + triage stop
 ch = b_chain("correct-evt")
 ch._correct_evt = threading.Event()
-ch._single_correct(ch.base, "test")
+with patched(QUIET):
+    ch._single_correct(ch.base, "test")
 check("B5__single_correct sets the CORRECT event (triage's deferred recon stop)", ch._correct_evt.is_set())
 ch2 = b_chain("correct-noevt")
 ch2._single_correct(ch2.base, "test")   # no event (an earlier-run single): no error
@@ -539,6 +542,106 @@ check("B6_ untimed pool, few new ids: the dry run is capped at HCTF_NEWID_SYNC_U
 res, dt, called = newid_with(False, 2500, gap_secs=0.3)
 check("B6_ clocked / unknown pool: the synchronous dry run runs as before (even for many new ids)",
       res == ["n0"] and called, (res, dt))
+
+
+# ---------------------------------------------------------------- B7 TT pre-start at the single's first GM CORRECT
+from hctf import hb_timed  # noqa: E402
+
+
+def pre_chain(name, rfts=True):
+    ch = b_chain(name)
+    ch._correct_evt = threading.Event()
+    for m in ("time_trial", "mastery"):
+        if rfts:
+            ch.entries[m]["run_for_time_supported"] = True
+    return ch
+
+
+def prestart_calls(ch, why_list=("single",), env_rft="auto", extra=None):
+    calls = []
+    import os as _os
+    old = _os.environ.get("HCTF_RUN_FOR_TIME")
+    _os.environ["HCTF_RUN_FOR_TIME"] = env_rft
+    try:
+        with patched({**QUIET, (timed, "last_result"): lambda cid: {}, (orchestrate, "_CLOCKED_PRESTART"): [],
+                      (orchestrate.Chain, "_prefetch_mode_start"): lambda self, mode, when: (calls.append((mode, when)),
+                                                                                               True)[1],
+                      **(extra or {})}):
+            ts = [threading.Thread(target=ch._single_correct, args=(ch.base, w)) for w in why_list]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join(3)
+    finally:
+        if old is None:
+            _os.environ.pop("HCTF_RUN_FOR_TIME", None)
+        else:
+            _os.environ["HCTF_RUN_FOR_TIME"] = old
+    return calls
+
+
+calls = prestart_calls(pre_chain("pre-ok"), why_list=("single", "reuse race", "answer-first"))
+check("B7_ first GM CORRECT on an untimed-evidence route: ONE TT pre-start even when watcher, race and answer-first "
+      "report it at once", len(calls) == 1 and calls[0][0] == "time_trial" and "first GM CORRECT" in calls[0][1], calls)
+calls = prestart_calls(pre_chain("pre-legacy", rfts=False))
+check("B7_ never on a route without untimed evidence (legacy timed-by-default: a plain start starts the clock)", not calls,
+      calls)
+calls = prestart_calls(pre_chain("pre-rft1"), env_rft="1")
+check("B7_ never with HCTF_RUN_FOR_TIME=1 (HoF pool first = clocked)", not calls, calls)
+calls = prestart_calls(pre_chain("pre-latched"), extra={(orchestrate, "_CLOCKED_PRESTART"): ["x/time_trial"]})
+check("B7_ never once a clocked pre-start was seen this run (latch)", not calls, calls)
+calls = prestart_calls(pre_chain("pre-clockedtt"),
+                       extra={(timed, "last_result"): lambda cid: {"attempt_id": "a", "deadline": "2026-10-25T13:00:06Z"}
+                              if cid.endswith("time_trial") else {}})
+check("B7_ never when this TT's last plain attempt was clocked", not calls, calls)
+with patched({(orchestrate, "PRESTART_AT_CORRECT"): False}):
+    calls = prestart_calls(pre_chain("pre-off"))
+check("B7_ kill switch HCTF_PRESTART_AT_CORRECT=0: no pre-start at CORRECT (the handoff one only)", not calls, calls)
+ch = pre_chain("pre-done")
+ch._prefetch_started = True
+calls = prestart_calls(ch)
+check("B7_ no second pre-start once one was launched", not calls, calls)
+
+# a CLOCKED pre-start body latches the feature off for every chain of the run
+TD7 = TMP / "b7-timed"
+ch = pre_chain("pre-clocked-body")
+latch = []
+with patched({**QUIET, (orchestrate, "_CLOCKED_PRESTART"): latch, (orchestrate, "PREFETCH_TT"): True,
+              (cli, "is_complete"): lambda cid: False, (timed, "timed_dir"): lambda cid: TD7 / "tt",
+              (cli, "call"): lambda *a, **k: {"http": 200, "body": {"answer_ids": ["a"], "attempt_id": "att",
+                                                                   "deadline": "2026-10-25T13:00:30Z"}}}):
+    launched = ch._prefetch_mode_start("time_trial", "test")
+    for _ in range(50):
+        if latch:
+            break
+        time.sleep(0.05)
+    ch2 = pre_chain("pre-after-latch")
+    with patched({(timed, "last_result"): lambda cid: {}}):
+        ev_after = ch2._untimed_evidence()
+check("B7_ a clocked pre-start body latches the feature off (no untimed evidence for any chain after it)",
+      launched and latch == [f"{ch.base}/time_trial"] and ev_after is False and not (TD7 / "tt" / ".prefetch.json").exists(),
+      (launched, latch, ev_after))
+
+# the call sites: _watch_ready's first is_complete, the race win, answer-first's watch
+srcw = __import__("inspect").getsource(orchestrate.Chain._watch_ready)
+srcr = __import__("inspect").getsource(orchestrate.Chain._reuse_race)
+srca = __import__("inspect").getsource(orchestrate.AnswerFirst._watch)
+check("B7_ _single_correct is called at the watcher's first is_complete, right after the race submit, and by answer-first",
+      "_single_correct(cid" in srcw and srcr.index("_single_correct(cid") < srcr.index("_race_snapshot(cid")
+      and "_single_correct" in srca)
+
+# hb_timed trusts a pre-start for 300 s, then reconnects with a normal start
+hw = TMP / "b7-hw"
+adir = hw / ".run" / "tmp-timed" / "x_time_trial"
+adir.mkdir(parents=True)
+(adir / "contract.json").write_text(json.dumps({"answer_ids": ["a"], "attempt_id": "att1"}))
+(adir / "f.bin").write_bytes(b"x")
+for age, want in ((10, True), (400, False)):
+    (adir / ".prefetch.json").write_text(json.dumps({"attempt_id": "att1", "files": ["f.bin"], "t": time.time() - age}))
+    (adir / ".prefetch.reused").unlink(missing_ok=True)
+    with patched({(hb_timed, "HW"): hw}):
+        got = hb_timed._prestarted_body("x/time_trial")
+    check(f"B7_ hb_timed reuses a {age} s old pre-start: {want} (HCTF_PRESTART_TRUST_S 300)", (got is not None) == want, got)
 
 
 shutil.rmtree(TMP, ignore_errors=True)
