@@ -51,22 +51,31 @@ if stage == "single":
             allow()
         block("The challenge is not complete yet: no CORRECT result recorded. Keep going, or write HELP.md if truly blocked.")
     ok, res = orchestrate.ensure_case_and_test(paths.base_id(cid), paths.solver_dir(cid))
-    if complete and ok:
+    static = solvers.id_cache_problems(paths.solver_dir(cid))
+    if complete and ok and not static:
         allow()
     todo = []
     if not complete:
         todo.append("the Single Solve is not fully CORRECT yet (check `hctf status`, keep investigating, then `hctf submit`)")
     if not ok:
         todo.append(f"`hctf solver-test {cid}` does not pass yet: {json.dumps(res)[:600]}")
+    if static:
+        todo.append("unsafe solver cache (fix it now, before the Mastery: it breaks multi-set runs): " + static[0][:400]
+                    + (f" (+{len(static) - 1} more)" if len(static) > 1 else ""))
     block("Not done: " + "; ".join(todo) + ". Re-read notes.md, pick the next most promising lead, and continue. "
           "If you have been stuck for a while, use the explore-alternatives skill.")
 
 if stage == "generalize":
     ok, res = orchestrate.ensure_case_and_test(paths.base_id(cid), paths.solver_dir(cid))
-    if ok:
+    static = solvers.id_cache_problems(paths.solver_dir(cid))
+    if ok and not static:
         allow()
+    if ok:
+        block("Every case passes, but the solver has an unsafe cache (it breaks multi-set Mastery runs): "
+              + "; ".join(static[:2])[:700] + ". Fix it, then re-run `hctf solver-test`.")
     block(f"`hctf solver-test {paths.base_id(cid)}` does not pass for every case yet: {json.dumps(res)[:700]}. "
-          "Fix solve.py (never edit cases/*/expected.json -- it is GM-verified only), then re-run.")
+          "Fix solve.py (never edit cases/*/expected.json -- it is GM-verified only), then re-run."
+          + (f" Also: {static[0][:300]}" if static else ""))
 
 if stage == "live":
     # done = the attempt is CORRECT or every field this worker owes (orchestrate.LiveAnswer) has been ACCEPTED

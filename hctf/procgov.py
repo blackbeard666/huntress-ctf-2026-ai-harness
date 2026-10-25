@@ -10,7 +10,8 @@ and the kernel OOM killed WSL itself.
 Background runs (thread-local flag, inherited by procgov.Executor pools, or process default for the post-run):
   * a global slot limit (HCTF_BG_SOLVERS, default 4), waiting for a slot is fine
   * nice 15, pinned to the top third of the cores, so the critical path keeps the rest
-  * HCTF_SOLVER_PARALLEL=0 (the solver skeleton's switch: no per-run fork pool, one process per run)
+  * HCTF_SOLVER_PARALLEL=0 (the solver skeleton's switch: no per-run fork pool, one process per run) -- except a
+    small-pool rehearsal (solvers.small_pool_env: HCTF_SOLVER_POOL_REHEARSAL=1, pool capped by HCTF_SOLVER_MAX_PROCS)
   * oom_score_adj 800 (the kernel takes these first, never WSL init); foreground runs get 300
 """
 import contextlib
@@ -146,7 +147,8 @@ def run(cmd, timeout=None, background=None, env=None, grace=0.0, input=None, **k
     env = dict(os.environ if env is None else env)
     cpus = None
     if bg:
-        env["HCTF_SOLVER_PARALLEL"] = "0"
+        if env.get("HCTF_SOLVER_POOL_REHEARSAL") != "1":   # solvers.small_pool_env: keep its capped (2-proc) pool
+            env["HCTF_SOLVER_PARALLEL"] = "0"
         cpus = bg_cpus()
     import time as _t
     t_wait = _t.time()

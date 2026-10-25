@@ -9,6 +9,9 @@ description: Huntress binary-reverse-engineering lane - ELF/PE/Mach-O structure 
 java/androidx/... library packages skipped; a Kotlin fat jar is ~3k classes, 5 of them the app's) and read constants with
 `lib.binary.class_utf8(class_bytes)`. Never scan every class of the jar: a solver that did spent 5.9 s per run and failed
 its Time Trial on speed. Keep the whole solve under ~2 s on the single case -- the harness times it before any timed attempt.
+**Never cache on `id(bytes)`** (`_FACTS[id(data)]`-style): a Mastery pool process solves several sets and a freed
+member's id() is reused by the next set's member -> stale facts (D25 Mastery, 46 fields). Cache `(obj, value)` and check
+`entry[0] is obj` (the day-24 solver's `_memo`), and clear the caches at the start of `_solve_pairs`.
 
 # Day-1-style structural questions (answer from the headers, exactly)
 - `readelf -h` : ELF class (`ELF32`/`ELF64`), data (endianness, e.g. `little endian` -> the exact token the question wants),

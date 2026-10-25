@@ -57,6 +57,10 @@ Checklist:
 - [ ] handles both a single file and an archive containing it
 - [ ] works when the question order changes, and when only a subset of questions is passed in
 - [ ] an extra question it has never seen doesn't stop the known ones (skip it, answer the rest)
+- [ ] no module-level cache keyed on a bare `id(obj)`: Mastery sets run in a fork pool (2 procs on Homebase), one process
+      solves several sets, and a freed object's id() comes back for the next set's object (D25 binary Mastery: stale
+      facts, 46 wrong). Store `(obj, value)` and check `entry[0] is obj`, key on content, or clear per set -- the stop
+      gate and `hctf solver-test` flag it, and multi-set cases replay on a 2-process pool
 - [ ] when the direct parse finds nothing, a cheap generic fallback runs (the lane lib's name-agnostic decoder /
       `find_artifact`, then a match against the field's `answer_format`) -- only on a miss, so the happy path stays fast
 The harness checks the last four itself before the first timed attempt (`hctf/mutate.py`: renamed delivery, reordered /

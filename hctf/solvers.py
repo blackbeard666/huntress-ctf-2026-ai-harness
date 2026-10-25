@@ -10,6 +10,7 @@ Solver contract (every challenge, every mode):
 Regression cases: .../solver/cases/<case>/{contract.json, artifacts/, expected.json}
   expected.json holds only answers the GM confirmed (CORRECT/accepted).
 """
+import ast
 import difflib
 import json
 import os
@@ -145,12 +146,12 @@ def answer_str(v):
     return str(v)
 
 
-def run_solver(sdir, contract, artifacts, timeout=120, background=None, deadline=None):
+def run_solver(sdir, contract, artifacts, timeout=120, background=None, deadline=None, env_extra=None):
     """Run one solver. Returns (answers dict, error string or None, seconds).
     Own process group, killed as a group on timeout (its fork pool too); background=True (or the calling thread's
     procgov flag) = the low-priority class -- see hctf/procgov.py. deadline = seconds from now: HCTF_SOLVE_DEADLINE
     (epoch) for the solver, so a partial-emit solver (lib.solverrt / lib.websolve.race) prints what it has by then
-    instead of being killed silent at `timeout`."""
+    instead of being killed silent at `timeout`. env_extra: overrides for the solver's environment (small_pool_env)."""
     from . import procgov
     if not (Path(sdir) / "solve.py").exists():
         return {}, f"no solver yet at {Path(sdir).relative_to(ROOT)}/solve.py", 0.0
@@ -159,6 +160,7 @@ def run_solver(sdir, contract, artifacts, timeout=120, background=None, deadline
     py = str(VENV_PY) if VENV_PY.exists() else "python3"
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # solvers can `import lib.*`
+    env.update(env_extra or {})
     t0 = time.time()
     if deadline is not None:
         env["HCTF_SOLVE_DEADLINE"] = f"{t0 + float(deadline):.3f}"
@@ -438,13 +440,128 @@ def case_parallel(cap=8):
     return max(1, n)
 
 
+# ---------------------------------------------------------------------------------------------- id()-keyed caches
+# D25 binary Mastery (46 fields wrong on the first try): module caches keyed on id(member bytes). A pool worker on the
+# 2-vCPU Homebase solves several sets in turn; a freed member's address comes back as the NEXT set's member, which then
+# reads the earlier set's cached facts. Invisible on 12 local cores (one set per process) and in background replays
+# (single process). Static check: a lookup keyed on id(...) in a container that outlives the call (module global or an
+# attribute) is unsafe unless the same function verifies identity with `is` (cache entry = (obj, value)).
+ID_CACHE_CHECK = os.environ.get("HCTF_ID_CACHE_CHECK", "1") != "0"
+ID_CACHE_OK = "id-cache-ok"   # line pragma for a reviewed exception
+
+
+def _has_id_key(node):
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "id":
+        return True
+    return isinstance(node, ast.Tuple) and any(_has_id_key(e) for e in node.elts)
+
+
+def id_cache_findings(src, name="solve.py"):
+    """[(line, text)] of unsafe id()-keyed cache lookups in Python source `src` (see above). Unparsable -> []."""
+    try:
+        tree = ast.parse(src)
+    except (SyntaxError, ValueError):
+        return []
+    lines = src.splitlines()
+    module_names = set()
+    for st in tree.body:
+        for t in (st.targets if isinstance(st, ast.Assign) else [st.target] if isinstance(st, ast.AnnAssign) else []):
+            module_names |= {n.id for n in ast.walk(t) if isinstance(n, ast.Name)}
+
+    def own_nodes(fn):
+        """Nodes of `fn`'s own body (nested defs / lambdas are scopes of their own)."""
+        todo = list(ast.iter_child_nodes(fn))
+        while todo:
+            n = todo.pop()
+            yield n
+            if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                todo.extend(ast.iter_child_nodes(n))
+
+    out = []
+    scopes = [tree] + [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))]
+    for fn in scopes:
+        nodes = list(own_nodes(fn))
+        if any(isinstance(n, ast.Compare) and any(isinstance(o, (ast.Is, ast.IsNot)) for o in n.ops)
+               and any(isinstance(x, ast.Subscript) for x in [n.left] + n.comparators) for n in nodes):
+            continue   # `entry[0] is obj` in this function: the safe (obj, value) entry
+        glob = {x for n in nodes if isinstance(n, ast.Global) for x in n.names}
+        local = set() if fn is tree else ({n.id for n in nodes if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+                                          | {a.arg for a in ast.walk(fn.args) if isinstance(a, ast.arg)}) - glob
+        for n in nodes:
+            box = None
+            if isinstance(n, ast.Subscript) and isinstance(n.ctx, ast.Load) and _has_id_key(n.slice):
+                box = n.value
+            elif (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in ("get", "setdefault", "pop")
+                  and n.args and _has_id_key(n.args[0])):
+                box = n.func.value
+            elif (isinstance(n, ast.Compare) and _has_id_key(n.left) and len(n.ops) == 1
+                  and isinstance(n.ops[0], (ast.In, ast.NotIn))):
+                box = n.comparators[0]
+            if box is None:
+                continue
+            persistent = (isinstance(box, ast.Attribute)
+                          or (isinstance(box, ast.Name) and box.id in module_names and box.id not in local))
+            ln = lines[n.lineno - 1] if 0 < n.lineno <= len(lines) else ""
+            if persistent and ID_CACHE_OK not in ln:
+                out.append((n.lineno, ln.strip()))
+    return sorted(set(out))
+
+
+def id_cache_problems(sdir):
+    """Problem strings for every unsafe id()-keyed cache lookup in the solver dir's .py files (case generators and
+    tests skipped). Reported by the single / generalize stop gate and `hctf solver-test`."""
+    if not ID_CACHE_CHECK:
+        return []
+    probs = []
+    for f in sorted(Path(sdir).glob("*.py")):
+        if f.name.startswith(("make_", "test_", "gen_")):
+            continue
+        try:
+            src = f.read_text(errors="replace")
+        except OSError:
+            continue
+        if "id(" not in src:
+            continue
+        for ln, text in id_cache_findings(src, f.name):
+            probs.append(f"{f.name}:{ln}: cache keyed on a bare id() -- `{text[:90]}`: a Mastery pool process solves "
+                         "several sets and a freed object's id() comes back for the next set's object (D25: stale facts "
+                         "on 46 fields). Store (obj, value) and check `entry[0] is obj`, or key on content, or clear the "
+                         "cache at the start of each set's solve")
+    return probs
+
+
+# Case replays run a multi-set contract on a fork pool of this many processes (lib.solverrt.max_procs via
+# HCTF_SOLVER_MAX_PROCS) -- the Homebase VM's 2 vCPUs -- so state leaking from one set into the next fails a case here
+# instead of on the GM. 0 = the solver's own default (cpu_count, single-process in background runs).
+CASE_MAX_PROCS = int(os.environ.get("HCTF_CASE_MAX_PROCS", "2"))
+
+
+def _set_count(contract):
+    try:
+        from lib.common import group_by_set
+        ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
+        return len(group_by_set([(a, None) for a in ids]))
+    except Exception:  # noqa: BLE001 - the count only decides the pool size
+        return 1
+
+
+def small_pool_env(contract, procs=None):
+    """Env overrides for a solver run that must rehearse the 2-vCPU pool: {} for a single-set contract."""
+    procs = CASE_MAX_PROCS if procs is None else procs
+    if procs <= 0 or _set_count(contract) < 2:
+        return {}
+    # POOL_REHEARSAL: procgov keeps this run's pool even in the background class (which is otherwise single-process)
+    return {"HCTF_SOLVER_PARALLEL": "1", "HCTF_SOLVER_MAX_PROCS": str(procs), "HCTF_SOLVER_POOL_REHEARSAL": "1"}
+
+
 def test_solver(sdir, timeout=120, parallel=None, cases=None):
     """Run the solver on every case (cases in parallel: they are independent; replay run 2 spent 141s replaying a
     slow solver's cases one by one). Returns list of {case, ok, seconds, diff/error}, in case-name order.
     Also verified_n (GM-verified fields), rejected_hits (GM-rejected values produced again, gm_feedback.json) and
     fully_verified (every asked field has a verified answer).
     `cases`: only case names matching any of these names / fnmatch globs (None = all) -- the generalize watchers and
-    `hctf solver-test --case` test the target cases first instead of the whole corpus on every edit."""
+    `hctf solver-test --case` test the target cases first instead of the whole corpus on every edit.
+    A multi-set case runs on a CASE_MAX_PROCS (2) fork pool, background or not: cross-set state leaks show here."""
     from . import procgov
 
     from . import webtarget
@@ -460,7 +577,7 @@ def test_solver(sdir, timeout=120, parallel=None, cases=None):
             return {"case": case.name, "ok": True, "seconds": 0.0, "error": None, "diff": {}, "unverified": not expected,
                     "answered": len(ids), "total": len(ids), "verified_n": len(expected), "rejected_hits": 0,
                     "rejected_got": {}, "fully_verified": False, "skipped": "live_target_finished"}
-        got, err, dt = run_solver(Path(sdir), contract, case / "artifacts", timeout)
+        got, err, dt = run_solver(Path(sdir), contract, case / "artifacts", timeout, env_extra=small_pool_env(contract))
         diff = {k: {"expected": v, "got": got.get(k)} for k, v in expected.items() if got.get(k) != v}
         ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
         answered = sum(1 for i in ids if got.get(i) not in (None, ""))

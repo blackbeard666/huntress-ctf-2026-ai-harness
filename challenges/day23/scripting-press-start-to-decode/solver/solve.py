@@ -851,7 +851,8 @@ def main():
         except Exception as e:  # noqa: BLE001
             log("index warm-up failed", repr(e))
         try:
-            with ProcessPoolExecutor(max_workers=min(len(groups), os.cpu_count() or 2),
+            from lib.solverrt import max_procs   # HCTF_SOLVER_MAX_PROCS: the harness's small-pool rehearsal
+            with ProcessPoolExecutor(max_workers=max_procs(len(groups)),
                                      mp_context=mp.get_context("fork")) as ex:
                 for part in ex.map(_solve_pairs, [(a.artifacts, g) for g in groups.values()]):
                     answers.update(part)
