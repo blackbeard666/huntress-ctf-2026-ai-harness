@@ -226,11 +226,13 @@ def synth(sdir, today_enc, today_name, base=None, variants=VARIANTS, out_dir=Non
     return made
 
 
-def _run(sdir, case, timeout):
+def _run(sdir, case, timeout, env_extra=None):
+    """Solver on one probe case. A multi-set case runs on the 2-proc pool (solvers.small_pool_env) unless env_extra."""
     case = Path(case).resolve()
     contract = json.loads((case / "contract.json").read_text())
     expected = json.loads((case / "expected.json").read_text())
-    got, err, dt = solvers.run_solver(Path(sdir).resolve(), contract, case / "artifacts", timeout)
+    got, err, dt = solvers.run_solver(Path(sdir).resolve(), contract, case / "artifacts", timeout,
+                                      env_extra=solvers.small_pool_env(contract) if env_extra is None else env_extra)
     wrong = {k: {"expected": v, "got": got.get(k)} for k, v in expected.items() if got.get(k) != v}
     return {"case": case.name, "path": str(case), "expected": len(expected), "correct": len(expected) - len(wrong),
             "wrong": wrong, "error": err, "seconds": round(dt, 2)}
@@ -471,6 +473,191 @@ def merge_summary(res, limit=8):
     for aid, w in list(r["wrong"].items())[:limit]:
         out.append(f"      {aid}: expected {w['expected']!r} got {w['got']!r}")
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------------------------- A2: pool rehearsal
+# D25 binary Mastery: a solver passed the Single, the Time Trial and every replayed case, then failed 46 fields of its
+# first Mastery -- on Homebase's 2-vCPU pool each process solved several sets and module caches keyed on id() handed an
+# earlier set's facts to the next set's (address-reusing) member. The merge probe above can't see that: its solver runs
+# are background-class (single process) and its two halves may share bytes. Here: today's Single and Time Trial (two
+# DIFFERENT GM-verified variants) as sets S,S,T,T,(S,S,...) of one synthetic Mastery, run on a 2-process pool AND
+# single-process. Whichever set a pool process takes next, its content changes, so a leak shows. A miss counts only when
+# the single-process run passes (a shape problem is the merge probe's; never a guess).
+POOL_PREFIX = "rehearsal-pool-"
+# 8 sets: the D25 solver leaked in 2/5 4-set rehearsals and 5/5 8-set ones (~5 s, background class)
+POOL_SETS = max(4, int(os.environ.get("HCTF_POOL_REHEARSAL_SETS", "8")))
+POOL_PROCS = int(os.environ.get("HCTF_POOL_REHEARSAL_PROCS", "2"))
+
+
+def _source(case_or_tuple):
+    """(contract, artifacts dir, expected) from a case dir or such a tuple; None unless >= half its ids are GM-verified
+    (a TT passed through the live answer can hold only part of its answers as confirmed)."""
+    if isinstance(case_or_tuple, (tuple, list)):
+        contract, art, expected = case_or_tuple
+    else:
+        case = Path(case_or_tuple)
+        try:
+            contract = json.loads((case / "contract.json").read_text())
+            expected = json.loads((case / "expected.json").read_text())
+        except (OSError, ValueError):
+            return None
+        art = case / "artifacts"
+    ids = _ids(contract or {})
+    if not ids or not expected or 2 * len(set(ids) & set(expected)) < len(set(ids)) or not art or not Path(art).is_dir():
+        return None
+    return contract, Path(art), expected
+
+
+def _containers(contract):
+    out = []
+    for _a, q in solvers.paired_questions(contract):
+        c = str(q.get("artifact") or "").split("->")[0].strip()
+        if c and c not in out:
+            out.append(c)
+    return out
+
+
+def _art_sig(src):
+    """Content hash of the files a source's contract names (both halves name theirs "evidence.zip")."""
+    import hashlib
+    contract, art, _ = src
+    h = hashlib.sha256()
+    for c in _containers(contract):
+        f = Path(art) / Path(c).name
+        if not f.is_file():
+            h.update(c.encode())
+            continue
+        with open(f, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+    return h.hexdigest()
+
+
+def pool_case(sdir, tt, single=None, sample="", n_sets=POOL_SETS, out_dir=None, tag="tt"):
+    """Write `rehearsal-pool-dNN-<tag>` (today's Single + `tt` as alternating sets) -> case dir, or None when either
+    half is not fully GM-verified, has no named containers, or both halves are the same bytes (identical sets hide a
+    leak). `sample`: a Mastery artifact name ("delivery 3: evidence.zip", "blob-01.txt") for the per-set naming."""
+    import hashlib
+    sdir = Path(sdir)
+    a, b = _source(single or sdir / "cases" / "single_solve"), _source(tt)
+    if a is None or b is None or _art_sig(a) == _art_sig(b):
+        return None
+    today = _day(sdir.parent)
+    case = Path(out_dir or ROOT / ".run" / "today_probe" / sdir.parent.name) / f"{POOL_PREFIX}d{today:02d}-{tag}"
+    if case.exists():
+        shutil.rmtree(case)
+    (case / "artifacts").mkdir(parents=True)
+    ids, qs, expected, arts, layout = [], [], {}, [], []
+    for n in range(1, n_sets + 1):
+        src = a if ((n - 1) // 2) % 2 == 0 else b
+        contract, art, exp = src
+        conts = _containers(contract)
+        if not conts:
+            shutil.rmtree(case, ignore_errors=True)
+            return None
+        rename = {c: (_new_container(sample, c, n) if len(conts) == 1 else f"set{n}-{Path(c).name}") for c in conts}
+        for c, nc in rename.items():
+            dst, direct = case / "artifacts" / nc, art / Path(c).name
+            try:
+                if direct.is_file():
+                    try:
+                        os.link(direct, dst)          # 35 MB binary deliveries: hardlink, never copy
+                    except OSError:
+                        shutil.copy2(direct, dst)
+                    data_sha = None
+                else:
+                    from lib.common import find_artifact
+                    data = find_artifact(art, c)
+                    dst.write_bytes(data)
+                    data_sha = hashlib.sha256(data).hexdigest()
+            except (KeyError, FileNotFoundError, OSError):
+                shutil.rmtree(case, ignore_errors=True)
+                return None
+            arts.append({"name": nc, "filename": nc, **({"sha256": data_sha} if data_sha else {})})
+        for aid, q in solvers.paired_questions(contract):
+            cont, _, member = str(q.get("artifact") or "").partition("->")
+            q2 = dict(q, id=f"set{n}.{q.get('id') or aid}", set=n)
+            if cont.strip() in rename:
+                q2["artifact"] = rename[cont.strip()] + (f" -> {member.strip()}" if member.strip() else "")
+            ids.append(f"set{n}.{aid}")
+            qs.append(q2)
+            if aid in exp:
+                expected[f"set{n}.{aid}"] = exp[aid]
+        layout.append("S" if src is a else "T")
+    base_c = dict(a[0])
+    for k in ("attempt_id", "started_at", "expires_at", "deadline", "window_seconds"):
+        base_c.pop(k, None)
+    merged = dict(base_c, mode="mastery", answer_ids=ids, questions=qs, artifacts=arts)
+    (case / "contract.json").write_text(json.dumps(merged, indent=1, ensure_ascii=False))
+    (case / "expected.json").write_text(json.dumps(expected, indent=1, ensure_ascii=False))
+    (case / "truth.json").write_text(json.dumps({
+        "what": f"Day {today} pool rehearsal: today's Single (S) and {tag} (T) as one {n_sets}-set Mastery "
+                f"({''.join(layout)}), solved on a {POOL_PROCS}-process pool like the 2-vCPU Homebase VM; answers = "
+                "both GM-verified. Passing single-process but not on the pool = state leaking between sets "
+                "(module caches keyed on id(), globals mutated per set)", "layout": "".join(layout)}, indent=1))
+    return case
+
+
+def pool_rehearsal(sdir, tt, single=None, sample="", deadline=None, out_dir=None, tag="tt"):
+    """-> {"status": clean|leak|shape|no-cases|error, "case", "pooled", "sequential", "seconds"} (see above)."""
+    t0 = time.time()
+    res = {"status": "no-cases", "case": None, "pooled": None, "sequential": None}
+    try:
+        case = pool_case(sdir, tt, single=single, sample=sample, out_dir=out_dir, tag=tag)
+    except Exception as e:  # noqa: BLE001 - advisory
+        return dict(res, status="error", error=str(e)[:200], seconds=round(time.time() - t0, 2))
+    if case is None:
+        return dict(res, seconds=round(time.time() - t0, 2))
+    res["case"] = str(case)
+    timeout = max(10.0, (deadline - time.time()) if deadline else 90.0)
+    contract = json.loads((case / "contract.json").read_text())
+    envs = [solvers.small_pool_env(contract, procs=POOL_PROCS) or {"HCTF_SOLVER_PARALLEL": "1"},
+            {"HCTF_SOLVER_PARALLEL": "0"}]
+    with _BgExecutor(max_workers=2) as ex:
+        pooled, seq = list(ex.map(lambda e: _run(sdir, case, timeout, env_extra=e), envs))
+    res.update(pooled=pooled, sequential=seq, seconds=round(time.time() - t0, 2))
+    if not (pooled["error"] or pooled["wrong"]):
+        res["status"] = "clean"
+    elif seq["error"] or seq["wrong"]:
+        res["status"] = "shape"
+    else:
+        res["status"] = "leak"
+    return res
+
+
+def pool_summary(res, limit=8):
+    if res.get("status") != "leak":
+        return ""
+    p = res["pooled"]
+    out = [f"pool rehearsal: the solver passes a synthetic {POOL_SETS}-set Mastery of today's Single + Time Trial "
+           f"(`cases/{Path(res['case']).name}`, truth.json) single-process but NOT on a {POOL_PROCS}-process fork pool -- "
+           f"the Homebase Mastery shape (2 vCPUs: each process solves several sets in turn): "
+           f"{p['correct']}/{p['expected']} fields right"
+           + (f"; solver error: {str(p['error'])[:200]}" if p["error"] else "") + ". State leaks from one set into the "
+           "next: a module cache keyed on id() (a freed object's id comes back for the next set's object), or a global "
+           "mutated per set. Store (obj, value) and check `entry[0] is obj` / key on content / clear per set."]
+    for aid, w in list(p["wrong"].items())[:limit]:
+        out.append(f"      {aid}: expected {w['expected']!r} got {w['got']!r}")
+    return "\n".join(out)
+
+
+def adopt_pool(sdir, res):
+    """Copy a leak's rehearsal case into the solver's cases/ (verified expected; hardlinked bytes) -> its name or None."""
+    if res.get("status") != "leak" or not res.get("case"):
+        return None
+    src = Path(res["case"])
+    dst = Path(sdir) / "cases" / src.name
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst, copy_function=_link_or_copy)
+    return dst.name
+
+
+def _link_or_copy(src, dst):
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
 
 
 def main(argv=None):

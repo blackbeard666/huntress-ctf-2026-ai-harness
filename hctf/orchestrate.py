@@ -1861,6 +1861,15 @@ TODAY_MERGE_WAIT = float(os.environ.get("HCTF_TODAY_MERGE_WAIT", "5"))   # the l
 TODAY_MERGE_PROBE = os.environ.get("HCTF_TODAY_MERGE_PROBE", "1") != "0"
 TODAY_MERGE_LANES = {x.strip() for x in os.environ.get(
     "HCTF_TODAY_MERGE_LANES", "metadata-forensics,binary-reverse-engineering,script-analysis").split(",") if x.strip()}
+# D25 A2 pool rehearsal (today_probe.pool_rehearsal): at the Time Trial's CORRECT, today's Single + that TT (two different
+# GM-verified variants) as one 8-set Mastery on a 2-process pool vs single-process, in the background. The merge probe
+# above runs single-process, so it could not see D25's binary Mastery failure (id()-keyed caches leaking between the
+# sets one Homebase pool process solves). Every lane but web, only for a multi-set (or not yet known) Mastery contract.
+# Never waited for: a leak found by the Mastery pre-attempt block -> generalize BEFORE Mastery (even on an untimed
+# pool); found while the Mastery attempt runs -> the early generalize beside it; later -> the failure generalize.
+POOL_REHEARSAL = os.environ.get("HCTF_POOL_REHEARSAL", "1") != "0"
+POOL_REHEARSAL_SECONDS = float(os.environ.get("HCTF_POOL_REHEARSAL_SECONDS", "60"))
+_pool_lock = threading.Lock()
 # Verified-green (D12: generalize #1 went "green" on a variant case whose answers nobody had verified -- every field
 # filled -- and the untimed retry came back 11/58 wrong): capture_variant folds the GM's in-window verdicts into the
 # variant case (accepted answers -> expected.json, rejected values -> gm_feedback.json, which solvers.test_solver
@@ -2498,6 +2507,15 @@ class Chain:
                          "make it route each set by its own artifact / question text (no one-family-per-contract "
                          "assumption, no hard-coded set count or delivery name), without breaking any case.\n"
                          + "\n".join("    " + ln for ln in d["compound_merge"].splitlines()))
+        if d.get("pool_rehearsal"):
+            gm_wrong += ("\n  - POOL REHEARSAL (the Mastery runs its sets in a 2-process fork pool on the 2-vCPU Homebase VM: "
+                         "each process solves several sets in turn): the `rehearsal-pool-*` case is today's Single + Time "
+                         "Trial (different variants, GM-verified answers) as one multi-set Mastery. It passes "
+                         "single-process but NOT on the pool, so state leaks from one set into the next. Usual cause: a "
+                         "module cache keyed on id(obj) -- a freed member's id() comes back for the next set's member. "
+                         "Store (obj, value) and check `entry[0] is obj`, key on content, or clear the caches at the start "
+                         "of each set's solve; `hctf solver-test` replays multi-set cases on the same 2-process pool.\n"
+                         + "\n".join("    " + ln for ln in d["pool_rehearsal"].splitlines()))
         if d.get("mutation_pre"):
             gm_wrong += ("\n  - NO TIMED ATTEMPT HAS RUN YET: the single is CORRECT, but the solver breaks on ANSWER-INVARIANT "
                          "mutations of its own case (the `mutation-*` cases: same member bytes and names, same expected "
@@ -2716,15 +2734,22 @@ class Chain:
     def _early_event(self, cid, data):
         if data.get("event") != "solved" or not data.get("local") or getattr(self, "_early", None) is not None:
             return
+        pool = {}
         if not workers.EARLY_GENERALIZE:
             missing = list(data.get("missing") or [])
             mode = solvers.mode_of(cid)
             ahead = self._ahead_new(mode)
-            if data.get("result") != "solver_incomplete" or not (
-                    len(missing) >= EARLY_MIN_MISSING or (missing and ahead >= AHEAD_MIN_NEW)):
+            # A2: a pool rehearsal that found a leak while this Mastery attempt ran -> its answers are suspect on the
+            # same pool: generalize now, beside the attempt's banking / in-attempt localization
+            pool = self._pool_rehearsal_result(cid) if mode == "mastery" else {}
+            if not pool and (data.get("result") != "solver_incomplete" or not (
+                    len(missing) >= EARLY_MIN_MISSING or (missing and ahead >= AHEAD_MIN_NEW))):
                 return
-            say(f"[{cid}] contract-ahead: the solver left {len(missing)} field(s) empty (status-time contract: {ahead} "
-                f"id(s) new to the lane) -- the attempt can't pass as is: generalizing NOW, beside its banking")
+            if pool:
+                say(f"[{cid}] pool rehearsal leak landed during the attempt: generalizing NOW, beside its banking")
+            else:
+                say(f"[{cid}] contract-ahead: the solver left {len(missing)} field(s) empty (status-time contract: "
+                    f"{ahead} id(s) new to the lane) -- the attempt can't pass as is: generalizing NOW, beside its banking")
         tc = json.loads((Path(data["local"]) / "contract.json").read_text())
         if not data.get("attempt_id") or cli.attempt_id(tc) != data["attempt_id"]:
             return
@@ -2734,7 +2759,8 @@ class Chain:
         if case is None:
             return
         missing = list(data.get("missing") or [])
-        diag = {"early": True, "variant_case": case.name, "window": data.get("window"), "phases": data.get("phases")}
+        diag = {"early": True, "variant_case": case.name, "window": data.get("window"), "phases": data.get("phases"),
+                **pool}
         say(f"[{cid}] early generalize: solver {data.get('result')} ({len(missing)} empty) -- starting the worker on "
             f"{case.name} while the attempt is still judged")
         t = threading.Thread(target=self.generalize, daemon=True,
@@ -4369,6 +4395,68 @@ class Chain:
         self._today_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(today_probe, owner_tag=self.base), self.sdir,
                                                                    60 if kind == "merge" else 30, kind)
 
+    def _start_pool_rehearsal(self, tt_cid):
+        """Background pool rehearsal (POOL_REHEARSAL above) for the Time Trial `tt_cid` just passed; once per chain."""
+        if not POOL_REHEARSAL or not tt_cid or getattr(self, "_pool_fut", None) is not None:
+            return
+        from . import webtarget
+        m = self.entries.get("mastery")
+        if (m is None or cli.is_complete(m["id"]) or webtarget.is_live_lane(getattr(self, "lane", None))
+                or not (self.sdir / "solve.py").exists()):
+            return
+        mc = cli.load(f"{self.base}/mastery", "contract.json") or {}
+        if mc.get("answer_ids") and solvers._set_count(mc) < 2:
+            return   # a one-set Mastery never forks a pool
+        contract = cli.load(tt_cid, "start.json") or {}
+        art = timed.latest_artifacts(tt_cid) or _timed_bytes_of(tt_cid, cli.attempt_id(contract))
+        conf = cli.confirmed_answers(tt_cid)
+        if not (contract and art and conf):
+            say(f"[{m['id']}] pool rehearsal skipped: the Time Trial's contract / bytes / confirmed answers are not on disk")
+            return
+        sample = next((c for c in (str(q.get("artifact") or "").split("->")[0].strip()
+                                   for q in mc.get("questions") or []) if c), "")
+        mcid, tag = m["id"], f"tt{(cli.attempt_id(contract) or 'x')[:8]}"
+
+        def run():
+            from . import today_probe as tp
+            res = tp.pool_rehearsal(self.sdir, (contract, Path(art), conf), sample=sample, tag=tag,
+                                    deadline=time.time() + POOL_REHEARSAL_SECONDS)
+            st, p = res.get("status"), res.get("pooled") or {}
+            if st == "leak":
+                say(f"[{mcid}] pool rehearsal: LEAK -- {tp.POOL_SETS} sets of Single+TT pass single-process but only "
+                    f"{p.get('correct')}/{p.get('expected')} fields on a {tp.POOL_PROCS}-process pool "
+                    f"({res.get('seconds')}s): cross-set state in the solver; generalizing before / beside Mastery")
+            else:
+                say(f"[{mcid}] pool rehearsal: {st} ({res.get('seconds')}s"
+                    + (f"; {str(res.get('error'))[:160]}" if res.get("error") else "")
+                    + ("; single-process also misses -- shape, left to the probes" if st == "shape" else "") + ")")
+            return res
+        self._pool_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(run, owner_tag=self.base))
+        say(f"[{mcid}] pool rehearsal started: Single + Time Trial {tag[2:]} as one multi-set "
+            "Mastery on a 2-process pool (background, never waited for)")
+
+    def _pool_rehearsal_result(self, cid):
+        """-> {"pool_rehearsal": text} ONCE when the finished rehearsal found a leak (its case adopted), else {}.
+        Never waits (a running rehearsal stays pending for the next consumer)."""
+        fut = getattr(self, "_pool_fut", None)
+        if fut is None or not fut.done():
+            return {}
+        with _pool_lock:
+            if getattr(self, "_pool_done", False):
+                return {}
+            self._pool_done = True
+        try:
+            res = fut.result()
+        except Exception as e:  # noqa: BLE001
+            say(f"!!! [{cid}] pool rehearsal FAILED ({e}) -- the Mastery attempt runs WITHOUT it")
+            return {}
+        if res.get("status") != "leak":
+            return {}
+        from . import today_probe as tp
+        name = tp.adopt_pool(self.sdir, res)
+        say(f"[{cid}] pool rehearsal: leak case {name} adopted as a regression case")
+        return {"pool_rehearsal": tp.pool_summary(res)}
+
     def _today_kind(self):
         lane = getattr(self, "lane", None)
         if TODAY_PROBE and lane in TODAY_PROBE_LANES:
@@ -4707,6 +4795,7 @@ class Chain:
         if solvers.mode_of(cid) == "mastery":
             # today-probe: before Mastery (bounded wait of its own, whatever `wait` says) or a Mastery-failure generalize
             pre.update(self._today_pre_result(cid, wait=wait))
+            pre.update(self._pool_rehearsal_result(cid))     # only if already done: never waited for
         if not getattr(self, "_cmp_late_done", False):
             ctxt, hard = self._compound_pre_result(wait=wait)
             if hard or ctxt or wait:
@@ -5358,7 +5447,7 @@ class Chain:
                 say(f"[{cid}] web live compound check still running "
                     + ("but the Mastery target is ready" if rdy is not None and rdy.is_set()
                        else f"after {WEB_COMPOUND_WAIT:g}s") + ": Mastery starts now")
-            if late and mode == "mastery" and self._tt_pool_untimed() and not web_m:
+            if late and mode == "mastery" and self._tt_pool_untimed() and not web_m and "pool_rehearsal" not in late:
                 # misses are adopted as cases already; the failure generalize (if Mastery fails at all) gets the diag
                 self._late_held = late
                 say(f"[{cid}] probes found misses ({', '.join(sorted(late))}), but the pool is UNTIMED: Mastery now "
@@ -5462,6 +5551,7 @@ class Chain:
             if res == "correct" and mode == "time_trial":
                 self._mark("time_trial:correct")
                 self._prefetch_mastery_start()   # the Mastery start + bytes overlap the TT bookkeeping + pre-Mastery block
+                self._start_pool_rehearsal(cid)  # A2: background, beside the same bookkeeping
             if res == "blocked" and LOCAL_RERUN_SLOW and self._slow_vm_no_clock(cid):
                 # No clock + a CPU-bound solve that ran out of its budget on the slow VM: the attempt is still live, so
                 # re-run it HERE (12 cores, x5-11 per core) before a speed generalize. D17 warmups Mastery: 60 s cap on
@@ -6216,6 +6306,8 @@ class Chain:
         for mode in ("time_trial", "mastery"):
             if mode == "mastery" and mode in modes:
                 self.scout_stage()   # no-op unless SCOUT_ROUNDS > 0
+                # A2 pool rehearsal for a TT passed by any other path (live answer, race, an earlier run); once per chain
+                self._start_pool_rehearsal((self.entries.get("time_trial") or {}).get("id"))
             if mode in modes and mode in self.entries and not self._web_slot(mode, self.timed_stage, mode):
                 return
         self._bg_gen_take(self.base, "chain complete")
