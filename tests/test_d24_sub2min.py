@@ -290,6 +290,123 @@ print(f"   (A2 12,480-id pairing, solvers + hb_timed together: {_times})")
 check("A2 12,480 ids pair in < 0.5 s (each shape, both implementations)", max(_times.values()) < 0.5, _times)
 check("A2 12,480 1:1 ids pair to their own questions", _ok11)
 
+# ---------------------------------------------------------------- A3 faster runner start
+from hctf import cli as _cli  # noqa: E402
+_probes = []
+
+
+def _slow_ok_probe():
+    _probes.append(time.time())
+    time.sleep(0.4)
+    return True
+
+
+def _ready_case(checked, ok, nonblock):
+    _probes.clear()
+    saved = dict(workers._hb)
+    workers._hb.update(checked=checked, ok=ok, provisioned=True)
+    try:
+        with patched({(workers, "start_homebase_health"): lambda log=None: None, (workers.remote, "probe"): _slow_ok_probe,
+                      (workers, "HB_READY_NONBLOCK"): nonblock}):
+            t = time.time()
+            got = workers._homebase_ready(lambda *a: None)
+            took = time.time() - t
+            end = time.time() + 3
+            while nonblock and not workers._hb["ok"] and time.time() < end:
+                time.sleep(0.05)
+            after = workers._hb["ok"]
+    finally:
+        workers._hb.clear()
+        workers._hb.update(saved)
+    return got, took, after
+
+
+got, took, after = _ready_case(time.time() - 100, False, True)
+check("A3 stale + last probe failed: _homebase_ready answers at once (local) and re-probes in the background",
+      got is False and took < 0.2 and after is True and len(_probes) == 1, (got, took, after, len(_probes)))
+got, took, _a = _ready_case(time.time() - 100, False, False)
+check("A3 HCTF_HB_READY_NONBLOCK=0: the old synchronous probe", got is True and took >= 0.35, (got, took))
+got, took, _a = _ready_case(time.time() - 100, True, True)
+check("A3 stale + last probe OK: still probed in line (never sends a healthy VM's attempt local)",
+      got is True and took >= 0.35, (got, took))
+got, took, _a = _ready_case(0.0, False, True)
+check("A3 never probed yet (CLI use): one synchronous probe, as before", got is True and took >= 0.35, (got, took))
+
+# adaptive GM pool size from the saved status-time contract
+_pdir = TMP_A / "pool"
+
+
+def _pool_for(contract, env_pool=None, adaptive=True):
+    shutil.rmtree(_pdir, ignore_errors=True)
+    _pdir.mkdir(parents=True)
+    if contract is not None:
+        (_pdir / "contract.json").write_text(json.dumps(contract))
+    with patched({(_cli, "cdir"): lambda cid: _pdir, (workers, "GM_POOL_ADAPTIVE"): adaptive,
+                  (workers, "live_overlay"): lambda cid, attempt=None: None}), envset(HCTF_GM_POOL=env_pool):
+        return workers.timed_env("d24a-pool/mastery").get("HCTF_GM_POOL")
+
+
+def _sets(n, per=3):
+    return {"answer_ids": [f"set-{k}.f{j}" for k in range(1, n + 1) for j in range(per)]}
+
+
+check("A3 adaptive pool: a 1-set Time Trial pre-opens 4 sockets", _pool_for(_sets(1)) == "4", _pool_for(_sets(1)))
+check("A3 adaptive pool: 3 sets -> 8", _pool_for(_sets(3)) == "8", _pool_for(_sets(3)))
+check("A3 adaptive pool: 28 sets -> capped at 32", _pool_for(_sets(28)) == "32", _pool_for(_sets(28)))
+check("A3 adaptive pool: more artifacts than sets -> sized by the artifacts",
+      _pool_for(dict(_sets(1), artifacts=[{"size": 1}] * 6)) == "14")
+check("A3 adaptive pool: unknown contract -> the runner's default (unset)", _pool_for(None) is None)
+check("A3 adaptive pool: an explicit HCTF_GM_POOL wins (not overridden)", _pool_for(_sets(1), env_pool="32") is None)
+check("A3 HCTF_GM_POOL_ADAPTIVE=0: unset (the runner's 32)", _pool_for(_sets(1), adaptive=False) is None)
+
+
+# lazy pool: return once 2 sockets are up
+class _FakeConn:
+    def __init__(self):
+        self.sock, self._hctf_used = "s", time.time()
+
+    def close(self):
+        self.sock = None
+
+
+_news = []
+
+
+def _fake_new(self, connect=True):
+    k = len(_news)
+    _news.append(k)
+    if connect:
+        time.sleep(0.02 if k < 2 else 1.2)
+    return _FakeConn()
+
+
+with patched({(hb_timed._Pool, "_new"): _fake_new}), envset(HCTF_GM_POOL_LAZY="1"):
+    t = time.time()
+    _p = hb_timed._Pool("https://gm.invalid", size=8)
+    _lazy_s = time.time() - t
+    _q0 = _p.q.qsize()
+    _p.fresh()                      # pending sockets count toward `want`: no second burst of connects
+    _n_after_fresh = len(_news)
+    time.sleep(1.6)
+    _q1 = _p.q.qsize()
+check("A3 lazy pool returns once 2 sockets are up; the rest join as they connect",
+      _lazy_s < 0.5 and _q0 >= 2 and _q1 == 8, (_lazy_s, _q0, _q1))
+check("A3 fresh() counts sockets still connecting (no extra handshakes)", _n_after_fresh == 8, _n_after_fresh)
+_news.clear()
+with patched({(hb_timed._Pool, "_new"): _fake_new}), envset(HCTF_GM_POOL_LAZY="0"):
+    t = time.time()
+    _p = hb_timed._Pool("https://gm.invalid", size=4)
+    _eager_s = time.time() - t
+check("A3 HCTF_GM_POOL_LAZY=0: waits for every socket (old behaviour)", _eager_s >= 1.1 and _p.q.qsize() == 4,
+      (_eager_s, _p.q.qsize()))
+_news.clear()
+with patched({(hb_timed._Pool, "_new"): _fake_new}), envset(HCTF_GM_POOL_LAZY="1"):
+    _p = hb_timed._Pool("https://gm.invalid", size=4)
+    time.sleep(1.4)
+    _n0 = len(_news)
+    _p.fresh()
+check("A3 an adaptive (4-socket) pool is topped up to its size, not to 8", len(_news) == _n0, (len(_news), _n0))
+
 # ================================================================ end of Track A
 shutil.rmtree(TMP_A, ignore_errors=True)
 if failures:

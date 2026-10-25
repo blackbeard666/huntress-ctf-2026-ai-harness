@@ -1001,6 +1001,10 @@ def timed_env(cid):
             env["HCTF_EXPECT_BYTES"] = str(n)
     except (OSError, ValueError, TypeError):
         pass
+    if GM_POOL_ADAPTIVE and "HCTF_GM_POOL" not in os.environ:
+        pool = gm_pool_size(cid)
+        if pool:
+            env["HCTF_GM_POOL"] = str(pool)
     ov = live_overlay(cid)
     if ov:
         env["HCTF_LIVE_OVERLAY"] = json.dumps(ov, separators=(",", ":"))
@@ -1014,6 +1018,26 @@ def timed_env(cid):
     except Exception:  # noqa: BLE001 - ranking aid only
         pass
     return env
+
+
+GM_POOL_ADAPTIVE = os.environ.get("HCTF_GM_POOL_ADAPTIVE", "1") != "0"
+
+
+def gm_pool_size(cid):
+    """D24 #3: keep-alive GM sockets the runner pre-opens = clamp(2 x deliveries + 2, 4, 32), deliveries = the saved
+    status-time contract's sets (or its artifact list, if longer). The flat 32 TLS handshakes per mode cost a 1-set Time
+    Trial ~1-2 s of CPU + origin latency it never uses (a request past the pool opens its own socket). None (= the runner's
+    default 32) when the contract is unknown."""
+    from . import cli
+    n, _nb, sets = _contract_shape(cid)
+    if not n:
+        return None
+    try:
+        arts = json.loads((cli.cdir(cid) / "contract.json").read_text()).get("artifacts") or []
+        arts = len(arts) if isinstance(arts, list) else 0
+    except (OSError, ValueError, AttributeError):
+        arts = 0
+    return max(4, min(32, 2 * max(1, sets, arts) + 2))
 
 
 def live_overlay(cid, attempt=None):
@@ -1374,11 +1398,17 @@ def start_homebase_health(log=print):
 def _homebase_ready(log=print):
     """Non-blocking readiness for a tight timed window: the health thread's latest verdict. Never holds a lock across
     an SSH call and never latches a failure for the run (Day 6: one probe in a VPN gap sent every attempt local).
-    Without a fresh verdict (first call / CLI use), probe once synchronously."""
+    Without a fresh verdict (first call / CLI use), probe once synchronously.
+    D24 #3 (HCTF_HB_READY_NONBLOCK): a stale verdict whose last probe FAILED is not re-probed in line -- this attempt
+    goes local at once and a background probe refreshes the verdict (D24: the MTU-blackholed SSH handshake held a
+    mode's start 8-13 s on a synchronous probe that could only say "no")."""
     t = time.time()
     try:
         start_homebase_health(log)
         if time.time() - _hb["checked"] > HB_FRESH_S:
+            if HB_READY_NONBLOCK and _hb["checked"] and not _hb["ok"]:
+                _bg_probe()
+                return False
             _hb.update(ok=remote.probe(), checked=time.time())
         return bool(_hb["ok"] and _hb["provisioned"])
     finally:
@@ -1386,6 +1416,24 @@ def _homebase_ready(log=print):
 
 
 _route_t = threading.local()   # per-attempt routing seconds (run_timed_auto -> the `timed:` line's t_hb_ready)
+HB_READY_NONBLOCK = os.environ.get("HCTF_HB_READY_NONBLOCK", "1") != "0"
+_bg_probe_lock = threading.Lock()
+
+
+def _bg_probe():
+    """One background Homebase probe at a time (the health thread may itself be stuck in one): refreshes the verdict
+    _homebase_ready reads, never blocks the caller."""
+    if not _bg_probe_lock.acquire(blocking=False):
+        return
+
+    def run():
+        try:
+            _hb.update(ok=remote.probe(), checked=time.time())
+        except Exception:  # noqa: BLE001 - a probe that raised is a failed probe
+            _hb.update(ok=False, checked=time.time())
+        finally:
+            _bg_probe_lock.release()
+    threading.Thread(target=run, daemon=True, name="hb-ready-probe").start()
 
 
 def wait_homebase(timeout, log=print):

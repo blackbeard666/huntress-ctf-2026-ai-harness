@@ -175,9 +175,44 @@ class _Pool:
         self.host, self.port = u.hostname, u.port
         self.path = u.path or "/"         # inside proxy: /huntress-ctf-proxy (never add a trailing slash)
         self.q = queue.LifoQueue()
+        self.size, self._pending = size, 0
+        first = int(os.environ.get("HCTF_GM_POOL_FIRST", "2"))
+        if os.environ.get("HCTF_GM_POOL_LAZY", "1") != "0" and 0 < first < size:
+            self._open_lazy(size, first)
+            return
         with ThreadPoolExecutor(max_workers=size) as ex:
             for c in ex.map(lambda _: self._new(), range(size)):
                 self.q.put(c)
+
+    def _open_lazy(self, size, first):
+        """D24 #3 (HCTF_GM_POOL_LAZY): return once `first` sockets are connected (or every connect has ended); the rest
+        finish their TCP+TLS on daemon threads and join the pool as they come up. Building all 32 before returning put
+        the slowest handshake (a 6.9 s TLS spike once) in front of every mode's start. Daemon threads, not an executor:
+        an executor's workers are joined at interpreter exit, so a one-shot runner would wait on a stuck connect."""
+        import threading
+        lock, ev = threading.Lock(), threading.Event()
+        st = {"done": 0, "up": 0}
+        self._pending = size
+
+        def one():
+            c = None
+            try:
+                c = self._new()
+                c._hctf_used = time.time()   # idle is counted from the end of the handshake
+            except Exception:  # noqa: BLE001 - a request opens its own socket when the pool is empty
+                c = None
+            finally:
+                with lock:
+                    self._pending -= 1
+                    st["done"] += 1
+                    if c is not None:
+                        self.q.put(c)
+                        st["up"] += c.sock is not None
+                    if st["up"] >= first or st["done"] >= size:
+                        ev.set()
+        for _ in range(size):
+            threading.Thread(target=one, daemon=True, name="gm-pool-connect").start()
+        ev.wait()
 
     def _new(self, connect=True):
         import http.client
@@ -193,8 +228,10 @@ class _Pool:
 
     def fresh(self, want=8):
         """Before a clock: drop sockets idle past IDLE_MAX and pre-open fresh ones (TCP+TLS) up to `want`, in parallel.
-        A one-shot process's pool was just built (no-op); hb_daemon's pool idles between attempts."""
+        A one-shot process's pool was just built (no-op); hb_daemon's pool idles between attempts. Sockets a lazy pool is
+        still connecting count toward `want`, and a pool smaller than `want` (adaptive size) is topped up to its size."""
         import queue
+        want = min(want, getattr(self, "size", want))
         keep = []
         while True:
             try:
@@ -205,7 +242,7 @@ class _Pool:
                 keep.append(c)
             else:
                 c.close()
-        need = max(0, want - len(keep))
+        need = max(0, want - len(keep) - getattr(self, "_pending", 0))
         if need:
             with ThreadPoolExecutor(max_workers=need) as ex:
                 keep += list(ex.map(lambda _: self._new(), range(need)))
