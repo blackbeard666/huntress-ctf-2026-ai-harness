@@ -238,3 +238,29 @@ D20 measured: the 15 regular modes were CORRECT on the GM by T+1:12; the feed/KP
 - **Web (see web-team-limit notes):** parallel web chains, preparing kicks + web_trace, live pre-Mastery compounding
   check.
 
+
+## 8. Implemented 2026-10-26 (D25 post-mortem, before Day 26)
+D25: 24/24 GM-CORRECT, but board T+6:02 (regular 15/15 T+5:51, web 9/9 T+3:56). The tails were two compounding Masteries
+wrong on the first try plus a slow failure path. No Hall of Fame work (TT/Mastery stay on the untimed regular pool).
+Merged as `d25-A` (`bd1b5c4b`) + follow-ups `5b07aed4`, `6a7a7976`.
+- **First-try correctness (A):** binary solvers d08-d25 keyed caches on `id(bytes)` -> a freed-and-reused address on
+  Homebase's 2-proc pool gave a later set an earlier set's facts (46 wrong fields). Caches now hold the object and
+  check identity; `lib/solverrt.max_procs()` / `HCTF_SOLVER_MAX_PROCS`; case replays run on 2 procs
+  (`HCTF_CASE_MAX_PROCS`); `tests/test_no_id_cache.py` lint + a stop-gate block. A TT -> Mastery pool rehearsal
+  (8 synthetic sets on 2 vs 1 procs, background at TT CORRECT) catches the next one. Warmups: `_unknown_line_cands`
+  puts the verbatim line first (rot18 `le-07` beat `le-52` -> 123/123 wrong); a last line that fails its own day
+  codec (pre-decoded by a solver) reads as unknown. today-probe ignored dotfiles (dead since D22).
+- **Routing + transport (B):** no-clock timed modes run local when there is untimed evidence (Homebase kickoff cost
+  25-30 s/mode; `HCTF_NO_CLOCK_LOCAL=0` reverts); hedged idempotent `start`, sized from today's contract; ranged
+  parallel download with a self-probe (`HCTF_GM_RANGE_STREAMS`); sha-matching pulls kept; atomic `challenges/index.json`.
+- **Failure path (C):** generalize baseline async (-70 s); case dedupe by sha; reject-free unverified cases pass the
+  stop gate + green watcher + duel (~-130 s); live cap lifted for uniform shapes (`HCTF_LIVE_UNIFORM_MAX`); no-LLM lib
+  racer (`hctf/libracer.py`); early live on per-set verdicts; no label-retry bisection on free-text fields.
+- **Web (D):** the single's worker writes and verifies the plugin (`lib/web/plugin.py`), Mastery re-runs it, the
+  Mastery target is requested at TT CORRECT; feed/kpi count live-answer TT passes (`timeline.TIMED_PASSED`; D25 KPI
+  re-recorded 24/24, web 9/9); `KEY_COMPANIONS` gate shared concept keys; answer-first cap scales with chains; opt-in
+  web prebuild lane (`HCTF_PREBUILD_WEB=1`, offline fixture gate).
+- **Not built:** Homebase in-network reuse race for big singles (hb_daemon `race` op on a no-bearer relay channel).
+  GM Range support unverified (the probe hit an expired capability): read `ranges` in the D26 download envelopes.
+- **Verify on D26:** binary + warmups Mastery first try, no Homebase kickoff on timed modes, web plugin file at single
+  CORRECT and TT/Mastery without a live worker; board N/N by T+2:00.

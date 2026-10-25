@@ -358,7 +358,9 @@ try:
     [t.start() for t in ts]
     [t.join(10) for t in ts]
     spans.sort()
-    overlap = [sum(1 for b in spans if b[0] < a[1] - 1e-3 and a[0] < b[1] - 1e-3) for a in spans]
+    # holders active at each holder's start (= peak concurrency); counting every span that overlaps a span said 3
+    # when 1-2 and 2-3 overlapped but 1 and 3 never did (seen under sweep load)
+    overlap = [sum(1 for b in spans if b[0] <= a[0] + 1e-3 and a[0] < b[1] - 1e-3) for a in spans]
     check("7 slot n=2: two holders at once, the third waits for a free slot",
           len(spans) == 3 and max(overlap) == 2 and spans[2][0] >= min(spans[0][1], spans[1][1]) - 1e-3,
           (spans, overlap))
