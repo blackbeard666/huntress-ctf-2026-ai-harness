@@ -2,6 +2,8 @@
 - #8  every lib/web/handlers/*.py plugin compiles, imports, and maps each KEY_MAP name to a callable handler
 - #9  class_known counts concept keys only; known/unknown race budgets 20/12 s; run_solver(deadline=); the web reuse race
       is ONE lane-solver run (14 s deadline) that still races prior answer() + every plugin; answer-first never waits on web
+- #10 a web single on a fresh drop (no local trace + this run's list entry says solved: false) skips gm_solved; a
+      solved / unknown entry or local state still asks it (a solved live-web single is still ACCEPTED); polls 2 s
 
 Run:  source bin/env.sh && python3 tests/test_d24_web.py      (exit 0 = all pass)
 """
@@ -215,6 +217,55 @@ check("#9 answer-first on web does not wait for the reuse race (HCTF_ANSWER_FIRS
 check("#9 answer-first on other lanes still waits for the race (bounded)", af_wait("metadata-forensics", 0.6) >= 0.55)
 with patched({(orchestrate, "ANSWER_FIRST_RACE_WAIT_WEB"): 0.6}):
     check("#9 HCTF_ANSWER_FIRST_RACE_WAIT_WEB > 0 restores a web wait", af_wait("web", 1.0) >= 0.55)
+
+
+# ---------------------------------------------------------------- #10: web start -- fresh-drop gm_solved skip, 2 s polls
+from hctf import webtarget  # noqa: E402
+
+check("#10 fresh drop = the list entry says solved: false explicitly",
+      orchestrate._web_fresh_drop({"id": "w", "solved": False}) is True
+      and orchestrate._web_fresh_drop({"id": "w", "solved": True}) is False
+      and orchestrate._web_fresh_drop({"id": "w"}) is False and orchestrate._web_fresh_drop(None) is False)
+with patched({(orchestrate, "WEB_FRESH_SKIP_SOLVED"): False}):
+    check("#10 kill switch HCTF_WEB_FRESH_SKIP_SOLVED=0: never fresh", not orchestrate._web_fresh_drop({"solved": False}))
+
+
+def single_gate(lane, entry, trace=False, gm=False):
+    """Drive Chain._single up to its first post-gate step -> (gm_solved calls, returned / 'continued')."""
+    d = Path(tempfile.mkdtemp())
+    if trace:
+        (d / "start.json").write_text("{}")
+    ch = orchestrate.Chain.__new__(orchestrate.Chain)
+    ch.lane, ch.base, ch.sdir = lane, "x", d / "solver"
+    ch.entries = {"single_solve": dict(entry, id="web-x")}
+    ch._start_family_calibration = lambda: None
+    asked = []
+
+    def stop(*a, **k):
+        raise _Stop()
+    with patched({(orchestrate, "say"): lambda *a, **k: None, (orchestrate.cli, "cdir"): lambda cid: d,
+                  (orchestrate.cli, "is_complete"): lambda cid: False,
+                  (orchestrate.cli, "gm_solved"): lambda cid: (asked.append(cid), gm)[1],
+                  (orchestrate, "set_state"): stop}):
+        try:
+            out = orchestrate.Chain._single(ch)
+        except _Stop:
+            out = "continued"
+    return asked, out
+
+
+check("#10 web fresh drop: no gm_solved round trip, the single starts at once",
+      single_gate("web", {"solved": False}) == ([], "continued"), single_gate("web", {"solved": False}))
+check("#10 web, list entry without `solved`: gm_solved still asked (old behaviour)",
+      single_gate("web", {}) == (["web-x"], "continued"))
+check("#10 web resume/replay of a SOLVED single (list solved: true, no local state): asked AND accepted -> timed modes",
+      single_gate("web", {"solved": True}, gm=True) == (["web-x"], True))
+check("#10 web with local state (resume after a crash): gm_solved asked even if the stale entry said unsolved",
+      single_gate("web", {"solved": False}, trace=True, gm=True) == (["web-x"], True))
+check("#10 regular lane fresh drop: unchanged (no local trace -> no gm_solved)",
+      single_gate("warmups", {"solved": False}) == ([], "continued"))
+check("#10 prepare / ready polls default to 2 s (were 4 / 5)",
+      webtarget.POLL == 2 and orchestrate.WEB_READY_POLL == 2, (webtarget.POLL, orchestrate.WEB_READY_POLL))
 
 
 if __name__ == "__main__":

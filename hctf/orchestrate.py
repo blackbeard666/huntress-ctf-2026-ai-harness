@@ -576,6 +576,19 @@ def answer_first_eligible(lane, n_fields):
     return True, ""
 
 
+# D24 #10: a web single on a FRESH DROP skips cli.gm_solved (a status + a `list` round trip, 6-12 s per web chain). Fresh
+# drop = no local trace of the single (no start.json / submissions / solved_once) AND the GM `list` entry this run was
+# launched from carries `solved: false` explicitly -- the scoreboard's own per-mode truth, seconds old. A resume / replay
+# of a solved single either has local state or a list entry with `solved: true` (replay_gm proxies the real list), so the
+# gm_solved acceptance of an already-solved live-web single (f90a60b6) still runs there; an entry without the key never
+# counts as fresh. 0 = always ask gm_solved on web (old).
+WEB_FRESH_SKIP_SOLVED = os.environ.get("HCTF_WEB_FRESH_SKIP_SOLVED", "1") != "0"
+
+
+def _web_fresh_drop(entry):
+    return WEB_FRESH_SKIP_SOLVED and isinstance(entry, dict) and entry.get("solved") is False
+
+
 def _web_race_seed(lane):
     """The web lane solver dir the single's reuse race runs (WEB_RACE_LANE), or None (not web / off / missing)."""
     from . import webtarget
@@ -1774,7 +1787,7 @@ COMPOUND_PROBE_SECONDS = float(os.environ.get("HCTF_COMPOUND_PROBE_SECONDS", "45
 WEB_LIVE_COMPOUND = os.environ.get("HCTF_WEB_LIVE_COMPOUND", "1") != "0"
 WEB_COMPOUND_SECONDS = float(os.environ.get("HCTF_WEB_COMPOUND_SECONDS", "30"))   # earlier challenges started by then
 WEB_COMPOUND_WAIT = float(os.environ.get("HCTF_WEB_COMPOUND_WAIT", "90"))
-WEB_READY_POLL = float(os.environ.get("HCTF_WEB_READY_POLL", "5"))         # s between status polls
+WEB_READY_POLL = float(os.environ.get("HCTF_WEB_READY_POLL", "2"))         # s between status polls (D24 #10: was 5)
 WEB_READY_POLL_MAX = float(os.environ.get("HCTF_WEB_READY_POLL_MAX", "600"))  # give up polling after
 # Mastery speed gate: estimated Mastery solve (mutation probe's 2-set mastery-shape run) vs the known TT window. Mastery
 # windows were 1-2.7x the TT window on D3-D8, so only an estimate over MASTERY_GATE_RATIO x TT window acts.
@@ -3531,7 +3544,10 @@ class Chain:
         fresh = not any((cli.cdir(cid) / f).exists() for f in ("start.json", "submissions.jsonl", "solved_once"))
         from . import webtarget
         web_live = webtarget.is_live_lane(self.lane)
-        if cli.is_complete(cid) or ((not fresh or web_live) and cli.gm_solved(cid)):
+        web_fresh = web_live and fresh and _web_fresh_drop(e)
+        if web_fresh:
+            say(f"[{cid}] web single: fresh drop (no local trace, this run's GM list says unsolved) -- no gm_solved check")
+        if cli.is_complete(cid) or ((not fresh or (web_live and not web_fresh)) and cli.gm_solved(cid)):
             # Solved: a solver that exists is good enough to proceed. Failing auto-* variant cases are the timed
             # stages' business (they feed the generalize worker); they must not relaunch the Single Solve worker.
             # web_live: a live-web single the GM already marks solved (resume/replay wipes local start.json, so
