@@ -650,6 +650,54 @@ check("D5 prebuild AST gate still bans urllib.request / socket in a prebuilt mod
 
 srv.shutdown()
 
+# ---- rehearsal fair D25: the answer-first worker keeps a grace at the single's CORRECT to promote its plugin --------------------
+import threading  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+GR = TD / "grace"
+GR.mkdir(parents=True, exist_ok=True)
+
+
+def af_stub(lane):
+    af = object.__new__(orchestrate.AnswerFirst)
+    af.cid, af.stop_evt, af.done = "web-x", threading.Event(), threading.Event()
+    af.chain = SimpleNamespace(lane=lane, sdir=GR / "solver", _deliver_note=lambda *a, **k: None)
+    return af
+
+
+plug = GR / "day99_web_x.py"
+with patched({(orchestrate, "web_plugin_path"): lambda sdir: plug, (orchestrate.cli, "is_complete"): lambda cid: True,
+              (orchestrate, "WEB_AF_PLUGIN_GRACE"): 3.0, (orchestrate, "say"): lambda *a, **k: None}):
+    af = af_stub("web")
+    t0 = time.time()
+    af.stop(join=0)
+    early = af.stop_evt.is_set()
+    threading.Timer(0.6, lambda: plug.write_text("HANDLERS = {}\n")).start()
+    af.stop_evt.wait(5)
+    dt = time.time() - t0
+    check("grace: stop() at a live-web single's CORRECT with no plugin yet waits for the promote, then stops",
+          not early and af.stop_evt.is_set() and 0.5 <= dt < 2.5, (early, dt))
+    af = af_stub("web")
+    t0 = time.time()
+    af.stop(join=0)
+    check("grace: a plugin already in place -> stopped at once", af.stop_evt.is_set() and time.time() - t0 < 0.5)
+    plug.unlink()
+    af = af_stub("binary-reverse-engineering")
+    af.stop(join=0)
+    check("grace: never for a non-web lane", af.stop_evt.is_set())
+    with patched({(orchestrate, "WEB_AF_PLUGIN_GRACE"): 0.6}):
+        af = af_stub("web")
+        t0 = time.time()
+        af.stop(join=0)
+        af.stop_evt.wait(5)
+        af.stop(join=0)   # a second stop after the grace: no second grace
+        check("grace: no promote -> stopped when the grace runs out, once",
+              af.stop_evt.is_set() and 0.5 <= time.time() - t0 < 2.0 and af._grace_ran, time.time() - t0)
+        af = af_stub("web")
+        af._grace_ran, af._grace_until = True, time.time() + 0.6   # a grace running on another thread
+        af.stop(join=0)
+        check("grace: stop() during a running grace defers to it", not af.stop_evt.is_set())
+
 if __name__ == "__main__":
     print(f"\n{'FAILED: ' + ', '.join(failures) if failures else 'all passed'}")
     sys.exit(1 if failures else 0)

@@ -294,6 +294,11 @@ WEB_GEN_WAIT_POLL = float(os.environ.get("HCTF_WEB_GEN_WAIT_POLL", "0.5"))
 # the proof it prints -> the plugin exists at the single's CORRECT and the Time Trial's FIRST run dispatches to it (D25:
 # codify landed 84-159 s after CORRECT, always after the TT's live answer). 0 = the old answer-only prompt.
 WEB_SINGLE_PLUGIN = os.environ.get("HCTF_WEB_SINGLE_PLUGIN", "1") != "0"
+# The single can go CORRECT from the answer-first worker's PROOF (its inbox note / the solver worker) while it is still
+# drafting the plugin (rehearsal fair D25 resolver-revolt: ended mid-draft -> codify wrote it from scratch, the TT waited 38 s).
+# At a live-web single's CORRECT it keeps up to this many s to promote its verified plugin (beside the TT's target
+# provisioning); 0 = end it at CORRECT as before.
+WEB_AF_PLUGIN_GRACE = float(os.environ.get("HCTF_WEB_AF_PLUGIN_GRACE", "45"))
 # With a verified plugin already promoted at the single's CORRECT, codify runs as an off-critical-path HARDENING pass
 # (re-verify on a fresh target, generalise what the single's target fixed, promote only a verified improvement).
 # 0 = no codify worker when the plugin is already in place.
@@ -936,6 +941,9 @@ class AnswerFirst:
                     self.chain._deliver_note(self.cid, note, key="answer-first")
                 if cli.is_complete(self.cid):
                     getattr(self.chain, "_single_correct", lambda *a: None)(self.cid, "answer-first")
+                    self._plugin_grace()
+                    while getattr(self, "_grace_until", 0.0) > time.time() and not self.done.is_set():
+                        self.done.wait(0.5)   # a grace started by stop() on another thread
                     say(f"[{self.cid}] single complete -> ending the answer-first worker")
                     self.stop_evt.set()
                     break
@@ -943,7 +951,43 @@ class AnswerFirst:
                 say(f"[{self.cid}] answer-first watch note: {str(e)[:120]}")
             self.done.wait(1.0)
 
+    def _grace_plugin(self):
+        """The plugin path when a plugin grace applies (live web, WEB_SINGLE_PLUGIN, single complete, not promoted yet,
+        no grace run yet), else None."""
+        from . import webtarget
+        if (WEB_AF_PLUGIN_GRACE <= 0 or not WEB_SINGLE_PLUGIN or getattr(self, "_grace_ran", False)
+                or self.done.is_set() or not webtarget.is_live_lane(getattr(self.chain, "lane", None))):
+            return None
+        plug = web_plugin_path(self.chain.sdir)
+        return None if plug.exists() or not cli.is_complete(self.cid) else plug
+
+    def _plugin_grace(self):
+        """Up to WEB_AF_PLUGIN_GRACE s for this worker to promote its verified plugin (once per worker)."""
+        with self.__dict__.setdefault("_grace_lock", threading.Lock()):
+            plug = self._grace_plugin()
+            if plug is None:
+                return
+            self._grace_ran = True
+            t0 = time.time()
+            self._grace_until = t0 + WEB_AF_PLUGIN_GRACE   # stop() / the watch defer to it
+        self.chain._deliver_note(self.cid, "SINGLE CORRECT. Promote your verified plugin NOW (`python -m lib.web.plugin` on "
+                                 "your draft against the live target), then stop. Do nothing else.", key="answer-first")
+        say(f"[{self.cid}] single complete -> the answer-first worker keeps up to {WEB_AF_PLUGIN_GRACE:g}s to promote "
+            f"{plug.name} (the timed modes go on meanwhile)")
+        while time.time() - t0 < WEB_AF_PLUGIN_GRACE and not self.done.is_set() and not plug.exists():
+            self.done.wait(0.5)
+        self._grace_until = 0.0
+        say(f"[{self.cid}] answer-first plugin grace: {'promoted' if plug.exists() else 'none'} after "
+            f"{time.time() - t0:.0f}s")
+
     def stop(self, join=5.0):
+        if getattr(self, "_grace_until", 0.0) > time.time():
+            return   # promoting its plugin (_plugin_grace): the watch ends it when that is done or the grace runs out
+        if self._grace_plugin() is not None:
+            # the chain's handoff saw the CORRECT before this watch did (0.25 s vs 1 s polls): the grace runs here
+            threading.Thread(target=lambda: (self._plugin_grace(), self.stop_evt.set()), daemon=True,
+                             name=f"answer-first-grace-{self.cid}").start()
+            return
         self.stop_evt.set()
         self.done.wait(join)
 

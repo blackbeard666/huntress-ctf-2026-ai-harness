@@ -260,7 +260,21 @@ Merged as `d25-A` (`bd1b5c4b`) + follow-ups `5b07aed4`, `6a7a7976`.
   Mastery target is requested at TT CORRECT; feed/kpi count live-answer TT passes (`timeline.TIMED_PASSED`; D25 KPI
   re-recorded 24/24, web 9/9); `KEY_COMPANIONS` gate shared concept keys; answer-first cap scales with chains; opt-in
   web prebuild lane (`HCTF_PREBUILD_WEB=1`, offline fixture gate).
-- **Not built:** Homebase in-network reuse race for big singles (hb_daemon `race` op on a no-bearer relay channel).
-  GM Range support unverified (the probe hit an expired capability): read `ranges` in the D26 download envelopes.
-- **Verify on D26:** binary + warmups Mastery first try, no Homebase kickoff on timed modes, web plugin file at single
-  CORRECT and TT/Mastery without a live worker; board N/N by T+2:00.
+- **In-network race (B3b, built 10-26, `73740ebc` + `272807ae`):** a lane whose last single was >= 10 MB (binary only,
+  32-35 MB D20-D25) also races on Homebase: once the local `start` lands, the VM reconnects to that attempt over the
+  in-network proxy (no bearer; refused on a bearer channel), downloads in-network, runs the newest same-lane solvers on
+  warm zygotes and returns answers only; the client merges + submits through the shared race path (first plan per
+  attempt claims it). A win before the local bytes land hands the timed modes over at once. Solvers pushed + warmed
+  while armed. Live on a rehearsal copy (D25 binary TT variant): VM start 1.1 s, 35.8 MB in-network 7.1 s, answers identical to the
+  local runs, submit CORRECT. Off-peak the public download is as fast (5 s); the win is at the drop (D25: 68.6 s).
+- **GM Range: NOT honoured** (alt probe 10-26: `Range: bytes=...` -> 200 + full body, no Content-Range/Accept-Ranges).
+  gm.py's ranged path costs nothing (one request, used whole) but cannot speed the drop download up.
+- **Rehearsal fair D25 (10-26; workflow = these fixes, knowledge = 1cb31043, Day 25 masked):** 24/24; regular 15/15 T+1:36,
+  board T+2:26 from launch (main D25: T+5:51 / T+6:02); 0 generalizes (main: 2, 241 s); 0 timed modes on Homebase;
+  timed first try 15/16; warmups Mastery T+0:47 and binary Mastery T+1:38 first try; live $6.41 (main $9.73). Web: the
+  single's worker promoted the plugin on 2/3 chains and their TT/Mastery dispatched to it with no live worker. Found +
+  fixed: the race gave up when no relay channel was up yet; the codify hardening prompt crashed on a Path; the
+  answer-first worker was ended mid-plugin at the single's CORRECT (now a 45 s promote grace,
+  HCTF_WEB_AF_PLUGIN_GRACE). Remaining board tail = web: an LLM single (47-56 s) + GM Mastery target provisioning (~57 s).
+- **Verify on D26:** the in-network race line + its win time on binary at the drop; web plugin at every single's
+  CORRECT (grace line); board N/N by T+2:00.
