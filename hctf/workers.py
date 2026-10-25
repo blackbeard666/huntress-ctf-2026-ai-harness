@@ -1345,7 +1345,9 @@ def _health_loop(log):
             metered = time.time()
             threading.Thread(target=meter_vm, daemon=True).start()
         if ok != was:
-            log(f"[homebase] {'reachable' if ok else 'NOT reachable'} (health probe every {HB_HEALTH_S:g}s)")
+            mtu = "" if ok or not remote.sshd_answers() else (
+                " -- sshd answers, handshake doesn't (MTU? HCTF_SSH_MSS clamp, or `sudo ip link set tun0 mtu 1200`)")
+            log(f"[homebase] {'reachable' if ok else 'NOT reachable'} (health probe every {HB_HEALTH_S:g}s){mtu}")
             was = ok
         if ok and not _hb["provisioned"]:
             _provision(log)
@@ -1751,6 +1753,90 @@ def restart_hb_daemon(log=print):
     if d is not None:
         d.close()
         log("[homebase] timed daemon restarted (code changed)")
+
+
+# GM relay channels (D24 #13, hctf/gmroute.py): HCTF_GM_RELAY_CHANNELS dedicated `hb_daemon --stdio` processes for the
+# ORCHESTRATOR's own status / start / submit -- each on its OWN ssh connection (no ControlMaster: D23's attempt daemon
+# shared it with pushes and its submits took p50 7.8 s end to end vs 0.56 s on the VM). They talk to the VM's in-network
+# proxy (INSIDE_GM) with NO bearer: event guidance forbids entering our credentials into Homebase. Pinged every
+# RELAY_PING_S; RELAY_MISSES missed pings = down (closed, restarted after RELAY_RETRY_S).
+RELAY_CHANNELS = int(os.environ.get("HCTF_GM_RELAY_CHANNELS", "2"))
+RELAY_PING_S = float(os.environ.get("HCTF_GM_RELAY_PING_S", "2"))
+RELAY_MISSES = 2
+RELAY_RETRY_S = float(os.environ.get("HCTF_GM_RELAY_RETRY_S", "20"))
+_relays = {"chans": [], "thread": None, "failed_at": 0.0}
+_relays_lock = threading.Lock()
+
+
+class RelayChan:
+    def __init__(self, d, k):
+        self.d, self.k, self.misses, self.up_at, self.busy = d, k, 0, time.time(), 0
+
+    def alive(self):
+        return self.misses < RELAY_MISSES and self.d.alive()
+
+    def call(self, op, timeout=60, **kw):
+        self.busy += 1
+        try:
+            return self.d.call(op, timeout=timeout, **kw)
+        finally:
+            self.busy -= 1
+
+
+def _relay_argv():
+    cmd = f"mkdir -p ~/{HB_WORK}/.run && cd ~/{HB_WORK} && exec python3 hctf/hb_daemon.py --stdio 2>>.run/hb_relay.err"
+    return ["ssh", *remote.own_ssh_opts(), f"{remote.HB_USER}@{remote.HB_HOST}", cmd]
+
+
+def _relay_keeper(log):
+    while True:
+        try:
+            with _relays_lock:
+                chans = list(_relays["chans"])
+            for c in chans:   # ping: two misses = down
+                try:
+                    c.d.call("ping", timeout=min(RELAY_PING_S, 1.5))
+                    c.misses = 0
+                except Exception:  # noqa: BLE001
+                    c.misses += 1
+                if not c.alive():
+                    with _relays_lock:
+                        if c in _relays["chans"]:
+                            _relays["chans"].remove(c)
+                        _relays["failed_at"] = time.time()   # a flapping VPN: reconnect after RELAY_RETRY_S, not at once
+                    log(f"[gmroute] relay channel {c.k} down ({c.misses} missed pings) -- local until it is back")
+                    threading.Thread(target=c.d.close, daemon=True).start()
+            want = RELAY_CHANNELS - len(_relays["chans"])
+            if want > 0 and _hb["ok"] and _hb["provisioned"] and time.time() - _relays["failed_at"] >= RELAY_RETRY_S:
+                k = max([c.k for c in _relays["chans"]] + [-1]) + 1
+                try:
+                    t0 = time.time()
+                    d = HbDaemon(log, argv=_relay_argv(), gm_url=remote.INSIDE_GM, token=None)
+                    with _relays_lock:
+                        _relays["chans"].append(RelayChan(d, k))
+                    log(f"[gmroute] relay channel {k} up in {time.time() - t0:.1f}s (gm {d.gm}, own ssh connection, "
+                        "no bearer)")
+                except Exception as e:  # noqa: BLE001 - local stays the path
+                    _relays["failed_at"] = time.time()
+                    log(f"[gmroute] relay channel unavailable ({str(e)[:160]}); retry in {RELAY_RETRY_S:g}s")
+        except Exception as e:  # noqa: BLE001 - the keeper never dies
+            log(f"[gmroute] relay keeper note: {str(e)[:160]}")
+        time.sleep(RELAY_PING_S)
+
+
+def hb_relays(log=print, start=True, health=True):
+    """The live relay channels (never blocks: an empty list = local). The first call starts the keeper thread (and the
+    Homebase health thread it reads; health=False: the caller set _hb itself -- `gmroute calibrate`, no provisioning)."""
+    if start and _relays["thread"] is None:
+        with _relays_lock:
+            if _relays["thread"] is None:
+                if health:
+                    start_homebase_health(log)
+                t = threading.Thread(target=_relay_keeper, args=(log,), daemon=True, name="gm-relay-keeper")
+                _relays["thread"] = t
+                t.start()
+    with _relays_lock:
+        return [c for c in _relays["chans"] if c.alive()]
 
 
 # Early generalize (default OFF): the daemon reports "solved" (answers + missing + the attempt's bytes inline) BEFORE

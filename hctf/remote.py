@@ -39,6 +39,19 @@ SSH_OPTS = [
     "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
     "-o", "ControlMaster=auto", "-o", f"ControlPath={CTL}", "-o", "ControlPersist=600",
 ]
+# D24 #12: the VPN path carries ~1200-byte packets, tun0 says 1500 and "frag needed" is filtered -> the SSH handshake
+# blackholes (homebase-mtu-pmtud). An MSS-clamping ProxyCommand (hctf/mssproxy.py) keeps every segment of this
+# connection small, no root and no tun0 change. HCTF_SSH_MSS=0 (or empty) = no proxy = the options above, unchanged.
+SSH_MSS = os.environ.get("HCTF_SSH_MSS", "1100").strip()
+
+
+def _mss_opts(mss=None):
+    from . import mssproxy
+    pc = mssproxy.proxy_command(SSH_MSS if mss is None else mss)
+    return ["-o", f"ProxyCommand={pc}"] if pc else []
+
+
+SSH_OPTS += _mss_opts()
 
 
 class Unreachable(RuntimeError):
@@ -98,6 +111,18 @@ def probe(timeout=8):
     if r.returncode == 255:
         clear_control_sockets()
     return r.returncode == 0
+
+
+def sshd_answers(timeout=3, host=None, port=22):
+    """True when the VM's sshd sends its `SSH-` banner over a plain TCP connect. A failing probe() while this is True =
+    the handshake (large KEX packets) is what dies: the MTU blackhole, not a VM/VPN outage."""
+    import socket
+    try:
+        with socket.create_connection((host or HB_HOST, port), timeout=timeout) as s:
+            s.settimeout(timeout)
+            return s.recv(64).startswith(b"SSH-")
+    except OSError:
+        return False
 
 
 ON_HOMEBASE = bool(os.environ.get("HCTF_ON_HOMEBASE"))  # set for workers running on Homebase itself
@@ -188,6 +213,20 @@ def gm(*args, timeout=180):
                            capture_output=True, text=True, timeout=timeout,
                            env=dict(os.environ, HUNTRESS_GAME_MASTER_URL=INSIDE_GM))
         return _gm_parse(r, "homebase-local")
+    if GM_RELAY and args and args[0] in ("status", "start", "submit") and _public_gm():
+        from . import gmroute   # D24 #13: measured relay vs today's path -- only once orchestrate.run() activated it
+        if gmroute.active():
+            return gmroute.call(args, timeout, lambda: _gm_public(args, timeout))
+    return _gm_public(args, timeout)
+
+
+# HCTF_GM_RELAY=0: remote.gm never consults hctf/gmroute.py -- exactly the paths below.
+GM_RELAY = os.environ.get("HCTF_GM_RELAY", "1") != "0"
+
+
+def _gm_public(args, timeout):
+    """Today's public-GM routing (local transport): big start -> local; start/submit via the warm daemon / Homebase;
+    else the in-process client."""
     if args and args[0] == "start" and len(args) > 1 and _public_gm() and _big_start(str(args[1])):
         # A large start reply (script: ~650 KB contract) crosses the VPN at ~130 KB/s on the daemon's ONE stdio
         # channel and holds up every reply queued behind it: D15 script 8.9 s + binary (80 KB) 9.4 s client time for

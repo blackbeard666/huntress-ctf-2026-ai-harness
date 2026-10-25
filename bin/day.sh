@@ -4,7 +4,7 @@
 #
 # Usage:
 #   bash bin/day.sh [DAY] [--wait] [--preflight] [--scout N] [--local N] [--effort LEVEL] [--fg]
-#     DAY        day number (default: inferred from today's date vs CTF day-1).
+#     DAY        day number (default: today's US-Eastern date vs CTF day-1 = 2026-10-01, i.e. day N = October N ET).
 #     --wait     arm-and-fire: do all prep NOW (pre-flight if stale, Homebase warm), then start the run, which polls
 #                the GM in-process (`hctf run --wait-release`) and launches the INSTANT the day is listed.
 #     --preflight force the pre-flight even if a passing one is fresh (default: skip when .run/preflight.ok is
@@ -27,7 +27,10 @@ cd "$ROOT" || exit 1
 # shellcheck disable=SC1091
 source bin/env.sh 2>/dev/null || true
 
-CTF_DAY1="2026-10-03"
+# Day N is released on October N at 09:00 ET (verified D20 = 10-20, D21 = 10-21; the old 10-03 was 2 days stale and a
+# bare `day.sh --wait` armed the WRONG day). The default is counted on the US-Eastern calendar, so an evening (Manila)
+# arm before the drop and an after-midnight Manila relaunch both name the day the GM is (about to be) serving.
+CTF_DAY1="2026-10-01"
 DAY=""; SCOUT=0; LOCAL=5; FG=0; WAIT=0; FORCE_PF=0; EFFORT="${HCTF_WORKER_EFFORT:-high}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -42,7 +45,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ -z "$DAY" ]; then
-  DAY=$(( ( $(date +%s) - $(date -d "$CTF_DAY1" +%s) ) / 86400 + 1 ))
+  et_today="$(TZ=America/New_York date +%F)"
+  DAY=$(( ( $(date -u -d "$et_today" +%s) - $(date -u -d "$CTF_DAY1" +%s) ) / 86400 + 1 ))
+  echo "[day] no day given: day $DAY (US-Eastern date $et_today; day 1 = $CTF_DAY1)"
 fi
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) echo "bad --effort: $EFFORT" >&2; exit 2;; esac
 export HCTF_WORKER_EFFORT="$EFFORT"
@@ -107,7 +112,8 @@ if [ "${HCTF_AUTO_HOMEBASE:-1}" != 0 ] && ip route get "${HCTF_HB_HOST:-10.1.50.
     ( timeout 1800 hctf hb tools >/dev/null 2>&1 && echo "[warm] Homebase toolchain (~/hbtools) ready." \
         || echo "[warm] Homebase toolchain incomplete (shadow workers fall back to python libs): hctf hb tools" ) &
   fi
-  echo "[credits] $(timeout 30 hctf hb budget 2>/dev/null | tail -1)"
+  # informational only: in the BACKGROUND (it is an SSH round trip, up to 30 s on a flapping VPN, before the run starts)
+  ( echo "[credits] $(timeout 30 hctf hb budget 2>/dev/null | tail -1)" ) &
 fi
 
 # 2b) --wait: the run starts NOW and waits for the drop itself (`hctf run --wait-release`: in-process GM polling over

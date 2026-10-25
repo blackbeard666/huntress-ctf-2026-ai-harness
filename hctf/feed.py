@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 from .paths import ROOT
-from .timeline import LINE, SINGLE_SOLVED, _split
+from .timeline import LINE, SINGLE_SOLVED, _split, lane_label
 
 LANES = (("warmups", "warmups"), ("metadata-forensics", "metadata"), ("script-analysis", "script"),
          ("binary-reverse-engineering", "binary"), ("mobile-android", "mobile"), ("welcome", "welcome"))
@@ -32,6 +32,8 @@ GEN_WARN_S = float(os.environ.get("HCTF_FEED_GEN_WARN_S", "90"))   # a generaliz
 
 
 def lane_of(base):
+    if base.startswith("web") and "-day-" in base:
+        return lane_label(base)[:28]   # `web:<slug>`: two web chains a day stay distinct (D24 plan #15)
     for prefix, short in LANES:
         if base.startswith(prefix):
             return short

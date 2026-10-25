@@ -909,8 +909,10 @@ class Pools:
         self.hb = threading.BoundedSemaphore(homebase) if homebase else None
         self.gov = gov
 
-    def acquire(self, prefer_homebase=False):
-        """Block until a slot is free. Returns 'local' or 'homebase'."""
+    def acquire(self, prefer_homebase=False, who=None):
+        """Block until a slot is free. Returns 'local' or 'homebase'. A wait is logged (`[slot] <who>: waited ...`):
+        the KPI segment split counts it as harness time, not LLM time."""
+        t0 = time.time()
         while True:
             order = [("homebase", self.hb), ("local", self.local)] if prefer_homebase else \
                     [("local", self.local), ("homebase", self.hb)]
@@ -918,6 +920,8 @@ class Pools:
                 if sem is None or (name == "homebase" and not self.gov.allow_homebase_workers()):
                     continue
                 if sem.acquire(blocking=False):
+                    if time.time() - t0 >= 1:
+                        say(f"[slot] {who or '?'}: waited {time.time() - t0:.1f}s for a {name} slot")
                     return name
             time.sleep(2)
 
@@ -2193,7 +2197,7 @@ class Chain:
         # force_local (A2): pin to local so a `stop` event can actually cancel the worker -- run_homebase does NOT honor
         # `stop`, so a Homebase-placed generalize would run to its full timeout even after a racer won (Day 21).
         acquired = not urgent and not force_local and not (warm is not None and warm.alive())
-        pool = self.pools.acquire(prefer_homebase) if acquired else "local"
+        pool = self.pools.acquire(prefer_homebase, who=cid) if acquired else "local"
         set_state(self.base, worker=f"{stage}@{pool}")
         say(f"[{cid}] {stage} worker -> {pool}{' (warm)' if warm is not None else ''} (timeout {timeout:.0f}s)")
         try:
@@ -5755,11 +5759,14 @@ def _expected_modes(day):
     return (n or 15) + (3 if web else 0)    # web: ONE chain a day (D19's three were a one-off backfill)
 
 
-def _list_race(day, lanes, log=None, timeout=40, expected=None):
+def _list_race(day, lanes, log=None, timeout=40, expected=None, on_group=None):
     """The day's challenge list as fast as the GM gives it: the full `list --day N` and one `--lane L` list per lane
     all at once; the first complete answer wins (every lane list back -> their union; or the full list). Lane lists for
     a populated day answered in ~1.8-2.5 s vs 3.6-13 s for the full one (measured 2026-10-17). Registers the
-    challenge folders exactly as cli.call does for a list."""
+    challenge folders exactly as cli.call does for a list.
+    on_group(base, entries) (HCTF_RELEASE_STREAM): called as soon as ONE lane list holds a base's three modes -- that
+    chain starts without waiting for the other lanes' lists (the union waited 8-11 s for the slowest; D24). Its errors
+    are logged, never raised: an unstarted chain is started by the caller from the returned list (_stream_groups)."""
     from concurrent.futures import ThreadPoolExecutor, wait as _wait, FIRST_COMPLETED
     log = log or say
     t0 = time.time()
@@ -5769,6 +5776,8 @@ def _list_race(day, lanes, log=None, timeout=40, expected=None):
         return ("*", released_challenges(day))
 
     def lane(ln):
+        if on_group is not None and ln.startswith("binary"):
+            return (ln, _lane_or_search(day, ln, timeout, log))   # --lane and --search at once (stream mode only)
         env = remote.gm("list", "--day", str(day), "--lane", ln, timeout=timeout)
         body = env.get("body") if isinstance(env.get("body"), dict) else {}
         got = list(body.get("challenges") or [])
@@ -5780,7 +5789,7 @@ def _list_race(day, lanes, log=None, timeout=40, expected=None):
             got = list(body.get("challenges") or [])
         return (ln, got)
 
-    by_lane, result = {}, None
+    by_lane, result, fired = {}, None, set()
     ex = ThreadPoolExecutor(max_workers=1 + len(lanes))   # not `with`: its exit would wait for the slow full list
     try:
         futs = {ex.submit(full)} | {ex.submit(lane, ln) for ln in lanes}
@@ -5801,6 +5810,8 @@ def _list_race(day, lanes, log=None, timeout=40, expected=None):
                         break
                 else:
                     by_lane[key] = got
+                    if on_group is not None and got:
+                        _stream_groups(got, on_group, fired, log)
                     if len(by_lane) == len(lanes) and all(by_lane.values()) and \
                             sum(map(len, by_lane.values())) >= expect:
                         # every lane answered with modes and the union is at least yesterday's size: complete. A lane
@@ -5823,8 +5834,75 @@ def _list_race(day, lanes, log=None, timeout=40, expected=None):
     if how == "lanes":
         paths.register(out)
     log(f"[wait] list race: {how} list first ({len(out)} modes in {time.time() - t0:.1f}s; "
-        f"lane lists back: {len(by_lane)}/{len(lanes)})")
+        f"lane lists back: {len(by_lane)}/{len(lanes)}" + (f"; {len(fired)} chain(s) streamed" if fired else "") + ")")
     return out
+
+
+_REG_LOCK = threading.Lock()
+
+
+def _stream_groups(got, on_group, fired, log):
+    """One lane list's reply -> on_group(base, entries) for each base whose three modes it holds and that was not handed
+    over yet. The folders are registered first (cli.call does that for a full list; the lane lists only registered at
+    the end of the race) and the lane is canonicalized like every list reply. Any error: that base is not marked fired
+    and the caller starts it from the full list, exactly as without streaming."""
+    groups = {}
+    for c in got:
+        if isinstance(c, dict) and c.get("id"):
+            groups.setdefault(solvers.base_id(c["id"]), []).append(c)
+    for base, entries in groups.items():
+        if base in fired:
+            continue
+        modes = {c.get("mode") or paths.mode_of(c["id"]) for c in entries}
+        if not set(paths.MODES) <= modes:
+            continue    # a partial list (the GM still filling the day): the full list / a later lane reply starts it
+        try:
+            seen, ents = set(), []
+            for c in entries:
+                if c["id"] in seen:
+                    continue
+                seen.add(c["id"])
+                if c.get("lane") and paths.canonical_lane(c["lane"]) != c["lane"]:
+                    c["gm_lane"], c["lane"] = c["lane"], paths.canonical_lane(c["lane"])
+                ents.append(c)
+            with _REG_LOCK:
+                paths.register(ents)
+                if not paths.lookup(base):   # a concurrent full-list register clobbered it: write it again
+                    paths.register(ents)
+            if on_group(base, ents) is not False:
+                fired.add(base)
+        except Exception as e:  # noqa: BLE001 - never on the release's critical path: the old launch covers it
+            log(f"[wait] stream start of {base} failed ({str(e)[:120]}) -- it starts from the full list")
+
+
+def _lane_or_search(day, ln, timeout, log):
+    """`list --lane binary...` and `list --search binary` at once (the lane filter answered [] on D16 and the sequential
+    fallback cost a second round trip): the first non-empty reply, the search's narrowed to this lane when it names
+    one. Both empty -> []."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def one(args):
+        env = remote.gm("list", "--day", str(day), *args, timeout=timeout)
+        body = env.get("body") if isinstance(env.get("body"), dict) else {}
+        return args[0], list(body.get("challenges") or [])
+
+    ex = ThreadPoolExecutor(max_workers=2)
+    try:
+        futs = [ex.submit(one, ("--lane", ln)), ex.submit(one, ("--search", ln.split("-")[0]))]
+        for f in as_completed(futs, timeout=timeout + 5):
+            try:
+                how, got = f.result()
+            except Exception as e:  # noqa: BLE001 - the other list may still answer
+                log(f"[wait] {ln} list note: {str(e)[:120]}")
+                continue
+            if got and how == "--search":
+                mine = [c for c in got if isinstance(c, dict) and str(c.get("lane", "")).startswith(ln.split("-")[0])]
+                got = mine or got
+            if got:
+                return got
+        return []
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
 
 WEB_ANYDAY = os.environ.get("HCTF_WEB_ANYDAY", "1") != "0"
@@ -5858,15 +5936,19 @@ RELEASE_HOT_AFTER = float(os.environ.get("HCTF_RELEASE_HOT_AFTER", "180"))   # s
 RELEASE_LIST_EVERY = float(os.environ.get("HCTF_RELEASE_LIST_EVERY", "3"))   # fallback full list period in the hot window
 
 
-def wait_for_release(day, poll=None, log=None, drop=None):
+def wait_for_release(day, poll=None, log=None, drop=None, on_group=None):
     """Block until the GM lists `day`, polling IN this process (warm GM connections, no interpreter start) -> the
     listed challenges. Replaces bin/day.sh's shell loop of `hctf list` + a second list inside `hctf run`: D9 the first
     GM start landed 3-5 s after the drop was seen. Clock-aware (release_interval) against the real GM only: a replay's
     stand-in releases whenever it is started, so it keeps the flat poll (as does HCTF_RELEASE_CLOCK=0).
     Around the drop (T-RELEASE_LEAD .. T+RELEASE_HOT_AFTER) the release is detected by a 0.5 s status probe on the
     day's warmups id (_released_fast) and the list is then fetched as a race of lane lists vs the full list
-    (_list_race); a full list still runs every RELEASE_LIST_EVERY s as the fallback (an id pattern change)."""
+    (_list_race); a full list still runs every RELEASE_LIST_EVERY s as the fallback (an id pattern change).
+    HCTF_RELEASE_STREAM=1 (default): the hot window runs in _hot_release -- the fallback full list on its own thread
+    (a 2-13 s list no longer stalls the status probe), RELEASE_PROBERS staggered probers, and on_group(base, entries)
+    handed to the list race so each chain can start the moment its lane is listed. Any error there -> this old loop."""
     poll = RELEASE_POLL if poll is None else poll
+    global _STREAM_BROKEN
     clock = RELEASE_CLOCK and (drop is not None or remote._public_gm())
     if clock and drop is None:
         drop = _drop_instant()
@@ -5881,7 +5963,14 @@ def wait_for_release(day, poll=None, log=None, drop=None):
         hot = RELEASE_FAST_PROBE and clock and drop is not None and -RELEASE_LEAD <= (drop - now) <= RELEASE_HOT_AFTER
         got = []
         try:
-            if hot:
+            if hot and RELEASE_STREAM and not _STREAM_BROKEN:
+                try:
+                    got = _hot_release(day, drop, poll, on_group)
+                except Exception as e:  # noqa: BLE001 - the release path must never die: the old loop takes over
+                    _STREAM_BROKEN = True
+                    got = []
+                    say(f"[wait] release stream failed ({str(e)[:160]}) -- old probe loop")
+            elif hot:
                 if _released_fast(day):
                     say(f"[wait] day {day} announced by the GM (status probe, {time.time() - drop:+.1f}s from the "
                         "drop) -- fetching its list")
@@ -5915,6 +6004,101 @@ RELEASE_POLL_HOT = float(os.environ.get("HCTF_RELEASE_POLL_HOT", "0.2"))     # T
 RELEASE_HEARTBEAT = float(os.environ.get("HCTF_RELEASE_HEARTBEAT", "5"))     # one list per this long before T-lead
 RELEASE_LEAD = float(os.environ.get("HCTF_RELEASE_LEAD", "20"))       # > any host clock skew preflight allows (3 s)
 RELEASE_CLOCK = os.environ.get("HCTF_RELEASE_CLOCK", "1") != "0"
+# D24 #14: stream the release (full list on its own thread, staggered probers, per-lane chain start). 0 = the old loop.
+RELEASE_STREAM = os.environ.get("HCTF_RELEASE_STREAM", "1") != "0"
+RELEASE_PROBERS = max(1, int(os.environ.get("HCTF_RELEASE_PROBERS", "2") or 2))
+_STREAM_BROKEN = False
+
+
+def _hot_release(day, drop, poll, on_group=None):
+    """The hot window (T-RELEASE_LEAD .. T+RELEASE_HOT_AFTER) of wait_for_release, threaded: RELEASE_PROBERS status
+    probers staggered by poll/N (each on the old cadence: a probe is detected up to N x sooner) and the fallback full
+    list every RELEASE_LIST_EVERY s on its own thread -- the old loop ran it inline, so a 2-13 s full list blinded the
+    probe for that long. A probe hit -> the list race (on_group streams chains); a full list -> returned as is.
+    [] once the hot window is over (the caller's loop carries on). Threads stop on return."""
+    stop, hit = threading.Event(), threading.Event()
+    found = {}
+
+    def lister():
+        while not stop.is_set():
+            t = time.time()
+            try:
+                got = released_challenges(day)
+            except Exception as e:  # noqa: BLE001 - keep listing
+                got = []
+                found.setdefault("note", str(e)[:160])
+            if got:
+                found.setdefault("full", got)
+                hit.set()
+                return
+            stop.wait(max(0.05, RELEASE_LIST_EVERY - (time.time() - t)))
+
+    def prober(k):
+        stop.wait(k * poll / RELEASE_PROBERS)
+        while not stop.is_set():
+            try:
+                if _released_fast(day):
+                    found.setdefault("probe", (k, time.time()))
+                    hit.set()
+                    return
+            except Exception:  # noqa: BLE001 - unknown = not released yet
+                pass
+            stop.wait(min(release_interval(time.time(), drop, poll), poll))
+
+    ths = [threading.Thread(target=lister, daemon=True, name="release-list")] + [
+        threading.Thread(target=prober, args=(k,), daemon=True, name=f"release-probe{k}") for k in range(RELEASE_PROBERS)]
+    try:
+        for t in ths:
+            t.start()
+        while not hit.wait(0.05):
+            if time.time() - drop > RELEASE_HOT_AFTER:
+                return []
+        if "probe" in found:
+            k, at = found["probe"]
+            say(f"[wait] day {day} announced by the GM (status probe {k}, {at - drop:+.1f}s from the drop) -- "
+                "fetching its list (streaming chains per lane)")
+            got = _list_race(day, _lanes_for(day), say, on_group=on_group)
+            if got:
+                return got
+            if found.get("full"):
+                return found["full"]
+            return released_challenges(day)
+        return found.get("full") or []
+    finally:
+        stop.set()
+
+
+class _EarlyChains:
+    """Chains started by the release stream (wait_for_release(on_group=start)) before the day's full list is back. The
+    launch loop in run() skips them (started()) and joins them (join()). The same `only` / HCTF_SKIP_IDS filters as the
+    launch loop; a refused group returns False (not fired: the launch loop decides from the full list)."""
+
+    def __init__(self, pools, gov, modes, only=None):
+        self.pools, self.gov, self.modes, self.only = pools, gov, modes, only
+        self._lock, self._futs = threading.Lock(), {}
+        self._ex = ThreadPoolExecutor(max_workers=int(os.environ.get("HCTF_RELEASE_STREAM_MAX", "16")))
+
+    def start(self, base, entries):
+        if self.only and not any(o in base for o in self.only):
+            return False
+        skip = {x.strip() for x in os.environ.get("HCTF_SKIP_IDS", "").split(",") if x.strip()}
+        entries = [c for c in entries if c["id"] not in skip]
+        if not entries:
+            return False
+        with self._lock:
+            if base in self._futs:
+                return True
+            chain = Chain(base, entries, self.pools, self.gov, self.modes)
+            self._futs[base] = self._ex.submit(chain.run)
+        say(f"[wait] {base}: lane listed -- chain started ({len(entries)} modes; release stream)")
+        return True
+
+    def started(self, base):
+        with self._lock:
+            return base in self._futs
+
+    def join(self):
+        self._ex.shutdown(wait=True)
 
 
 def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_homebase=None, keep_homebase=None,
@@ -5941,6 +6125,11 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         threading.Thread(target=workers._homebase_ready, args=(say,), daemon=True).start()
         say("[homebase] pre-warming in the background for timed windows (powers off only if this run powered it on; "
             "otherwise `hctf hb off` when done)")
+        try:   # D24 #13: this process's own status/start/submit via a measured relay (HCTF_GM_RELAY=0: off)
+            from . import gmroute
+            gmroute.activate(log=say)
+        except Exception as e:  # noqa: BLE001 - today's paths
+            say(f"[gmroute] not activated ({str(e)[:120]})")
     if RETRIEVAL:   # before the release wait: ready long before the drop (a missing index = no retrieval block)
         from . import retrieval
         retrieval.build_async(log=say)
@@ -5948,7 +6137,9 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
     gov = Governor(hb_enabled=bool(hb_slots))
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}
-    for c in (wait_for_release(day) if wait_release and day is not None else released_challenges(day)):
+    early = _EarlyChains(pools, gov, modes, only) if (wait_release and day is not None and RELEASE_STREAM) else None
+    for c in (wait_for_release(day, on_group=early.start if early else None) if wait_release and day is not None
+              else released_challenges(day)):
         groups.setdefault(solvers.base_id(c["id"]), []).append(c)
     from . import ressample   # D23 #4: memory / CPU pressure at the drop, measured (see hctf/ressample.py)
     ressample.start(say)
@@ -5978,6 +6169,8 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
     try:
         with ThreadPoolExecutor(max_workers=max(1, len(groups)) + (4 if web_late is not None else 0)) as ex:
             for base, entries in sorted(groups.items()):
+                if early is not None and early.started(base):
+                    continue   # already running since its lane was listed (release stream)
                 ex.submit(Chain(base, entries, pools, gov, modes).run)
             if web_late is not None:
                 try:
@@ -5990,6 +6183,8 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
                         "with this day's chains")
                     groups[base] = entries
                     ex.submit(Chain(base, entries, pools, gov, modes).run)
+        if early is not None:
+            early.join()
         if HOF_RACE and timed_in_scope:
             try:
                 hof_race(groups)   # off the critical path: every chain is done; Homebase still warm

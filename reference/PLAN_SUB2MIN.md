@@ -61,6 +61,11 @@ Cost of the loop today: ratchet 5-23 min / $2-8 per day, ratchet_log workers up 
 ## 3. Target
 
 - **SLO-A: 15/15 by T+2:00 on at least 4 of 5 days. SLO-B: 14/15 by T+1:00 median.** Then push SLO-A to 1:00.
+- **SLO (from D25, supersedes SLO-A as the headline): board N/N incl. web by T+2:00 from the drop** -- every mode of
+  every lane, the web chains included (user 10-21: the whole board is the target, web is a regular lane), T0 = 21:00
+  (the launch only when the run was not armed before the drop). Scored by `hctf kpi --day N --record` -> the "Board v2" /
+  "Lanes v2" tables in reference/KPI.md (D20-D24 backfilled: 15:01, 17:38, 8:00, 29:08, 3:35 -- web set the board
+  on four of five days).
 - Zero manual interventions (D16 needed one).
 - Determinism ratio (answer ids confirmed without an LLM turn / total ids) reported per day; today roughly
   mobile 100%, script ~94%, binary ~94%, warmups ~90%, metadata 0%.
