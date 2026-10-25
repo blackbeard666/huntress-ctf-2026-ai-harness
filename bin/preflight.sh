@@ -14,7 +14,7 @@ FIX=0; [ "${1:-}" = "--fix" ] && FIX=1
 
 # --- config you may need to update ---------------------------------------------------------------
 TOKEN_EXPIRY="2026-11-01"   # UPDATE THIS after re-pairing (secrets/gm_pairing_token). See reference/RUNBOOK.md.
-CTF_DAY1="2026-10-03"       # day 01 release date; daily cadence -> day 31 = CTF_DAY1 + 30 days.
+CTF_DAY1="2026-10-01"       # day 01 release date (day N = October N, 09:00 ET); day 31 = CTF_DAY1 + 30 days.
 CTF_LASTDAY=31
 HB_HOST="${HCTF_HB_HOST:-10.1.50.243}"; VPN_DEV="${HCTF_VPN_DEV:-tun0}"
 # -------------------------------------------------------------------------------------------------
