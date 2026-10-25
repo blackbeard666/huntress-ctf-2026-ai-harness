@@ -66,6 +66,8 @@ if stage == "single":
           "If you have been stuck for a while, use the explore-alternatives skill.")
 
 if stage == "generalize":
+    # passing = solvers.gate_ok: a verified case matches its expected.json; an UNVERIFIED one (a failed variant) needs every
+    # field answered with no GM-rejected value (D25 C2: it could never pass before, ~130 s of a fixed worker held here)
     ok, res = orchestrate.ensure_case_and_test(paths.base_id(cid), paths.solver_dir(cid))
     static = solvers.id_cache_problems(paths.solver_dir(cid))
     if ok and not static:
@@ -73,8 +75,10 @@ if stage == "generalize":
     if ok:
         block("Every case passes, but the solver has an unsafe cache (it breaks multi-set Mastery runs): "
               + "; ".join(static[:2])[:700] + ". Fix it, then re-run `hctf solver-test`.")
-    block(f"`hctf solver-test {paths.base_id(cid)}` does not pass for every case yet: {json.dumps(res)[:700]}. "
-          "Fix solve.py (never edit cases/*/expected.json -- it is GM-verified only), then re-run."
+    bad = [r for r in res if not solvers.gate_ok(r)] if isinstance(res, list) else res
+    block(f"`hctf solver-test {paths.base_id(cid)}` does not pass for every case yet: {json.dumps(bad)[:700]}. "
+          "Fix solve.py (never edit cases/*/expected.json -- it is GM-verified only), then re-run. An unverified "
+          "variant passes once every field is answered and no GM-rejected value comes back."
           + (f" Also: {static[0][:300]}" if static else ""))
 
 if stage == "live":

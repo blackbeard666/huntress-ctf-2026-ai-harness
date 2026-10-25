@@ -401,19 +401,104 @@ def add_case(sdir, name, contract, artifacts, expected):
 VERIFIED_GREEN = os.environ.get("HCTF_VERIFIED_GREEN", "1") != "0"
 
 
-def targets_pass(sdir, targets, fill=(), timeout=8):
-    """Cheap pre-check for the generalize green watchers: do the TARGET cases pass and the FILL cases come out complete?
-    Only then is the whole corpus worth replaying (rehearsal D13 replay: up to 4 full suites at once on every edit, most of
-    them on code that still failed its target). True when there is nothing to pre-check."""
-    names = set(targets) | set(fill)
+def targets_pass(sdir, targets, fill=(), timeout=8, reject_free=()):
+    """Cheap pre-check for the generalize green watchers: do the TARGET cases pass, the FILL cases come out complete and
+    the REJECT_FREE cases come out complete with no GM-rejected value? Only then is the whole corpus worth replaying
+    (rehearsal D13 replay: up to 4 full suites at once on every edit, most of them on code that still failed its target).
+    True when there is nothing to pre-check."""
+    names = set(targets) | set(fill) | set(reject_free)
     if not names:
         return True
     res = test_solver(sdir, timeout=timeout, cases=sorted(names))
     by = {r["case"]: r for r in res}
     if any(not (by.get(t) or {}).get("ok") for t in targets):
         return False
+    if any(not (by.get(t) or {}).get("reject_free") for t in reject_free):
+        return False
     return all((by.get(f) or {}).get("total") and by[f].get("answered") == by[f].get("total") and not by[f].get("error")
                for f in fill)
+
+
+# D25 post-mortem C2: an UNVERIFIED case (empty expected.json: a failed variant, an old carried variant-*) can never be
+# `ok`, so the generalize Stop gate (ensure_case_and_test: every case ok) blocked a worker that had the fix at +39 s for
+# ~130 s more, until it wrote HELP.md. For the GATE such a case passes when the solver answers every field, reproduces no
+# value the GM rejected (gm_feedback.json) and does not error -- `reject_free`. `ok` itself is unchanged (the
+# transactional accept and the verified-green watchers still read it). 0 = the old gate (every case ok).
+GATE_REJECT_FREE = os.environ.get("HCTF_GATE_REJECT_FREE", "1") != "0"
+# C1: cases with byte-identical contract + artifacts (D25 warmups: mastery-X / variant-mastery-X / auto-mastery-X
+# triplets, 33 of 36 cases carried over from earlier days) run the solver ONCE; each case is still judged against its
+# own expected.json / gm_feedback.json. 0 = one solver run per case.
+CASE_DEDUPE = os.environ.get("HCTF_CASE_DEDUPE", "1") != "0"
+_SHA_CACHE = {}
+
+
+def _file_sha(p):
+    """sha256 of a file, cached by (device, inode, size, mtime): hard-linked case artifacts hash once per process."""
+    import hashlib
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    key = (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
+    h = _SHA_CACHE.get(key)
+    if h is None:
+        d = hashlib.sha256()
+        try:
+            with open(p, "rb") as f:
+                for blk in iter(lambda: f.read(1 << 20), b""):
+                    d.update(blk)
+        except OSError:
+            return None
+        h = _SHA_CACHE[key] = d.hexdigest()
+    return h
+
+
+def case_key(case, full=True):
+    """Identity of what a solver run on this case sees: its contract.json bytes + every artifact's (name, sha256), or
+    (full=False, the cheap pre-key) its (name, size). None when unreadable (never deduped)."""
+    import hashlib
+    try:
+        h = hashlib.sha256(Path(case, "contract.json").read_bytes())
+        for f in sorted(Path(case, "artifacts").rglob("*")):
+            if f.is_file():
+                s = _file_sha(f) if full else str(f.stat().st_size)
+                if s is None:
+                    return None
+                h.update(f"\0{f.relative_to(Path(case, 'artifacts'))}\0{s}".encode())
+    except OSError:
+        return None
+    return h.hexdigest()
+
+
+def _dedupe_groups(cases):
+    """[[case, ...], ...]: byte-identical cases grouped (first = the one the solver runs on), order kept. Only cases that
+    share the cheap (contract, artifact sizes) pre-key are hashed in full (a fresh Stop-gate process re-hashes)."""
+    if not CASE_DEDUPE:
+        return [[c] for c in cases]
+    pre = {}
+    for c in cases:
+        pre.setdefault(case_key(c, full=False) or f"\0{c}", []).append(c)
+    full = {}
+    for k, cs in pre.items():
+        for c in cs:
+            full[c] = (case_key(c) if len(cs) > 1 else None) or f"\0{c}"
+    groups, by = [], {}
+    for c in cases:
+        k = full[c]
+        if k in by:
+            by[k].append(c)
+        else:
+            by[k] = [c]
+            groups.append(by[k])
+    return groups
+
+
+def gate_ok(r):
+    """Does one test_solver result pass the Stop gate? `ok`, or (GATE_REJECT_FREE) an unverified case that is
+    reject-free, or an unverified duplicate (`dup_of`) of a verified case that passes (its result carries `gate_ok`)."""
+    if "gate_ok" in r:
+        return bool(r["gate_ok"])
+    return bool(r.get("ok")) or bool(GATE_REJECT_FREE and r.get("unverified") and r.get("reject_free"))
 
 
 def _mem_avail_gb():
@@ -567,17 +652,9 @@ def test_solver(sdir, timeout=120, parallel=None, cases=None):
     from . import webtarget
     lane = _lane_of(sdir)
 
-    def one(case):
-        contract = json.loads((case / "contract.json").read_text())
+    def judge(case, contract, got, err, dt):
+        """One case's verdict on a solver output (shared by every byte-identical case: CASE_DEDUPE)."""
         expected = json.loads((case / "expected.json").read_text()) if (case / "expected.json").exists() else {}
-        if webtarget.case_stale(case, sdir, lane):
-            # a FINISHED live-target (web) attempt: its target answers 410 now -- nothing to replay. Counted as
-            # passing (it can't break) and marked, so no gate fails a GM-confirmed web solver on it.
-            ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
-            return {"case": case.name, "ok": True, "seconds": 0.0, "error": None, "diff": {}, "unverified": not expected,
-                    "answered": len(ids), "total": len(ids), "verified_n": len(expected), "rejected_hits": 0,
-                    "rejected_got": {}, "fully_verified": False, "skipped": "live_target_finished"}
-        got, err, dt = run_solver(Path(sdir), contract, case / "artifacts", timeout, env_extra=small_pool_env(contract))
         diff = {k: {"expected": v, "got": got.get(k)} for k, v in expected.items() if got.get(k) != v}
         ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
         answered = sum(1 for i in ids if got.get(i) not in (None, ""))
@@ -596,16 +673,50 @@ def test_solver(sdir, timeout=120, parallel=None, cases=None):
                 "error": err, "diff": diff, "unverified": not expected,
                 "answered": answered, "total": len(ids),
                 "verified_n": len(expected), "rejected_hits": len(hits), "rejected_got": hits,
+                "rejected_n": sum(len(v or []) for v in rejected.values()),
+                # C2: every field answered, no GM-rejected value reproduced, no verified field wrong, no error
+                "reject_free": bool(ids) and not err and not diff and not hits and answered == len(ids),
                 "fully_verified": bool(ids) and set(ids) <= set(expected)}
+
+    def group(members):
+        """Run the solver once on the first case of a group of byte-identical cases; judge every member."""
+        case = members[0]
+        contract = json.loads((case / "contract.json").read_text())
+        if webtarget.case_stale(case, sdir, lane):
+            # a FINISHED live-target (web) attempt: its target answers 410 now -- nothing to replay. Counted as
+            # passing (it can't break) and marked, so no gate fails a GM-confirmed web solver on it.
+            out = []
+            for c in members:
+                exp = json.loads((c / "expected.json").read_text()) if (c / "expected.json").exists() else {}
+                ids = contract.get("answer_ids") or [q.get("id") for q in contract.get("questions") or [] if q.get("id")]
+                out.append({"case": c.name, "ok": True, "seconds": 0.0, "error": None, "diff": {}, "unverified": not exp,
+                            "answered": len(ids), "total": len(ids), "verified_n": len(exp), "rejected_hits": 0,
+                            "rejected_got": {}, "rejected_n": 0, "reject_free": True, "fully_verified": False,
+                            "skipped": "live_target_finished"})
+            return out
+        got, err, dt = run_solver(Path(sdir), contract, case / "artifacts", timeout, env_extra=small_pool_env(contract))
+        out = [judge(c, contract, got, err, dt) for c in members]
+        if len(out) > 1:
+            # an unverified duplicate of a VERIFIED case (an old variant-mastery-X beside auto-mastery-X): the gate
+            # follows the verified twin (same solver output, GM-checked answers) -- C1
+            ver = [r for r in out if not r["unverified"]]
+            for r in out:
+                if r["unverified"] and ver:
+                    r["dup_of"] = ver[0]["case"]
+                    r["gate_ok"] = bool(ver[0]["ok"]) or bool(GATE_REJECT_FREE and r["reject_free"])
+        return out
+
     pats = list(cases) if cases is not None else None
     cases = sorted((Path(sdir) / "cases").glob("*/"))
     if pats is not None:
         import fnmatch
         cases = [c for c in cases if any(fnmatch.fnmatchcase(c.name, p) for p in pats)]
+    groups = _dedupe_groups(cases)
     if parallel is None:
         parallel = case_parallel()
     with procgov.Executor(max_workers=max(1, parallel)) as ex:   # the caller's background flag flows into each run
-        return list(ex.map(one, cases))
+        res = [r for rs in ex.map(group, groups) for r in rs]
+    return sorted(res, key=lambda r: r["case"])
 
 
 # ---------------------------------------------------------------------------------------------- merged reuse

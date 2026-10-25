@@ -12,7 +12,13 @@ Routing (every decision measured, never assumed -- 10-25: status 1.4 s from WSL 
     (the op's own averages when both exist, else the status calibration's), and the request / the reply expected
     are <= MAX_BYTES (32 KB);
   - status: hedged -- both paths at once, the first judged reply wins (no side effects);
-  - start: relay, any relay failure -> today's path (start RESUMES the live attempt: idempotent);
+  - start: hedged too (D25: script Mastery's start sat 38 s on a relay channel that died mid-call) -- `start` RESUMES
+    the live attempt (GM: "start always reconnects to the same attempt"), so a second one is safe. The path decide()
+    prefers goes first, the other HEDGE_START_S later unless the first already failed (two near-simultaneous FIRST
+    starts of a mode must not race the GM's attempt creation); the first judged reply wins, and differing attempt ids
+    are logged `!!!`. A reply expected > MAX_BYTES -- sized from TODAY's status-time contract of that mode
+    (<mode>/contract.json), else the lane's earlier start -- never takes the relay (one stdio channel: it would hold
+    every reply queued behind it), so it goes today's path alone;
   - submit: relay; a failure BEFORE the request left (channel down / write failed) -> today's path; ANY failure after
     it was sent -> remote.Unreachable (outcome unknown). A submit is NEVER sent twice.
 Kill switch HCTF_GM_RELAY=0: remote.gm never calls this module = exactly today's paths.
@@ -30,6 +36,9 @@ RATIO = float(os.environ.get("HCTF_GM_RELAY_RATIO", "0.8"))
 MARGIN = float(os.environ.get("HCTF_GM_RELAY_MARGIN", "0.1"))
 MAX_BYTES = int(os.environ.get("HCTF_GM_RELAY_MAX_KB", "32")) * 1024
 CAL_S = float(os.environ.get("HCTF_GM_RELAY_CAL_S", "15"))
+# start hedging (D25 B2): the second path's head start. HCTF_GM_START_HEDGE=0 = the old relay-then-fallback start.
+START_HEDGE = os.environ.get("HCTF_GM_START_HEDGE", "1") != "0"
+HEDGE_START_S = float(os.environ.get("HCTF_GM_START_HEDGE_S", "1.5"))
 ALPHA = 0.3                      # EWMA weight of the newest sample
 OPS = ("status", "start", "submit")
 
@@ -84,6 +93,9 @@ def _size_ok(args):
         return len(str(args[2]) if len(args) > 2 else "") <= MAX_BYTES
     if op == "start" and len(args) > 1:
         cid = str(args[1])
+        today = _contract_bytes(cid)
+        if today is not None:
+            return today <= MAX_BYTES        # this mode's own status-time contract: the best predictor there is
         with _lock:
             known = _reply.get(("start", _shape(cid)))
         if known is not None:
@@ -93,6 +105,22 @@ def _size_ok(args):
             return False
         return _earlier_start_bytes(cid) <= MAX_BYTES
     return True
+
+
+def _contract_bytes(cid):
+    """Bytes of TODAY's saved contract of this mode (<mode dir>/contract.json: the status-time contract, or the start
+    body that replaced it) -- a start reply carries the same questions (+ answer_ids), within ~15 %. D25 script
+    Mastery: 14,625 ids = 8.3 MB, while the lane's earlier Mastery start that _earlier_start_bytes saw was smaller /
+    absent. None when the mode has no contract on disk yet (never creates the mode dir)."""
+    from . import paths
+    try:
+        entry = paths.lookup(cid)
+        if not entry:
+            return None
+        p = paths.CHALLENGES / entry["dir"] / paths.mode_of(cid) / "contract.json"
+        return p.stat().st_size if p.exists() else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def _earlier_start_bytes(cid):
@@ -176,6 +204,15 @@ def _note_decision(op, how):
              f"{l if l is None else round(l, 2)}s)")
 
 
+def _how(op):
+    """The routing label _note_decision logs for op (the calibrator and call() must agree, or the line flaps)."""
+    if op == "status":
+        return "hedged"
+    if op == "start" and START_HEDGE:
+        return f"hedged, {decide(op)} first"
+    return decide(op)
+
+
 def _judged(env):
     return isinstance(env, dict) and env.get("http") not in (0, None, 429, 503)
 
@@ -191,6 +228,15 @@ def call(args, timeout, local_fn):
     if op == "status":
         return _hedge(args, timeout, chan, local_fn)
     how = decide(op)
+    if op == "start" and START_HEDGE:
+        if not _size_ok(args):
+            return _timed(local_fn, op, "local")   # a big reply never rides the relay (not hedged either)
+        _note_decision(op, _how(op))
+        env = _hedge(args, timeout, chan, local_fn, op="start", first=how, lag=HEDGE_START_S)
+        if str(env.get("transport") or "").startswith("relay"):
+            with _lock:
+                _reply[("start", _shape(args[1]))] = _reply_bytes(env)
+        return env
     _note_decision(op, how)
     if how != "relay" or not _size_ok(args):
         return _timed(local_fn, op, "local")
@@ -215,12 +261,23 @@ def call(args, timeout, local_fn):
     return env
 
 
-def _hedge(args, timeout, chan, local_fn):
-    """status on both paths at once: the first judged non-404 reply wins; the other still lands in the averages."""
+def _hedge(args, timeout, chan, local_fn, op="status", first=None, lag=0.0):
+    """`op` on both paths: the first judged non-404 reply wins; the other still lands in the averages. Idempotent ops
+    only (status; start, which resumes the live attempt). lag > 0: the `first` path ('relay' | 'local') goes at once,
+    the other after `lag` s -- or at once when the first one ends without a winner (raised / unjudged / 404)."""
     done, out, lock = threading.Event(), {}, threading.Lock()
     left = [2]
+    first_over = threading.Event()
 
-    def run(path, fn):
+    def run(path, fn, delayed):
+        if delayed and lag > 0:
+            first_over.wait(lag)
+            with lock:
+                if "win" in out:          # the first path already won: never send the second request
+                    left[0] -= 1
+                    if left[0] == 0:
+                        done.set()
+                    return
         t0 = time.time()
         try:
             env = fn()
@@ -228,7 +285,9 @@ def _hedge(args, timeout, chan, local_fn):
         except Exception as e:  # noqa: BLE001
             env, err = None, e
         if _judged(env):
-            record("status", path, time.time() - t0)
+            record(op, path, time.time() - t0)
+        elif err is not None and path == "relay" and op != "status":
+            record(op, "relay", max(time.time() - t0, 5.0))   # a failure costs: the average backs off the relay
         with lock:
             left[0] -= 1
             # a 404 never wins alone: the release probe (status on the day's warmups id) reads 404 as "not yet" -- a
@@ -236,16 +295,26 @@ def _hedge(args, timeout, chan, local_fn):
             if _judged(env) and env.get("http") != 404 and "win" not in out:
                 out["win"] = env
                 done.set()
+            elif _judged(env) and "win" in out and op == "start":
+                a, b = _attempt_of(out["win"]), _attempt_of(env)
+                if a and b and a != b:
+                    _say(f"!!! [gmroute] start {args[1]}: the two paths returned different attempts ({a[:8]} won, "
+                         f"{b[:8]} on {path}) -- check `hctf status`")
             elif env is not None:
                 out.setdefault(path, env)
             elif err is not None:
                 out.setdefault(f"{path}_err", err)
             if left[0] == 0:
                 done.set()
+        if not delayed:
+            first_over.set()
 
-    threading.Thread(target=run, args=("relay", lambda: _relay_call(chan, args, timeout)), daemon=True).start()
-    threading.Thread(target=run, args=("local", local_fn), daemon=True).start()
-    done.wait(timeout + 5)
+    lead = first if first in ("relay", "local") else "relay"
+    fns = {"relay": lambda: _relay_call(chan, args, timeout), "local": local_fn}
+    for path in (lead, "local" if lead == "relay" else "relay"):
+        threading.Thread(target=run, args=(path, fns[path], path != lead and lag > 0), daemon=True,
+                         name=f"gm-hedge-{op}-{path}").start()
+    done.wait(timeout + lag + 5)
     with lock:
         if "win" in out:
             return out["win"]
@@ -257,7 +326,15 @@ def _hedge(args, timeout, chan, local_fn):
     if err is not None:
         raise err
     from . import remote
-    raise remote.Unreachable("status: neither the relay nor the local GM answered in time")
+    raise remote.Unreachable(f"{op}: neither the relay nor the local GM answered in time")
+
+
+def _attempt_of(env):
+    body = env.get("body") if isinstance(env, dict) else None
+    if not isinstance(body, dict):
+        return None
+    v = body.get("attempt_id") or body.get("attempt")
+    return str(v.get("id") if isinstance(v, dict) else v) if v else None
 
 
 def calibrate_once(cid=None):
@@ -295,7 +372,7 @@ def _calibrator():
                 calibrate_once()
                 _note_decision("status", "hedged")
                 for op in ("start", "submit"):
-                    _note_decision(op, decide(op))
+                    _note_decision(op, _how(op))
         except Exception as e:  # noqa: BLE001
             _say(f"[gmroute] calibration note: {str(e)[:120]}")
         time.sleep(CAL_S)
@@ -316,8 +393,10 @@ def activate(log=None):
     t = threading.Thread(target=_calibrator, daemon=True, name="gm-route-cal")
     _state["cal"] = t
     t.start()
-    _say(f"[gmroute] on: relay channels starting; status hedged, start/submit via the relay only when its average < "
-         f"{RATIO:g} x local - {MARGIN:g}s and <= {MAX_BYTES // 1024} KB (HCTF_GM_RELAY=0 = off)")
+    _say(f"[gmroute] on: relay channels starting; status hedged, "
+         f"{'start hedged (the faster path first, the other ' + format(HEDGE_START_S, 'g') + ' s later), submit' if START_HEDGE else 'start/submit'}"
+         f" via the relay only when its average < {RATIO:g} x local - {MARGIN:g}s and <= {MAX_BYTES // 1024} KB "
+         "(HCTF_GM_RELAY=0 = off)")
     return True
 
 
@@ -330,7 +409,7 @@ def summary():
     for op in OPS:
         r, l = avg(op, "relay"), avg(op, "local")
         rows.append(f"{op}: relay {'-' if r is None else f'{r:.2f}s'} local {'-' if l is None else f'{l:.2f}s'} "
-                    f"-> {'hedged' if op == 'status' else decide(op)}")
+                    f"-> {_how(op)}")
     return "; ".join(rows)
 
 

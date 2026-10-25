@@ -363,12 +363,125 @@ def cmd_artifact(cid, outdir, delivery=None):
     return _envelope(status, headers, raw, saved)
 
 
-def cmd_download(cap, outdir, name=None):
-    status, headers, raw = _request("GET", {"op": "download", "capability": cap})
+def cmd_download(cap, outdir, name=None, sha256=None):
+    got = _download_ranged(cap, sha256) if RANGE_STREAMS > 1 else None
+    if got is not None:
+        status, headers, raw = got
+    else:
+        status, headers, raw = _request("GET", {"op": "download", "capability": cap})
     if status != 200 or _is_json(headers, raw):
         return _envelope(status, headers, raw)
     fname = name or _filename(headers, cap[:16] + ".bin")
-    return _envelope(status, headers, raw, [_save_bytes(outdir, fname, raw)])
+    env = _envelope(status, headers, raw, [_save_bytes(outdir, fname, raw)])
+    if got is not None and headers.get("X-Hctf-Ranges"):
+        env["ranges"] = int(headers["X-Hctf-Ranges"])
+    return env
+
+
+# D25 B3: binary's 35.7 MB single took 68.6 s at the drop (0.52 MB/s on ONE stream; 5.4 s a minute later). Downloads ask
+# for `Range: bytes=0-<RANGE_FIRST_MB>`: a 200 = the server ignores Range and that reply IS today's single stream (no extra
+# request); a 206 whose Content-Range total exceeds the first part fetches the rest as RANGE_STREAMS-1 parallel ranges on
+# their own connections, started as soon as the first reply's headers arrive. Any surprise (a non-206 part, a wrong
+# Content-Range, a short part, a sha256 mismatch when the caller knows it) -> today's single GET. HCTF_GM_RANGE_STREAMS=0
+# or 1 = off (exactly today's request).
+RANGE_STREAMS = int(os.environ.get("HCTF_GM_RANGE_STREAMS", "6"))
+RANGE_FIRST = int(float(os.environ.get("HCTF_GM_RANGE_FIRST_MB", "8")) * (1 << 20))
+
+
+def _range_conn():
+    import http.client
+    u = urllib.parse.urlsplit(GM)
+    cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+    return cls(u.hostname, u.port, timeout=GET_TIMEOUT)
+
+
+def _range_path(cap):
+    return (urllib.parse.urlsplit(GM).path or "/") + "?" + urllib.parse.urlencode({"op": "download", "capability": cap})
+
+
+def _content_range(headers):
+    """'bytes A-B/T' -> (A, B, T) or None."""
+    m = re.match(r"\s*bytes\s+(\d+)-(\d+)/(\d+)\s*$", str(headers.get("Content-Range") or headers.get("content-range")
+                                                         or ""))
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def _range_get(cap, lo, hi):
+    """ONE ranged GET on a fresh connection -> the part's bytes; raises on anything but a 206 for exactly [lo, hi]."""
+    if ratebucket:
+        ratebucket.admit()
+    c = _range_conn()
+    try:
+        h = {"Range": f"bytes={lo}-{hi}"}
+        tok = _token()
+        if tok:
+            h["Authorization"] = "Bearer " + tok
+        c.request("GET", _range_path(cap), headers=h)
+        r = c.getresponse()
+        raw = r.read()
+        cr = _content_range(dict(r.getheaders()))
+        if r.status != 206 or not cr or cr[:2] != (lo, hi) or len(raw) != hi - lo + 1:
+            raise ValueError(f"range {lo}-{hi}: HTTP {r.status} {cr} {len(raw)} B")
+        return raw
+    finally:
+        c.close()
+
+
+def _download_ranged(cap, sha256=None):
+    """-> (status, headers, raw) like _request, or None = use today's single GET (see RANGE_STREAMS)."""
+    import http.client
+    from concurrent.futures import ThreadPoolExecutor
+    if ratebucket:
+        ratebucket.admit()
+    c = _range_conn()
+    ex = None
+    try:
+        h = {"Range": f"bytes=0-{RANGE_FIRST - 1}"}
+        tok = _token()
+        if tok:
+            h["Authorization"] = "Bearer " + tok
+        c.request("GET", _range_path(cap), headers=h)
+        r = c.getresponse()
+        hdrs = dict(r.getheaders())
+        if r.status in (429, 503):
+            r.read()
+            return None                          # load: today's path backs off and retries
+        if r.status != 206:
+            return r.status, hdrs, r.read()      # 200 = Range ignored: the whole file on this one stream; else a verdict
+        cr = _content_range(hdrs)
+        if not cr or cr[0] != 0:
+            r.read()
+            return None
+        first_hi, total = cr[1], cr[2]
+        if first_hi + 1 >= total:                # small file: the first part is all of it (one request, as today)
+            raw = r.read()
+            parts = []
+        else:
+            # balance the streams: read only this stream's share of the first reply, close it, range the rest
+            share = min(first_hi + 1, max(1 << 20, -(-total // RANGE_STREAMS)))
+            rest = total - share
+            n = max(1, min(RANGE_STREAMS - 1, -(-rest // (1 << 20))))
+            step = -(-rest // n)
+            parts = [(share + i * step, min(total, share + (i + 1) * step) - 1) for i in range(n)
+                     if share + i * step < total]
+            ex = ThreadPoolExecutor(max_workers=len(parts))
+            futs = [ex.submit(_range_get, cap, lo, hi) for lo, hi in parts]
+            first = r.read(share)
+            c.close()                            # the unread tail of the first reply is covered by the ranges
+            if len(first) != share:
+                return None
+            raw = first + b"".join(f.result() for f in futs)
+        if len(raw) != total or (sha256 and hashlib.sha256(raw).hexdigest() != sha256):
+            return None
+        hdrs = {k: v for k, v in hdrs.items() if k.lower() not in ("content-range", "content-length")}
+        hdrs["X-Hctf-Ranges"] = str(1 + len(parts))
+        return 200, hdrs, raw
+    except (OSError, ValueError, http.client.HTTPException):
+        return None                              # any failed part / transport surprise: the single stream instead
+    finally:
+        if ex is not None:
+            ex.shutdown(wait=False, cancel_futures=True)
+        c.close()
 
 
 # The browser arena's endpoint (GET /arena serves the page): same bearer, JSON {op, challenge[, run_for_time]}. Web live
@@ -436,6 +549,7 @@ def _parser():
     pd.add_argument("capability")
     pd.add_argument("outdir")
     pd.add_argument("--name")
+    pd.add_argument("--sha256", help="expected sha256: a ranged download that does not match falls back to one stream")
     par = sub.add_parser("arena")
     par.add_argument("op", choices=["start", "stop", "status", "retry"])
     par.add_argument("id")
@@ -480,7 +594,7 @@ def _dispatch(a):
         env = cmd_arena(a.op, a.id, run_for_time=True if a.run_for_time else (
             False if a.op in ("start", "retry") and timed else None))
     else:
-        env = cmd_download(a.capability, a.outdir, a.name)
+        env = cmd_download(a.capability, a.outdir, a.name, a.sha256)
     env["elapsed"] = round(time.time() - t0, 3)          # request time incl. any 429 backoff (not process startup)
     env["retries"], env["slept"] = STATS["retries"], round(STATS["slept"], 2)
     return env

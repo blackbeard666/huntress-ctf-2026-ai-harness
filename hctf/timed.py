@@ -464,6 +464,61 @@ def _say(msg):
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
 
+ADOPT_LOCAL_BYTES = __import__("os").environ.get("HCTF_ADOPT_LOCAL_BYTES", "1") != "0"
+
+
+def adopt_local_bytes(cid, body):
+    """D25 B4.2: this attempt's sha-verified bytes already on disk (the timed runner's dir, or the failed attempt kept
+    under attempts/<id8>) -> hard-linked into artifacts/<ts>/ with a manifest + `latest`, like cli.c_artifact would
+    leave them. Binary D25 Mastery: ensure_started re-downloaded 9 x 35.7 MB the timed dir already held. -> the new
+    artifacts dir, or None (attempt mismatch / a file missing / a sha mismatch: the caller downloads)."""
+    import hashlib
+    import os
+    import shutil
+    att = cli.attempt_id(body or {})
+    plan = cli._planned_downloads(body or {})
+    if not (ADOPT_LOCAL_BYTES and att and plan):
+        return None
+    for src in (timed_dir(cid), cli.cdir(cid) / "attempts" / att[:8]):
+        try:
+            if cli.attempt_id(json.loads((src / "contract.json").read_text())) != att:
+                continue
+        except (OSError, ValueError):
+            continue
+        files = []
+        for name, _cap, sha in plan:
+            f = src / name
+            if not f.is_file():
+                break
+            h = hashlib.sha256()
+            with open(f, "rb") as fh:
+                for blk in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(blk)
+            if sha and h.hexdigest() != sha:
+                break
+            files.append((name, f, h.hexdigest()))
+        else:
+            ts = cli.now()
+            local = cli.cdir(cid) / "artifacts" / ts
+            local.mkdir(parents=True, exist_ok=True)
+            manifest = []
+            for name, f, digest in files:
+                dst = local / name
+                try:
+                    os.link(f, dst)
+                except OSError:
+                    shutil.copy2(f, dst)
+                manifest.append({"file": str(dst.relative_to(cli.ROOT)), "name": name, "bytes": dst.stat().st_size,
+                                 "sha256": digest})
+            (local / "manifest.json").write_text(json.dumps(
+                {"challenge": cid, "ts": ts, "attempt": att, "files": manifest, "adopted_from": src.name}, indent=2))
+            latest = cli.cdir(cid) / "artifacts" / "latest"
+            latest.unlink(missing_ok=True)
+            latest.symlink_to(ts)
+            return local
+    return None
+
+
 def ensure_started(cid, log=None):
     """Start (or resume: start is idempotent while the clock runs) and download the variant."""
     with cli.chal_lock(cid):
@@ -493,6 +548,9 @@ def ensure_started(cid, log=None):
         return body, None
     art = latest_artifacts(cid)
     manifest = json.loads((art / "manifest.json").read_text()) if art and (art / "manifest.json").exists() else {}
+    if manifest.get("attempt") != cli.attempt_id(body) and adopt_local_bytes(cid, body) is not None:
+        (log or _say)(f"[{cid}] ensure_started: this attempt's bytes were already local (sha-verified) -- no re-download")
+        return body, None
     if manifest.get("attempt") != cli.attempt_id(body):  # fetch this attempt's artifacts if we don't have them
         class A:  # argparse-like namespace for cli.c_artifact
             id, delivery = cid, None
@@ -600,7 +658,8 @@ def wait_idle(max_wait=None, poll=0.5):
 
 _TIMED_KEYS = ('result', 'remaining', 'elapsed', 'window', 'routed', 'missing', 'partial_submit', 'per_set', 'bad_sets',
                'wrong', 'fixed', 'attempt_id', 'phases', 'kickoff', 'pipelined', 'pipeline_fallback', 'resubmit_fixed')
-if __import__("os").environ.get("HCTF_TIMING_MARKS", "1") != "0":
+_TIMING_MARKS = __import__("os").environ.get("HCTF_TIMING_MARKS", "1") != "0"
+if _TIMING_MARKS:
     # D24 #1: where a mode's pre-clock seconds went (runner spawn / mode lock / GM pool, pre-start reuse or why not,
     # timed_env, the Homebase readiness check)
     _TIMED_KEYS += ('spawn', 'pool_warm', 'prestart_reused', 'prestart_miss', 'prefetched', 't_env', 't_hb_ready')
@@ -632,12 +691,14 @@ def process_result(cid, solver_dir, res, log=print):
                 log(f"[{cid}] saved this variant as regression case {case} ({len(res.get('verified') or res.get('submitted') or {})} GM-verified answers)")
         except Exception as e:  # noqa: BLE001 - capture is best-effort
             log(f"[{cid}] variant capture note: {e}")
+    marks = [("t0", time.time())]   # D25 C4: the post-attempt bookkeeping between the runner's result and the verdict
     try:
         _remember(cid, res)
     except Exception as e:  # noqa: BLE001
         log(f"[{cid}] last_timed note: {e}")
     if r != "correct":
         _keep_failed_attempt(cid, res, log)
+    marks.append(("remember+keep", time.time()))
     if pull:
         import threading
         t = threading.Thread(target=capture, name=f"capture-{cid}", daemon=True)
@@ -645,6 +706,7 @@ def process_result(cid, solver_dir, res, log=print):
         t.start()
     else:
         capture()
+    marks.append(("capture", time.time()))
     if r != "correct" and res.get("verified"):
         # A failed attempt still carries GM-verified labels (accepted sets, localized subsets, in-window fixes):
         # cache them now so the next variant's in-window corrector already knows the spelling.
@@ -653,6 +715,9 @@ def process_result(cid, solver_dir, res, log=print):
             labels.record_values(cid, res["verified"], log=log)
         except Exception as e:  # noqa: BLE001
             log(f"[{cid}] label cache note: {e}")
+    marks.append(("label-cache", time.time()))
+    if _TIMING_MARKS and r != "correct" and marks[-1][1] - marks[0][1] >= 1.0:
+        log(f"[{cid}] post-attempt timing: " + ", ".join(f"{n} {t - p:.1f}s" for (_, p), (n, t) in zip(marks, marks[1:])))
     if r == "correct":
         # Record the confirmed answers + a correct submission locally (the timed runner submits to the GM
         # directly), so cli.is_complete and the dashboard reflect reality.

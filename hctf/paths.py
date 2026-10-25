@@ -81,13 +81,55 @@ def slugify(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "untitled"
 
 
-def _load_index():
-    return json.loads(INDEX.read_text()) if INDEX.exists() else {}
+def _load_index(tries=5):
+    """index.json -> dict. D25: a reader caught a writer mid-write (empty file -> JSONDecodeError) and the warmups single
+    lost 10 s at the drop. Writes are atomic now (_write_index); a torn read from an older writer is retried briefly."""
+    import time
+    for i in range(tries):
+        try:
+            return json.loads(INDEX.read_text()) if INDEX.exists() else {}
+        except ValueError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.02 * (i + 1))
+    return {}
+
+
+def _write_index(idx):
+    """Atomic replace (tmp in the same dir + os.replace): concurrent readers see the old or the new index, never a
+    partial one."""
+    import os
+    import threading
+    tmp = INDEX.with_name(f".{INDEX.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        tmp.write_text(json.dumps(idx, indent=2, ensure_ascii=False, sort_keys=True))
+        os.replace(tmp, INDEX)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def register(challenges):
-    """Record folders for challenges from a GM list response (idempotent; existing folders never move)."""
-    idx = _load_index()
+    """Record folders for challenges from a GM list response (idempotent; existing folders never move).
+    The read-modify-write runs under a cross-process lock when it changes anything: the orchestrator and the workers'
+    `hctf` processes all register from their GM list replies."""
+    cur = _load_index()
+    if _apply(cur, challenges) is None:
+        return cur
+    import fcntl
+    LOCKS.mkdir(parents=True, exist_ok=True)
+    with open(LOCKS / "index.lock", "w") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            idx = _load_index()     # re-read under the lock: another process may have written since
+            if _apply(idx, challenges) is not None:
+                _write_index(idx)
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+    return idx
+
+
+def _apply(idx, challenges):
+    """`challenges` merged into idx -> the new dict, or None when nothing changes."""
     changed = False
     for c in challenges:
         b = base_id(c["id"])
@@ -107,9 +149,7 @@ def register(challenges):
         idx[b] = {"dir": f"day{day:02d}/{lane}-{slugify(c.get('name') or c.get('title') or b)}",
                   "day": day, "lane": c.get("lane"), "name": c.get("name")}
         changed = True
-    if changed:
-        INDEX.write_text(json.dumps(idx, indent=2, ensure_ascii=False, sort_keys=True))
-    return idx
+    return idx if changed else None
 
 
 def challenge_root(cid):
