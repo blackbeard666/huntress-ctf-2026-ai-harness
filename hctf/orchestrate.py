@@ -258,6 +258,19 @@ EVIDENCE_MAX_FIELDS = int(os.environ.get("HCTF_EVIDENCE_MAX_FIELDS", "120"))
 WEB_CODIFY = os.environ.get("HCTF_WEB_CODIFY", "1") != "0"
 WEB_CODIFY_TIMEOUT = float(os.environ.get("HCTF_WEB_CODIFY_TIMEOUT", "300"))
 WEB_CODIFY_HOLD = float(os.environ.get("HCTF_WEB_CODIFY_HOLD", "0"))
+# D24 #11 (D24 fetch-quest TT: solver 41 s -> blocked -> live answer 26 s; codify plugin landed 17 s after the block):
+# PAR_LIVE  -- the FIRST web TT attempt (no clock, codify plugin not landed yet) gets its live answer AT ATTEMPT START,
+#              beside the runner (bound to the runner's attempt id + contract via workers.runner_progress): a runner pass
+#              ends it, its pass maps to `correct` (no second _gm_passed round trip); a block hands it to the blocked path.
+# CODIFY_IS_GEN -- while the codify worker is alive it IS the web TT's generalize: a block waits up to CODIFY_GEN_WAIT s for
+#              the live answer or the plugin (then reconnects with `start`, never `retry`) before any generalize; past the
+#              wait codify is ended before the generalize takes over the same plugin file (never two writers), and a live
+#              pass starts no background generalize while codify runs. 0 = the old blocked path.
+WEB_PAR_LIVE = os.environ.get("HCTF_WEB_PAR_LIVE", "1") != "0"
+WEB_CODIFY_IS_GEN = os.environ.get("HCTF_WEB_CODIFY_IS_GEN", "1") != "0"
+WEB_CODIFY_GEN_WAIT = float(os.environ.get("HCTF_WEB_CODIFY_GEN_WAIT", "90"))
+WEB_PAR_LIVE_BIND = float(os.environ.get("HCTF_WEB_PAR_LIVE_BIND", "120"))   # s to wait for the runner's attempt id
+WEB_GEN_WAIT_POLL = 2.0
 RESUME_CONTINUES = int(os.environ.get("HCTF_RESUME_CONTINUES", "2"))
 TT_FIX_GATE = os.environ.get("HCTF_TT_FIX_GATE", "1") == "1"
 SINGLE_DUEL_CASES = os.environ.get("HCTF_SINGLE_DUEL_CASES", "1") == "1"
@@ -596,6 +609,68 @@ def _web_race_seed(lane):
         return None
     d = paths.LANE_SOLVERS / paths.canonical_lane(lane) / "solver"
     return d if (d / "solve.py").exists() else None
+
+
+class WebParLive:
+    """D24 #11 (WEB_PAR_LIVE): binds the timed runner's attempt (workers.runner_progress: attempt id, no clock) and the
+    attempt's contract.json in timed.timed_dir, then starts a LiveAnswer on it while the runner still solves. close()
+    stops binding (no LiveAnswer starts after it) and returns the LiveAnswer, if any."""
+
+    def __init__(self, chain, cid, since):
+        self.chain, self.cid, self.since = chain, cid, since
+        self.live, self.attempt = None, None
+        self.closed, self._lock = threading.Event(), threading.Lock()
+        self.thread = threading.Thread(target=self._bind, daemon=True, name=f"par-live-{cid}")
+
+    def start(self):
+        self.thread.start()
+        return self
+
+    def _bound(self):
+        """(attempt id, contract) once the runner started a NO-CLOCK attempt and wrote its contract, else (None, None)."""
+        pr = workers.runner_progress(self.cid, since=self.since)
+        att = pr.get("attempt_id")
+        if not att or pr.get("deadline") is not None:
+            return None, None
+        try:
+            c = json.loads((timed.timed_dir(self.cid) / "contract.json").read_text())
+        except (OSError, ValueError):
+            return None, None
+        return (att, c) if cli.attempt_id(c) == att else (None, None)
+
+    def _bind(self):
+        end = time.time() + WEB_PAR_LIVE_BIND
+        att = contract = None
+        while not self.closed.is_set() and time.time() < end:
+            att, contract = self._bound()
+            if att:
+                break
+            self.closed.wait(0.3)
+        fields = list((contract or {}).get("answer_ids") or [])
+        if not att or not fields or len(fields) > LIVE_MAX_FIELDS:
+            return
+        with self._lock:
+            if self.closed.is_set():
+                return
+            self.attempt = att
+            say(f"[{self.cid}] parallel live answer: runner attempt {str(att)[:8]} bound -> live worker on "
+                f"{len(fields)} field(s) beside the runner")
+            self.live = self.chain._start_live(self.cid, {"attempt_id": att, "no_clock": True}, fields, None, None)
+
+    def close(self):
+        with self._lock:
+            self.closed.set()
+        return self.live
+
+
+class _HeldLive:
+    """A LiveAnswer kept in timed_stage's parallel-live slot across a codify reconnect (close() -> it)."""
+
+    def __init__(self, live):
+        self.live = live
+
+    def close(self):
+        return self.live
 
 
 class WebCodify:
@@ -5016,6 +5091,7 @@ class Chain:
         untimed = False     # True once the fresh timed pool is spent: every further attempt is untimed (no clock)
         attempt = -1
         skip_rerun = False
+        par, web_restart = None, False    # D24 #11: the parallel web TT live answer; a codify reconnect (op=start)
         while attempt < MAX_TIMED_RETRIES:
             attempt += 1
             while not self.gov.allow_timed():
@@ -5057,6 +5133,8 @@ class Chain:
                 op = {"op": "untimed"}
             else:
                 op = {"op": "retry"} if left is not None and left <= 0 else {}
+            if web_restart:   # the codify plugin landed on a blocked web TT: re-run on the SAME open attempt
+                op, web_restart = {"op": "start"}, False
             # D22 pole #2 (live-first): on the FIRST web live-lane attempt, cap the solver so it blocks fast and the
             # blocked-path live-answer takes over at once (the web solver can't do the live `proof` field anyway).
             # Retries (attempt > 0) and untimed/banked ops run the full solver. Default off (HCTF_WEB_TIMED_LIVE_FIRST).
@@ -5073,7 +5151,9 @@ class Chain:
                 say(f"[{cid}] the generalize left the solver unchanged: not re-running it on attempt "
                     f"{str((timed.last_result(cid) or {}).get('attempt_id'))[:8]} (same verdicts) -- straight to the next fix")
             else:
+                par = par or self._web_par_live(cid, mode, attempt, untimed or live_banked)
                 res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed))
+                res = self._web_par_settle(cid, par, res)
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
             if res == "correct" and mode == "time_trial":
@@ -5092,6 +5172,7 @@ class Chain:
             if self._early_join(cid) and res in ("expired", "blocked"):
                 continue   # an early generalize already worked on this variant (verdicts merged): retry
             if res == "correct":
+                self._end_live(self._web_par_take(par, {}))
                 if untimed:
                     say(f"[{cid}] passed on an UNTIMED attempt (fresh timed pool spent): flag + points, no Hall of Fame")
                     set_state(self.base, stage=f"{mode}:untimed-pass")
@@ -5198,6 +5279,16 @@ class Chain:
                 attempt -= 1
                 time.sleep(min(2 * clock_retries, 10))
                 continue
+            got_w, par = self._web_codify_gen_wait(cid, mode, par, last)
+            if got_w == "correct":
+                set_state(self.base, **{f"{mode}_result": "correct"})
+                self._live_pass_prefetch(mode)
+                record_timed_case(cid, self.sdir)
+                return True
+            if got_w == "restart":
+                web_restart = True
+                attempt -= 1
+                continue
             # A failed timed attempt means the solver is wrong or incomplete for this variant (with Homebase
             # execution the window is no longer the bottleneck). Always improve the solver offline, then retry.
             # The generalize worker re-derives the variant's correct answers itself (ground truth), so it can
@@ -5273,9 +5364,10 @@ class Chain:
                 capture_variant(cid, self.sdir)  # expected.json now enriched by the probe-confirmed fields
             # D23 #1b: the live answer starts NOW, beside the online resolution below (it used to wait behind it: script
             # Mastery's label probes ran ~10 min before any LLM looked at the 18 fields' bytes).
-            live = None
+            live = self._web_par_take(par, last)
+            par = None
             fields = _live_fields(last, wrong, fixed) if LIVE_ANSWER else []
-            if LIVE_FIRST and fields and len(fields) <= LIVE_MAX_FIELDS:
+            if LIVE_FIRST and fields and len(fields) <= LIVE_MAX_FIELDS and live is None:
                 live = self._start_live(cid, last, fields, wrong, fixed)
             # Online resolution (parallel probes, time-bounded): GM-judged spellings for closed-vocab label fields and
             # ORDER/format alternates for list-valued fields (D23 metadata TT: the CD-order list was wrong, the sorted
@@ -5337,6 +5429,7 @@ class Chain:
             if live is None and fields and len(fields) <= LIVE_MAX_FIELDS:
                 live = self._start_live(cid, last, fields, wrong, fixed)
             sig = _code_sig(self.sdir)
+            self._codify_yield(cid, mode)
             self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag, live=live)
             if live is not None:
                 live.finish()
@@ -5358,8 +5451,107 @@ class Chain:
                 # same verdicts. (A cut-short localization still re-runs -- it learns more, and hb_timed no longer
                 # resubmits the values already rejected there: D23 script TT re-bisected 593 answers for 100 s.)
                 skip_rerun = True
+        self._end_live(self._web_par_take(par, {}))
         set_state(self.base, stage=f"{mode}:blocked")
         return False
+
+    def _web_par_live(self, cid, mode, attempt, resumed):
+        """D24 #11: start the parallel live-answer binder for the FIRST web TT attempt when the codify plugin hasn't
+        landed (a landed plugin -> the runner's solver dispatches to it first-try). -> WebParLive or None."""
+        from . import webtarget
+        if not (WEB_PAR_LIVE and LIVE_ANSWER and mode == "time_trial" and attempt == 0 and not resumed
+                and webtarget.is_live_lane(getattr(self, "lane", None))):
+            return None
+        c = getattr(self, "_codify", None)
+        if c and c.plugin.exists() and c.plugin.stat().st_mtime >= c.t0:
+            return None
+        try:
+            return WebParLive(self, cid, time.time() - 1.0).start()
+        except Exception as e:  # noqa: BLE001 - the runner path stands on its own
+            say(f"[{cid}] parallel live answer not started: {e}")
+            return None
+
+    def _web_par_settle(self, cid, par, res):
+        """After the runner returns: no new parallel live answer; a runner pass ends a running one; its own pass maps a
+        non-correct runner result to `correct` (the attempt is CORRECT on the GM: no _gm_passed round trip needed)."""
+        if par is None:
+            return res
+        live = par.close()
+        if live is None:
+            return res
+        if res == "correct":
+            self._end_live(live)
+            say(f"[{cid}] runner passed: parallel live answer ended")
+            return res
+        passed, _acc = live._state()
+        if passed:
+            live.passed = True
+            self._end_live(live)
+            say(f"[{cid}] passed by the parallel live answer (attempt {str(live.attempt)[:8]}; runner said {res})")
+            return "correct"
+        return res
+
+    def _web_par_take(self, par, last):
+        """The parallel live answer still working on `last`'s attempt (the blocked path adopts it instead of starting a
+        second one), else None (one on another attempt / finished is ended)."""
+        live = par.close() if par is not None else None
+        if live is None:
+            return None
+        if live.attempt == last.get("attempt_id") and not live.done.is_set():
+            return live
+        self._end_live(live)
+        return None
+
+    def _codify_alive(self, cid):
+        from . import webtarget
+        c = getattr(self, "_codify", None)
+        return bool(WEB_CODIFY_IS_GEN and c and not c.done.is_set() and solvers.mode_of(cid) == "time_trial"
+                    and webtarget.is_live_lane(getattr(self, "lane", None)))
+
+    def _web_codify_gen_wait(self, cid, mode, par, last):
+        """D24 #11 (CODIFY_IS_GEN): a blocked web TT while codify is alive waits up to WEB_CODIFY_GEN_WAIT s for the live
+        answer ("correct") or the codify plugin ("restart": reconnect with start, the solver re-dispatches) before any
+        generalize. -> (verdict or None, the parallel live answer to keep for the blocked path)."""
+        if mode != "time_trial" or not self._codify_alive(cid) or WEB_CODIFY_GEN_WAIT <= 0:
+            return None, par
+        c = self._codify
+        live = par.close() if par is not None else None
+        if live is not None and (live.attempt != last.get("attempt_id") or live.done.is_set()):
+            self._end_live(live)
+            live = None
+        if live is None and LIVE_ANSWER:
+            fields = _live_fields(last, None, None)
+            if fields and len(fields) <= LIVE_MAX_FIELDS:
+                live = self._start_live(cid, last, fields, None, None)
+        held = _HeldLive(live)
+        say(f"[{cid}] blocked while the web codify worker runs: waiting up to {WEB_CODIFY_GEN_WAIT:g}s for the live "
+            f"answer or its plugin before any generalize")
+        t0 = time.time()
+        while time.time() - t0 < WEB_CODIFY_GEN_WAIT:
+            if cli.is_complete(cid) or (live is not None and live._state()[0]):
+                if live is not None:
+                    live.passed = True
+                self._end_live(live)
+                say(f"[{cid}] passed by the live answer after {time.time() - t0:.0f}s of the codify wait (no generalize)")
+                return "correct", None
+            fresh = c.plugin.exists() and c.plugin.stat().st_mtime >= c.t0
+            if (fresh or c.done.is_set()) and c.landed():
+                say(f"[{cid}] codify plugin {c.plugin.name} landed after {time.time() - t0:.0f}s: reconnecting to "
+                    f"attempt {str(last.get('attempt_id'))[:8]} with start (never retry), live answer kept")
+                return "restart", held
+            if c.done.is_set():
+                say(f"[{cid}] codify worker ended without a plugin: generalize")
+                break
+            time.sleep(WEB_GEN_WAIT_POLL)
+        else:
+            say(f"[{cid}] no live pass / plugin after {WEB_CODIFY_GEN_WAIT:g}s: generalize")
+        return None, held
+
+    def _codify_yield(self, cid, mode):
+        """No two writers on one plugin file: a generalize past the codify wait ends a still-running codify worker."""
+        if mode == "time_trial" and self._codify_alive(cid):
+            say(f"[{cid}] web codify worker ended: the generalize takes over {self._codify.plugin.name}")
+            self._stop_codify()
 
     def _live_pass_prefetch(self, mode):
         """A Time Trial passed off the runner's own path (live answer / online resolution): pre-start Mastery now, as a
@@ -5393,6 +5585,9 @@ class Chain:
         the solver, target = the TT variant case (GM-verified answers incl. the live worker's). Mastery starts now with
         the current solver; its failure (or the chain's end) adopts the copy when it went green (_bg_gen_take)."""
         from . import duel
+        if self._codify_alive(cid):
+            say(f"[{cid}] no background generalize: the web codify worker is still writing the class plugin")
+            return
         mst = self.entries.get("mastery")
         missing = list(last.get("missing") or [])
         if not (LIVE_BG_GEN and missing and mst and not cli.is_complete(mst["id"])
