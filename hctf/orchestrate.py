@@ -549,6 +549,9 @@ ANSWER_FIRST_TIMEOUT = float(os.environ.get("HCTF_ANSWER_FIRST_TIMEOUT", "420"))
 ANSWER_FIRST_MAX = int(os.environ.get("HCTF_ANSWER_FIRST_MAX", "3"))          # concurrent answer-first workers
 ANSWER_FIRST_MIN_AVAIL_GB = float(os.environ.get("HCTF_ANSWER_FIRST_MIN_AVAIL_GB", "2.0"))
 ANSWER_FIRST_RACE_WAIT = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT", "10"))   # give the reuse race its 3-9 s
+# web (D24 #9): the answer-first worker starts at once beside the race (its live probe and the race's exploits hit the
+# same target; whichever completes first ends the other). 10 = the old wait.
+ANSWER_FIRST_RACE_WAIT_WEB = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT_WEB", "0"))
 _af_live, _af_lock = set(), threading.Lock()
 
 
@@ -571,6 +574,15 @@ def answer_first_eligible(lane, n_fields):
         if len(_af_live) >= ANSWER_FIRST_MAX:
             return False, f"{len(_af_live)} answer-first workers already running"
     return True, ""
+
+
+def _web_race_seed(lane):
+    """The web lane solver dir the single's reuse race runs (WEB_RACE_LANE), or None (not web / off / missing)."""
+    from . import webtarget
+    if not (WEB_RACE_LANE and webtarget.is_live_lane(lane)):
+        return None
+    d = paths.LANE_SOLVERS / paths.canonical_lane(lane) / "solver"
+    return d if (d / "solve.py").exists() else None
 
 
 class WebCodify:
@@ -677,8 +689,10 @@ class AnswerFirst:
 
     def _run(self, race_done):
         try:
-            if race_done is not None:
-                race_done.wait(ANSWER_FIRST_RACE_WAIT)
+            from . import webtarget
+            wait = ANSWER_FIRST_RACE_WAIT_WEB if webtarget.is_live_lane(self.chain.lane) else ANSWER_FIRST_RACE_WAIT
+            if race_done is not None and wait > 0:
+                race_done.wait(wait)
             if self.stop_evt.is_set() or cli.is_complete(self.cid):
                 say(f"[{self.cid}] no answer-first worker: the single is already complete")
                 return
@@ -765,6 +779,10 @@ REUSE_RACE_LANES = {x.strip() for x in os.environ.get(
 REUSE_RACE_PROBES = int(os.environ.get("HCTF_REUSE_RACE_PROBES", "3"))
 REUSE_RACE_SOLVERS = int(os.environ.get("HCTF_REUSE_RACE_SOLVERS", "3"))   # newest N same-lane solvers
 REUSE_RACE_TIMEOUT = float(os.environ.get("HCTF_REUSE_RACE_TIMEOUT", "20"))
+# D24 #9: web's race = ONE challenges/_lane/web/solver run (it races every plugin + `prior:` answer() + `default` itself)
+# under a HCTF_SOLVE_DEADLINE, instead of the 3 newest dated web solvers (D24: 31-35 s, 0 fields). 0 = the old race.
+WEB_RACE_LANE = os.environ.get("HCTF_WEB_RACE_LANE", "1") != "0"
+WEB_RACE_DEADLINE = float(os.environ.get("HCTF_WEB_RACE_DEADLINE", "14"))
 # Partial banking (D12 binary: merged 120 rejected over ONE speculative field, 60 banked, budget out -> worker +58 s):
 # after a rejected/incomplete merged set, bank the CONFIDENT subset as one batch, then the speculative remainder, then
 # other solvers' values / spelling alternates for each isolated wrong field -- stopping the moment the worker submits.
@@ -2992,12 +3010,16 @@ class Chain:
                 return
             # same-lane newest N only (no question-text index: r11b spent 18-24 s building it under drop load)
             rank = None
-            if RETRIEVAL:
+            web_seed = _web_race_seed(self.lane)
+            if RETRIEVAL and not web_seed:
                 from . import retrieval
                 rank = retrieval.solver_rank(cli.cdir(cid), self.lane, contract) or None
             tr = {"rank": time.time()}   # D22 post-mortem #14: where the race's seconds go (script won at +27.6 s)
-            plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir], timeout=REUSE_RACE_TIMEOUT,
-                                      limit=REUSE_RACE_SOLVERS, by_question=False, rank=rank)
+            if web_seed:
+                plan = solvers.lane_race_plan(web_seed, contract, art, WEB_RACE_DEADLINE)
+            else:
+                plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir], timeout=REUSE_RACE_TIMEOUT,
+                                          limit=REUSE_RACE_SOLVERS, by_question=False, rank=rank)
             tr["plan"] = time.time()
             high, spec = dict(plan["high"]), dict(plan["spec"])
             dropped = self._race_gate(contract, high, spec) if RACE_FORMAT_GATE else []

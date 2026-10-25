@@ -32,6 +32,11 @@ _PRIOR = None
 # every never-seen class on D22 at the full 40 s (4/4 TT attempts, Masteries 53-59 s) before the attempt blocked and a
 # live answer took over: cap that race. 0 = off. (D22 post-mortem #7)
 UNKNOWN_KEY_BUDGET = float(os.environ.get("HCTF_WEB_UNKNOWN_KEY_BUDGET", "12"))
+# A known class's race (no explicit budget): every winner on record took <= 6.3 s (.run/web_race.jsonl, D20-D24), so the
+# old 40 s only delayed the handover to a live answer when the known handler missed a variant. 40 = the old behaviour.
+KNOWN_BUDGET = float(os.environ.get("HCTF_WEB_KNOWN_BUDGET", "20"))
+# class_known counts only handlers a CONCEPT clue key names (handlers.concept_handlers); 0 = any for_key match (old).
+CONCEPT_KNOWN = os.environ.get("HCTF_WEB_CONCEPT_KNOWN", "1") != "0"
 
 
 def _prior_web_solvers():
@@ -84,9 +89,10 @@ def _safe_answer(mod, question, contract):
     return v if v and websolve.PROOF_RE.fullmatch(str(v).strip()) else None
 
 
-def solve_target(question, contract, budget=40, clues=None):
-    """Proof for one live target (a contract question whose `artifact` is a Target), or None. `clues`: an already
-    fetched /api/clues dict (skips the refetch). A target whose clues name no route and whose home page is not 2xx/3xx
+def solve_target(question, contract, budget=None, clues=None):
+    """Proof for one live target (a contract question whose `artifact` is a Target), or None. `budget` None = by class:
+    KNOWN_BUDGET for a known class, UNKNOWN_KEY_BUDGET otherwise (an explicit budget is still capped for an unknown
+    class); HCTF_SOLVE_DEADLINE caps either. `clues`: an already fetched /api/clues dict (skips the refetch). A target whose clues name no route and whose home page is not 2xx/3xx
     is gone (expired = 410 `{"state":"completed"}`): None at once instead of burning the race budget (D22: 9-40 s)."""
     base = websolve.base_of(question, contract)
     if not base:
@@ -99,6 +105,8 @@ def solve_target(question, contract, budget=40, clues=None):
             and not 200 <= websolve.fetch(base)[0] < 400:
         return None
     known = class_known(clues_json, key)
+    if budget is None:
+        budget = KNOWN_BUDGET
     if not known and UNKNOWN_KEY_BUDGET > 0:
         budget = min(budget, UNKNOWN_KEY_BUDGET)
     rep = {}
@@ -122,8 +130,9 @@ def _prior_sources():
 
 def class_known(clues_json, key):
     """Has this harness met the target's vuln class? A built-in handler maps one of its clue keys, or an earlier web
-    day's solver names one of its concept keys (route-valued keys and the kit's common keys are furniture)."""
-    if handlers.for_key(key, clues_json):
+    day's solver names one of its concept keys (route-valued keys and the kit's common keys are furniture). A handler
+    matched only through a furniture key (an all-furniture D23-style kit) does not make the class known."""
+    if (handlers.concept_handlers if CONCEPT_KNOWN else handlers.for_key)(key, clues_json):
         return True
     concept = {str(k).lower() for k, v in (clues_json if isinstance(clues_json, dict) else {}).items()
                if k not in websolve.COMMON_KEYS and not (isinstance(v, str) and v.startswith("/"))}
