@@ -5585,6 +5585,7 @@ class Chain:
                 continue
             got_w, par = self._web_codify_gen_wait(cid, mode, par, last)
             if got_w == "correct":
+                say(f"[{cid}] result: correct (live answer, codify wait)")   # D25 D1: was uncounted by feed/kpi
                 set_state(self.base, **{f"{mode}_result": "correct"})
                 self._live_pass_prefetch(mode)
                 record_timed_case(cid, self.sdir)
@@ -5662,6 +5663,7 @@ class Chain:
                     # The probe's own submits passed this mode (replay run 3 binary TT: it went CORRECT, then the harness
                     # retried anyway and failed again -- 33s wasted after the pass).
                     say(f"[{cid}] the probe attempt itself passed the mode")
+                    say(f"[{cid}] result: correct (probe attempt)")
                     set_state(self.base, **{f"{mode}_result": "correct"})
                     record_timed_case(cid, self.sdir)
                     return True
@@ -5694,6 +5696,10 @@ class Chain:
                 self._end_live(live)
                 say(f"[{cid}] passed during the online resolution"
                     + (" / live answer" if live is not None and live.passed else ""))
+                # D25 D1: one recognised line per timed pass (feed / timeline / kpi / effort_report: TIMED_PASSED)
+                say(f"[{cid}] result: correct ("
+                    + ("live answer, online resolution" if live is not None and live.passed else "online resolution")
+                    + ")")
                 set_state(self.base, **{f"{mode}_result": "correct"})
                 self._live_pass_prefetch(mode)
                 record_timed_case(cid, self.sdir)
@@ -6056,6 +6062,7 @@ class Chain:
         n = len(s.get("rounds") or [])
         if s.get("last_correct") or cli.is_complete(cid):
             say(f"[{cid}] label scouting: a scout round passed the mode ({n} round(s), {time.time() - t0:.0f}s)")
+            say(f"[{cid}] result: correct (label scout)")
             set_state(self.base, **{f"{mode}_result": "correct"})
             record_timed_case(cid, self.sdir)
             return True
