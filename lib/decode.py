@@ -585,20 +585,18 @@ POSITIONAL = os.environ.get("HCTF_DECODE_POSITIONAL", "1") != "0"
 
 
 def _unknown_line_cands(frag):
-    """Every decoding of a line whose day has no known codec (today's, before anyone registered it): speculative free
-    codecs, all rot-N, Atbash, reversal, the strict chunk decoders and every lib.warmups_codecs.CANDIDATES decoder that
-    re-encodes to the exact bytes. The template + known-slug check in _positional_ok picks among them."""
+    """Every decoding of a line whose day has no known codec (today's, before anyone registered it), most literal
+    first: the fragment VERBATIM, the strict chunk decoders and every lib.warmups_codecs.CANDIDATES decoder that
+    re-encodes to the exact bytes, then all rot-N / Atbash / reversal, then the speculative free codecs. The template +
+    known-slug check in _positional_ok picks among them; a tie keeps the earlier (more literal) one.
+    D25: solve.py had pre-decoded line 25 to `le-52`; the speculative codecs came first and `rot18`'s `le-07` won the
+    tie (same slug words; bigrams don't see digits) -> 123/123 Mastery sets wrong."""
     out = []
 
     def add(x):
         if isinstance(x, str) and x and x not in out:
             out.append(x)
-    for x in _free_cands(_SPEC, frag):
-        add(x)
-    for n in range(26):
-        add(_rot(frag, n))
-    add(_atbash(frag))
-    add(frag[::-1])
+    add(frag)
     add(decode_chunk(frag))
     try:
         from lib import warmups_codecs as W
@@ -614,6 +612,12 @@ def _unknown_line_cands(frag):
                     pass
     except Exception:  # noqa: BLE001
         pass
+    for n in range(1, 26):
+        add(_rot(frag, n))
+    add(_atbash(frag))
+    add(frag[::-1])
+    for x in _free_cands(_SPEC, frag):
+        add(x)
     return out
 
 
@@ -658,12 +662,17 @@ def _positional(rows):
 
 def _positional_ok(rows):
     """The positional reading that is the template + a slug whose three words are all known, else None. With several
-    (an unknown last-line codec): the most GM generator words in the slug, then bigram English-likeness."""
+    (an unknown last-line codec): the VERBATIM last line when it already completes the template (a plain fragment is
+    never re-"decoded": D25 `le-52` -> rot18 `le-07`), else the most GM generator words in the slug, then bigram
+    English-likeness, then the more literal candidate (_unknown_line_cands' order)."""
     best = None
-    for pos in _positional(rows):
+    cands = _positional(rows)
+    for i, pos in enumerate(cands):
         slug_txt = pos.rstrip().rsplit(" ", 1)[-1]
         if not _TEMPLATE_RE.fullmatch(pos) or _slug_known(slug_txt) != 3:
             continue
+        if i == 0 and len(cands) > 1:
+            return pos   # the verbatim last line (first candidate of an unknown line) fits: digits stay as they are
         sc = (_slug_known(slug_txt, generator_only=True), _bigram(pos))
         if best is None or sc > best[0]:
             best = (sc, pos)

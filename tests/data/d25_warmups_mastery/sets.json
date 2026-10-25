@@ -1,0 +1,497 @@
+{
+"source": "challenges/day25/warmups-you-have-a-point/solver/cases/auto-mastery-0b1ae1d0 (GM-verified, 123 sets); blob-01.txt = the GM zip of blob-NN.txt",
+"sets": {
+"set1.message": [
+"blob-01.txt",
+"hearty-meadow-maple-52"
+],
+"set2.message": [
+"blob-02.txt",
+"droll-blanket-copper-77"
+],
+"set3.message": [
+"blob-03.txt",
+"cozy-meadow-ripple-57"
+],
+"set4.message": [
+"blob-04.txt",
+"brave-harbor-opal-57"
+],
+"set5.message": [
+"blob-05.txt",
+"dandy-coral-pebble-17"
+],
+"set6.message": [
+"blob-06.txt",
+"daring-valley-nugget-44"
+],
+"set7.message": [
+"blob-07.txt",
+"kind-island-birch-94"
+],
+"set8.message": [
+"blob-08.txt",
+"sunny-summit-glade-90"
+],
+"set9.message": [
+"blob-09.txt",
+"clever-sparrow-wagon-25"
+],
+"set10.message": [
+"blob-10.txt",
+"merry-rocket-dune-55"
+],
+"set11.message": [
+"blob-11.txt",
+"droll-forest-grove-25"
+],
+"set12.message": [
+"blob-12.txt",
+"deft-canoe-flint-94"
+],
+"set13.message": [
+"blob-13.txt",
+"quiet-stream-petal-58"
+],
+"set14.message": [
+"blob-14.txt",
+"sunny-island-fern-94"
+],
+"set15.message": [
+"blob-15.txt",
+"sturdy-rainbow-bison-14"
+],
+"set16.message": [
+"blob-16.txt",
+"jovial-cactus-tulip-83"
+],
+"set17.message": [
+"blob-17.txt",
+"funky-clock-butter-87"
+],
+"set18.message": [
+"blob-18.txt",
+"quiet-starfish-fern-11"
+],
+"set19.message": [
+"blob-19.txt",
+"daring-puzzle-blossom-61"
+],
+"set20.message": [
+"blob-20.txt",
+"clever-squirrel-blossom-37"
+],
+"set21.message": [
+"blob-21.txt",
+"lucky-button-dune-89"
+],
+"set22.message": [
+"blob-22.txt",
+"quiet-rainbow-whale-88"
+],
+"set23.message": [
+"blob-23.txt",
+"witty-basket-laurel-85"
+],
+"set24.message": [
+"blob-24.txt",
+"spiffy-squirrel-wagon-14"
+],
+"set25.message": [
+"blob-25.txt",
+"jolly-button-hazel-98"
+],
+"set26.message": [
+"blob-26.txt",
+"merry-meadow-birch-94"
+],
+"set27.message": [
+"blob-27.txt",
+"sturdy-valley-marble-92"
+],
+"set28.message": [
+"blob-28.txt",
+"daring-sailor-fern-56"
+],
+"set29.message": [
+"blob-29.txt",
+"zippy-beacon-quill-45"
+],
+"set30.message": [
+"blob-30.txt",
+"dapper-island-cocoa-50"
+],
+"set31.message": [
+"blob-31.txt",
+"proud-canoe-juniper-25"
+],
+"set32.message": [
+"blob-32.txt",
+"brave-tent-wizard-67"
+],
+"set33.message": [
+"blob-33.txt",
+"silly-anchor-brook-10"
+],
+"set34.message": [
+"blob-34.txt",
+"merry-puzzle-bison-52"
+],
+"set35.message": [
+"blob-35.txt",
+"bright-daisy-juniper-78"
+],
+"set36.message": [
+"blob-36.txt",
+"hearty-cactus-nugget-87"
+],
+"set37.message": [
+"blob-37.txt",
+"spiffy-daisy-brook-30"
+],
+"set38.message": [
+"blob-38.txt",
+"tidy-puzzle-quartz-88"
+],
+"set39.message": [
+"blob-39.txt",
+"quiet-button-bison-55"
+],
+"set40.message": [
+"blob-40.txt",
+"jazzy-stream-beaver-80"
+],
+"set41.message": [
+"blob-41.txt",
+"quick-compass-opal-26"
+],
+"set42.message": [
+"blob-42.txt",
+"daring-cloud-laurel-92"
+],
+"set43.message": [
+"blob-43.txt",
+"jolly-scooter-ivy-40"
+],
+"set44.message": [
+"blob-44.txt",
+"happy-blanket-clover-84"
+],
+"set45.message": [
+"blob-45.txt",
+"gentle-starfish-blossom-73"
+],
+"set46.message": [
+"blob-46.txt",
+"dapper-meadow-cider-33"
+],
+"set47.message": [
+"blob-47.txt",
+"gentle-prairie-whale-58"
+],
+"set48.message": [
+"blob-48.txt",
+"tidy-basket-tiger-26"
+],
+"set49.message": [
+"blob-49.txt",
+"bright-daisy-quartz-41"
+],
+"set50.message": [
+"blob-50.txt",
+"dainty-scooter-ridge-39"
+],
+"set51.message": [
+"blob-51.txt",
+"lively-piano-grove-22"
+],
+"set52.message": [
+"blob-52.txt",
+"perky-piano-waterfall-10"
+],
+"set53.message": [
+"blob-53.txt",
+"eager-signal-badger-25"
+],
+"set54.message": [
+"blob-54.txt",
+"witty-candle-wizard-78"
+],
+"set55.message": [
+"blob-55.txt",
+"snappy-meadow-glade-10"
+],
+"set56.message": [
+"blob-56.txt",
+"calm-chimney-petal-29"
+],
+"set57.message": [
+"blob-57.txt",
+"lucky-clock-hazel-49"
+],
+"set58.message": [
+"blob-58.txt",
+"dashing-pillow-grove-60"
+],
+"set59.message": [
+"blob-59.txt",
+"zippy-summit-ivy-33"
+],
+"set60.message": [
+"blob-60.txt",
+"jazzy-canoe-birch-64"
+],
+"set61.message": [
+"blob-61.txt",
+"jazzy-clock-blossom-23"
+],
+"set62.message": [
+"blob-62.txt",
+"eager-starfish-tiger-43"
+],
+"set63.message": [
+"blob-63.txt",
+"sturdy-starfish-cocoa-25"
+],
+"set64.message": [
+"blob-64.txt",
+"proud-rainbow-wagon-87"
+],
+"set65.message": [
+"blob-65.txt",
+"sturdy-quilt-clover-75"
+],
+"set66.message": [
+"blob-66.txt",
+"cozy-signal-wagon-20"
+],
+"set67.message": [
+"blob-67.txt",
+"sunny-harbor-grove-21"
+],
+"set68.message": [
+"blob-68.txt",
+"proud-valley-pebble-33"
+],
+"set69.message": [
+"blob-69.txt",
+"peppy-canyon-whale-36"
+],
+"set70.message": [
+"blob-70.txt",
+"plucky-cabin-glade-12"
+],
+"set71.message": [
+"blob-71.txt",
+"speedy-rainbow-laurel-63"
+],
+"set72.message": [
+"blob-72.txt",
+"merry-crater-clover-19"
+],
+"set73.message": [
+"blob-73.txt",
+"cozy-sunset-pepper-57"
+],
+"set74.message": [
+"blob-74.txt",
+"jaunty-castle-willow-12"
+],
+"set75.message": [
+"blob-75.txt",
+"sunny-raven-beaver-39"
+],
+"set76.message": [
+"blob-76.txt",
+"jazzy-starfish-tiger-81"
+],
+"set77.message": [
+"blob-77.txt",
+"spiffy-chimney-quartz-72"
+],
+"set78.message": [
+"blob-78.txt",
+"dandy-tent-pepper-22"
+],
+"set79.message": [
+"blob-79.txt",
+"brave-harbor-marble-43"
+],
+"set80.message": [
+"blob-80.txt",
+"quiet-cloud-butter-24"
+],
+"set81.message": [
+"blob-81.txt",
+"merry-puzzle-marble-66"
+],
+"set82.message": [
+"blob-82.txt",
+"jazzy-daisy-boulder-72"
+],
+"set83.message": [
+"blob-83.txt",
+"dandy-daisy-nugget-12"
+],
+"set84.message": [
+"blob-84.txt",
+"spiffy-meadow-juniper-67"
+],
+"set85.message": [
+"blob-85.txt",
+"calm-garden-birch-93"
+],
+"set86.message": [
+"blob-86.txt",
+"jolly-harbor-pebble-58"
+],
+"set87.message": [
+"blob-87.txt",
+"groovy-sunset-opal-14"
+],
+"set88.message": [
+"blob-88.txt",
+"handy-canoe-fern-66"
+],
+"set89.message": [
+"blob-89.txt",
+"jazzy-anchor-opal-10"
+],
+"set90.message": [
+"blob-90.txt",
+"clever-river-opal-69"
+],
+"set91.message": [
+"blob-91.txt",
+"snappy-canyon-ripple-76"
+],
+"set92.message": [
+"blob-92.txt",
+"jaunty-banner-maple-14"
+],
+"set93.message": [
+"blob-93.txt",
+"snappy-sailor-hazel-11"
+],
+"set94.message": [
+"blob-94.txt",
+"dapper-summit-grove-54"
+],
+"set95.message": [
+"blob-95.txt",
+"happy-forest-glade-96"
+],
+"set96.message": [
+"blob-96.txt",
+"droll-clock-glade-45"
+],
+"set97.message": [
+"blob-97.txt",
+"peppy-piano-pepper-46"
+],
+"set98.message": [
+"blob-98.txt",
+"witty-cabin-juniper-58"
+],
+"set99.message": [
+"blob-99.txt",
+"lively-chimney-waterfall-67"
+],
+"set100.message": [
+"blob-100.txt",
+"happy-rainbow-willow-11"
+],
+"set101.message": [
+"blob-101.txt",
+"calm-beacon-blossom-22"
+],
+"set102.message": [
+"blob-102.txt",
+"crisp-forest-pebble-38"
+],
+"set103.message": [
+"blob-103.txt",
+"jaunty-storm-turtle-77"
+],
+"set104.message": [
+"blob-104.txt",
+"tidy-valley-juniper-80"
+],
+"set105.message": [
+"blob-105.txt",
+"brisk-puzzle-tulip-79"
+],
+"set106.message": [
+"blob-106.txt",
+"jazzy-beacon-grove-16"
+],
+"set107.message": [
+"blob-107.txt",
+"peppy-quilt-mosaic-42"
+],
+"set108.message": [
+"blob-108.txt",
+"groovy-pillow-ridge-20"
+],
+"set109.message": [
+"blob-109.txt",
+"peppy-rocket-birch-93"
+],
+"set110.message": [
+"blob-110.txt",
+"jolly-button-cocoa-44"
+],
+"set111.message": [
+"blob-111.txt",
+"spry-compass-ripple-37"
+],
+"set112.message": [
+"blob-112.txt",
+"proud-basket-mosaic-55"
+],
+"set113.message": [
+"blob-113.txt",
+"peppy-basket-coral-22"
+],
+"set114.message": [
+"blob-114.txt",
+"jolly-canyon-glade-53"
+],
+"set115.message": [
+"blob-115.txt",
+"silly-starfish-coral-72"
+],
+"set116.message": [
+"blob-116.txt",
+"gentle-canyon-glade-30"
+],
+"set117.message": [
+"blob-117.txt",
+"zesty-island-tiger-92"
+],
+"set118.message": [
+"blob-118.txt",
+"crisp-puzzle-quill-66"
+],
+"set119.message": [
+"blob-119.txt",
+"witty-starfish-butter-22"
+],
+"set120.message": [
+"blob-120.txt",
+"sunny-button-pepper-38"
+],
+"set121.message": [
+"blob-121.txt",
+"daring-banner-birch-16"
+],
+"set122.message": [
+"blob-122.txt",
+"daring-blanket-quartz-14"
+],
+"set123.message": [
+"blob-123.txt",
+"hearty-button-birch-98"
+]
+}
+}

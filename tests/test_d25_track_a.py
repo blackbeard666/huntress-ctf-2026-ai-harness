@@ -281,6 +281,55 @@ check("A2 wiring: started at the TT's CORRECT + before Mastery; untimed pools do
       and '"pool_rehearsal" not in late' in src)
 env_set(**old)
 
+# ------------------------------------------------------------------------------------------------ A3 warmups decode
+import io  # noqa: E402
+import re  # noqa: E402
+import subprocess  # noqa: E402
+import zipfile  # noqa: E402
+from lib import decode  # noqa: E402
+
+cands = decode._unknown_line_cands("le-52")
+check("A3 _unknown_line_cands: verbatim first, no digit-rotating speculative codec ahead of it",
+      cands[0] == "le-52" and cands.index("le-52") < min((cands.index(x) for x in ("le-07", "LE-52") if x in cands),
+                                                         default=len(cands)), cands[:6])
+FIX = ROOT / "tests" / "data" / "d25_warmups_mastery"
+fx = json.loads((FIX / "sets.json").read_text())["sets"]
+with zipfile.ZipFile(FIX / "blob-01.txt") as z:
+    blobs = {Path(n).name: z.read(n).decode() for n in z.namelist()}
+
+
+def predecode(t):   # the D25 solve.py's _uplus_lines on a Mastery blob: line 25 `U+006C U+0065 ...` -> `le-52`
+    return re.sub(r"(?m)^(\d{2}\t)((?:U\+[0-9A-Fa-f]{4}\s*)+)$",
+                  lambda m: m.group(1) + "".join(chr(int(h, 16)) for h in re.findall(r"U\+([0-9A-Fa-f]{4})", m.group(2))), t)
+
+
+def slug_of(t):
+    m = re.search(r"([a-z]+(?:-[a-z]+){2,}-\d{2,})\s*$", t or "")
+    return m.group(1) if m else None
+
+
+wrong = [a for a, (art, want) in fx.items() if slug_of(decode.decode_chunked(predecode(blobs[art]))) != want]
+check(f"A3 D25 Mastery with line 25 pre-decoded (the old solve.py): {len(fx)} GM-verified sets decode right", not wrong,
+      wrong[:5])
+one = blobs[fx["set1.message"][0]]
+rows = decode._rows(predecode(one))
+check("A3 _positional_ok: the verbatim plain last line wins (digits never rotated)",
+      decode._positional_ok(rows).rstrip().endswith(fx["set1.message"][1]), decode._positional_ok(rows)[-40:])
+# raw blobs with the codec table pinned to pre-D25 (fresh interpreter: the tables are read at import)
+r = subprocess.run([sys.executable, "-c", textwrap.dedent('''
+    import json, re, sys, zipfile
+    from pathlib import Path
+    from lib import decode
+    fx = json.loads(Path(sys.argv[1], "sets.json").read_text())["sets"]
+    z = zipfile.ZipFile(Path(sys.argv[1], "blob-01.txt"))
+    b = {Path(n).name: z.read(n).decode() for n in z.namelist()}
+    bad = [a for a, (art, want) in fx.items() if not (decode.decode_chunked(b[art]) or "").rstrip().endswith(want)]
+    print(json.dumps(bad))
+'''), str(FIX)], capture_output=True, text=True, timeout=300,
+    env=dict(os.environ, HCTF_CODEC_MAX_DAY="24", PYTHONPATH=str(ROOT)))
+check("A3 raw D25 blobs, HCTF_CODEC_MAX_DAY=24 (pre-D25 codec table): every set decodes right",
+      r.returncode == 0 and json.loads(r.stdout.strip().splitlines()[-1]) == [], (r.stdout[-300:], r.stderr[-300:]))
+
 shutil.rmtree(TMP, ignore_errors=True)
 if failures:
     print(f"\n{len(failures)} FAILED: {failures}")

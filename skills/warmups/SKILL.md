@@ -17,8 +17,11 @@ Mastery = 5N-2 sets on day N; each set blob is N numbered lines `NN<TAB>fragment
 (strips the `NN\t` prefix, decodes EACH line by its character class: url %XX, binary, decimal/octal codes, hex,
 base32, strict base64, then rot-N for free text; joins in NN order; GM-confirmed D6 28/28 sets, D7 33/33) -- then take
 the slug from its last non-empty line. A single-line blob: `lib.decode.decode_chunk(text)`. Don't re-type the decoder
-(Day 7's worker spent ~25 s doing that); if a NEW line encoding appears, handle that one case in solve.py around the
-helper. All sets well under 1 s. `lib.decode.peel` is a BFS for EXPLORING an unknown blob at the shell; never call it
+(Day 7's worker spent ~25 s doing that). A NEW line encoding is registered in LIB, never handled in solve.py: an
+exact codec in `lib.warmups_codecs.DAYS` (day, name, encoder, decoder, free), a free-text one via
+`lib.decode.register_free(name, day, fn)`. **Never pre-decode Mastery lines in solve.py** (decode a whole single-line
+blob only): D25's solver turned line 25 `U+006C U+0065 ...` into plain `le-52`, decode_chunked then treated it as an
+unknown codec and 123/123 sets came back wrong. All sets well under 1 s. `lib.decode.peel` is a BFS for EXPLORING an unknown blob at the shell; never call it
 per set inside solve.py (D6: the peel fallback made Mastery time out and cost ~150 s).
 
 # Tools
