@@ -909,8 +909,10 @@ class Pools:
         self.hb = threading.BoundedSemaphore(homebase) if homebase else None
         self.gov = gov
 
-    def acquire(self, prefer_homebase=False):
-        """Block until a slot is free. Returns 'local' or 'homebase'."""
+    def acquire(self, prefer_homebase=False, who=None):
+        """Block until a slot is free. Returns 'local' or 'homebase'. A wait is logged (`[slot] <who>: waited ...`):
+        the KPI segment split counts it as harness time, not LLM time."""
+        t0 = time.time()
         while True:
             order = [("homebase", self.hb), ("local", self.local)] if prefer_homebase else \
                     [("local", self.local), ("homebase", self.hb)]
@@ -918,6 +920,8 @@ class Pools:
                 if sem is None or (name == "homebase" and not self.gov.allow_homebase_workers()):
                     continue
                 if sem.acquire(blocking=False):
+                    if time.time() - t0 >= 1:
+                        say(f"[slot] {who or '?'}: waited {time.time() - t0:.1f}s for a {name} slot")
                     return name
             time.sleep(2)
 
@@ -2193,7 +2197,7 @@ class Chain:
         # force_local (A2): pin to local so a `stop` event can actually cancel the worker -- run_homebase does NOT honor
         # `stop`, so a Homebase-placed generalize would run to its full timeout even after a racer won (Day 21).
         acquired = not urgent and not force_local and not (warm is not None and warm.alive())
-        pool = self.pools.acquire(prefer_homebase) if acquired else "local"
+        pool = self.pools.acquire(prefer_homebase, who=cid) if acquired else "local"
         set_state(self.base, worker=f"{stage}@{pool}")
         say(f"[{cid}] {stage} worker -> {pool}{' (warm)' if warm is not None else ''} (timeout {timeout:.0f}s)")
         try:
