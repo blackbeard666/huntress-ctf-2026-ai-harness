@@ -825,6 +825,7 @@ class AnswerFirst:
                             + (f" Still open: {rest[:12]}." if rest else " Every field is confirmed: finish the solver."))
                     self.chain._deliver_note(self.cid, note, key="answer-first")
                 if cli.is_complete(self.cid):
+                    getattr(self.chain, "_single_correct", lambda *a: None)(self.cid, "answer-first")
                     say(f"[{self.cid}] single complete -> ending the answer-first worker")
                     self.stop_evt.set()
                     break
@@ -905,6 +906,34 @@ WEB_SPEC_STABLE = float(os.environ.get("HCTF_WEB_SPEC_STABLE", "8"))  # web: no 
 # (was 2 s: _spec_snapshot re-checks the mtimes after its copy, so a mid-edit copy is caught anyway; D13 metadata
 # spent 8 s between CORRECT and the handoff)
 SPEC_POLL = float(os.environ.get("HCTF_SPEC_POLL", "0.25"))  # D9: single CORRECT -> ready took up to 1 s of poll
+# Async handoff (D24 plan #5): at a stopped-at-CORRECT handoff the after-worker bookkeeping (prior cases/ join, the
+# single's regression case, the beside-the-TT probes + baseline) runs in a background thread that every consumer of its
+# products joins first (_handoff_join: generalize, Mastery _late_probes, the probe/baseline results, the background
+# generalize, the chain's end); the ready-watcher join is bounded at 1 s and answer-first is not waited for. D24: binary
+# ~16 s, metadata ~7 s, warmups ~6 s between "verified" and the TT start. 0 = the D24 path exactly.
+ASYNC_HANDOFF = os.environ.get("HCTF_ASYNC_HANDOFF", "1") != "0"
+HANDOFF_JOIN_MAX = float(os.environ.get("HCTF_HANDOFF_JOIN_MAX", "900"))   # > the 300 s prior cases/ copy cap
+DUEL_STOP_AT_READY = os.environ.get("HCTF_DUEL_STOP_AT_READY", "1") != "0"   # signal the duel at ready, join aside
+TRIAGE_ABORT_AT_CORRECT = os.environ.get("HCTF_TRIAGE_ABORT_AT_CORRECT", "1") != "0"   # deferred recon stops at CORRECT
+# Race path (D24 plan #6; D24 race wins: seed verify re-ran the seed after the submit, carry check started only then):
+# verify the seed from reuse_plan's own run (no re-run), snapshot it + start its carry-over check BEFORE the race submit
+# (complete merged sets only), and adopt the race snapshot at once when the worker hasn't touched the staged code.
+RACE_VERIFY_FROM_PLAN = os.environ.get("HCTF_RACE_VERIFY_FROM_PLAN", "1") != "0"
+RACE_PRESNAP = os.environ.get("HCTF_RACE_PRESNAP", "1") != "0"
+RACE_SNAP_FIRST = os.environ.get("HCTF_RACE_SNAP_FIRST", "1") != "0"
+# On a pool with EVIDENCE of no clock (_untimed_evidence) a missed carry-over / new-id field is fixed in-attempt (localize,
+# bank, live answer), so the handoff holds are capped: carry-check wait (was CARRY_CHECK_MAX + 5 = 17 s), synchronous
+# new-id dry run skipped above SKIP_IDS new ids (D23 script: 12k-id contracts) else capped. 0 = no cap / no skip.
+CARRY_WAIT_UNTIMED = float(os.environ.get("HCTF_CARRY_WAIT_UNTIMED", "6"))
+NEWID_SYNC_SKIP_IDS = int(os.environ.get("HCTF_NEWID_SYNC_SKIP_IDS", "2000"))
+NEWID_SYNC_UNTIMED = float(os.environ.get("HCTF_NEWID_SYNC_UNTIMED", "4"))
+_CLOCKED_PRESTART = []   # a pre-start came back CLOCKED this run -> no untimed evidence for anyone (D24 #7 latch)
+# TT pre-start at the single's FIRST GM CORRECT (D24 plan #7) instead of at the verified handoff: the TT start + bytes
+# overlap the solver verification / holds (warmups + metadata 4-10 s). Only with _untimed_evidence(): the GM gives ONE
+# timed attempt per mode and a clocked pre-start would burn it while the solver is unverified (D18 warmups: 4 s of a
+# 30 s window left). A clocked body latches it off for the run; hb_timed trusts a pre-start for 300 s
+# (HCTF_PRESTART_TRUST_S), then simply reconnects.
+PRESTART_AT_CORRECT = os.environ.get("HCTF_PRESTART_AT_CORRECT", "1") != "0"
 # The single's solver on its OWN case must beat this (local s) or a speed generalize runs BEFORE the first timed attempt:
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
@@ -2337,6 +2366,7 @@ class Chain:
         `wrong`: (answer_id, solver_value) pairs the GM rejected; `fixed`: {answer_id: value} the GM accepted as the
         right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
         worker is told the truth — "timing" only when every field was actually judged correct."""
+        self._handoff_join("generalize")   # its case + probes + baseline (D24 #5 async handoff)
         if FAST_LIVE_ACCEPT and live is not None and (live.passed or cli.is_complete(cid)):
             # D23 script Mastery: CORRECT already on the GM, yet 55 s of prep + three workers spawned only to be killed
             say(f"[{cid}] mode already CORRECT on the GM (live answer): no generalize")
@@ -2947,6 +2977,7 @@ class Chain:
         auto-* / variant-*): rehearsal D13 replay, the full baseline sat 3-6 s on the path to every worker launch."""
         if not (self.sdir / "solve.py").exists():
             return []
+        self._handoff_join("baseline")   # the background baseline is started by the handoff bookkeeping
         thr = getattr(self, "_baseline_thr", None)
         if thr is not None and thr.is_alive():
             thr.join(timeout=BASELINE_PRE_JOIN)   # the background baseline of this same code is nearly done
@@ -3119,6 +3150,9 @@ class Chain:
             say(f"[{cid}] reuse race: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
                 f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s"
                 + (f"; dropped {len(dropped)} implausible value(s) {dropped[:4]}" if dropped else ""))
+            presnap = None
+            if RACE_PRESNAP and plan.get("best") and len(merged) == len(ids):
+                presnap = self._race_presnap(plan["best"])   # copy + carry-over check beside the submit (D24 #6)
             if not RACE_PARTIAL:
                 if len(merged) < len(ids):
                     return  # can't finish the single: leave it to the worker (its dry-run note covers the gaps)
@@ -3127,8 +3161,10 @@ class Chain:
                 used = self._race_bank(cid, ids, high, spec, merged, plan)
             tr["submit"] = time.time()
             if cli.is_complete(cid):
+                self._single_correct(cid, "reuse race")
                 set_state(self.base, stage="single:reuse-won")
-                snap = self._race_snapshot(cid, plan["best"], contract, art)
+                snap = self._race_snapshot(cid, plan["best"], contract, art,
+                                           plan_out=(plan.get("outs") or {}).get(plan["best"]), presnap=presnap)
                 say(f"[{cid}] reuse race WON: single CORRECT at +{time.time() - t0:.1f}s from prior solver output "
                     f"[rank {tr['rank'] - t0:.1f}s, {len(plan['runs'])} solver run(s) {tr['plan'] - tr['rank']:.1f}s, "
                     f"{used} submit(s) {tr['submit'] - tr['plan']:.1f}s, seed verify {time.time() - tr['submit']:.1f}s] "
@@ -3305,29 +3341,59 @@ class Chain:
             inbox.post(cli.cdir(cid), note, key=key)
             say(f"[{cid}] {key} note -> worker inbox ({len(note)} chars)")
 
-    def _race_snapshot(self, cid, seed, contract, art):
+    def _race_snapshot(self, cid, seed, contract, art, plan_out=None, presnap=None):
         """The race's seed solver as a ready snapshot (`.run/spec-dayNN/<chal>-race/solver`: same depth as the real solver
         dir) if it alone reproduces every GM-confirmed answer; _watch_ready adopts it when the worker's own solver isn't
-        verified yet (r11b: the staged newest solver differed from the winning seed -> 7-12 s until the worker caught up)."""
+        verified yet (r11b: the staged newest solver differed from the winning seed -> 7-12 s until the worker caught up).
+        plan_out: the seed's own (answers, err, secs) from reuse_plan on this exact contract + bytes -> verified from it,
+        no re-run (RACE_VERIFY_FROM_PLAN). presnap: the copy _race_presnap made before the submit (its carry check runs)."""
         if not seed:
             return None
+        snap = presnap if presnap is not None else self._race_snap_dir()
+        if snap is None:
+            return None
+        if presnap is None:
+            self._race_copy(seed, snap)
+        conf = cli.confirmed_answers(cid)
+        if RACE_VERIFY_FROM_PLAN and plan_out is not None:
+            got, err, _dt = plan_out
+        else:
+            got, err, _dt = solvers.run_solver(snap, contract, art)
+        if err or not conf or any(got.get(k) != v for k, v in conf.items()):
+            return None
+        self._race_snap = snap
+        if CARRY_CHECK and presnap is None:   # the handoff's carry-over check starts now (D22 post-mortem #11)
+            self._carry_fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
+        return snap
+
+    def _race_snap_dir(self):
         rel = self.sdir.relative_to(paths.CHALLENGES).parts
         if len(rel) != 3:
             return None
-        snap = ROOT / ".run" / f"spec-{rel[0]}" / f"{rel[1]}-race" / "solver"
+        return ROOT / ".run" / f"spec-{rel[0]}" / f"{rel[1]}-race" / "solver"
+
+    def _race_copy(self, seed, snap):
         if snap.exists():
             shutil.rmtree(snap)
         shutil.copytree(seed, snap, ignore=shutil.ignore_patterns("cases", "__pycache__"))
         if (self.root / "meta.json").exists():
             shutil.copy2(self.root / "meta.json", snap.parent / "meta.json")
-        conf = cli.confirmed_answers(cid)
-        got, err, _dt = solvers.run_solver(snap, contract, art)
-        if err or not conf or any(got.get(k) != v for k, v in conf.items()):
+
+    def _race_presnap(self, seed):
+        """RACE_PRESNAP: copy the seed to the race snapshot dir and start its carry-over check BEFORE the race submit
+        (both depend only on the seed, not on the GM's verdict). NOT a ready snapshot until _race_snapshot verifies it.
+        -> the snapshot dir, or None (then _race_snapshot copies after the win, as before)."""
+        try:
+            snap = self._race_snap_dir()
+            if snap is None:
+                return None
+            self._race_copy(seed, snap)
+            if CARRY_CHECK:
+                self._carry_fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
+            return snap
+        except Exception as e:  # noqa: BLE001 - the post-win path copies it itself
+            say(f"[{self.base}] race pre-snapshot note: {e}")
             return None
-        self._race_snap = snap
-        if CARRY_CHECK:   # the handoff's carry-over check starts now, beside the rest of the race (D22 post-mortem #11)
-            self._carry_fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
-        return snap
 
     def try_existing_solvers(self, cid):
         """Merged reuse (no model time): run EVERY same-lane solver (+ question-text matches) on the full contract,
@@ -3513,7 +3579,10 @@ class Chain:
             if ev is not None:
                 ev.set()   # ends the Homebase shadow (its thread kills the remote worker and books the cost)
             d = getattr(self, "_duel", None)
-            if d is not None:
+            if d is not None and DUEL_STOP_AT_READY:
+                d.signal_stop()   # every racer at once; their joins (up to 10 s each) go on aside
+                threading.Thread(target=d.stop, daemon=True, name=f"duel-stop-{self.base}").start()
+            elif d is not None:
                 d.stop()   # ends the local duel worker (hctf/duel.py)
 
     def _maybe_start_duel(self, cid, prompt):
@@ -3677,6 +3746,7 @@ class Chain:
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
         self._start_prior_dry_run(cid)
         self._race_done = threading.Event()   # wakes the duel (hctf/duel.py) the moment the race has its answer
+        self._correct_evt = threading.Event()   # the single's first GM CORRECT (_single_correct), whoever got it
         if not welcome and REUSE_RACE and not REUSE_OLD_SOLVERS and self.lane in REUSE_RACE_LANES:
             def race():
                 try:
@@ -3725,7 +3795,8 @@ class Chain:
         self._pre_t["tri0"] = time.time()
         try:
             from . import triage as triage_mod
-            triage_mod.triage(cid, defer_recon=self._recon_deferrable, log=say)  # grounding before the LLM worker
+            triage_mod.triage(cid, defer_recon=self._recon_deferrable, log=say,  # grounding before the LLM worker
+                              **({"stop": self._correct_evt.is_set} if TRIAGE_ABORT_AT_CORRECT else {}))
         except Exception as e:  # noqa: BLE001 - triage is best-effort
             say(f"[{cid}] triage note: {e}")
         self._pre_t["tri1"] = time.time()
@@ -3842,6 +3913,7 @@ class Chain:
             ready, done_evt, watch = threading.Event(), threading.Event(), None
             self._ready_snap = None
             if STOP_WHEN_READY and not welcome:
+                self._launch_mtimes = self._solver_mtimes()   # RACE_SNAP_FIRST: "the worker hasn't edited" baseline
                 watch = threading.Thread(target=self._watch_ready, args=(cid, ready, done_evt), daemon=True)
                 watch.start()
             self._cur_ready = ready
@@ -3875,12 +3947,21 @@ class Chain:
                                      warm=warm, warm_task=warm_task)
             finally:
                 done_evt.set()
+                # a verified handoff (ready + snapshot): nothing below may hold the timed modes (D24 plan #5). A still
+                # running watcher can no longer hand over (ready is set); its leftover work ends on done_evt.
+                fast = ASYNC_HANDOFF and ready.is_set() and getattr(self, "_ready_snap", None) is not None
+                if DUEL_STOP_AT_READY and ready.is_set() and getattr(self, "_duel", None) is not None:
+                    self._duel.signal_stop()   # dies beside the chain worker; single() joins it in the background
                 af = getattr(self, "_af", None)
                 if af is not None:
-                    af.stop()          # the single's worker ended (by the handoff or by itself): nothing left to answer
+                    if fast:
+                        af.stop(join=0)   # signal only: its worker dies beside the chain's
+                    else:
+                        af.stop()          # the single's worker ended (by the handoff or by itself): nothing left to answer
                 if watch:
-                    watch.join()
-                self._join_prior_cases(cid)
+                    watch.join(**({"timeout": 1} if fast else {}))
+                if not fast:
+                    self._join_prior_cases(cid)   # fast: the handoff bookkeeping thread joins it
             duel_w = getattr(self, "_duel", None)
             if (rc != workers.STOPPED_RC and duel_w is not None and duel_w.alive() and not cli.is_complete(cid)
                     and not (cli.cdir(cid) / "HELP.md").exists()):
@@ -3899,6 +3980,12 @@ class Chain:
                 # regression case and go straight to the timed modes (the full-suite replay is not needed: the
                 # snapshot was just verified on this exact case).
                 self._restore_ready_snapshot(self._ready_snap)
+                if ASYNC_HANDOFF:
+                    self._record_labels(cid)   # synchronous: hb_timed's in-window localize reads vocab.json (ms)
+                    self._start_handoff_bookkeeping(cid)
+                    say(f"[{cid}] after worker: stopped at CORRECT with a verified solver (bookkeeping in the "
+                        "background)")
+                    return True
                 ensure_case_and_test(cid, self.sdir, full=False)
                 say(f"[{cid}] after worker: stopped at CORRECT with a verified solver")
                 self._record_labels(cid)
@@ -3908,6 +3995,7 @@ class Chain:
                 self._start_today_pre(cid)
                 self._start_baseline_pre(cid)
                 return True
+            self._join_prior_cases(cid)   # no-op unless the async handoff above skipped it (ready set, worker not STOPPED)
             done = cli.is_complete(cid)
             if not done and not welcome:
                 done = self.auto_labels(cid)
@@ -3973,6 +4061,62 @@ class Chain:
                 fut.result(timeout=300)
             except Exception as e:  # noqa: BLE001 - the regression corpus is just smaller
                 say(f"[{cid}] prior cases/ copy note: {e}")
+
+    # -- async handoff (D24 plan #5)
+    def _start_handoff_bookkeeping(self, cid):
+        """Background, at a verified stopped-at-CORRECT handoff: what that path used to do before the timed modes could
+        start -- the prior cases/ copy join, the single's regression case, the beside-the-TT probes + baseline (same
+        order). Their consumers call _handoff_join() first."""
+        def body():
+            t0 = time.time()
+            try:
+                self._join_prior_cases(cid)
+                ensure_case_and_test(cid, self.sdir, full=False)
+                self._start_family_pre(cid)
+                self._start_mutation_pre(cid)
+                self._start_compound_pre(cid)
+                self._start_today_pre(cid)
+                self._start_baseline_pre(cid)
+            except Exception as e:  # noqa: BLE001 - a missing probe/case only weakens the later checks
+                say(f"[{cid}] handoff bookkeeping note: {e}")
+            finally:
+                say(f"[{cid}] handoff bookkeeping done in {time.time() - t0:.1f}s (beside the timed modes)")
+        self._handoff_thr = threading.Thread(target=body, daemon=True, name=f"handoff-{self.base}")
+        self._handoff_thr.start()
+
+    def _handoff_join(self, why):
+        """Wait for the async handoff's bookkeeping (no-op when none ran or it is done)."""
+        t = getattr(self, "_handoff_thr", None)
+        if t is None or t is threading.current_thread() or not t.is_alive():
+            return
+        t0 = time.time()
+        t.join(HANDOFF_JOIN_MAX)
+        say(f"[{self.base}] {why}: waited {time.time() - t0:.1f}s for the handoff bookkeeping"
+            + (" (STILL running: going on without it)" if t.is_alive() else ""))
+
+    def _single_correct(self, cid, why):
+        """The single's first GM CORRECT, whoever got it (ready-watcher / reuse race / answer-first). Idempotent."""
+        ev = getattr(self, "_correct_evt", None)
+        with self.__dict__.setdefault("_correct_lock", threading.Lock()):   # 3 callers may race here
+            if ev is None or ev.is_set():
+                return
+            ev.set()   # triage's deferred recon stops (TRIAGE_ABORT_AT_CORRECT)
+        if PRESTART_AT_CORRECT:
+            self._prestart_at_correct(why)
+
+    def _prestart_at_correct(self, why):
+        """PRESTART_AT_CORRECT: the Time Trial's start + download now, on evidence of an untimed pool only. Never raises."""
+        try:
+            if getattr(self, "_prefetch_started", False) or "time_trial" not in self.entries:
+                return
+            if not self._untimed_evidence():
+                say(f"[{self.base}] TT pre-start at the single's CORRECT ({why}): skipped -- no evidence the pool is "
+                    "untimed (list entry without run_for_time_supported / clocked); pre-start at the handoff as before")
+                return
+            if self._prefetch_mode_start("time_trial", f"the single's first GM CORRECT ({why})"):
+                self._prefetch_started = True
+        except Exception as e:  # noqa: BLE001 - an optimisation; the handoff pre-start / the runner start it anyway
+            say(f"[{self.base}] TT pre-start note: {e}")
 
     # -- early handoff (speculative timed attempts while the Single Solve worker is still running)
     def _case_names(self):
@@ -4079,6 +4223,8 @@ class Chain:
     def _mutation_pre_result(self, wait=True):
         """wait=False (the single is too slow, a speed generalize is coming anyway): take the result only if the probe
         already finished -- mainblind4: waiting on a 6.5 s solver's probe held binary's critical path ~13 s."""
+        if wait:
+            self._handoff_join("mutation probe")
         if getattr(self, "_mut_pre_fut", None) is None:
             if not wait:
                 return "", []
@@ -4108,6 +4254,8 @@ class Chain:
         self._cmp_pre_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(probe, owner_tag=self.base), self.sdir)
 
     def _compound_pre_result(self, wait=True):
+        if wait:
+            self._handoff_join("compounding probe")
         if getattr(self, "_cmp_pre_fut", None) is None:
             if not wait:
                 return "", []
@@ -4143,6 +4291,8 @@ class Chain:
         """-> diag {"compound_today": text} when the solver misses the rehearsal (cases adopted), else {}. Waits at most
         TODAY_PROBE_WAIT s; a probe still running stays pending for the next consumer (a Mastery-failure generalize).
         Consumed once; never held back by _compound_relevant (the rehearsal IS this Mastery's shape)."""
+        if wait:
+            self._handoff_join("today-probe")
         if self._today_kind() is None or getattr(self, "_today_done", False):
             return {}
         if getattr(self, "_today_fut", None) is None:
@@ -4216,6 +4366,7 @@ class Chain:
     def _await_probes(self, timeout, ready=None):
         """Wait up to `timeout` s for the beside-the-TT probes -> True when every started one has finished. `ready`
         (an Event): stop waiting as soon as it is set (the web Mastery target is up) -> False if probes still run."""
+        self._handoff_join("probe wait")   # the probes are started by the handoff bookkeeping
         futs = [f for f in (getattr(self, a, None) for a in ("_fam_pre_fut", "_mut_pre_fut", "_cmp_pre_fut"))
                 if f is not None]
         end = time.time() + timeout
@@ -4358,6 +4509,9 @@ class Chain:
                 t_start = time.time()   # D22 post-mortem #14: GM start vs download at the drop (Mastery 20-25 s)
                 body = env.get("body") or {}
                 att = cli.attempt_id(body)
+                if body.get("deadline") and not _CLOCKED_PRESTART:
+                    _CLOCKED_PRESTART.append(mcid)   # D24 #7: this run's plain starts can be clocked -> no early pre-starts
+                    say(f"!!! [{mcid}] {label} pre-start came back CLOCKED: no pre-start at a single's CORRECT this run")
                 if env.get("http") != 200 or body.get("error") or not body.get("answer_ids") or body.get("deadline"):
                     why = body.get("error") or (f"clocked to {body['deadline']}: the runner reconnects to it"
                                                 if body.get("deadline") else "no ids")
@@ -4405,12 +4559,31 @@ class Chain:
             return False
         return bool(last.get("untimed") or last.get("no_clock") or last.get("run_for_time") is False)
 
+    def _untimed_evidence(self):
+        """EVIDENCE (not the run_for_time policy guess of _expect_untimed) that this chain's Time Trial / Mastery
+        attempts run with no clock: HCTF_RUN_FOR_TIME != 1 (plain start), no clocked pre-start seen this run, and either
+        the TT's last attempt came back untimed, or every timed list entry advertises `run_for_time_supported: true`
+        (organizer lesson: there a plain start IS an untimed regular attempt; older routes without it start timed --
+        D8 binary, D10-D12, D14). The GM gives ONE timed attempt per mode: unknown = clocked."""
+        if os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1" or _CLOCKED_PRESTART:
+            return False
+        tt = self.entries.get("time_trial")
+        last = (timed.last_result(tt["id"]) or {}) if tt else {}
+        if last.get("attempt_id") and last.get("deadline") is not None and last.get("run_for_time") is not True:
+            return False   # this route's plain start came back clocked
+        if self._tt_pool_untimed():
+            return True
+        timed_e = [self.entries[m] for m in ("time_trial", "mastery") if m in self.entries]
+        return bool(timed_e) and all(e.get("run_for_time_supported") is True for e in timed_e)
+
     def _late_probes(self, cid, wait=True, defer_compound=False):
         """Probes that run beside the first Time Trial (codec family + mutation + compounding): adopt hard misses as
         regression cases. Returns the diag dict for a generalize ({} when clean). Each result is consumed once.
         `defer_compound` (pre-Mastery): compounding misses the Mastery contract can't ask are held back instead of
         blocking Mastery on a generalize (r10a metadata: 21 s for d01-d08 families a d09-pe-only Mastery never asked);
         a Mastery-failure generalize (defer_compound=False) still gets them."""
+        if wait or solvers.mode_of(cid) == "mastery":
+            self._handoff_join("late probes")
         pre = {}
         held = getattr(self, "_compound_held", None)
         if held and not defer_compound:
@@ -4487,6 +4660,8 @@ class Chain:
     def _family_pre_result(self, wait=True):
         """(text, missed family case dirs). Each result is consumed ONCE (pre-attempt block or _late_probes).
         wait=False: only if the probe already finished (it runs beside the first Time Trial)."""
+        if wait:
+            self._handoff_join("codec-family probe")
         fut = getattr(self, "_fam_pre_fut", None)
         if fut is None or getattr(self, "_fam_late_done", False) or (not wait and not fut.done()):
             return "", []
@@ -4704,12 +4879,18 @@ class Chain:
                             early, spec_n = m, spec_n + (not stamped)
                             self._prepush_verified(cid, self.sdir, warm=stamped)
                 if cli.is_complete(cid):
+                    self._single_correct(cid, "single")
                     self._web_tt_kick()
                     self._record_single_method(cid)
                     self._start_codify(cid)
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
-                    snap = self._spec_snapshot(cid) or getattr(self, "_race_snap", None)
+                    race = getattr(self, "_race_snap", None)
+                    if (RACE_SNAP_FIRST and race is not None and not held
+                            and self._solver_mtimes() == getattr(self, "_launch_mtimes", None)):
+                        snap = race   # the worker hasn't touched the staged code: no copy + re-run of it (D24 #6)
+                    else:
+                        snap = self._spec_snapshot(cid) or race
                     if snap and not held and snap is not getattr(self, "_race_snap", None):
                         held = True
                         snap = self._newid_hold(cid, snap, ready, done)
@@ -4829,10 +5010,19 @@ class Chain:
             new = []
         if not new or NEWID_SYNC_MAX <= 0:
             return None
+        cap = NEWID_SYNC_MAX
+        if (NEWID_SYNC_SKIP_IDS > 0 or NEWID_SYNC_UNTIMED > 0) and self._untimed_evidence():
+            # no clock (D24 #6): an empty new field is filled in-attempt; a 12k-id dry run is not worth the hold
+            if 0 < NEWID_SYNC_SKIP_IDS < len(new):
+                say(f"[{self.base}] new-id check: {len(new)} new timed id(s) on an untimed pool (> {NEWID_SYNC_SKIP_IDS}) "
+                    "-> no synchronous dry run, no hold")
+                return None
+            if NEWID_SYNC_UNTIMED > 0:
+                cap = min(cap, NEWID_SYNC_UNTIMED)
         t0 = time.time()
         fut = ThreadPoolExecutor(max_workers=1).submit(self._newid_gaps, self.base, str(snap))
         try:
-            gaps = fut.result(timeout=NEWID_SYNC_MAX)
+            gaps = fut.result(timeout=cap)
         except Exception as e:  # noqa: BLE001 - too slow / failed: hand over as before, but say so
             say(f"[{self.base}] new-id check: {len(new)} new timed id(s), dry run unfinished after "
                 f"{time.time() - t0:.1f}s ({type(e).__name__}) -> no hold")
@@ -4920,7 +5110,18 @@ class Chain:
         ended on its own."""
         try:
             fut = getattr(self, "_carry_fut", None)
-            gaps = fut.result(timeout=CARRY_CHECK_MAX + 5) if fut is not None else self._carry_gaps(snap)
+            if CARRY_WAIT_UNTIMED > 0 and self._untimed_evidence():
+                # no clock: a missed carry-over field is fixed in-attempt -> never hold the handoff long on the check
+                if fut is None:
+                    fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
+                try:
+                    gaps = fut.result(timeout=CARRY_WAIT_UNTIMED)
+                except TimeoutError:
+                    say(f"[{cid}] carry-over check unfinished after {CARRY_WAIT_UNTIMED:g}s on an untimed pool: "
+                        "handing over (the attempt fixes a miss in-attempt)")
+                    return snap
+            else:
+                gaps = fut.result(timeout=CARRY_CHECK_MAX + 5) if fut is not None else self._carry_gaps(snap)
         except Exception as e:  # noqa: BLE001 - never block a handoff on a check
             say(f"[{cid}] carry-over check note: {e}")
             return snap
@@ -5588,6 +5789,7 @@ class Chain:
         ~50 s + a second generalize). The ended generalize goes on OFF the critical path: a duel-style worker on a COPY of
         the solver, target = the TT variant case (GM-verified answers incl. the live worker's). Mastery starts now with
         the current solver; its failure (or the chain's end) adopts the copy when it went green (_bg_gen_take)."""
+        self._handoff_join("background generalize")   # its copy takes cases/ (the single's case, prior corpus)
         from . import duel
         if self._codify_alive(cid):
             say(f"[{cid}] no background generalize: the web codify worker is still writing the class plugin")
@@ -5622,6 +5824,7 @@ class Chain:
     def _bg_gen_take(self, cid, why, only_won=False):
         """Consume the background generalize: adopt its code when it went green and nothing that passes now breaks,
         else end it (unless `only_won`: then a still-running one is left alone). -> True when adopted."""
+        self._handoff_join("background generalize take")
         bg = getattr(self, "_bg_gen", None)
         if not bg:
             return False
@@ -5829,6 +6032,7 @@ class Chain:
         try:
             return self._run_retrying()
         finally:
+            self._handoff_join("chain end")   # post-run (speed-harden, ratchet) reads cases/
             # leftover background probes of this chain (mutation/compound/today/new-id/baseline): their answers can no
             # longer matter. D16: ~20 binary solve.py forks still ran 5 min after the binary chain finished.
             n = procgov.kill_owner(self.base)

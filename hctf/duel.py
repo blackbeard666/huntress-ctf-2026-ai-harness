@@ -269,6 +269,10 @@ class Duel:
             self.thread.join(timeout=join)
         _release(self.key)
 
+    def signal_stop(self):
+        """End the worker without waiting for it (the chain's handoff must not; HCTF_DUEL_STOP_AT_READY): stop() joins."""
+        self.stop_evt.set()
+
     # ---- single: verified snapshot of the duel's solver
     def verified_snapshot(self, log=print):
         m = _code_mtimes(self.ddir)
@@ -419,6 +423,10 @@ class DuelGroup:
             m.stop_evt.set()
         for m in self.members:
             m.stop(join=join)
+
+    def signal_stop(self):
+        for m in self.members:
+            m.signal_stop()
 
     def alive(self):
         return any(m.alive() for m in self.members)
