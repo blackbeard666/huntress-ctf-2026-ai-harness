@@ -213,6 +213,20 @@ def gm(*args, timeout=180):
                            capture_output=True, text=True, timeout=timeout,
                            env=dict(os.environ, HUNTRESS_GAME_MASTER_URL=INSIDE_GM))
         return _gm_parse(r, "homebase-local")
+    if GM_RELAY and args and args[0] in ("status", "start", "submit") and _public_gm():
+        from . import gmroute   # D24 #13: measured relay vs today's path -- only once orchestrate.run() activated it
+        if gmroute.active():
+            return gmroute.call(args, timeout, lambda: _gm_public(args, timeout))
+    return _gm_public(args, timeout)
+
+
+# HCTF_GM_RELAY=0: remote.gm never consults hctf/gmroute.py -- exactly the paths below.
+GM_RELAY = os.environ.get("HCTF_GM_RELAY", "1") != "0"
+
+
+def _gm_public(args, timeout):
+    """Today's public-GM routing (local transport): big start -> local; start/submit via the warm daemon / Homebase;
+    else the in-process client."""
     if args and args[0] == "start" and len(args) > 1 and _public_gm() and _big_start(str(args[1])):
         # A large start reply (script: ~650 KB contract) crosses the VPN at ~130 KB/s on the daemon's ONE stdio
         # channel and holds up every reply queued behind it: D15 script 8.9 s + binary (80 KB) 9.4 s client time for

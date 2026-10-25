@@ -6125,6 +6125,11 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         threading.Thread(target=workers._homebase_ready, args=(say,), daemon=True).start()
         say("[homebase] pre-warming in the background for timed windows (powers off only if this run powered it on; "
             "otherwise `hctf hb off` when done)")
+        try:   # D24 #13: this process's own status/start/submit via a measured relay (HCTF_GM_RELAY=0: off)
+            from . import gmroute
+            gmroute.activate(log=say)
+        except Exception as e:  # noqa: BLE001 - today's paths
+            say(f"[gmroute] not activated ({str(e)[:120]})")
     if RETRIEVAL:   # before the release wait: ready long before the drop (a missing index = no retrieval block)
         from . import retrieval
         retrieval.build_async(log=say)

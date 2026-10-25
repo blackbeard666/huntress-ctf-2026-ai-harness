@@ -343,6 +343,11 @@ if [ "$hb_out" = skip ]; then :
 elif grep -q hb-ok <<<"$hb_out"; then
   st="$(timeout 20 hctf hb status 2>&1 | tr -d ' \n')"
   ok "Homebase SSH works. status: ${st:0:120}"
+  # D24 #13: relay vs local for the orchestrator's own status/start/submit (read-only: status calls only)
+  rt="$(timeout 120 python3 -m hctf.gmroute calibrate --n 5 2>&1 | grep -E '^(OK|WARN|SKIP) ' | tail -1)"
+  case "$rt" in OK*) ok "GM relay: ${rt#OK }";; SKIP*) ok "GM relay: ${rt#SKIP }";;
+    WARN*) warn "GM relay: ${rt#WARN } (non-blocking)";;
+    *) warn "GM relay: calibration did not finish (non-blocking: today's GM paths)";; esac
   # Bedrock shadow workers (hctf/hbshadow.py): the VM's instance role (free STS call, no model tokens) + the
   # heavy toolchain in ~/hbtools (setup/homebase_tools.sh) + today's credit ledger.
   hbx="$(timeout 40 hctf hb exec -- 'timeout 20 aws sts get-caller-identity --query Arn --output text 2>&1 | grep -o "assumed-role/[A-Za-z0-9]*"; command -v claude >/dev/null && echo claude-ok; for t in java jadx apktool analyzeHeadless rizin ilspycmd exiftool; do [ -x ~/hbtools/bin/$t ] || echo "nohbtool:$t"; done' 2>&1)"
