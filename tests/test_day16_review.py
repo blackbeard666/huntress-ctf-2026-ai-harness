@@ -183,7 +183,7 @@ class _D:
         (sdir / "solve.py").write_text("NEW\n")
 
 
-ch9 = SimpleNamespace(sdir=sd9, base="b")
+ch9 = SimpleNamespace(sdir=sd9, base="b", _handoff_join=lambda *a, **k: None)   # D24 #5 join point
 ch9._baseline_results = lambda: [{"case": "a", "ok": True}, {"case": "b", "ok": True}]
 _ts = _solvers.test_solver
 for won, after, adopted, text in ((True, {"a", "b", "t"}, True, "NEW\n"), (True, {"a"}, False, "OLD\n"),

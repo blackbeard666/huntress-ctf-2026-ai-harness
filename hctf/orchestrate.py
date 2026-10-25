@@ -4569,13 +4569,16 @@ class Chain:
         D8 binary, D10-D12, D14). The GM gives ONE timed attempt per mode: unknown = clocked."""
         if os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1" or _CLOCKED_PRESTART:
             return False
-        tt = self.entries.get("time_trial")
+        entries = getattr(self, "entries", None) or {}
+        if not entries:
+            return False   # a bare Chain (tests) has no list entries: no evidence = clocked
+        tt = entries.get("time_trial")
         last = (timed.last_result(tt["id"]) or {}) if tt else {}
         if last.get("attempt_id") and last.get("deadline") is not None and last.get("run_for_time") is not True:
             return False   # this route's plain start came back clocked
         if self._tt_pool_untimed():
             return True
-        timed_e = [self.entries[m] for m in ("time_trial", "mastery") if m in self.entries]
+        timed_e = [entries[m] for m in ("time_trial", "mastery") if m in entries]
         return bool(timed_e) and all(e.get("run_for_time_supported") is True for e in timed_e)
 
     def _late_probes(self, cid, wait=True, defer_compound=False):
