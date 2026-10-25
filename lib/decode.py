@@ -648,6 +648,11 @@ def _positional(rows):
         if c:
             p = W.safe(c[2], frag)
             if p is None or c[1](p) != frag:
+                if k == len(rows):
+                    # the last line fails its own day codec = a solver already decoded it (D25 `U+...` -> `le-52`,
+                    # registered as day 25 by that night's ratchet): read it as unknown, verbatim first
+                    out.append(_unknown_line_cands(frag))
+                    continue
                 return []
             out.append([p])
             continue
