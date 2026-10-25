@@ -11,6 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import paths
+from .timeline import lane_label
 
 LINE = re.compile(r"^(\d\d):(\d\d):(\d\d) \[([^\]]+)\] (.*)$")
 MODES = ("single_solve", "time_trial", "mastery")
@@ -22,7 +23,7 @@ def _secs(h, m, s):
 
 
 def _lane(base):
-    return base.split("-day-")[0]
+    return lane_label(base)   # `web:<slug>` per web chain (D24 plan #15), the GM lane otherwise
 
 
 def _log(root, day):
@@ -84,7 +85,7 @@ def worker_stats(root, day):
         m = re.search(r"T(\d\d):(\d\d):(\d\d)", r.get("ts") or "")
         if lo is not None and m and not (lo - 60 <= _secs(*m.groups()) <= hi + 60):
             continue
-        a = agg[(r.get("lane") or _lane(r["base"]), r.get("stage"))]
+        a = agg[(_lane(r["base"]) if r.get("base") else r.get("lane"), r.get("stage"))]
         a["n"] += 1
         for k, col in (("wall", "wall_s"), ("turns", "turns"), ("out_tok", "out_tok")):
             try:
@@ -99,7 +100,8 @@ def wrong_submits(root, day):
     out = {}
     for sj in sorted((Path(root) / "challenges" / f"day{int(day):02d}").glob("*/single_solve/submissions.jsonl")):
         try:
-            lane = json.loads((sj.parent.parent / "meta.json").read_text()).get("lane")
+            meta = json.loads((sj.parent.parent / "meta.json").read_text())
+            lane = _lane(meta["base"]) if meta.get("base") else meta.get("lane")
         except (OSError, ValueError):
             continue
         n = 0

@@ -6,7 +6,7 @@ worker (LLM) time vs harness overhead. The per-run table every review used to as
 import re
 from pathlib import Path
 
-from .paths import ROOT
+from .paths import ROOT, canonical_lane
 
 LINE = re.compile(r"^(\d\d):(\d\d):(\d\d) \[([^\]]+)\] (.*)$")
 MODES = ("single_solve", "time_trial", "mastery")
@@ -27,9 +27,36 @@ def single_solved(msg, mode):
                                        or msg.startswith("already solved"))
 
 
+CHAIN_TAG = re.compile(r"-day-\d+")   # a chain's base id (`warmups-day-24`, `web-exploitation-day-15-fetch-quest`)
+# `[slot] <cid>: waited 3.2s for a local slot` (Pools) / `[<web cid>] web target slot acquired after 484s` (webtarget)
+SLOT_WAIT = re.compile(r"^(\S+?): waited ([\d.]+)s for a (\w+) slot")
+WEB_SLOT = re.compile(r"web target slot acquired after ([\d.]+)s")
+
+
+def is_chain(base):
+    """A chain = any tag carrying a `-day-NN` part. Only those: `[res]`, `[hof]`, `[postrun]`, `[train]`... used to count
+    as chains ("7/16 chains complete" on D24)."""
+    return bool(CHAIN_TAG.search(base or ""))
+
+
+def lane_label(base):
+    """The lane a chain is reported under: its GM lane (`script-analysis`), except web -- one lane, several chains a
+    day (D21: three) -- which is `web:<slug>` (`web:fetch-quest`), so two web chains stay distinct everywhere."""
+    lane = (base or "").split("-day-")[0]
+    if canonical_lane(lane) != "web":
+        return lane
+    slug = re.sub(r"^.*?-day-\d+-?", "", base or "")
+    return f"web:{slug}" if slug else "web"
+
+
 def _split(cid):
     m = re.match(r"^(.*?)/(time_trial|mastery)$", cid)
     return (m.group(1), m.group(2)) if m else (cid, "single_solve")
+
+
+def _chain(chains, base):
+    return chains.setdefault(base, {"done": {}, "attempts": dict.fromkeys(MODES, 0), "workers": [], "open": {},
+                                    "harvested": 0, "harvest_refused": 0, "slot_wait": 0.0})
 
 
 def parse(lines):
@@ -48,11 +75,22 @@ def parse(lines):
         if t0 is None:
             t0 = t
         tag, msg = m.group(4), m.group(5)
+        if tag == "slot":
+            sw = SLOT_WAIT.match(msg)
+            if sw and is_chain(sw.group(1)):
+                c = _chain(chains, _split(sw.group(1))[0])
+                c["slot_wait"] += float(sw.group(2))
+            continue
         if tag in ("homebase", "ratchet", "attack-coverage", "warm", "run", "shapes"):
             continue
         base, mode = _split(tag)
-        c = chains.setdefault(base, {"done": {}, "attempts": dict.fromkeys(MODES, 0), "workers": [], "open": {},
-                                     "harvested": 0, "harvest_refused": 0})
+        if not is_chain(base):
+            continue
+        c = _chain(chains, base)
+        c.setdefault("first", t)   # the chain's launch (its first log line)
+        sw = WEB_SLOT.search(msg)
+        if sw:
+            c["slot_wait"] += float(sw.group(1))
         if single_solved(msg, mode) and "single_solve" not in c["done"]:
             c["done"]["single_solve"] = t
         if (msg.startswith("result: correct") or msg.startswith("passed by the live-answer worker")) \
