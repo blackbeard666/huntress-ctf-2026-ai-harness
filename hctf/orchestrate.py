@@ -809,6 +809,19 @@ ASYNC_HANDOFF = os.environ.get("HCTF_ASYNC_HANDOFF", "1") != "0"
 HANDOFF_JOIN_MAX = float(os.environ.get("HCTF_HANDOFF_JOIN_MAX", "900"))   # > the 300 s prior cases/ copy cap
 DUEL_STOP_AT_READY = os.environ.get("HCTF_DUEL_STOP_AT_READY", "1") != "0"   # signal the duel at ready, join aside
 TRIAGE_ABORT_AT_CORRECT = os.environ.get("HCTF_TRIAGE_ABORT_AT_CORRECT", "1") != "0"   # deferred recon stops at CORRECT
+# Race path (D24 plan #6; D24 race wins: seed verify re-ran the seed after the submit, carry check started only then):
+# verify the seed from reuse_plan's own run (no re-run), snapshot it + start its carry-over check BEFORE the race submit
+# (complete merged sets only), and adopt the race snapshot at once when the worker hasn't touched the staged code.
+RACE_VERIFY_FROM_PLAN = os.environ.get("HCTF_RACE_VERIFY_FROM_PLAN", "1") != "0"
+RACE_PRESNAP = os.environ.get("HCTF_RACE_PRESNAP", "1") != "0"
+RACE_SNAP_FIRST = os.environ.get("HCTF_RACE_SNAP_FIRST", "1") != "0"
+# On a pool with EVIDENCE of no clock (_untimed_evidence) a missed carry-over / new-id field is fixed in-attempt (localize,
+# bank, live answer), so the handoff holds are capped: carry-check wait (was CARRY_CHECK_MAX + 5 = 17 s), synchronous
+# new-id dry run skipped above SKIP_IDS new ids (D23 script: 12k-id contracts) else capped. 0 = no cap / no skip.
+CARRY_WAIT_UNTIMED = float(os.environ.get("HCTF_CARRY_WAIT_UNTIMED", "6"))
+NEWID_SYNC_SKIP_IDS = int(os.environ.get("HCTF_NEWID_SYNC_SKIP_IDS", "2000"))
+NEWID_SYNC_UNTIMED = float(os.environ.get("HCTF_NEWID_SYNC_UNTIMED", "4"))
+_CLOCKED_PRESTART = []   # a pre-start came back CLOCKED this run -> no untimed evidence for anyone (D24 #7 latch)
 # The single's solver on its OWN case must beat this (local s) or a speed generalize runs BEFORE the first timed attempt:
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
@@ -3017,6 +3030,9 @@ class Chain:
             say(f"[{cid}] reuse race: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
                 f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s"
                 + (f"; dropped {len(dropped)} implausible value(s) {dropped[:4]}" if dropped else ""))
+            presnap = None
+            if RACE_PRESNAP and plan.get("best") and len(merged) == len(ids):
+                presnap = self._race_presnap(plan["best"])   # copy + carry-over check beside the submit (D24 #6)
             if not RACE_PARTIAL:
                 if len(merged) < len(ids):
                     return  # can't finish the single: leave it to the worker (its dry-run note covers the gaps)
@@ -3027,7 +3043,8 @@ class Chain:
             if cli.is_complete(cid):
                 self._single_correct(cid, "reuse race")
                 set_state(self.base, stage="single:reuse-won")
-                snap = self._race_snapshot(cid, plan["best"], contract, art)
+                snap = self._race_snapshot(cid, plan["best"], contract, art,
+                                           plan_out=(plan.get("outs") or {}).get(plan["best"]), presnap=presnap)
                 say(f"[{cid}] reuse race WON: single CORRECT at +{time.time() - t0:.1f}s from prior solver output "
                     f"[rank {tr['rank'] - t0:.1f}s, {len(plan['runs'])} solver run(s) {tr['plan'] - tr['rank']:.1f}s, "
                     f"{used} submit(s) {tr['submit'] - tr['plan']:.1f}s, seed verify {time.time() - tr['submit']:.1f}s] "
@@ -3204,29 +3221,59 @@ class Chain:
             inbox.post(cli.cdir(cid), note, key=key)
             say(f"[{cid}] {key} note -> worker inbox ({len(note)} chars)")
 
-    def _race_snapshot(self, cid, seed, contract, art):
+    def _race_snapshot(self, cid, seed, contract, art, plan_out=None, presnap=None):
         """The race's seed solver as a ready snapshot (`.run/spec-dayNN/<chal>-race/solver`: same depth as the real solver
         dir) if it alone reproduces every GM-confirmed answer; _watch_ready adopts it when the worker's own solver isn't
-        verified yet (r11b: the staged newest solver differed from the winning seed -> 7-12 s until the worker caught up)."""
+        verified yet (r11b: the staged newest solver differed from the winning seed -> 7-12 s until the worker caught up).
+        plan_out: the seed's own (answers, err, secs) from reuse_plan on this exact contract + bytes -> verified from it,
+        no re-run (RACE_VERIFY_FROM_PLAN). presnap: the copy _race_presnap made before the submit (its carry check runs)."""
         if not seed:
             return None
+        snap = presnap if presnap is not None else self._race_snap_dir()
+        if snap is None:
+            return None
+        if presnap is None:
+            self._race_copy(seed, snap)
+        conf = cli.confirmed_answers(cid)
+        if RACE_VERIFY_FROM_PLAN and plan_out is not None:
+            got, err, _dt = plan_out
+        else:
+            got, err, _dt = solvers.run_solver(snap, contract, art)
+        if err or not conf or any(got.get(k) != v for k, v in conf.items()):
+            return None
+        self._race_snap = snap
+        if CARRY_CHECK and presnap is None:   # the handoff's carry-over check starts now (D22 post-mortem #11)
+            self._carry_fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
+        return snap
+
+    def _race_snap_dir(self):
         rel = self.sdir.relative_to(paths.CHALLENGES).parts
         if len(rel) != 3:
             return None
-        snap = ROOT / ".run" / f"spec-{rel[0]}" / f"{rel[1]}-race" / "solver"
+        return ROOT / ".run" / f"spec-{rel[0]}" / f"{rel[1]}-race" / "solver"
+
+    def _race_copy(self, seed, snap):
         if snap.exists():
             shutil.rmtree(snap)
         shutil.copytree(seed, snap, ignore=shutil.ignore_patterns("cases", "__pycache__"))
         if (self.root / "meta.json").exists():
             shutil.copy2(self.root / "meta.json", snap.parent / "meta.json")
-        conf = cli.confirmed_answers(cid)
-        got, err, _dt = solvers.run_solver(snap, contract, art)
-        if err or not conf or any(got.get(k) != v for k, v in conf.items()):
+
+    def _race_presnap(self, seed):
+        """RACE_PRESNAP: copy the seed to the race snapshot dir and start its carry-over check BEFORE the race submit
+        (both depend only on the seed, not on the GM's verdict). NOT a ready snapshot until _race_snapshot verifies it.
+        -> the snapshot dir, or None (then _race_snapshot copies after the win, as before)."""
+        try:
+            snap = self._race_snap_dir()
+            if snap is None:
+                return None
+            self._race_copy(seed, snap)
+            if CARRY_CHECK:
+                self._carry_fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
+            return snap
+        except Exception as e:  # noqa: BLE001 - the post-win path copies it itself
+            say(f"[{self.base}] race pre-snapshot note: {e}")
             return None
-        self._race_snap = snap
-        if CARRY_CHECK:   # the handoff's carry-over check starts now, beside the rest of the race (D22 post-mortem #11)
-            self._carry_fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
-        return snap
 
     def try_existing_solvers(self, cid):
         """Merged reuse (no model time): run EVERY same-lane solver (+ question-text matches) on the full contract,
@@ -3743,6 +3790,7 @@ class Chain:
             ready, done_evt, watch = threading.Event(), threading.Event(), None
             self._ready_snap = None
             if STOP_WHEN_READY and not welcome:
+                self._launch_mtimes = self._solver_mtimes()   # RACE_SNAP_FIRST: "the worker hasn't edited" baseline
                 watch = threading.Thread(target=self._watch_ready, args=(cid, ready, done_evt), daemon=True)
                 watch.start()
             self._cur_ready = ready
@@ -4368,6 +4416,23 @@ class Chain:
             return False
         return bool(last.get("untimed") or last.get("no_clock") or last.get("run_for_time") is False)
 
+    def _untimed_evidence(self):
+        """EVIDENCE (not the run_for_time policy guess of _expect_untimed) that this chain's Time Trial / Mastery
+        attempts run with no clock: HCTF_RUN_FOR_TIME != 1 (plain start), no clocked pre-start seen this run, and either
+        the TT's last attempt came back untimed, or every timed list entry advertises `run_for_time_supported: true`
+        (organizer lesson: there a plain start IS an untimed regular attempt; older routes without it start timed --
+        D8 binary, D10-D12, D14). The GM gives ONE timed attempt per mode: unknown = clocked."""
+        if os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1" or _CLOCKED_PRESTART:
+            return False
+        tt = self.entries.get("time_trial")
+        last = (timed.last_result(tt["id"]) or {}) if tt else {}
+        if last.get("attempt_id") and last.get("deadline") is not None and last.get("run_for_time") is not True:
+            return False   # this route's plain start came back clocked
+        if self._tt_pool_untimed():
+            return True
+        timed_e = [self.entries[m] for m in ("time_trial", "mastery") if m in self.entries]
+        return bool(timed_e) and all(e.get("run_for_time_supported") is True for e in timed_e)
+
     def _late_probes(self, cid, wait=True, defer_compound=False):
         """Probes that run beside the first Time Trial (codec family + mutation + compounding): adopt hard misses as
         regression cases. Returns the diag dict for a generalize ({} when clean). Each result is consumed once.
@@ -4677,7 +4742,12 @@ class Chain:
                     self._start_codify(cid)
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
-                    snap = self._spec_snapshot(cid) or getattr(self, "_race_snap", None)
+                    race = getattr(self, "_race_snap", None)
+                    if (RACE_SNAP_FIRST and race is not None and not held
+                            and self._solver_mtimes() == getattr(self, "_launch_mtimes", None)):
+                        snap = race   # the worker hasn't touched the staged code: no copy + re-run of it (D24 #6)
+                    else:
+                        snap = self._spec_snapshot(cid) or race
                     if snap and not held and snap is not getattr(self, "_race_snap", None):
                         held = True
                         snap = self._newid_hold(cid, snap, ready, done)
@@ -4797,10 +4867,19 @@ class Chain:
             new = []
         if not new or NEWID_SYNC_MAX <= 0:
             return None
+        cap = NEWID_SYNC_MAX
+        if (NEWID_SYNC_SKIP_IDS > 0 or NEWID_SYNC_UNTIMED > 0) and self._untimed_evidence():
+            # no clock (D24 #6): an empty new field is filled in-attempt; a 12k-id dry run is not worth the hold
+            if 0 < NEWID_SYNC_SKIP_IDS < len(new):
+                say(f"[{self.base}] new-id check: {len(new)} new timed id(s) on an untimed pool (> {NEWID_SYNC_SKIP_IDS}) "
+                    "-> no synchronous dry run, no hold")
+                return None
+            if NEWID_SYNC_UNTIMED > 0:
+                cap = min(cap, NEWID_SYNC_UNTIMED)
         t0 = time.time()
         fut = ThreadPoolExecutor(max_workers=1).submit(self._newid_gaps, self.base, str(snap))
         try:
-            gaps = fut.result(timeout=NEWID_SYNC_MAX)
+            gaps = fut.result(timeout=cap)
         except Exception as e:  # noqa: BLE001 - too slow / failed: hand over as before, but say so
             say(f"[{self.base}] new-id check: {len(new)} new timed id(s), dry run unfinished after "
                 f"{time.time() - t0:.1f}s ({type(e).__name__}) -> no hold")
@@ -4888,7 +4967,18 @@ class Chain:
         ended on its own."""
         try:
             fut = getattr(self, "_carry_fut", None)
-            gaps = fut.result(timeout=CARRY_CHECK_MAX + 5) if fut is not None else self._carry_gaps(snap)
+            if CARRY_WAIT_UNTIMED > 0 and self._untimed_evidence():
+                # no clock: a missed carry-over field is fixed in-attempt -> never hold the handoff long on the check
+                if fut is None:
+                    fut = ThreadPoolExecutor(max_workers=1).submit(self._carry_gaps, snap)
+                try:
+                    gaps = fut.result(timeout=CARRY_WAIT_UNTIMED)
+                except TimeoutError:
+                    say(f"[{cid}] carry-over check unfinished after {CARRY_WAIT_UNTIMED:g}s on an untimed pool: "
+                        "handing over (the attempt fixes a miss in-attempt)")
+                    return snap
+            else:
+                gaps = fut.result(timeout=CARRY_CHECK_MAX + 5) if fut is not None else self._carry_gaps(snap)
         except Exception as e:  # noqa: BLE001 - never block a handoff on a check
             say(f"[{cid}] carry-over check note: {e}")
             return snap

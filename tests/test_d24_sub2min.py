@@ -6,6 +6,8 @@ Track B (single -> TT handoff):
      probes, baseline) runs aside; every consumer (generalize, Mastery _late_probes, probe/baseline results, the
      background generalize, the chain's end) joins it first; the TT pre-attempt block does not; duel signal + aside
      join; triage's deferred recon stops at the single's CORRECT; kill switches restore the old path.
+- B6 race path: reuse_plan's outs verify the seed (no re-run); seed snapshot + carry check before the race submit; the
+     race snapshot goes first when the worker hasn't edited; untimed-evidence caps on the carry / new-id holds.
 
 Run:  source bin/env.sh && python3 tests/test_d24_sub2min.py      (exit 0 = all pass)
 """
@@ -318,6 +320,225 @@ with patched({(cli, "cdir"): lambda cid: tdir, (cli, "load"): lambda cid, f: {},
         time.sleep(0.1)
 check("B5_triage: the deferred recon/toolchain rewrite is dropped once the single is CORRECT",
       any("dropped" in str(m) for m in logs) and "Still running in the background" in p.read_text(), logs[-3:])
+
+
+# ---------------------------------------------------------------- B6 race path
+
+B6 = TMP / "b6"
+CH6 = B6 / "challenges"
+
+
+def race_chain(name="race"):
+    ch = b_chain(name, lane="script-analysis")
+    ch.root = CH6 / "day99" / name
+    ch.sdir = ch.root / "solver"
+    ch.sdir.mkdir(parents=True, exist_ok=True)
+    (ch.sdir / "solve.py").write_text("print('{}')\n")
+    return ch
+
+
+seed = B6 / "prior" / "solver"
+(seed / "cases" / "c1").mkdir(parents=True)
+(seed / "solve.py").write_text("print('{\"a\": \"1\"}')\n")
+(seed / "helper.py").write_text("X = 1\n")
+RACEP = {**QUIET, (orchestrate.paths, "CHALLENGES"): CH6, (orchestrate, "ROOT"): B6}
+
+# reuse_plan hands back every solver's raw output
+s1, s2 = B6 / "day97" / "x" / "solver", B6 / "day98" / "y" / "solver"
+with patched({(solvers, "lane_solver_dirs"): lambda lane: [], (solvers, "all_solver_dirs"): lambda: [s1, s2],
+              (solvers, "_lane_of"): lambda p: "script-analysis", (solvers, "_known_ids"): lambda p: set(),
+              (solvers, "run_solver"): lambda s, c, a, t=60: ({"a": "1"} if s == s2 else {"a": "0"}, None, 0.1)}):
+    plan = solvers.reuse_plan({"answer_ids": ["a"]}, B6, "script-analysis", by_question=False)
+check("B6_ reuse_plan returns `outs` (each solver's raw answers, err, secs)",
+      set(plan.get("outs") or {}) == {s1, s2} and plan["outs"][s2][0] == {"a": "1"} and plan["best"] == s2, plan)
+
+# _race_snapshot verifies from the plan's run (no re-run); a mismatch is still refused; kill switch re-runs
+runs = []
+
+
+def counting_run(sdir, contract, art, timeout=120, **k):
+    runs.append(str(sdir))
+    return {"a": "1"}, None, 0.2
+
+
+for flag, out, want_snap, want_runs in ((True, ({"a": "1"}, None, 0.1), True, 0), (True, ({"a": "2"}, None, 0.1), False, 0),
+                                        (True, ({"a": "1"}, "Timeout", 0.1), False, 0), (False, ({"a": "2"}, None, 0.1), True, 1)):
+    ch = race_chain(f"verify-{flag}-{out[0]['a']}-{out[1]}")
+    runs.clear()
+    with patched({**RACEP, (orchestrate, "RACE_VERIFY_FROM_PLAN"): flag, (orchestrate, "CARRY_CHECK"): False,
+                  (cli, "confirmed_answers"): lambda cid: {"a": "1"}, (solvers, "run_solver"): counting_run}):
+        snap = ch._race_snapshot(ch.base, seed, {"answer_ids": ["a"]}, B6, plan_out=out)
+    check(f"B6_ _race_snapshot verify_from_plan={flag} plan_out={out[:2]} -> snapshot={want_snap}, solver re-runs={want_runs}",
+          (snap is not None) == want_snap and len(runs) == want_runs
+          and (snap is None or ((snap / "helper.py").exists() and not (snap / "cases").exists())), (snap, runs))
+
+# presnap: copy + carry check BEFORE the submit; the post-win snapshot reuses both (no second copy / carry run)
+carry_calls = []
+ch = race_chain("presnap")
+with patched({**RACEP, (orchestrate, "CARRY_CHECK"): True, (cli, "confirmed_answers"): lambda cid: {"a": "1"},
+              (orchestrate.Chain, "_carry_gaps"): lambda self, snap: (carry_calls.append(snap), [])[1],
+              (solvers, "run_solver"): counting_run}):
+    runs.clear()
+    pre = ch._race_presnap(seed)
+    fut1 = ch._carry_fut
+    fut1.result(2)
+    no_snap_yet = getattr(ch, "_race_snap", None) is None
+    (pre / "marker").write_text("x")           # a second copy would wipe it
+    snap = ch._race_snapshot(ch.base, seed, {"answer_ids": ["a"]}, B6, plan_out=({"a": "1"}, None, 0.1), presnap=pre)
+check("B6_ presnap: seed copied + carry check started before the submit, not a ready snapshot until verified; the win "
+      "reuses both (no re-copy, no second carry run, no solver re-run)",
+      pre is not None and no_snap_yet and snap == pre and (pre / "marker").exists() and ch._carry_fut is fut1
+      and len(carry_calls) == 1 and not runs and ch._race_snap == pre, (pre, snap, carry_calls, runs))
+
+# _reuse_race end to end: the carry check is running BEFORE the race submit, and the win needs no seed re-run
+ev6 = {}
+ch = race_chain("race-e2e")
+ch._go_lock, ch._go_sent, ch._go_pending = threading.Lock(), True, []
+done6 = []
+
+
+def fake_plan(contract, art, lane, **k):
+    return {"high": {"a": "1"}, "spec": {}, "source": {}, "runs": {seed: (1, None, 0.1)}, "best": seed, "alts": {},
+            "outs": {seed: ({"a": "1"}, None, 0.1)}}
+
+
+def fake_bank(self, cid, ids, high, spec, merged, plan):
+    ev6["carry_before_submit"] = getattr(self, "_carry_fut", None) is not None
+    done6.append(1)
+    return 1
+
+
+with patched({**RACEP, (orchestrate, "CARRY_CHECK"): True, (orchestrate, "RETRIEVAL"): False,
+              (orchestrate, "RACE_FORMAT_GATE"): False, (orchestrate, "RACE_PARTIAL"): True,
+              (cli, "load"): lambda cid, f: {"answer_ids": ["a"]}, (timed, "latest_artifacts"): lambda cid: B6,
+              (cli, "is_complete"): lambda cid: bool(done6), (cli, "confirmed_answers"): lambda cid: {"a": "1"},
+              (solvers, "reuse_plan"): fake_plan, (orchestrate.Chain, "_race_bank"): fake_bank,
+              (orchestrate.Chain, "_carry_gaps"): lambda self, snap: [], (solvers, "run_solver"): counting_run}):
+    runs.clear()
+    ch._reuse_race(ch.base)
+check("B6_ _reuse_race: the carry-over check runs before the race submit; the win adopts the seed without a re-run",
+      ev6.get("carry_before_submit") and getattr(ch, "_race_snap", None) is not None and not runs, (ev6, runs))
+
+# _watch_ready: the race snapshot goes first when the worker hasn't touched the staged code
+def watch_with(edited):
+    ch = race_chain(f"watch-{edited}")
+    ch._race_snap = B6 / "racesnap"
+    ch._launch_mtimes = ch._solver_mtimes()
+    if edited:
+        time.sleep(0.02)
+        (ch.sdir / "solve.py").write_text("print('{\"a\": 1}')\n")
+    calls = {"spec": 0, "carry": 0}
+    ready, done = threading.Event(), threading.Event()
+    with patched({**RACEP, (orchestrate, "PREPUSH_AT_STAMP"): False, (orchestrate, "SPEC_POLL"): 0.01,
+                  (cli, "is_complete"): lambda cid: True,
+                  (orchestrate.Chain, "_newid_kick"): lambda self: None,
+                  (orchestrate.Chain, "_web_tt_kick"): lambda self: None,
+                  (orchestrate.Chain, "_record_single_method"): lambda self, cid: None,
+                  (orchestrate.Chain, "_start_codify"): lambda self, cid: None,
+                  (orchestrate.Chain, "_prefetch_tt"): lambda self: None,
+                  (orchestrate.Chain, "_prepush_verified"): lambda self, cid, snap, warm=True: None,
+                  (orchestrate.Chain, "_spec_snapshot"): lambda self, cid: (calls.__setitem__("spec", calls["spec"] + 1),
+                                                                             None)[1],
+                  (orchestrate.Chain, "_carry_hold"): lambda self, cid, snap, r, d: (calls.__setitem__(
+                      "carry", calls["carry"] + 1), snap)[1]}):
+        t = threading.Thread(target=ch._watch_ready, args=(ch.base, ready, done), daemon=True)
+        t.start()
+        ready.wait(3)
+        done.set()
+        t.join(3)
+    return ch, calls
+
+
+chw, cw = watch_with(False)
+check("B6_ _watch_ready: worker hasn't edited -> the race snapshot is handed over without a spec copy/re-run",
+      chw._ready_snap == chw._race_snap and cw == {"spec": 0, "carry": 1}, cw)
+chw, cw = watch_with(True)
+check("B6_ _watch_ready: worker edited -> its own snapshot is tried first (old order), race snapshot as fallback",
+      chw._ready_snap == chw._race_snap and cw["spec"] >= 1 and cw["carry"] == 1, cw)
+with patched({(orchestrate, "RACE_SNAP_FIRST"): False}):
+    chw, cw = watch_with(False)
+check("B6_ kill switch HCTF_RACE_SNAP_FIRST=0: the spec snapshot is always tried first", cw["spec"] >= 1, cw)
+
+# untimed evidence (the GM gives ONE timed attempt per mode: unknown = clocked)
+def ev_chain(rfts, last=None):
+    ch = b_chain("evidence")
+    for m, v in rfts.items():
+        if v is not None:
+            ch.entries[m]["run_for_time_supported"] = v
+    return ch, (lambda cid: (last or {}) if cid.endswith("time_trial") else {})
+
+
+cases6 = [("every timed list entry run_for_time_supported", {"time_trial": True, "mastery": True}, None, "auto", True),
+          ("one timed entry without it (legacy route)", {"time_trial": True, "mastery": None}, None, "auto", False),
+          ("no list flag, no attempt yet", {"time_trial": None, "mastery": None}, None, "auto", False),
+          ("HCTF_RUN_FOR_TIME=1 (HoF pool first)", {"time_trial": True, "mastery": True}, None, "1", False),
+          ("the TT's last attempt came back untimed", {"time_trial": None, "mastery": None},
+           {"attempt_id": "a", "deadline": None, "run_for_time": False, "no_clock": True}, "auto", True),
+          ("the TT's last plain attempt was CLOCKED", {"time_trial": True, "mastery": True},
+           {"attempt_id": "a", "deadline": "2026-10-25T13:00:00Z"}, "auto", False)]
+for label, rfts, last, rft, want in cases6:
+    ch, lr = ev_chain(rfts, last)
+    import os as _os
+    old = _os.environ.get("HCTF_RUN_FOR_TIME")
+    _os.environ["HCTF_RUN_FOR_TIME"] = rft
+    try:
+        with patched({(timed, "last_result"): lr}):
+            got = ch._untimed_evidence()
+    finally:
+        if old is None:
+            _os.environ.pop("HCTF_RUN_FOR_TIME", None)
+        else:
+            _os.environ["HCTF_RUN_FOR_TIME"] = old
+    check(f"B6_ untimed evidence: {label} -> {want}", got is want, got)
+ch, lr = ev_chain({"time_trial": True, "mastery": True})
+with patched({(timed, "last_result"): lr, (orchestrate, "_CLOCKED_PRESTART"): [1]}):
+    check("B6_ untimed evidence: a clocked pre-start seen this run -> False for everyone", ch._untimed_evidence() is False)
+
+# _carry_hold: bounded wait on an untimed pool; the full wait otherwise
+def carry_with(evidence, secs=1.0):
+    ch = race_chain(f"carry-{evidence}")
+    ch._carry_fut = orchestrate.ThreadPoolExecutor(max_workers=1).submit(lambda: (time.sleep(secs), ["d01-x"])[1])
+    with patched({**RACEP, (orchestrate, "CARRY_WAIT_UNTIMED"): 0.2, (orchestrate, "CARRY_CHECK_MAX"): 0.0,
+                  (orchestrate, "NEWID_HOLD"): 0.0, (orchestrate.Chain, "_untimed_evidence"): lambda self: evidence}):
+        t0 = time.time()
+        out = ch._carry_hold(ch.base, B6 / "s", threading.Event(), threading.Event())
+        return out, time.time() - t0
+
+
+out, dt = carry_with(True)
+check("B6_ untimed pool: the carry-over wait is capped (HCTF_CARRY_WAIT_UNTIMED) and the snapshot handed over",
+      out == B6 / "s" and dt < 0.6, dt)
+out, dt = carry_with(False)
+check("B6_ clocked / unknown pool: the carry-over check is awaited as before", out == B6 / "s" and dt >= 0.9, dt)
+
+# _newid_result: untimed -> skip a huge new-id dry run, cap a small one; unknown -> NEWID_SYNC_MAX as before
+def newid_with(evidence, n_new, gap_secs=1.0):
+    ch = race_chain(f"newid-{evidence}-{n_new}")
+    called = []
+    snapd = B6 / f"nsnap-{evidence}-{n_new}"
+    snapd.mkdir(exist_ok=True)
+    (snapd / "solve.py").write_text("")
+    with patched({**RACEP, (orchestrate, "NEWID_SYNC_MAX"): 1.5, (orchestrate, "NEWID_SYNC_UNTIMED"): 0.2,
+                  (orchestrate, "NEWID_SYNC_SKIP_IDS"): 2000,
+                  (orchestrate.Chain, "_untimed_evidence"): lambda self: evidence,
+                  (orchestrate.Chain, "_newid_ids"): lambda self: [f"n{i}" for i in range(n_new)],
+                  (orchestrate.Chain, "_newid_gaps"): lambda self, cid, s: (called.append(1), time.sleep(gap_secs),
+                                                                             ["n0"])[2]}):
+        ch._newid = {}
+        t0 = time.time()
+        res = ch._newid_result(snapd)
+        return res, time.time() - t0, called
+
+
+res, dt, called = newid_with(True, 2500)
+check("B6_ untimed pool, > HCTF_NEWID_SYNC_SKIP_IDS new ids: no synchronous dry run, no hold", res is None and not called
+      and dt < 0.2, (res, dt, called))
+res, dt, called = newid_with(True, 10)
+check("B6_ untimed pool, few new ids: the dry run is capped at HCTF_NEWID_SYNC_UNTIMED", res is None and called
+      and dt < 0.6, (res, dt))
+res, dt, called = newid_with(False, 2500, gap_secs=0.3)
+check("B6_ clocked / unknown pool: the synchronous dry run runs as before (even for many new ids)",
+      res == ["n0"] and called, (res, dt))
 
 
 shutil.rmtree(TMP, ignore_errors=True)

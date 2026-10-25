@@ -554,7 +554,7 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
         cands = cands[:limit]   # newest first: a cumulative lane's latest solver already covers the earlier families
     cands = lane_dirs + [c for c in cands if c not in lane_dirs]   # the lane solver first, never sliced away
     if not cands or not ids:
-        return {"high": {}, "spec": {}, "source": {}, "runs": {}, "best": None, "alts": {}}
+        return {"high": {}, "spec": {}, "source": {}, "runs": {}, "best": None, "alts": {}, "outs": {}}
     with ThreadPoolExecutor(max_workers=max_parallel) as ex:
         outs = dict(zip(cands, ex.map(lambda s: run_solver(s, contract, artifacts, timeout), cands)))
     high, spec, source, runs, alts = {}, {}, {}, {}, {}
@@ -581,4 +581,5 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
         got = outs[sdir][0]
         return sum(1 for a, v in merged.items() if got.get(a) == v), _day_key(sdir)
     best = max(cands, key=agree) if merged else None
-    return {"high": high, "spec": spec, "source": source, "runs": runs, "best": best, "alts": alts}
+    # outs: every solver's raw (answers, err, secs) -- the race verifies its seed from this run, no re-run (D24 #6)
+    return {"high": high, "spec": spec, "source": source, "runs": runs, "best": best, "alts": alts, "outs": outs}
