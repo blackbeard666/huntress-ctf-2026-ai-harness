@@ -98,6 +98,22 @@ if ip -brief addr show $VPN_DEV >/dev/null 2>&1; then
   tun_ip="$(ip -brief addr show $VPN_DEV | awk '{print $3}')"
   if ip route get "$HB_HOST" 2>/dev/null | grep -q $VPN_DEV; then
     ok "$VPN_DEV up ($tun_ip); route to $HB_HOST via $VPN_DEV."
+    # 3a) Path MTU (D24 #12): tun0 says 1500 but the path carried ~1200 (10-21, 10-25) and "frag needed" is filtered ->
+    # the SSH handshake blackholes. DF pings at 1400 / 1200 bytes; never a FAIL (Homebase is optional).
+    tun_mtu="$(cat /sys/class/net/$VPN_DEV/mtu 2>/dev/null)"
+    if ping -M do -s 1372 -c 2 -i 0.3 -W 2 "$HB_HOST" >/dev/null 2>&1; then
+      ok "path MTU to $HB_HOST >= 1400 ($VPN_DEV mtu ${tun_mtu:-?})."
+    elif ping -M do -s 1172 -c 2 -i 0.3 -W 2 "$HB_HOST" >/dev/null 2>&1; then
+      if [ "${HCTF_SSH_MSS-1100}" != "" ] && [ "${HCTF_SSH_MSS-1100}" != 0 ]; then
+        ok "path MTU to $HB_HOST < 1400 ($VPN_DEV mtu ${tun_mtu:-?}): covered by the SSH MSS clamp (HCTF_SSH_MSS=${HCTF_SSH_MSS-1100})."
+      else
+        warn "path MTU to $HB_HOST < 1400 but $VPN_DEV mtu ${tun_mtu:-?} and the SSH MSS clamp is off (HCTF_SSH_MSS=0): the SSH handshake can blackhole. Unset HCTF_SSH_MSS, or: sudo ip link set $VPN_DEV mtu 1200"
+      fi
+    elif ping -c 2 -i 0.3 -W 2 "$HB_HOST" >/dev/null 2>&1; then
+      warn "path MTU to $HB_HOST < 1200 (small pings pass, 1200-byte DF pings don't; $VPN_DEV mtu ${tun_mtu:-?}): lower HCTF_SSH_MSS (e.g. 900) or $VPN_DEV's mtu."
+    else
+      warn "$HB_HOST does not answer ping (VM off / ICMP filtered): path MTU unknown."
+    fi
   else
     warn "$VPN_DEV up ($tun_ip) but no route to $HB_HOST via it. Restart: sudo systemctl restart hctf-vpn"
   fi

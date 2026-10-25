@@ -39,6 +39,19 @@ SSH_OPTS = [
     "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3",
     "-o", "ControlMaster=auto", "-o", f"ControlPath={CTL}", "-o", "ControlPersist=600",
 ]
+# D24 #12: the VPN path carries ~1200-byte packets, tun0 says 1500 and "frag needed" is filtered -> the SSH handshake
+# blackholes (homebase-mtu-pmtud). An MSS-clamping ProxyCommand (hctf/mssproxy.py) keeps every segment of this
+# connection small, no root and no tun0 change. HCTF_SSH_MSS=0 (or empty) = no proxy = the options above, unchanged.
+SSH_MSS = os.environ.get("HCTF_SSH_MSS", "1100").strip()
+
+
+def _mss_opts(mss=None):
+    from . import mssproxy
+    pc = mssproxy.proxy_command(SSH_MSS if mss is None else mss)
+    return ["-o", f"ProxyCommand={pc}"] if pc else []
+
+
+SSH_OPTS += _mss_opts()
 
 
 class Unreachable(RuntimeError):
@@ -98,6 +111,18 @@ def probe(timeout=8):
     if r.returncode == 255:
         clear_control_sockets()
     return r.returncode == 0
+
+
+def sshd_answers(timeout=3, host=None, port=22):
+    """True when the VM's sshd sends its `SSH-` banner over a plain TCP connect. A failing probe() while this is True =
+    the handshake (large KEX packets) is what dies: the MTU blackhole, not a VM/VPN outage."""
+    import socket
+    try:
+        with socket.create_connection((host or HB_HOST, port), timeout=timeout) as s:
+            s.settimeout(timeout)
+            return s.recv(64).startswith(b"SSH-")
+    except OSError:
+        return False
 
 
 ON_HOMEBASE = bool(os.environ.get("HCTF_ON_HOMEBASE"))  # set for workers running on Homebase itself

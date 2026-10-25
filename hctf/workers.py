@@ -1345,7 +1345,9 @@ def _health_loop(log):
             metered = time.time()
             threading.Thread(target=meter_vm, daemon=True).start()
         if ok != was:
-            log(f"[homebase] {'reachable' if ok else 'NOT reachable'} (health probe every {HB_HEALTH_S:g}s)")
+            mtu = "" if ok or not remote.sshd_answers() else (
+                " -- sshd answers, handshake doesn't (MTU? HCTF_SSH_MSS clamp, or `sudo ip link set tun0 mtu 1200`)")
+            log(f"[homebase] {'reachable' if ok else 'NOT reachable'} (health probe every {HB_HEALTH_S:g}s){mtu}")
             was = ok
         if ok and not _hb["provisioned"]:
             _provision(log)
