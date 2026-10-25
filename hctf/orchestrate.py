@@ -4580,6 +4580,8 @@ class Chain:
         from . import webtarget
         if webtarget.is_live_lane(getattr(self, "lane", None)):
             return False   # web: live targets have their own kicks (_web_tt_kick / _web_mastery_kick)
+        if not workers.prestart_useful(e["id"]):
+            return False   # D25 B1: this mode runs on Homebase regardless -- its runner never reads local bytes
         mcid = e["id"]
         label = "TT" if mode == "time_trial" else "Mastery"
 
