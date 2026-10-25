@@ -407,6 +407,91 @@ with patched({(hb_timed._Pool, "_new"): _fake_new}), envset(HCTF_GM_POOL_LAZY="1
     _p.fresh()
 check("A3 an adaptive (4-socket) pool is topped up to its size, not to 8", len(_news) == _n0, (len(_news), _n0))
 
+# ---------------------------------------------------------------- A4 Mastery pre-start at the TT's CORRECT
+_order = []
+
+
+def _fake_auto(res):
+    return lambda *a, **k: dict(res)
+
+
+def _fake_process(cid, sdir, res, log=print):
+    _order.append("process_result")
+    return "correct" if res.get("result") == "correct" else "blocked"
+
+
+for _res, _flag, _want in (({"result": "correct"}, True, ["on_correct", "process_result"]),
+                           ({"result": "incorrect"}, True, ["process_result"]),
+                           ({"result": "correct"}, False, ["process_result"])):
+    _order.clear()
+    with patched({(workers, "run_timed_auto"): _fake_auto(_res), (timed, "process_result"): _fake_process,
+                  (timed, "PREFETCH_ON_CORRECT"): _flag}):
+        timed.run("d24a/time_trial", Path("/s"), log=lambda *a: None,
+                  on_correct=lambda r: _order.append("on_correct"))
+    check(f"A4 timed.run on_correct: result={_res['result']} flag={_flag} -> {_want}", _order == _want, _order)
+_notes = []
+with patched({(workers, "run_timed_auto"): _fake_auto({"result": "correct"}), (timed, "process_result"): _fake_process,
+              (timed, "PREFETCH_ON_CORRECT"): True}):
+    _r = timed.run("d24a/time_trial", Path("/s"), log=_notes.append, on_correct=lambda r: 1 / 0)
+check("A4 an on_correct that raises never costs the pass", _r == "correct" and any("on-correct note" in n for n in _notes),
+      (_r, _notes))
+
+_ch = bare_chain_a()
+check("A4 only the Time Trial passes on_correct",
+      _ch._on_correct_kw("time_trial").get("on_correct") is not None and _ch._on_correct_kw("mastery") == {})
+with patched({(timed, "PREFETCH_ON_CORRECT"): False}):
+    check("A4 HCTF_PREFETCH_ON_CORRECT=0: no on_correct kwarg (today's call)", _ch._on_correct_kw("time_trial") == {})
+
+# the pre-start at on_correct + the post-return call in timed_stage start Mastery ONCE
+from hctf import cli as _cli4  # noqa: E402
+_starts = []
+
+
+def _fake_call(cid, op, *a, **k):
+    _starts.append((cid, op))
+    return {"http": 200, "body": {"error": "test_stop"}}
+
+
+_mlock = timed.timed_dir("d24a/mastery").with_suffix(".lock")
+with patched({(orchestrate, "say"): lambda *a: None, (_cli4, "call"): _fake_call,
+              (_cli4, "is_complete"): lambda cid: False, (orchestrate, "PREFETCH_TT"): True,
+              (orchestrate, "PREFETCH_MASTERY"): True, (workers, "TIMING_MARKS"): True}), \
+        envset(HCTF_RUN_FOR_TIME=None):
+    _ch = bare_chain_a()
+    _ch._on_correct_kw("time_trial")["on_correct"]({"result": "correct"})   # timed.run, before process_result
+    _ch._prefetch_mastery_start()                                           # timed_stage, after timed.run returns
+    _ch._live_pass_prefetch("time_trial")
+    _end = time.time() + 3
+    while not _starts and time.time() < _end:
+        time.sleep(0.05)
+    time.sleep(0.2)
+check("A4 Mastery is pre-started once (on_correct + the post-return call + a live-pass call)",
+      [s for s in _starts if s[1] == "start"] == [("d24a/mastery", "start")], _starts)
+check("A4 on_correct marks the TT's CORRECT (the Mastery handoff timing starts there)",
+      "time_trial:correct" in getattr(_ch, "_marks", {}))
+try:
+    _mlock.unlink()
+except OSError:
+    pass
+
+_starts.clear()
+with patched({(orchestrate, "say"): lambda *a: None, (_cli4, "call"): _fake_call,
+              (_cli4, "is_complete"): lambda cid: False}), envset(HCTF_RUN_FOR_TIME="1"):
+    _ch = bare_chain_a()
+    _ch._tt_on_correct({"result": "correct"})
+    time.sleep(0.3)
+check("A4 HCTF_RUN_FOR_TIME=1: on_correct leaves the Mastery pre-start to the post-return call", not _starts, _starts)
+
+# web: the Mastery target kick fires at on_correct, no longer gated on HCTF_WEB_LIVE_COMPOUND
+_kicks = []
+with patched({(orchestrate, "WEB_LIVE_COMPOUND"): False, (orchestrate.Chain, "_web_mastery_kick"):
+              lambda self: _kicks.append(self.base), (orchestrate.Chain, "_prefetch_mastery_start"): lambda self: None}):
+    _wc = bare_chain_a(lane="web-exploitation", base="web-exploitation-day-24-x")
+    _wc._tt_on_correct({"result": "correct"})
+    bare_chain_a()._tt_on_correct({"result": "correct"})          # a regular lane: no web kick
+check("A4 web: on_correct requests the Mastery target even with HCTF_WEB_LIVE_COMPOUND=0 (regular lanes don't)",
+      _kicks == ["web-exploitation-day-24-x"], _kicks)
+
 # ================================================================ end of Track A
 shutil.rmtree(TMP_A, ignore_errors=True)
 if failures:

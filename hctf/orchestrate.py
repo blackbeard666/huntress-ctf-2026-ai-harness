@@ -5040,7 +5040,8 @@ class Chain:
                     f"{str((timed.last_result(cid) or {}).get('attempt_id'))[:8]} (same verdicts) -- straight to the next fix")
             else:
                 self._mark(f"{mode}:run", cid)
-                res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed))
+                res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed),
+                                **self._on_correct_kw(mode))
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
             if res == "correct" and mode == "time_trial":
@@ -5351,6 +5352,24 @@ class Chain:
                     + (f" (chain +{marks[name] - t_chain:.1f}s)" if t_chain else ""))
         except Exception:  # noqa: BLE001 - instrumentation must never hurt the chain
             pass
+
+    def _on_correct_kw(self, mode):
+        """timed.run kwargs: the Time Trial's pass fires _tt_on_correct BEFORE its bookkeeping (D24 #4)."""
+        return {"on_correct": self._tt_on_correct} if mode == "time_trial" and timed.PREFETCH_ON_CORRECT else {}
+
+    def _tt_on_correct(self, res):
+        """D24 #4: the TT runner just reported CORRECT (the GM judged it: Mastery's prerequisite is banked). Pre-start
+        Mastery now instead of after process_result (variant capture + label promotion: warmups 8 s, metadata 7 s,
+        mobile 3 s); web requests its Mastery target now, whatever HCTF_WEB_LIVE_COMPOUND says. Both are once-per-chain
+        (_prefetch_m_started / _web_m_kicked), and the pre-start holds the runner's mode lock, so the post-return call
+        in timed_stage can't start Mastery a second time. HCTF_RUN_FOR_TIME=1: left to that post-return call (its
+        untimed-pool test reads THIS attempt's last_timed.json, written by process_result)."""
+        self._mark("time_trial:correct")
+        if os.environ.get("HCTF_RUN_FOR_TIME", "auto") != "1":
+            self._prefetch_mastery_start()
+        from . import webtarget
+        if webtarget.is_live_lane(getattr(self, "lane", None)):
+            self._web_mastery_kick()
 
     def _live_pass_prefetch(self, mode):
         """A Time Trial passed off the runner's own path (live answer / online resolution): pre-start Mastery now, as a
