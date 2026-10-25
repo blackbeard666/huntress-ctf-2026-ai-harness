@@ -515,6 +515,36 @@ check("D4 class_known: a never-seen class with protected_reference/current_user/
 check("D4 handlers.gated_only: protected_reference gated without its companion, not with it",
       webhandlers.gated_only("protected_reference", kit18) and not webhandlers.gated_only("protected_reference", kit14))
 
+# ---- D4: the answer-first cap scales with the day's chains (web included) -----------------------------------------------
+from hctf import duel  # noqa: E402
+
+from hctf import paths  # noqa: E402
+
+CH_TD = TD / "chains"
+with patched({(duel, "_mem_avail_gb"): lambda: 99.0, (orchestrate, "ANSWER_FIRST_MAX"): 0,
+              (orchestrate, "_af_chains"): set(), (orchestrate, "_af_live"): set(),
+              (paths, "solver_dir"): lambda b: CH_TD / b / "solver", (paths, "challenge_root"): lambda b: (CH_TD / b).mkdir(parents=True, exist_ok=True) or CH_TD / b}):
+    D25_CHAINS = REG + [SH, RE, RV]
+    for b in D25_CHAINS:
+        orchestrate.Chain(b, [{"id": b, "mode": "single_solve", "lane": "web"}], None, None)
+    check("D4 auto cap = one per chain this run (8 on D25, web included)", orchestrate.answer_first_cap() == 8,
+          orchestrate.answer_first_cap())
+    orchestrate._af_live.update({"warmups-day-25", RV, SH})
+    ok, why = orchestrate.answer_first_eligible("web", 1)
+    check("D4 D25 replay: reset-expectations gets its answer-first worker with 3 already running", ok, why)
+    orchestrate._af_live.update({f"x{i}" for i in range(5)})
+    ok, why = orchestrate.answer_first_eligible("web", 1)
+    check("D4 ... and the cap still binds at one per chain", not ok and "cap 8" in why, why)
+with patched({(duel, "_mem_avail_gb"): lambda: 2.4, (orchestrate, "ANSWER_FIRST_MAX"): 0,
+              (orchestrate, "_af_chains"): {f"c{i}" for i in range(8)}, (orchestrate, "_af_live"): {"a", "b", "c", "d"}}):
+    ok, why = orchestrate.answer_first_eligible("web", 1)
+    check("D4 memory floor grows per worker beyond the old 3 (2.4 GB free, 4 running -> refused)",
+          not ok and "GB available" in why, why)
+with patched({(duel, "_mem_avail_gb"): lambda: 99.0, (orchestrate, "ANSWER_FIRST_MAX"): 3,
+              (orchestrate, "_af_chains"): {f"c{i}" for i in range(8)}, (orchestrate, "_af_live"): {"a", "b", "c"}}):
+    ok, why = orchestrate.answer_first_eligible("web", 1)
+    check("D4 HCTF_ANSWER_FIRST_MAX=3: the old fixed cap", not ok and "cap 3" in why, why)
+
 srv.shutdown()
 
 if __name__ == "__main__":

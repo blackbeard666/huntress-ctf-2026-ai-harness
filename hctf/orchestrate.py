@@ -579,13 +579,29 @@ ANSWER_FIRST_LANES = {x.strip() for x in os.environ.get(
     "warmups,metadata-forensics,mobile-android,binary-reverse-engineering,script-analysis,web").split(",") if x.strip()}
 ANSWER_FIRST_EFFORT = os.environ.get("HCTF_ANSWER_FIRST_EFFORT", "medium")
 ANSWER_FIRST_TIMEOUT = float(os.environ.get("HCTF_ANSWER_FIRST_TIMEOUT", "420"))
-ANSWER_FIRST_MAX = int(os.environ.get("HCTF_ANSWER_FIRST_MAX", "3"))          # concurrent answer-first workers
+# Concurrent answer-first workers. D25 D4: the fixed 3 starved reset-expectations (3 web chains + warmups held all
+# three at 21:00:31; its single then waited on the solver worker alone). "auto" (default) = one per chain started this
+# run (web included), never below ANSWER_FIRST_MIN; a number = that fixed cap (3 = the old behaviour). Memory still
+# gates every start: MIN_AVAIL_GB free, plus GB_EACH more per worker already running beyond the old 3.
+_AF_MAX_ENV = os.environ.get("HCTF_ANSWER_FIRST_MAX", "auto").strip()
+ANSWER_FIRST_MAX = int(_AF_MAX_ENV) if _AF_MAX_ENV.isdigit() else 0          # 0 = auto (scale with the day's chains)
+ANSWER_FIRST_MIN = int(os.environ.get("HCTF_ANSWER_FIRST_MIN", "3"))
 ANSWER_FIRST_MIN_AVAIL_GB = float(os.environ.get("HCTF_ANSWER_FIRST_MIN_AVAIL_GB", "2.0"))
+ANSWER_FIRST_GB_EACH = float(os.environ.get("HCTF_ANSWER_FIRST_GB_EACH", "0.3"))
 ANSWER_FIRST_RACE_WAIT = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT", "10"))   # give the reuse race its 3-9 s
 # web (D24 #9): the answer-first worker starts at once beside the race (its live probe and the race's exploits hit the
 # same target; whichever completes first ends the other). 10 = the old wait.
 ANSWER_FIRST_RACE_WAIT_WEB = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT_WEB", "0"))
 _af_live, _af_lock = set(), threading.Lock()
+_af_chains = set()   # chain bases constructed this run (Chain.__init__): the auto answer-first cap
+
+
+def answer_first_cap():
+    """The concurrent answer-first cap now: HCTF_ANSWER_FIRST_MAX when numeric, else max(MIN, chains this run)."""
+    if ANSWER_FIRST_MAX > 0:
+        return ANSWER_FIRST_MAX
+    with _af_lock:
+        return max(ANSWER_FIRST_MIN, len(_af_chains))
 
 
 def answer_first_eligible(lane, n_fields):
@@ -601,11 +617,14 @@ def answer_first_eligible(lane, n_fields):
         avail = _duel._mem_avail_gb()
     except Exception:  # noqa: BLE001
         avail = 99.0
-    if avail < ANSWER_FIRST_MIN_AVAIL_GB:
-        return False, f"only {avail:.1f} GB available"
+    cap = answer_first_cap()
     with _af_lock:
-        if len(_af_live) >= ANSWER_FIRST_MAX:
-            return False, f"{len(_af_live)} answer-first workers already running"
+        running = len(_af_live)
+    if running >= cap:
+        return False, f"{running} answer-first workers already running (cap {cap})"
+    need = ANSWER_FIRST_MIN_AVAIL_GB + max(0, running - 2) * ANSWER_FIRST_GB_EACH
+    if avail < need:
+        return False, f"only {avail:.1f} GB available (need {need:.1f} with {running} running)"
     return True, ""
 
 
@@ -2270,6 +2289,8 @@ def wait_until_expired(cid, extra=3):
 class Chain:
     def __init__(self, base, entries, pools, gov, only_modes=None):
         self.base, self.pools, self.gov = base, pools, gov
+        with _af_lock:
+            _af_chains.add(base)   # D25 D4: the auto answer-first cap counts the day's chains (web included)
         self.entries = {e["mode"]: e for e in entries}
         ss = self.entries.get("single_solve") or next(iter(self.entries.values()))
         self.lane, self.name = ss.get("lane", "misc"), ss.get("name", base)
