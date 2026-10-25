@@ -282,8 +282,8 @@ with patched(base_env):
     with patched({(workers, "render"): lambda t, **kw: rendered.update(kw) or "x",
                   (orchestrate, "single_method_text"): lambda d: "curl ...",
                   (orchestrate.Chain, "run_worker"): lambda self, *a, **k: 0,
-                  (orchestrate.WebCodify, "landed"): lambda self, timeout=15: False,
-                  (orchestrate, "_rel"): str}):
+                  (orchestrate.WebCodify, "landed"): lambda self, timeout=15: False}):   # the real _rel (a Path:
+        #                                     rehearsal fair D25 -- `"..." + _rel(plugin)` raised in the hardening prompt)
         ch = bare_chain()
         wc = orchestrate.WebCodify(ch, "web-exploitation-day-25-x", prelanded=True)
         wc._run()

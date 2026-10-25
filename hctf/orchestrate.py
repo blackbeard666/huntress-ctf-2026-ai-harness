@@ -803,7 +803,7 @@ class WebCodify:
     def _run(self):
         try:
             tt, ms = self.chain.entries.get("time_trial"), self.chain.entries.get("mastery")
-            harden = ("A VERIFIED plugin is ALREADY in place: `" + _rel(self.plugin) + "` (the single's worker promoted it "
+            harden = ("A VERIFIED plugin is ALREADY in place: `" + str(_rel(self.plugin)) + "` (the single's worker promoted it "
                       "after it returned the single's proof). This is a HARDENING pass: copy it to your draft, re-run it on "
                       "the fresh target below, and only fix what a fresh target breaks (per-target values the single's "
                       "target happened to fix, a missing fallback route/parameter, a too-slow step). If it already "
@@ -3659,16 +3659,23 @@ class Chain:
             cands, lane_dirs = solvers.reuse_cands(self.lane, exclude=[self.sdir], limit=REUSE_RACE_SOLVERS)
             if not cands:
                 return
-            workers.hb_race_prepare(cands, say)   # a no-op when the pre-drop prepare already pushed + warmed them
-            contract, p = None, cli.cdir(cid) / "start.json"
-            while time.time() - t0 < HB_RACE_WAIT_START:
-                st = cli.load(cid, "start.json")
-                if st and cli.attempt_id(st) and p.stat().st_mtime >= getattr(self, "_chain_t0", t0) - 1:
-                    contract = st
-                    break
-                if start_fut.done():
+            # the local start body AND a relay channel, while the local download still runs (rehearsal fair D25: the
+            # single started 2 s into the run, the relay channels came up 3-8 s later -> the race gave up at once)
+            contract, chan, p = None, None, cli.cdir(cid) / "start.json"
+            while time.time() - t0 < HB_RACE_WAIT_START and not start_fut.done():
+                if contract is None:
+                    st = cli.load(cid, "start.json")
+                    if st and cli.attempt_id(st) and p.stat().st_mtime >= getattr(self, "_chain_t0", t0) - 1:
+                        contract = st
+                chan = chan or workers.hb_race_chan(say)
+                if contract is not None and chan is not None:
                     break
                 time.sleep(0.1)
+            if chan is None and contract is not None and not start_fut.done():
+                say(f"[{cid}] in-network race: no relay channel up within {HB_RACE_WAIT_START:g}s -- the local race "
+                    "runs when the bytes land")
+                return
+            workers.hb_race_prepare(cands, say)   # a no-op when the pre-drop prepare already pushed + warmed them
             if contract is None or start_fut.done() or cli.is_complete(cid):
                 say(f"[{cid}] in-network race: stands down ("
                     + ("no start body" if contract is None else "the local bytes landed first") + ")")

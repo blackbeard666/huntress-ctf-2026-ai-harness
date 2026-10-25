@@ -172,7 +172,7 @@ cdir.mkdir()
 contract = {"attempt_id": "A1", "answer_ids": ["a", "b"], "questions": []}
 (cdir / "start.json").write_text(json.dumps(contract))
 saved = {k: getattr(orchestrate.cli, k) for k in ("load", "cdir", "is_complete", "attempt_id")}
-saved_w = (workers.hb_race, workers.hb_race_prepare)
+saved_w = (workers.hb_race, workers.hb_race_prepare, workers.hb_race_chan)
 saved_s = (solvers.reuse_cands, solvers.reuse_merge)
 try:
     orchestrate.cli.load = lambda cid, name: json.loads((cdir / name).read_text()) if (cdir / name).exists() else None
@@ -180,6 +180,8 @@ try:
     orchestrate.cli.is_complete = lambda cid: False
     orchestrate.cli.attempt_id = lambda b: (b or {}).get("attempt_id")
     workers.hb_race_prepare = lambda sdirs, log=print: []
+    chan = {"up": object()}
+    workers.hb_race_chan = lambda log=print: chan["up"]
     solvers.reuse_cands = lambda lane, exclude=(), limit=None, rank=None, question_contract=None: ([good, bad], [])
     merged_in = {}
 
@@ -218,6 +220,27 @@ try:
     ch = chain()
     ch._hb_race("b/single_solve", Future())
     check("3 _hb_race: no relay channel -> nothing submitted", ch.sub == [], ch.sub)
+    # no relay channel YET at the single's start (rehearsal fair D25: up 3-8 s later): the race waits for one beside the
+    # local download, then runs
+    calls = []
+    workers.hb_race = lambda cid, cands, att, t, log=print: calls.append(1) or {
+        "attempt_id": "A1", "outs": {good: ({"a": "1", "b": "2"}, None, 1.0)}}
+    chan["up"] = None
+    threading.Timer(0.6, lambda: chan.update(up=object())).start()
+    ch = chain()
+    ch._hb_race("b/single_solve", Future())
+    check("3 _hb_race: waits for a relay channel that comes up after the single's start, then races",
+          calls == [1] and ch.sub, (calls, ch.sub))
+    chan["up"] = None
+    old_wait = orchestrate.HB_RACE_WAIT_START
+    orchestrate.HB_RACE_WAIT_START = 0.5
+    calls.clear()
+    ch = chain()
+    ch._hb_race("b/single_solve", Future())
+    orchestrate.HB_RACE_WAIT_START = old_wait
+    check("3 _hb_race: no relay channel within HB_RACE_WAIT_START -> stands down, nothing raced",
+          calls == [] and ch.sub == [], (calls, ch.sub))
+    chan["up"] = object()
     (cdir / "start.json").unlink()
     old_wait = orchestrate.HB_RACE_WAIT_START
     orchestrate.HB_RACE_WAIT_START = 0.5
@@ -230,7 +253,7 @@ try:
 finally:
     for k, v in saved.items():
         setattr(orchestrate.cli, k, v)
-    workers.hb_race, workers.hb_race_prepare = saved_w
+    workers.hb_race, workers.hb_race_prepare, workers.hb_race_chan = saved_w
     solvers.reuse_cands, solvers.reuse_merge = saved_s
 
 ch = C.__new__(C)
