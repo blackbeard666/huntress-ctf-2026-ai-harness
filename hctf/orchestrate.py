@@ -921,6 +921,13 @@ TRIAGE_ABORT_AT_CORRECT = os.environ.get("HCTF_TRIAGE_ABORT_AT_CORRECT", "1") !=
 RACE_VERIFY_FROM_PLAN = os.environ.get("HCTF_RACE_VERIFY_FROM_PLAN", "1") != "0"
 RACE_PRESNAP = os.environ.get("HCTF_RACE_PRESNAP", "1") != "0"
 RACE_SNAP_FIRST = os.environ.get("HCTF_RACE_SNAP_FIRST", "1") != "0"
+# Race-first handoff: a reuse-race win with a verified seed hands the timed modes over at once -- triage runs in a thread
+# and the prompt build + LLM worker launch are skipped (D24 A/B replay: binary won its race at +18 s, then waited 23 s
+# for triage's 27 s extract + the 8 s prompt build before the watcher saw CORRECT; script 14 s). The watcher + the
+# normal stopped-at-CORRECT path do the handover; no verified handover in RACE_FIRST_WAIT s (e.g. a carry-over hold that
+# needs a worker) -> the worker path runs exactly as before. 0 = off.
+RACE_FIRST_HANDOFF = os.environ.get("HCTF_RACE_FIRST_HANDOFF", "1") != "0"
+RACE_FIRST_WAIT = float(os.environ.get("HCTF_RACE_FIRST_WAIT", "12"))
 # On a pool with EVIDENCE of no clock (_untimed_evidence) a missed carry-over / new-id field is fixed in-attempt (localize,
 # bank, live answer), so the handoff holds are capped: carry-check wait (was CARRY_CHECK_MAX + 5 = 17 s), synchronous
 # new-id dry run skipped above SKIP_IDS new ids (D23 script: 12k-id contracts) else capped. 0 = no cap / no skip.
@@ -3793,12 +3800,24 @@ class Chain:
                 self.sdir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / "hctf" / "templates" / "solve_skeleton.py", self.sdir / "solve.py")
         self._pre_t["tri0"] = time.time()
-        try:
-            from . import triage as triage_mod
-            triage_mod.triage(cid, defer_recon=self._recon_deferrable, log=say,  # grounding before the LLM worker
-                              **({"stop": self._correct_evt.is_set} if TRIAGE_ABORT_AT_CORRECT else {}))
-        except Exception as e:  # noqa: BLE001 - triage is best-effort
-            say(f"[{cid}] triage note: {e}")
+
+        def run_triage():
+            try:
+                from . import triage as triage_mod
+                triage_mod.triage(cid, defer_recon=self._recon_deferrable, log=say,  # grounding before the LLM worker
+                                  **({"stop": self._correct_evt.is_set} if TRIAGE_ABORT_AT_CORRECT else {}))
+            except Exception as e:  # noqa: BLE001 - triage is best-effort
+                say(f"[{cid}] triage note: {e}")
+        if RACE_FIRST_HANDOFF and not welcome:
+            tri = threading.Thread(target=run_triage, daemon=True, name=f"triage-{self.base}")
+            tri.start()
+            while tri.is_alive() and not self._race_first_ready(cid):
+                tri.join(0.25)
+            if tri.is_alive() and self._race_first_handoff(cid, staged, tfuts, "during triage"):
+                return True
+            tri.join()
+        else:
+            run_triage()
         self._pre_t["tri1"] = time.time()
         if body is None:
             # e.g. read-the-rules: no artifact, but the contract still names the answer ids
@@ -3821,6 +3840,9 @@ class Chain:
             except Exception as e:  # noqa: BLE001 - the prompt just lists fewer contracts
                 say(f"[{cid}] timed contract prefetch note: {e}")
         self._pre_t["tfetch"] = time.time()
+        if (RACE_FIRST_HANDOFF and not welcome and self._race_first_ready(cid)
+                and self._race_first_handoff(cid, staged, tfuts, "before the worker launch")):
+            return True
         for n in range(MAX_SINGLE_LAUNCHES):
             extra = ""
             notes = cli.cdir(cid) / "notes.md"
@@ -4035,6 +4057,73 @@ class Chain:
                 return False
         set_state(self.base, stage="single:blocked")
         return False
+
+    def _race_first_ready(self, cid):
+        """The reuse race won with a seed that reproduces every GM-confirmed answer (_race_snapshot set _race_snap) and
+        its carry-over check, if already finished, found nothing the timed modes ask that the seed can't answer."""
+        if getattr(self, "_race_snap", None) is None or not cli.is_complete(cid):
+            return False
+        fut = getattr(self, "_carry_fut", None)
+        if fut is not None and fut.done():
+            try:
+                return not fut.result()
+            except Exception:  # noqa: BLE001 - the watcher's hold reports it
+                return True
+        return True
+
+    def _race_first_handoff(self, cid, staged, tfuts, where):
+        """Race-first handoff: the watcher adopts the race snapshot with no worker launched; the normal stopped-at-CORRECT
+        path then restores it and starts the timed modes. False (nothing changed but the solver dir's staging) when no
+        verified handover came within RACE_FIRST_WAIT s -> the caller goes on with the worker path."""
+        if getattr(self, "_race_first_tried", False):
+            return False   # once per single: a failed attempt means the worker is needed
+        self._race_first_tried = True
+        t0 = time.time()
+        if staged is not None:
+            try:
+                staged.result(timeout=120)   # the prior solver copy lands in the solver dir first (mtime baseline)
+                prior = prior_solver_dir(self.lane, self.sdir)
+                if prior and getattr(self, "_cases_fut", None) is None:
+                    self._cases_fut = ThreadPoolExecutor(max_workers=1).submit(stage_prior_cases, prior, self.sdir)
+            except Exception as e:  # noqa: BLE001 - the worker path copies it itself
+                say(f"[{cid}] race-first: prior-solver staging note: {e}")
+                return False
+        for f in tfuts or []:
+            try:
+                f.result(timeout=15)
+            except Exception:  # noqa: BLE001 - the timed stages fetch their own contracts
+                pass
+        ready, done_evt = threading.Event(), threading.Event()
+        self._ready_snap = None
+        self._launch_mtimes = self._solver_mtimes()
+        self._cur_ready = ready
+        watch = threading.Thread(target=self._watch_ready, args=(cid, ready, done_evt), daemon=True)
+        watch.start()
+        ready.wait(RACE_FIRST_WAIT)
+        done_evt.set()
+        watch.join(RACE_FIRST_WAIT)
+        if not (ready.is_set() and self._ready_snap is not None):
+            say(f"[{cid}] race-first handoff ({where}): no verified handover in {RACE_FIRST_WAIT:g}s -> the worker path runs")
+            self._ready_snap = None
+            return False
+        self._cancel_warm()
+        self._mark("after_worker")
+        say(f"[{cid}] race-first handoff ({where}): no worker launched, timed modes start "
+            f"{time.time() - t0:.1f}s after the race's verified win")
+        self._restore_ready_snapshot(self._ready_snap)
+        if ASYNC_HANDOFF:
+            self._record_labels(cid)
+            self._start_handoff_bookkeeping(cid)
+            return True
+        self._join_prior_cases(cid)
+        ensure_case_and_test(cid, self.sdir, full=False)
+        self._record_labels(cid)
+        self._start_family_pre(cid)
+        self._start_mutation_pre(cid)
+        self._start_compound_pre(cid)
+        self._start_today_pre(cid)
+        self._start_baseline_pre(cid)
+        return True
 
     def _live_target_accept(self, cid, res):
         """Web single gate: the GM judged it CORRECT but its case can't be replayed (target 410 once solved; D19: chain
