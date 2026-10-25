@@ -169,6 +169,127 @@ with patched({(workers, "_run_timed_auto"): fake_route, (workers, "start_homebas
 check("A1 run_timed_auto reports the seconds its Homebase readiness check cost",
       r.get("t_hb_ready", 0) >= 0.04, r)
 
+# ---------------------------------------------------------------- A2 linear question pairing
+_TOK = ["a", "b", "marker", "field", "x.y", "q-1", "set1", "a+b", "x$", "(", "", "sec_2", "b.c_d", "1", "ß"]
+
+
+def _rid(rng):
+    parts = [rng.choice(_TOK) for _ in range(rng.randint(1, 3))]
+    out = parts[0]
+    for p in parts[1:]:
+        out += rng.choice("._-/ x") + p
+    return out
+
+
+def _rcase(rng):
+    qs = []
+    for k in range(rng.randint(0, 10)):
+        r = rng.random()
+        if r < 0.05:
+            qs.append({})
+        elif r < 0.12:
+            qs.append({"question": f"q{k}"})                       # no id
+        elif r < 0.15:
+            qs.append({"id": None, "question": f"q{k}"})
+        else:
+            qs.append({"id": _rid(rng), "question": f"q{k}"})
+    ids = []
+    for _ in range(rng.randint(0, 12)):
+        r = rng.random()
+        qids = [q.get("id") for q in qs if isinstance(q.get("id"), str)]
+        if r < 0.3 and qids:
+            ids.append(rng.choice(qids))                           # exact
+        elif r < 0.6 and qids:
+            ids.append(_rid(rng) + rng.choice("._-x") + rng.choice(qids))   # boundary (or not) suffix
+        elif r < 0.65 and ids:
+            ids.append(rng.choice(ids))                            # duplicate answer id
+        else:
+            ids.append(_rid(rng))
+    if qs and rng.random() < 0.08:
+        qs[rng.randrange(len(qs))]["id"] = qs[0].get("id")        # duplicate question ids
+    r = rng.random()
+    if r < 0.03 and qs:
+        qs.insert(rng.randrange(len(qs) + 1), "junk")              # non-dict question (scan path)
+    elif r < 0.06 and qs:
+        qs[rng.randrange(len(qs))]["id"] = rng.randint(0, 3)       # int question id (scan path; may raise)
+    elif r < 0.09 and qs and isinstance(qs[-1].get("id"), str):
+        ids.append("slot0_" + qs[-1]["id"] + "\n")                 # `$` before a trailing newline (scan path)
+    elif r < 0.11 and qs:
+        qs[rng.randrange(len(qs))]["id"] = "mark\ner"              # newline inside a question id (scan path)
+    return ids, qs
+
+
+def _shape(res, qs):
+    pairs = res.items() if isinstance(res, dict) else res
+    out = []
+    for aid, q in pairs:
+        k = next((i for i, x in enumerate(qs) if x is q), None)
+        out.append((aid, ("idx", k) if k is not None else ("val", repr(q))))
+    return out
+
+
+def _both(fn, ids, qs):
+    got = {}
+    for flag in ("0", "1"):
+        with envset(HCTF_PAIR_INDEX=flag):
+            try:
+                got[flag] = ("ok", _shape(fn(ids, qs), qs))
+            except Exception as e:  # noqa: BLE001 - the scan's own exceptions must be kept
+                got[flag] = ("raise", type(e).__name__)
+    return got["0"], got["1"]
+
+
+_sv = lambda ids, qs: solvers.paired_questions({"answer_ids": ids, "questions": qs})   # noqa: E731
+_rng = random.Random(2024)
+_bad = []
+for _n in range(4000):
+    _ids, _qs = _rcase(_rng)
+    for _name, _fn in (("solvers", _sv), ("hb_timed", hb_timed._paired)):
+        _old, _new = _both(_fn, _ids, _qs)
+        if _old != _new:
+            _bad.append((_name, _ids, _qs, _old, _new))
+check("A2 randomized: indexed pairing == the old scan (4000 cases x solvers + hb_timed)", not _bad, _bad[:2])
+
+_edge = [
+    (["slot0_a.marker"], [{"id": "marker"}, {"id": "a.marker"}]),           # longest boundary suffix wins
+    (["xmarker"], [{"id": "q0"}, {"id": "marker"}]),                       # no boundary -> position
+    (["m", "slot1-m"], [{"id": "m", "n": 1}, {"id": "m", "n": 2}]),         # duplicate question ids -> the first
+    (["slot_marker\n"], [{"id": "z"}, {"id": "marker"}]),                  # trailing newline: `$` still matches
+    ([""], [{"id": "x"}, {"id": ""}]),                                     # empty id: exact only
+    (["a_", "b-"], [{"id": ""}, {}]),                                      # empty suffix never matches; {} -> {}
+    (["a.b.c"], [{"id": "c"}, {"id": "b.c"}, {"id": "a.b.c.d"}]),
+    (["s1.k", "s2.k", "s3.zz"], [{"id": "k"}]),                            # shared question; past the end -> {}
+    (["5"], [{"id": 5}]),                                                  # int question id: the scan's TypeError
+    (["a"], ["junk", {"id": "a"}]),
+]
+_eb = [(i, q, *_both(f, i, q)) for i, q in _edge for f in (_sv, hb_timed._paired) if len(set(map(str, _both(f, i, q)))) > 1]
+check("A2 edge cases (longest suffix, boundary, duplicates, newline, empty ids, int ids, non-dict) == the scan", not _eb,
+      _eb[:2])
+with envset(HCTF_PAIR_INDEX="1"):
+    _r = dict(_sv(["slot0_a.marker", "xmarker"], [{"id": "marker"}, {"id": "a.marker"}]))
+check("A2 longest boundary suffix + positional fallback",
+      _r["slot0_a.marker"]["id"] == "a.marker" and _r["xmarker"]["id"] == "a.marker", _r)
+
+# 12,480 ids (D16/D24 script Mastery scale): 1:1 ids, shared-question bundles, and no id match at all (positional)
+_N = 12480
+_ids = [f"set-{k // 2496 + 1}.field_{k % 2496:04d}" for k in range(_N)]
+_cases = {"1:1": (_ids, [{"id": a, "question": "q"} for a in _ids]),
+          "bundle": ([f"set-{k // 2496 + 1}.slot{k}_marker{k % 40}" for k in range(_N)],
+                     [{"id": f"marker{n}", "question": "q"} for n in range(40)]),
+          "positional": (_ids, [{"id": f"other-{k}", "question": "q"} for k in range(_N)])}
+_times = {}
+with envset(HCTF_PAIR_INDEX="1"):
+    for _name, (_i, _q) in _cases.items():
+        t = time.perf_counter()
+        _a = solvers.paired_questions({"answer_ids": _i, "questions": _q})
+        _b = hb_timed._paired(_i, _q)
+        _times[_name] = round(time.perf_counter() - t, 3)
+        if _name == "1:1":
+            _ok11 = all(q is _q[k] for k, (_x, q) in enumerate(_a)) and all(_b[a] is _q[k] for k, a in enumerate(_i))
+print(f"   (A2 12,480-id pairing, solvers + hb_timed together: {_times})")
+check("A2 12,480 ids pair in < 0.5 s (each shape, both implementations)", max(_times.values()) < 0.5, _times)
+check("A2 12,480 1:1 ids pair to their own questions", _ok11)
+
 # ================================================================ end of Track A
 shutil.rmtree(TMP_A, ignore_errors=True)
 if failures:

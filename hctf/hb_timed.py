@@ -1699,15 +1699,50 @@ def _attempt(a):
     return _emit(out, adir)
 
 
+def _pair_index(ids, qs):
+    """D24 #2: lookup(answer_id) -> question via an exact-id index + the longest boundary suffix, or None when the index
+    can't promise the scan's answer (mirror of hctf.solvers._pair_index -- this file runs standalone on Homebase)."""
+    if not isinstance(ids, list) or not isinstance(qs, list):
+        return None
+    exact = {}
+    for q in qs:
+        if not isinstance(q, dict):
+            return None
+        qid = q.get("id")
+        if qid is None:
+            continue
+        if not isinstance(qid, str) or "\n" in qid:
+            return None
+        exact.setdefault(qid, q)
+    if any(not isinstance(a, str) or "\n" in a for a in ids):
+        return None
+
+    def lookup(aid):
+        q = exact.get(aid)
+        if q is None:
+            for j, c in enumerate(aid):
+                if c in "._-" and j + 1 < len(aid):
+                    q = exact.get(aid[j + 1:])
+                    if q is not None:
+                        break
+        return q
+    return lookup
+
+
 def _paired(ids, qs):
     """{answer_id: question}: exact question id, else the longest question id the answer id ends with, else by position
-    (stdlib mirror of hctf.solvers.paired_questions -- this file runs standalone on Homebase)."""
+    (stdlib mirror of hctf.solvers.paired_questions -- this file runs standalone on Homebase). The per-id scan of every
+    question took 17.8 s of a 12,480-id script Mastery's start phase: indexed now (HCTF_PAIR_INDEX=0: the scan)."""
+    look = _pair_index(ids, qs) if _opt("HCTF_PAIR_INDEX", "1") != "0" else None
     out = {}
     for i, aid in enumerate(ids):
-        q = next((q for q in qs if q.get("id") == aid), None)
-        if q is None:
-            sufs = [q for q in qs if q.get("id") and re.search(rf"(^|[._-]){re.escape(q['id'])}$", aid)]
-            q = max(sufs, key=lambda q: len(q["id"]), default=None)
+        if look is not None:
+            q = look(aid)
+        else:
+            q = next((q for q in qs if q.get("id") == aid), None)
+            if q is None:
+                sufs = [q for q in qs if q.get("id") and re.search(rf"(^|[._-]){re.escape(q['id'])}$", aid)]
+                q = max(sufs, key=lambda q: len(q["id"]), default=None)
         if q is None and i < len(qs):
             q = qs[i]
         out[aid] = q or {}
