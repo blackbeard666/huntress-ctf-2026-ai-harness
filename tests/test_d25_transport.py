@@ -351,7 +351,8 @@ try:
         reqs.clear()
         env = gm.cmd_download(CAP, str(out), "e3.zip", SHA)
         check("B3 a broken part -> today's single GET, correct bytes",
-              env["saved"][0]["sha256"] == SHA and reqs[-1][0] is None, reqs[-2:])
+              # sibling ranges still in flight may log after the fallback GET (seen under sweep load): order-free
+              env["saved"][0]["sha256"] == SHA and sum(r[0] is None for r in reqs) == 1, reqs[-3:])
         H.mode = "range"
         reqs.clear()
         env = gm.cmd_download(CAP, str(out), "e4.zip", "0" * 64)

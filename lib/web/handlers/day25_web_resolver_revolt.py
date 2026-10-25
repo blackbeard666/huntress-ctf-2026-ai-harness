@@ -101,5 +101,9 @@ def exploit(base, clues):
     return None
 
 
-KEY_MAP = [(r"protected_reference|resolver|graphql|schema|case_index", "day25_web_resolver_revolt")]
+# protected_reference is shared with Day 14/24's API-inventory kit: dispatch on it only beside this kit's
+# note / current_user (lib.web.handlers KEY_COMPANIONS)
+KEY_MAP = [(r"resolver|graphql|schema|case_index", "day25_web_resolver_revolt"),
+           (r"protected_reference", "day25_web_resolver_revolt")]
+KEY_COMPANIONS = {r"protected_reference": r"^(note|current_user)$"}
 HANDLERS = {"day25_web_resolver_revolt": exploit}

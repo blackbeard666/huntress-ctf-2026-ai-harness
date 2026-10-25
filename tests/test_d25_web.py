@@ -518,10 +518,15 @@ check("D4 Day 18's kit (protected_reference, no inventory_route) no longer dispa
 check("D4 Day 14's kit still dispatches to it (inventory_route, and protected_reference beside it)",
       d24 in [n for n, _f in webhandlers.for_key("inventory_route", kit14)]
       and d24 in [n for n, _f in webhandlers.for_key("protected_reference", kit14)])
-check("D4 class_known: a never-seen class with protected_reference/current_user/note is NOT known (12 s budget)",
-      libweb.class_known(kit18, "current_user") is False and libweb.class_known(kit14, "inventory_route") is True)
+# a kit with protected_reference beside neither class's companion (no inventory_route, no note/current_user)
+kitnew = {"framework": "x", "feature_route": "/api/v2/things", "protected_reference": "7"}
+check("D4 class_known: protected_reference beside no companion is NOT known (12 s budget); Day 14's kit is",
+      libweb.class_known(kitnew, "protected_reference") is False and libweb.class_known(kit14, "inventory_route") is True)
 check("D4 handlers.gated_only: protected_reference gated without its companion, not with it",
-      webhandlers.gated_only("protected_reference", kit18) and not webhandlers.gated_only("protected_reference", kit14))
+      webhandlers.gated_only("protected_reference", kitnew) and not webhandlers.gated_only("protected_reference", kit14))
+check("D4 Day 18's GraphQL kit dispatches to Day 25's resolver plugin (note/current_user companion), Day 14's does not",
+      "day25_web_resolver_revolt" in [n for n, _f in webhandlers.for_key("current_user", kit18)]
+      and "day25_web_resolver_revolt" not in [n for n, _f in webhandlers.for_key("inventory_route", kit14)])
 
 # ---- D4: the answer-first cap scales with the day's chains (web included) -----------------------------------------------
 from hctf import duel  # noqa: E402
