@@ -66,21 +66,27 @@ class _Ctx(__import__("threading").local):
 _CTX = _Ctx()
 
 
-def _event(kind, out, **extra):
+def _event(kind, out, slim=False, **extra):
     """Mid-attempt event to the daemon client (HCTF_EARLY_GENERALIZE=1 only): {"event": kind, attempt facts}. The
-    orchestrator can start the offline generalize on the variant while this attempt still localizes in-window."""
+    orchestrator can start the offline generalize on the variant while this attempt still localizes in-window.
+    slim: no `submitted` (D25 C4 per-set events: several per attempt, the answers can be ~2.6k fields)."""
     cb = _CTX.on_event
     path = os.environ.get("HCTF_EARLY_EVENT_FILE")   # local runs (a subprocess): the parent polls this file
     if (cb is None and not path) or _opt("HCTF_EARLY_GENERALIZE", "0") != "1":
         return
-    data = dict({k: out.get(k) for k in ("cid", "attempt_id", "window", "deadline", "phases", "missing", "submitted")},
-                event=kind, **extra)
+    keys = ("cid", "attempt_id", "window", "deadline", "phases", "missing") + (() if slim else ("submitted",))
+    data = dict({k: out.get(k) for k in keys}, event=kind, **extra)
     if cb is not None:
         try:
             cb(data)
         except Exception:  # noqa: BLE001 - an event must never cost the attempt
             pass
     if path:
+        try:   # every event, in order (the local poller reads this log; the single file below = the first-event compat)
+            with open(path + "l", "a") as f:
+                f.write(json.dumps({k: v for k, v in data.items() if k != "submitted"}) + "\n")
+        except (OSError, TypeError, ValueError):
+            pass
         try:
             tmp = path + ".tmp"
             with open(tmp, "w") as f:
@@ -833,6 +839,21 @@ def _await_live(cid, body, out):
     return body
 
 
+def _free_text_format(af):
+    """D25 C4: an answer_format no label retry can fix -- exact artifact text, an integer, or a pattern
+    that is only a hex / hash / digit shape (a pattern naming labels / names / tokens stays a label field)."""
+    if not isinstance(af, dict):
+        return False
+    kind = str(af.get("kind") or "").lower()
+    if kind in ("exact_text", "integer"):
+        return True
+    if kind != "pattern":
+        return False
+    syn = str(af.get("syntax") or "").lower()
+    return bool(re.search(r"hexadecimal|sha-?\d+|md5|digits?\b", syn)) and not re.search(
+        r"label|name|token|constant|architecture|format|container", syn)
+
+
 def _localize(cid, answers, groups, per_set, body, out):
     """Window permitting, binary-search the wrong answer_ids inside each failed set (subset submits on the SAME
     attempt), then try the field's other known labels (lib/vocab.json). Reports what the GM verified so the
@@ -901,6 +922,8 @@ def _localize(cid, answers, groups, per_set, body, out):
         narrow(group[mid:], wrong)
 
     def alternatives(aid, vocab):
+        if aid in freetext:
+            return   # D25 C4: exact text / integer / hash-shaped field -- no label spelling can fix it
         cur = answers.get(aid)
         # what an EARLIER attempt of this challenge (D15: the Time Trial) learned for this family + this rejected value
         hint = hints.get(_suffix(aid) or "", {}).get(str(cur), {})
@@ -991,6 +1014,10 @@ def _localize(cid, answers, groups, per_set, body, out):
             else:
                 for grp in _label_first(list(groups.get(key, {}).keys()), answers, vocab):
                     narrow(grp, wrong)
+            if v["result"] == "incorrect":
+                # D25 C4: this set's wrong fields are known now -- before the label retries, the resubmit, the runner's
+                # return and the variant pull (binary D25 Mastery: ~35 s + 26 s before the live worker started)
+                _event("set_localized", out, slim=True, set=key, set_wrong=[[x, answers.get(x)] for x in wrong])
             if len(wrong) > 1:
                 # every wrong field's alternatives at once (sequential, D16 alt: ~2-5 s per probe per field)
                 def alt_ctx(aid):
@@ -1019,6 +1046,12 @@ def _localize(cid, answers, groups, per_set, body, out):
             base_q = aid.split(".", 1)[-1]
             if base_q in enums:
                 enums[aid] = enums[base_q]
+    freetext = set()
+    if _opt("HCTF_LOCALIZE_SKIP_FREETEXT", "1") == "1":
+        for q in body.get("questions") or []:
+            if isinstance(q, dict) and q.get("id") and _free_text_format(q.get("answer_format")):
+                freetext.add(q["id"])
+        freetext |= {aid for aid in answers if aid.split(".", 1)[-1] in freetext}
     # _CTX is thread-local: the pool threads below would see lane/opts = None (no playbook alternatives, the daemon's
     # HCTF_LOCALIZE_UNTIMED_S ignored) -- hand this attempt's context to each of them
     ctx = (_CTX.lane, _CTX.opts, _CTX.on_event, _CTX.solver_dir, getattr(_CTX, "t0", None))
@@ -1654,6 +1687,7 @@ def _attempt(a):
                              "incorrect" if any(v["result"] == "incorrect" for v in per_set.values()) else "unjudged")
             out["bad_sets"] = [k for k, v in per_set.items() if v["result"] == "incorrect"]
             if out["result"] == "incorrect":
+                _event("per_set", out, slim=True, per_set=per_set, bad_sets=out["bad_sets"])   # D25 C4
                 _localize(a.cid, answers, groups, per_set, body, out)
                 _resubmit_fixed(a.cid, answers, body, out)
         out["elapsed"] = round(time.time() - t0, 2)
@@ -1729,6 +1763,8 @@ def _attempt(a):
     _write_progress(a.cid, out, "submitted")
     out["bad_sets"] = [k for k, v in per_set.items() if v["result"] == "incorrect"]
     if final == "incorrect":
+        # D25 C4: the first per-set verdicts -> the orchestrator (the live answer can start as each set is localized)
+        _event("per_set", out, slim=True, per_set=per_set, bad_sets=out["bad_sets"])
         _localize(a.cid, answers, groups, {k: v for k, v in per_set.items() if v["result"] != "unjudged"}, body, out)
         _resubmit_fixed(a.cid, answers, body, out)
     out["elapsed"] = round(time.time() - t0, 2)

@@ -1121,34 +1121,54 @@ TIMING_MARKS = os.environ.get("HCTF_TIMING_MARKS", "1") != "0"   # D24 #1: per-p
 
 
 def _local_event_poller(cid, env, on_event):
-    """Arm hb_timed's mid-attempt event for a LOCAL run: it writes the "solved" event to a file, this thread calls
-    on_event(data + "local") once. -> the Event that stops the poller (set when the run returns)."""
+    """Arm hb_timed's mid-attempt events for a LOCAL run: it appends every event to `<file>l` (and the first-event file),
+    this thread calls on_event(data + "local") for each, in order (D25 C4: the per-set verdicts follow the "solved"
+    event). -> the Event that stops the poller (set when the run returns)."""
     import re as _re
     local = ROOT / ".run" / "tmp-timed" / _re.sub(r"[^A-Za-z0-9]+", "_", cid)
     evf = ROOT / ".run" / "tmp-timed" / (_re.sub(r"[^A-Za-z0-9]+", "_", cid) + ".event.json")
-    try:
-        evf.parent.mkdir(parents=True, exist_ok=True)
-        evf.unlink()
-    except OSError:
-        pass
+    evl = evf.with_name(evf.name + "l")
+    for f in (evf, evl):
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.unlink()
+        except OSError:
+            pass
     env["HCTF_EARLY_GENERALIZE"] = "1"
     env["HCTF_EARLY_EVENT_FILE"] = str(evf)
     stop = threading.Event()
 
+    def deliver(data):
+        data["local"] = str(local)
+        try:
+            on_event(data)
+        except Exception as e:  # noqa: BLE001 - an event must never cost the attempt
+            print(f"[{cid}] early event note: {e}", flush=True)
+
     def watch():
+        off, single = 0, False
         while not stop.wait(0.3):
-            if not evf.exists():
+            try:
+                raw = evl.read_bytes()
+            except OSError:
+                raw = None
+            if raw is not None:
+                end = raw.rfind(b"\n") + 1          # whole lines only (the runner may be mid-append)
+                for ln in raw[off:end].splitlines():
+                    try:
+                        deliver(json.loads(ln))
+                    except ValueError:
+                        continue
+                off = max(off, end)
+                continue
+            if single or not evf.exists():   # an older runner: only the first-event file, delivered once
                 continue
             try:
                 data = json.loads(evf.read_text())
             except (OSError, ValueError):
                 continue
-            data["local"] = str(local)
-            try:
-                on_event(data)
-            except Exception as e:  # noqa: BLE001 - an event must never cost the attempt
-                print(f"[{cid}] early event note: {e}", flush=True)
-            return
+            single = True
+            deliver(data)
     threading.Thread(target=watch, daemon=True, name=f"early-evt-{cid}").start()
     return stop
 
