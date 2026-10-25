@@ -11,7 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import paths
-from .timeline import lane_label
+from .timeline import lane_label, timed_passed
 
 LINE = re.compile(r"^(\d\d):(\d\d):(\d\d) \[([^\]]+)\] (.*)$")
 MODES = ("single_solve", "time_trial", "mastery")
@@ -55,7 +55,7 @@ def solves(root, day):
             t0 = t
         base, _, mode = tag.partition("/")
         mode = mode or "single_solve"
-        hit = (msg.startswith("result: correct") or msg.startswith("passed by the live-answer worker")
+        hit = (timed_passed(msg)
                or (mode == "single_solve" and ("reuse race WON" in msg or msg.startswith("after worker: stopped at CORRECT"))))
         if hit and t0 is not None and (_lane(base), mode) not in out:
             out[(_lane(base), mode)] = t - t0

@@ -58,7 +58,7 @@ def log(*a):
 
 # ---------- archive ----------
 
-_SHA = {}   # id(member bytes) -> sha256 hex, computed in the inflate thread
+_SHA = {}   # id(member bytes) -> (bytes, sha256 hex), computed in the inflate thread (read via _memo)
 _POOL = None
 BIG = 8 << 20   # members larger than this decrypt / inflate / hash as a 3-thread pipeline
 
@@ -100,7 +100,7 @@ def _aes_member(data, i, pw):
     if len(enc) < BIG:
         raw = c.decrypt(enc)
         b = zlib.decompress(raw, -15, i.file_size or 1 << 16) if meth == 8 else raw
-        _SHA[id(b)] = hashlib.sha256(b).hexdigest()
+        _SHA[id(b)] = (b, hashlib.sha256(b).hexdigest())
     else:   # pipeline: decrypt chunks || inflate || sha256 (the 67 MB Swift member is the whole critical path)
         ch, qa, qb, h = 1 << 20, queue.Queue(), queue.Queue(), hashlib.sha256()
 
@@ -123,7 +123,7 @@ def _aes_member(data, i, pw):
         qb.put(None)
         b = b"".join(parts)
         tb.join()
-        _SHA[id(b)] = h.hexdigest()
+        _SHA[id(b)] = (b, h.hexdigest())
     if zlib.crc32(b) != i.CRC and i.CRC:   # AE-1 keeps the CRC; AE-2 zeroes it
         raise ValueError("crc mismatch")
     return b
@@ -273,26 +273,38 @@ def is_binary(b):
             or b[:2] == b"MZ" or is_jar(b))
 
 
+def _memo(cache, b, make, key=None):
+    """make() once per member OBJECT. The caches key on id() (re-hashing / re-parsing a 67 MB member per question is
+    what they save), but a pool worker solves several Mastery sets in turn and a freed member's address comes back as
+    the NEXT set's member: each entry keeps its object and only that very object hits (D25 binary Mastery: an earlier
+    set's facts answered 46 fields). Never key a cache on a bare id()."""
+    k = id(b) if key is None else (key, id(b))
+    e = cache.get(k)
+    if e is None or e[0] is not b:
+        e = cache[k] = (b, make())
+    return e[1]
+
+
 _ISJAR, _ZIPS = {}, {}
 
 
 def _zip(b):
     """One parsed ZipFile per member (a fat jar's ~3000-entry central directory was re-parsed per question)."""
-    if id(b) not in _ZIPS:
-        _ZIPS[id(b)] = zipfile.ZipFile(io.BytesIO(b))
-    return _ZIPS[id(b)]
+    return _memo(_ZIPS, b, lambda: zipfile.ZipFile(io.BytesIO(b)))
 
 
 def is_jar(b):
     if b[:2] != b"PK":
         return False
-    if id(b) not in _ISJAR:   # cached: answer() asks per field and a fat jar's central directory is ~3000 entries
-        try:
-            with nullcontext(_zip(b)) as z:
-                _ISJAR[id(b)] = any(n.endswith(".class") or n == "META-INF/MANIFEST.MF" for n in z.namelist())
-        except Exception:  # noqa: BLE001
-            _ISJAR[id(b)] = False
-    return _ISJAR[id(b)]
+    return _memo(_ISJAR, b, lambda: _is_jar(b))   # cached: answer() asks per field; a fat jar's CD is ~3000 entries
+
+
+def _is_jar(b):
+    try:
+        with nullcontext(_zip(b)) as z:
+            return any(n.endswith(".class") or n == "META-INF/MANIFEST.MF" for n in z.namelist())
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # ---------- config ----------
@@ -595,9 +607,7 @@ _FACTS, _CFG = {}, {}
 
 
 def facts(data):
-    if id(data) not in _FACTS:
-        _FACTS[id(data)] = _facts(data)
-    return _FACTS[id(data)]
+    return _memo(_FACTS, data, lambda: _facts(data))
 
 
 def _facts(data):
@@ -627,7 +637,7 @@ def answer(field, group, q):
         if len(group) < k:
             return "none"
         b = group[k - 1][1]
-        return _SHA.get(id(b)) or hashlib.sha256(b).hexdigest()
+        return _memo(_SHA, b, lambda: hashlib.sha256(b).hexdigest())
     if not field.startswith("analysis_"):
         return None
     f = field[len("analysis_"):]
@@ -636,9 +646,7 @@ def answer(field, group, q):
     if f.startswith("config_") or f in ("xor_key_hex", "hcfg_version", "hcfg_offset", "hcfg_xor_key_hex"):
         h = None
         for _, b in group:
-            if id(b) not in _CFG:
-                _CFG[id(b)] = jar_hcfg(b) if (is_jar(b) or b[:4] == b"\xca\xfe\xba\xbe") else native_hcfg(b)
-            h = _CFG[id(b)]
+            h = _memo(_CFG, b, lambda: jar_hcfg(b) if (is_jar(b) or b[:4] == b"\xca\xfe\xba\xbe") else native_hcfg(b))
             if h:
                 break
         if not h:
@@ -685,6 +693,8 @@ def answer(field, group, q):
 def _solve_pairs(job):
     """Answer [(answer_id, question), ...] from the artifacts under `root` (one Mastery set, or the whole contract)."""
     root, c, pairs = job
+    for d in (_SHA, _ZIPS, _ISJAR, _FACTS, _CFG):   # a pool worker solves several sets: drop the last set's members
+        d.clear()
     cache, raw, out = {}, {}, {}
     for aid, q in pairs:
         prefix, _, base = aid.rpartition(".")
@@ -743,7 +753,8 @@ def main():
         import multiprocessing as mp
         from concurrent.futures import ProcessPoolExecutor
         try:
-            with ProcessPoolExecutor(max_workers=min(len(groups), os.cpu_count() or 2),
+            from lib.solverrt import max_procs   # HCTF_SOLVER_MAX_PROCS: the harness's small-pool rehearsal
+            with ProcessPoolExecutor(max_workers=max_procs(len(groups)),
                                      mp_context=mp.get_context("fork")) as ex:
                 for part in ex.map(_solve_pairs, [(a.artifacts, c, g) for g in groups.values()]):
                     out.update(part)

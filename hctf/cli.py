@@ -1065,8 +1065,10 @@ def c_solver_test(a):
         ok = bool(res) and all(r["ok"] for r in res)
     else:
         ok, res = orchestrate.ensure_case_and_test(base, sdir)
-    emit({"ok": ok, "solver": str(sdir.relative_to(ROOT)), "results": res})
-    return 0 if ok else 1
+    static = solvers.id_cache_problems(sdir)   # D25: an id()-keyed cache passes 1-set cases, fails a pooled Mastery
+    emit({"ok": ok and not static, "solver": str(sdir.relative_to(ROOT)), "results": res,
+          **({"static_problems": static} if static else {})})
+    return 0 if ok and not static else 1
 
 
 def c_speed_harden(a):

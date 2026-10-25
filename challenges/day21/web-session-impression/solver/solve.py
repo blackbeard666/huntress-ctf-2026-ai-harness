@@ -315,8 +315,9 @@ def main():
         import multiprocessing as mp
         from concurrent.futures import ProcessPoolExecutor
         try:
-            # I/O-bound (live targets): one process per set regardless of CPU count
-            ex = ProcessPoolExecutor(max_workers=len(groups), mp_context=mp.get_context("fork"))
+            # I/O-bound (live targets): one process per set regardless of CPU count (HCTF_SOLVER_MAX_PROCS caps it)
+            from lib.solverrt import max_procs
+            ex = ProcessPoolExecutor(max_workers=max_procs(len(groups), io_bound=True), mp_context=mp.get_context("fork"))
             for part in ex.map(_solve_pairs, [(a.artifacts, contract, g) for g in groups.values()]):
                 out.update(part)
             pool = list((getattr(ex, "_processes", None) or {}).values())

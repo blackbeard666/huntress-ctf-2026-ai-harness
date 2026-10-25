@@ -628,7 +628,10 @@ _t25, _f25 = orchestrate.speed_watch_sets(_res25, sd25, "time_trial")
 assert _t25 == {"single_solve"} and _f25 == {"variant-time_trial-aaaa1111"}, (_t25, _f25)
 assert orchestrate.speed_watch_sets(_res25, sd25, "mastery")[1] == set()
 _g25 = inspect.getsource(orchestrate.Chain.generalize)
-assert "speed_watch_sets" in _g25 and _g25.index("speed_watch_sets") < _g25.index("watch.start()")
+# C1 (D25): the watch sets are computed by _gen_watch_sets (synchronously, or once the async baseline lands) before
+# the watcher fills its targets -- speed_watch_sets must still feed it
+assert "_gen_watch_sets" in _g25 and _g25.index("_gen_watch_sets") < _g25.index("watch.start()")
+assert "watch_sets(" in inspect.getsource(orchestrate.Chain._gen_watch_sets) and "speed_watch_sets" in inspect.getsource(orchestrate.watch_sets)
 
 # 26) single-time speed gate: a verified-but-slow single solver -> one speed generalize BEFORE the first timed attempt
 #     (no attempt spent; blind D7 replay burned a TT attempt + ~30 s on it), at most once per chain.

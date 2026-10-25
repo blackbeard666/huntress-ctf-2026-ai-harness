@@ -56,13 +56,22 @@ is fetched, not stored.
 - Submit the single's proof the moment you (or the answer-first worker) have it -- never delay the single to polish
   `solve.py`. The Time Trial and Mastery get BRAND-NEW targets (this one dies with HTTP 410 at CORRECT; Mastery has 3 and
   puts today's class on ANY slot -- proof-1/2/3 only name slots), so a proof you got by hand never carries over.
-- What carries over is a HANDLER for the class. At the single's CORRECT the harness starts a codify worker that writes
-  `lib/web/handlers/<dayNN>_<challenge>.py`: `KEY_MAP = [(r"<regex on a /api/clues KEY>", name)]` and
-  `HANDLERS = {name: fn}`, `fn(base, clues) -> "proof_..." or None` re-running the exploit end to end (recon what is
-  per-target, then upload / forge / trigger / read; short timeouts; browser UA; nothing from a manual session).
-  `lib.web.handlers` auto-loads it, so the generic solver dispatches to it on every fresh target -- and on later days'
-  compounded Mastery targets.
-- Any worker that fixes a web class later (a generalize, a speed fix) puts the class logic in that SAME per-challenge
-  plugin file (create it if missing) -- never in `solve.py` (keep it the generic dispatcher) and never in
-  `handlers/__init__.py` (two web chains may run at once). Key on a concept clue KEY, never on proof-N, a target slot,
-  a host or a value. If the exploit is genuinely one-shot on a fresh target, say so in the plugin's docstring.
+- What carries over is a HANDLER for the class: `lib/web/handlers/<dayNN>_web_<challenge>.py` with
+  `KEY_MAP = [(r"<regex on a /api/clues KEY>", name)]`, `HANDLERS = {name: fn}`, `fn(base, clues) -> "proof_..." or
+  None` re-running the exploit end to end (recon what is per-target, then upload / forge / trigger / read; short
+  timeouts; browser UA; nothing from a manual session). `lib.web.handlers` auto-loads it, so the generic solver
+  dispatches to it on every fresh target -- and on later days' compounded Mastery targets. A key that only means the
+  class next to a sibling key gets `KEY_COMPANIONS = {r"<key>": r"<sibling key>"}` (D25: `protected_reference` alone
+  is not Day 14's BOLA class -- its kit always has `inventory_route`).
+- **Plugin first (D25)**: the single's answer-first worker writes that plugin as a DRAFT in its own `$TMPDIR`, then gets
+  the single's proof BY RUNNING it: `.venv/bin/python -m lib.web.plugin $TMPDIR/<name>.py <target url>` imports the
+  draft, checks its KEY_MAP dispatches on the target's `/api/clues`, runs it, prints `PROOF proof_...` and PROMOTES it
+  into `lib/web/handlers/` atomically (exit 1 = no proof, 2 = not a plugin, 3 = no clue key matches). So the plugin is
+  in place at the single's CORRECT and the Time Trial's first run dispatches to it. Two failed draft fixes -> submit
+  the hand-derived proof (never hold the single); the codify worker then writes the plugin. With a plugin in place the
+  codify worker only HARDENS it on a fresh target and promotes a verified improvement through the same verifier.
+- Never write `lib/web/handlers/<name>.py` in place (a timed runner imports it at any moment -- D25 picked one up
+  mid-edit): every worker (generalize, speed fix, codify) edits a draft and lands it with `lib.web.plugin`. Never put
+  class logic in `solve.py` (keep it the generic dispatcher) or `handlers/__init__.py` (two web chains may run at once).
+  Key on a concept clue KEY, never on proof-N, a target slot, a host or a value. If the exploit is genuinely one-shot on
+  a fresh target, say so in the plugin's docstring.

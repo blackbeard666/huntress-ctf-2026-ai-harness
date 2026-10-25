@@ -23,6 +23,25 @@ _KEY_MAP = [
     (r"preferences|csrf|xsrf|browser_session", "csrf"),
 ]
 
+# D25 D4: a clue KEY that names a class only TOGETHER with a companion key -> {(pattern, handler name): companion key
+# regex}. Plugins declare it as KEY_COMPANIONS = {pattern: companion regex}. D25: Day 18's GraphQL kit {current_user,
+# feature_route, note, protected_reference} matched Day 14's BOLA plugin on `protected_reference` alone (that class
+# always ships `inventory_route` with it) -> its 20 s known-class race ran on a target it can never solve.
+_COMPANIONS = {}
+
+
+def _companion_ok(pat, name, keys):
+    need = _COMPANIONS.get((pat, name))
+    return need is None or any(re.search(need, k, re.I) for k in keys)
+
+
+def gated_only(key, clues):
+    """True when clue `key` is matched by KEY_MAP patterns ONLY through companion-gated entries whose companion key is
+    absent from `clues` (lib.web.class_known then does not count it as a known concept)."""
+    keys = list(clues if isinstance(clues, dict) else {})
+    hits = [(pat, name) for pat, name in _KEY_MAP if re.search(pat, key or "", re.I)]
+    return bool(hits) and all((pat, name) in _COMPANIONS and not _companion_ok(pat, name, keys) for pat, name in hits)
+
 
 def for_key(key, clues):
     """Ordered (name, fn) built-in handlers whose class the clue keys name: the dispatch key first, then every other
@@ -34,7 +53,7 @@ def for_key(key, clues):
     keys = [key or ""] + [k for k in (clues if isinstance(clues, dict) else {}) if k != key]
     for k in keys:
         for pat, name in _KEY_MAP:
-            if re.search(pat, k, re.I) and name in _HANDLERS:
+            if re.search(pat, k, re.I) and name in _HANDLERS and _companion_ok(pat, name, keys):
                 dst = furn if k in websolve.COMMON_KEYS else out
                 if (name, _HANDLERS[name]) not in dst:
                     dst.append((name, _HANDLERS[name]))
@@ -52,7 +71,8 @@ def concept_handlers(key, clues):
         if not k or k in websolve.COMMON_KEYS:
             continue
         for pat, name in _KEY_MAP:
-            if re.search(pat, k, re.I) and name in _HANDLERS and (name, _HANDLERS[name]) not in out:
+            if (re.search(pat, k, re.I) and name in _HANDLERS and _companion_ok(pat, name, keys)
+                    and (name, _HANDLERS[name]) not in out):
                 out.append((name, _HANDLERS[name]))
     return out
 
@@ -353,19 +373,27 @@ _HANDLERS = {
 
 def _load_plugins():
     """Per-class plugin modules next to this file (`lib/web/handlers/<slug>.py`), each with KEY_MAP = [(clue-key regex,
-    name)] and HANDLERS = {name: fn(base, clues) -> proof or None}. The web codify worker writes one IN-RUN the moment
+    name)] and HANDLERS = {name: fn(base, clues) -> proof or None} (optional KEY_COMPANIONS = {regex: companion-key
+    regex}: that pattern only dispatches when a companion clue key is present). The web codify worker writes one IN-RUN the moment
     a new class is cracked (D22 post-mortem #8/#9): this run's Mastery -- whose 3 targets put today's class on ANY slot --
     and every later day's compounded targets pick it up at import, with no adoption step and no lost update between two
     web chains editing this file at once. A broken plugin is skipped, never fatal. The ratchet may fold it in here."""
     import importlib
     import sys
     from pathlib import Path
-    for p in sorted(Path(__file__).parent.glob("*.py")):
+    here = Path(__file__).parent
+    # D25 D5: + the off-peak web prebuild's generic class handlers (lib/web/handlers/prebuilt/prebuilt_<id>.py, gated
+    # offline on recorded-kit fixtures by tests/test_web_fixtures.py); per-day plugins first, so a day's own handler
+    # keeps its place in the race order
+    mods = [(f"{__name__}.{p.stem}", p) for p in sorted(here.glob("*.py"))]
+    mods += [(f"{__name__}.prebuilt.{p.stem}", p) for p in sorted((here / "prebuilt").glob("*.py"))]
+    for modname, p in mods:
         if p.name.startswith("_"):
             continue
         try:
-            mod = importlib.import_module(f"{__name__}.{p.stem}")
+            mod = importlib.import_module(modname)
             hs = dict(getattr(mod, "HANDLERS", None) or {})
+            comp = dict(getattr(mod, "KEY_COMPANIONS", None) or {})
             for pat, name in list(getattr(mod, "KEY_MAP", None) or []):
                 # a built-in keeps its name; the same plugin may map several clue-key patterns to one handler
                 if name in hs and callable(hs[name]) and _HANDLERS.get(name, hs[name]) is hs[name]:
@@ -373,6 +401,9 @@ def _load_plugins():
                     _HANDLERS[name] = hs[name]
                     if (pat, name) not in _KEY_MAP:
                         _KEY_MAP.append((pat, name))
+                    if comp.get(pat):
+                        re.compile(comp[pat])
+                        _COMPANIONS[(pat, name)] = comp[pat]
         except Exception as e:  # noqa: BLE001 - one bad plugin must not sink the dispatch
             print(f"web handler plugin {p.name}: {e!r}", file=sys.stderr)
 

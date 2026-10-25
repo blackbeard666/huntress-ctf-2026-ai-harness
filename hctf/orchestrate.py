@@ -230,6 +230,22 @@ LIVE_ANSWER = os.environ.get("HCTF_LIVE_ANSWER", "1") == "1"
 # 80 (was 40): D12 warmups Mastery left 58 slug fields empty -- above the cap, so two 100 s generalizes ran where a live
 # worker on the open untimed attempt would have answered them (reference/PLAN_SUB2MIN.md P0)
 LIVE_MAX_FIELDS = int(os.environ.get("HCTF_LIVE_MAX_FIELDS", "80"))
+# D25 post-mortem C3a: warmups Mastery blocked on 123 `setN.message` fields of ONE shape -- over the cap, so no live
+# racer at all. Fields that all share one field_shape are one derivation applied N times (a script over the blobs), not
+# N hand derivations: the cap is lifted for them, up to LIVE_UNIFORM_MAX. 0 = the plain cap only.
+LIVE_UNIFORM_MAX = int(os.environ.get("HCTF_LIVE_UNIFORM_MAX", "600"))
+# C4: the live answer starts on hb_timed's per-set events (every bad set localized) instead of after the runner returns
+EARLY_LIVE = os.environ.get("HCTF_EARLY_LIVE", "1") != "0"
+
+
+def live_fields_ok(fields):
+    """Few enough fields for a live-answer worker: <= LIVE_MAX_FIELDS, or <= LIVE_UNIFORM_MAX of one field shape."""
+    n = len(fields or ())
+    if not n:
+        return False
+    if n <= LIVE_MAX_FIELDS:
+        return True
+    return n <= LIVE_UNIFORM_MAX and len({field_shape(a) for a in fields}) == 1
 LIVE_TIMEOUT = float(os.environ.get("HCTF_LIVE_TIMEOUT", "900"))
 # D23 post-mortem (reference/D23_POSTMORTEM.md):
 # #1b the live answer starts at the block, BESIDE the online label/format resolution (it used to wait behind ~10 min of
@@ -270,13 +286,37 @@ WEB_PAR_LIVE = os.environ.get("HCTF_WEB_PAR_LIVE", "1") != "0"
 WEB_CODIFY_IS_GEN = os.environ.get("HCTF_WEB_CODIFY_IS_GEN", "1") != "0"
 WEB_CODIFY_GEN_WAIT = float(os.environ.get("HCTF_WEB_CODIFY_GEN_WAIT", "90"))
 WEB_PAR_LIVE_BIND = float(os.environ.get("HCTF_WEB_PAR_LIVE_BIND", "120"))   # s to wait for the runner's attempt id
-WEB_GEN_WAIT_POLL = 2.0
+# D25 D3: the codify wait polls local files only (submissions.jsonl / the plugin's mtime): 0.5 s, not 2 s, so a live
+# answer's CORRECT requests the Mastery target ~1.5 s sooner on average
+WEB_GEN_WAIT_POLL = float(os.environ.get("HCTF_WEB_GEN_WAIT_POLL", "0.5"))
+# D25 D2 (plugin from the single): the web answer-first worker writes the class plugin as a draft in its $TMPDIR, runs it
+# on the single's live target via `python -m lib.web.plugin` (verify + atomic promote into lib/web/handlers/) and submits
+# the proof it prints -> the plugin exists at the single's CORRECT and the Time Trial's FIRST run dispatches to it (D25:
+# codify landed 84-159 s after CORRECT, always after the TT's live answer). 0 = the old answer-only prompt.
+WEB_SINGLE_PLUGIN = os.environ.get("HCTF_WEB_SINGLE_PLUGIN", "1") != "0"
+# With a verified plugin already promoted at the single's CORRECT, codify runs as an off-critical-path HARDENING pass
+# (re-verify on a fresh target, generalise what the single's target fixed, promote only a verified improvement).
+# 0 = no codify worker when the plugin is already in place.
+WEB_CODIFY_HARDEN = os.environ.get("HCTF_WEB_CODIFY_HARDEN", "1") != "0"
+# D25 D3: the codify-as-generalize wait (+ plugin-landed reconnect) also covers a blocked web MASTERY (D25 shell-company:
+# Mastery's proof-4 blocked 62 s before codify landed; a generalize + live answer ran instead). 0 = Time Trial only.
+WEB_CODIFY_MASTERY = os.environ.get("HCTF_WEB_CODIFY_MASTERY", "1") != "0"
 RESUME_CONTINUES = int(os.environ.get("HCTF_RESUME_CONTINUES", "2"))
 TT_FIX_GATE = os.environ.get("HCTF_TT_FIX_GATE", "1") == "1"
 SINGLE_DUEL_CASES = os.environ.get("HCTF_SINGLE_DUEL_CASES", "1") == "1"
 BASELINE_PRE = os.environ.get("HCTF_BASELINE_PRE", "1") == "1"
 BASELINE_PRE_PAR = int(os.environ.get("HCTF_BASELINE_PRE_PAR", "4"))
 BASELINE_PRE_JOIN = float(os.environ.get("HCTF_BASELINE_PRE_JOIN", "60"))
+# D25 post-mortem C1: "generalize prep 72.1s before the worker: ... baseline replay 70.6s (36 cases)" -- a 60 s join on
+# the background pre-baseline, then the suite again in the foreground. Nothing in the baseline is needed to START the
+# worker: snapshot first, launch the worker, replay the snapshot (= the pre-worker code) in a thread; the green watcher,
+# the duel and the transactional accept join it, and failing cases the prompt didn't list reach the worker via its inbox.
+# 0 = the old blocking baseline.
+GEN_BASELINE_ASYNC = os.environ.get("HCTF_GEN_BASELINE_ASYNC", "1") != "0"
+# C2: the green watcher / duel also target UNVERIFIED cases carrying GM rejections (gm_feedback.json): green once every
+# field is answered and no rejected value comes back; the untimed retry on the same open attempt then judges it (~10 s
+# when wrong). D25 warmups Mastery: 123/123 answered, all wrong -> neither target nor fill -> no watcher, no duel.
+GREEN_REJECT_FREE = os.environ.get("HCTF_GREEN_REJECT_FREE", "1") != "0"
 # generalize green watcher: poll / code-quiet seconds (was 2 s / 3 s: up to ~5 s between the fix and the worker's end)
 GREEN_POLL = float(os.environ.get("HCTF_GREEN_POLL", "0.5"))
 GREEN_QUIET = float(os.environ.get("HCTF_GREEN_QUIET", "1.5"))
@@ -402,6 +442,31 @@ def _live_fields(last, wrong, fixed):
     return list(dict.fromkeys(ids))
 
 
+def _art_need(contract, fields):
+    """Basenames of the deliveries `fields` ask about (a question's `artifact`, its container part)."""
+    qmap = {q.get("id"): q for q in (contract or {}).get("questions") or [] if isinstance(q, dict)}
+    return {os.path.basename(str((qmap.get(a) or {}).get("artifact") or "").split("->")[0].strip())
+            for a in fields} - {""}
+
+
+def attempt_art_dir(cid, need, who="live-answer"):
+    """Where every needed delivery of the open attempt is: the failure pull fetched ONE representative set per failing
+    family (enough for the generalize); a live answer / lib racer needs each listed set -> public download of the
+    attempt (start.json's deliveries) otherwise."""
+    tdir = timed.timed_dir(cid)
+    have = {p.name for p in tdir.iterdir()} if tdir.is_dir() else set()
+    if (tdir / "contract.json").exists() and need <= have:
+        return tdir
+    try:
+        class A:  # argparse-like namespace for cli.c_artifact (downloads start.json's deliveries, public GM)
+            id, delivery = cid, None
+        with cli.quiet():
+            cli.c_artifact(A)
+    except Exception as e:  # noqa: BLE001 - the worker can still fetch with `hctf artifact`
+        say(f"[{cid}] {who}: artifact download note: {str(e)[:160]}")
+    return timed.latest_artifacts(cid) or tdir
+
+
 class LiveAnswer:
     """Dynamic fallback beside a generalize (C1, 2026-10-15): a single-style worker answers ONLY the unresolved fields of
     the still-open untimed attempt from its bytes and submits them to that attempt. The generalize keeps the solver
@@ -414,6 +479,7 @@ class LiveAnswer:
         self.stop_evt, self.done = threading.Event(), threading.Event()
         self.passed = self.all_accepted = False
         self._links = []
+        self.on_pass = []   # callables run once by the watcher the moment the GM says CORRECT (D25 D3: Mastery kick)
         tdir = timed.timed_dir(cid)
         try:
             contract = json.loads((tdir / "contract.json").read_text())
@@ -434,6 +500,10 @@ class LiveAnswer:
             lines.append(f"  - `{a}`: {str(q.get('question') or '?')[:220]} | artifact `{q.get('artifact') or '?'}` | "
                          f"format {json.dumps(fmt)[:160]} | solver gave {sub.get(a)!r}"
                          + (f" | REJECTED: {sorted(rejected[a])[:6]}" if rejected.get(a) else ""))
+        if len(fields) > LIVE_MAX_FIELDS:
+            # C3a: a uniform-shape list over the plain cap -- one derivation N times, not N hand derivations
+            lines.insert(0, f"  (all {len(fields)} fields share ONE shape `{field_shape(fields[0])}`: write one script "
+                            "that derives every field from its own artifact, then submit them as one JSON batch)")
         self._need = {os.path.basename(str((qmap.get(a) or {}).get("artifact") or "").split("->")[0].strip())
                       for a in fields} - {""}
         # D19 metadata: Mastery's live answer re-derived `synthesis-sha256-order` (5 sets, 21 s) that the TT's live answer
@@ -473,20 +543,7 @@ class LiveAnswer:
             evt.set()
 
     def _art_dir(self):
-        """Where every listed field's delivery is: the failure pull fetched ONE representative set per failing family
-        (enough for the generalize); a live answer needs each listed set -> public download of the attempt otherwise."""
-        tdir = timed.timed_dir(self.cid)
-        have = {p.name for p in tdir.iterdir()} if tdir.is_dir() else set()
-        if (tdir / "contract.json").exists() and self._need <= have:
-            return tdir
-        try:
-            class A:  # argparse-like namespace for cli.c_artifact (downloads start.json's deliveries, public GM)
-                id, delivery = self.cid, None
-            with cli.quiet():
-                cli.c_artifact(A)
-        except Exception as e:  # noqa: BLE001 - the worker can still fetch with `hctf artifact`
-            say(f"[{self.cid}] live-answer: artifact download note: {str(e)[:160]}")
-        return timed.latest_artifacts(self.cid) or tdir
+        return attempt_art_dir(self.cid, self._need, "live-answer")
 
     def _run(self):
         try:
@@ -531,6 +588,11 @@ class LiveAnswer:
             if self.passed or self.all_accepted:
                 say(f"[{self.cid}] live-answer: {'mode CORRECT' if self.passed else 'every listed field accepted'} "
                     "-> ending the generalize")
+                for fn in self.on_pass if self.passed else ():
+                    try:
+                        fn()
+                    except Exception:  # noqa: BLE001 - a hook never stops the watcher
+                        pass
                 for e in self._links:
                     e.set()
                 self.stop_evt.set()
@@ -559,13 +621,29 @@ ANSWER_FIRST_LANES = {x.strip() for x in os.environ.get(
     "warmups,metadata-forensics,mobile-android,binary-reverse-engineering,script-analysis,web").split(",") if x.strip()}
 ANSWER_FIRST_EFFORT = os.environ.get("HCTF_ANSWER_FIRST_EFFORT", "medium")
 ANSWER_FIRST_TIMEOUT = float(os.environ.get("HCTF_ANSWER_FIRST_TIMEOUT", "420"))
-ANSWER_FIRST_MAX = int(os.environ.get("HCTF_ANSWER_FIRST_MAX", "3"))          # concurrent answer-first workers
+# Concurrent answer-first workers. D25 D4: the fixed 3 starved reset-expectations (3 web chains + warmups held all
+# three at 21:00:31; its single then waited on the solver worker alone). "auto" (default) = one per chain started this
+# run (web included), never below ANSWER_FIRST_MIN; a number = that fixed cap (3 = the old behaviour). Memory still
+# gates every start: MIN_AVAIL_GB free, plus GB_EACH more per worker already running beyond the old 3.
+_AF_MAX_ENV = os.environ.get("HCTF_ANSWER_FIRST_MAX", "auto").strip()
+ANSWER_FIRST_MAX = int(_AF_MAX_ENV) if _AF_MAX_ENV.isdigit() else 0          # 0 = auto (scale with the day's chains)
+ANSWER_FIRST_MIN = int(os.environ.get("HCTF_ANSWER_FIRST_MIN", "3"))
 ANSWER_FIRST_MIN_AVAIL_GB = float(os.environ.get("HCTF_ANSWER_FIRST_MIN_AVAIL_GB", "2.0"))
+ANSWER_FIRST_GB_EACH = float(os.environ.get("HCTF_ANSWER_FIRST_GB_EACH", "0.3"))
 ANSWER_FIRST_RACE_WAIT = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT", "10"))   # give the reuse race its 3-9 s
 # web (D24 #9): the answer-first worker starts at once beside the race (its live probe and the race's exploits hit the
 # same target; whichever completes first ends the other). 10 = the old wait.
 ANSWER_FIRST_RACE_WAIT_WEB = float(os.environ.get("HCTF_ANSWER_FIRST_RACE_WAIT_WEB", "0"))
 _af_live, _af_lock = set(), threading.Lock()
+_af_chains = set()   # chain bases constructed this run (Chain.__init__): the auto answer-first cap
+
+
+def answer_first_cap():
+    """The concurrent answer-first cap now: HCTF_ANSWER_FIRST_MAX when numeric, else max(MIN, chains this run)."""
+    if ANSWER_FIRST_MAX > 0:
+        return ANSWER_FIRST_MAX
+    with _af_lock:
+        return max(ANSWER_FIRST_MIN, len(_af_chains))
 
 
 def answer_first_eligible(lane, n_fields):
@@ -581,11 +659,14 @@ def answer_first_eligible(lane, n_fields):
         avail = _duel._mem_avail_gb()
     except Exception:  # noqa: BLE001
         avail = 99.0
-    if avail < ANSWER_FIRST_MIN_AVAIL_GB:
-        return False, f"only {avail:.1f} GB available"
+    cap = answer_first_cap()
     with _af_lock:
-        if len(_af_live) >= ANSWER_FIRST_MAX:
-            return False, f"{len(_af_live)} answer-first workers already running"
+        running = len(_af_live)
+    if running >= cap:
+        return False, f"{running} answer-first workers already running (cap {cap})"
+    need = ANSWER_FIRST_MIN_AVAIL_GB + max(0, running - 2) * ANSWER_FIRST_GB_EACH
+    if avail < need:
+        return False, f"only {avail:.1f} GB available (need {need:.1f} with {running} running)"
     return True, ""
 
 
@@ -647,7 +728,7 @@ class WebParLive:
                 break
             self.closed.wait(0.3)
         fields = list((contract or {}).get("answer_ids") or [])
-        if not att or not fields or len(fields) > LIVE_MAX_FIELDS:
+        if not att or not live_fields_ok(fields):
             return
         with self._lock:
             if self.closed.is_set():
@@ -661,6 +742,25 @@ class WebParLive:
         with self._lock:
             self.closed.set()
         return self.live
+
+
+_KICK_LOCK = threading.Lock()
+
+
+def _kick_once(obj, flag):
+    """Atomically claim a once-per-chain kick (D25 D3: the web Mastery kick now fires from the codify-wait thread, the
+    runner's on_correct and the post-pass path -- check-then-set without a lock could request the target twice)."""
+    with _KICK_LOCK:
+        if getattr(obj, flag, False):
+            return False
+        setattr(obj, flag, True)
+        return True
+
+
+def _codify_modes():
+    """The web modes whose block waits on a running codify worker (+ re-runs when its plugin lands): D24 #11 = the Time
+    Trial; D25 D3 adds Mastery (HCTF_WEB_CODIFY_MASTERY)."""
+    return ("time_trial", "mastery") if WEB_CODIFY_MASTERY else ("time_trial",)
 
 
 class _HeldLive:
@@ -677,41 +777,42 @@ class WebCodify:
     """Background web codify worker (see WEB_CODIFY): the single's exploit -> `lib/web/handlers/<slug>.py` (KEY_MAP +
     HANDLERS, auto-loaded by lib.web.handlers). One file per challenge, so two web chains never edit the same file."""
 
-    def __init__(self, chain, cid):
+    def __init__(self, chain, cid, prelanded=False):
         self.chain, self.cid = chain, cid
         self.stop_evt, self.done = threading.Event(), threading.Event()
         self.plugin = web_plugin_path(chain.sdir)
         self.name = self.plugin.stem
         self.t0 = time.time()
+        # D25 D2: the single's worker already promoted a verified plugin -> this is a hardening pass (a promote by it is
+        # still `landed`: mtime >= t0)
+        self.prelanded = prelanded
         self.thread = threading.Thread(target=self._run, daemon=True, name=f"codify-{cid}")
 
     def start(self):
-        say(f"[{self.cid}] web codify worker: the single's exploit -> {_rel(self.plugin)} (runs beside the Time Trial)")
+        say(f"[{self.cid}] web codify worker: " + (f"hardening {self.plugin.name} (promoted by the single's worker)"
+                                                   if self.prelanded else
+                                                   f"the single's exploit -> {_rel(self.plugin)}")
+            + " (runs beside the Time Trial)")
         self.thread.start()
         return self
 
     def landed(self, timeout=15):
-        """The plugin was written by this worker and maps its handler on import (checked in a fresh interpreter, so this
-        process never caches a half-written module)."""
-        import subprocess
-        try:
-            if not self.plugin.exists() or self.plugin.stat().st_mtime < self.t0:
-                return False
-            code = (f"from lib.web import handlers as h; import sys; "
-                    f"sys.exit(0 if {self.name!r} in h._HANDLERS and any(n == {self.name!r} for _p, n in h._KEY_MAP) "
-                    f"else 1)")
-            r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, timeout=timeout)
-            return r.returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            return False
+        """This worker promoted the plugin (mtime >= its start) and it maps its handler on import (web_plugin_landed)."""
+        return web_plugin_landed(self.plugin, since=self.t0, timeout=timeout)
 
     def _run(self):
         try:
             tt, ms = self.chain.entries.get("time_trial"), self.chain.entries.get("mastery")
+            harden = ("A VERIFIED plugin is ALREADY in place: `" + _rel(self.plugin) + "` (the single's worker promoted it "
+                      "after it returned the single's proof). This is a HARDENING pass: copy it to your draft, re-run it on "
+                      "the fresh target below, and only fix what a fresh target breaks (per-target values the single's "
+                      "target happened to fix, a missing fallback route/parameter, a too-slow step). If it already "
+                      "returns a proof on the fresh target and you see nothing to harden, STOP without promoting."
+                      ) if self.prelanded else ""
             prompt = workers.render(
                 "codify", persona=workers.lane_persona(self.chain.lane), cid=self.cid, name=self.name,
                 method=single_method_text(cli.cdir(self.cid)) or "(no transcript: re-derive it from /api/clues)",
-                plugin=_rel(self.plugin), budget=int(WEB_CODIFY_TIMEOUT),
+                plugin=_rel(self.plugin), budget=int(WEB_CODIFY_TIMEOUT), harden=harden,
                 tt_cid=tt["id"] if tt else "(no Time Trial)",
                 tt_contract=_rel(cli.cdir(tt["id"]) / "start.json") if tt else "(no Time Trial)",
                 m_contract=_rel(cli.cdir(ms["id"]) / "start.json") if ms else "(no Mastery)")
@@ -767,6 +868,15 @@ class AnswerFirst:
                 "'Mozilla/5.0'` (Cloudflare 403s default library user agents); read the page, its JS and robots.txt first, "
                 "then send only the few targeted requests that evidence points to -- no wordlist scanning, fuzzing or "
                 "brute force.")
+            if WEB_SINGLE_PLUGIN:
+                plug = web_plugin_path(chain.sdir)
+                self.prompt += (
+                    "\n\nPLUGIN FIRST (web lane): the Time Trial and Mastery get FRESH targets, so the proof must come "
+                    "from CODE the timed solver dispatches to. Once your few curl requests showed the exploit, encode it "
+                    "and get the proof BY RUNNING the plugin: " + web_plugin_steps(plug, urls[0] if urls else "<target url>")
+                    + " Submit the `PROOF` it prints. The verifier's promote is the ONE write into lib/ you may make. "
+                    "If two draft fixes still give no proof, submit the proof you derived by hand (never hold the single "
+                    "for the plugin; a codify worker then writes it).")
         self.stop_evt, self.done, self.started = threading.Event(), threading.Event(), threading.Event()
         self.rc = None
         self.seen = set()
@@ -1511,13 +1621,42 @@ def web_plugin_path(sdir):
     return ROOT / "lib" / "web" / "handlers" / f"{name}.py"
 
 
+def web_plugin_landed(plugin, since=0.0, timeout=15):
+    """The plugin file exists (written at/after `since`, epoch s) and maps its handler on import -- checked in a fresh
+    interpreter, so this process never caches a half-written module. Promotion is atomic (lib.web.plugin), so a file
+    that passes is complete."""
+    import subprocess
+    plugin = Path(plugin)
+    try:
+        if not plugin.exists() or plugin.stat().st_mtime < since:
+            return False
+        name = plugin.stem
+        code = (f"from lib.web import handlers as h; import sys; "
+                f"sys.exit(0 if {name!r} in h._HANDLERS and any(n == {name!r} for _p, n in h._KEY_MAP) else 1)")
+        r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, timeout=timeout)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def web_plugin_steps(p, target="<a live target url from the contract's targets[]>"):
+    """How any web worker writes + lands the class plugin `p` (D25 D2): a draft in its own $TMPDIR, verified on a live
+    target and promoted atomically by lib.web.plugin -- never edited in place (D25: a runner imported a plugin mid-edit)."""
+    return (f"(1) write the draft `$TMPDIR/{p.stem}.py`: `KEY_MAP = [(r\"<regex on a /api/clues KEY>\", \"{p.stem}\")]`, "
+            f"`HANDLERS = {{\"{p.stem}\": exploit}}`, `def exploit(base, clues) -> \"proof_...\" or None` re-running the "
+            "exploit end to end (recon what is per-target, then exploit, then read the proof; `lib.websolve.fetch` / "
+            "`PROOF_RE`, short timeouts, browser UA, nothing from your shell session); (2) run "
+            f"`.venv/bin/python -m lib.web.plugin $TMPDIR/{p.stem}.py {target}` -- it imports the draft, checks its "
+            "KEY_MAP dispatches on that target's /api/clues, runs it, prints `PROOF proof_...` and PROMOTES it to "
+            f"`{_rel(p)}` (atomic; exit 1 = no proof, 2 = not a plugin, 3 = KEY_MAP matches no clue key: fix the draft "
+            "and re-run). Never write that path directly.")
+
+
 def web_plugin_note(sdir):
     p = web_plugin_path(sdir)
-    return (f"WEB CLASS LOGIC GOES IN A PLUGIN: `{_rel(p)}` (create it if missing) with `KEY_MAP = [(r\"<regex on a "
-            f"/api/clues KEY>\", \"{p.stem}\")]` and `HANDLERS = {{\"{p.stem}\": fn}}`, `fn(base, clues) -> \"proof_...\" "
-            "or None` re-running the exploit end to end; lib.web.handlers auto-loads it. Never edit solve.py's dispatch "
-            "or lib/web/handlers/__init__.py (two web chains may run at once). Key on a concept clue KEY -- never on "
-            "proof-N or a target slot: Mastery puts today's class on ANY of its 3 targets.")
+    return (f"WEB CLASS LOGIC GOES IN A PLUGIN: `{_rel(p)}` -- " + web_plugin_steps(p) + " lib.web.handlers auto-loads "
+            "it. Never edit solve.py's dispatch or lib/web/handlers/__init__.py (two web chains may run at once). Key on "
+            "a concept clue KEY -- never on proof-N or a target slot: Mastery puts today's class on ANY of its 3 targets.")
 
 
 def web_seed_note(sdir):
@@ -1527,7 +1666,8 @@ def web_seed_note(sdir):
             "and returns the proof_<hex>. It already solves every KNOWN vuln class, so run it FIRST "
             "(`.venv/bin/python solve.py --contract <contract.json> --artifacts <dir>`) and confirm. Do NOT rewrite it. "
             "ONLY if /api/clues shows a brand-new clue key the dispatch does not recognise: submit the proof first, then "
-            + web_plugin_note(sdir) + " (A codify worker also does this right after your CORRECT.)")
+            + web_plugin_note(sdir) + " (The answer-first worker usually promotes it before CORRECT; a codify worker "
+            "hardens it after.)")
 
 
 def stage_prior_cases(prior, sdir):
@@ -1652,7 +1792,9 @@ def ensure_case_and_test(cid, sdir, full=True):
     if not full:
         return True, None
     res = solvers.test_solver(sdir)
-    return bool(res) and all(r["ok"] for r in res), res
+    # gate_ok: `ok`, or an unverified case answered completely with no GM-rejected value (D25 C2: an unverified case can
+    # never be `ok`, so the Stop gate held a generalize worker that already had the fix for ~130 s)
+    return bool(res) and all(solvers.gate_ok(r) for r in res), res
 
 
 def record_timed_case(cid, sdir):
@@ -1861,6 +2003,15 @@ TODAY_MERGE_WAIT = float(os.environ.get("HCTF_TODAY_MERGE_WAIT", "5"))   # the l
 TODAY_MERGE_PROBE = os.environ.get("HCTF_TODAY_MERGE_PROBE", "1") != "0"
 TODAY_MERGE_LANES = {x.strip() for x in os.environ.get(
     "HCTF_TODAY_MERGE_LANES", "metadata-forensics,binary-reverse-engineering,script-analysis").split(",") if x.strip()}
+# D25 A2 pool rehearsal (today_probe.pool_rehearsal): at the Time Trial's CORRECT, today's Single + that TT (two different
+# GM-verified variants) as one 8-set Mastery on a 2-process pool vs single-process, in the background. The merge probe
+# above runs single-process, so it could not see D25's binary Mastery failure (id()-keyed caches leaking between the
+# sets one Homebase pool process solves). Every lane but web, only for a multi-set (or not yet known) Mastery contract.
+# Never waited for: a leak found by the Mastery pre-attempt block -> generalize BEFORE Mastery (even on an untimed
+# pool); found while the Mastery attempt runs -> the early generalize beside it; later -> the failure generalize.
+POOL_REHEARSAL = os.environ.get("HCTF_POOL_REHEARSAL", "1") != "0"
+POOL_REHEARSAL_SECONDS = float(os.environ.get("HCTF_POOL_REHEARSAL_SECONDS", "60"))
+_pool_lock = threading.Lock()
 # Verified-green (D12: generalize #1 went "green" on a variant case whose answers nobody had verified -- every field
 # filled -- and the untimed retry came back 11/58 wrong): capture_variant folds the GM's in-window verdicts into the
 # variant case (accepted answers -> expected.json, rejected values -> gm_feedback.json, which solvers.test_solver
@@ -2100,6 +2251,99 @@ def speed_watch_sets(res, sdir, mode):
     return targets, ({var[-1].name} if var else set())
 
 
+# diag keys of a probe-driven generalize (no attempt verdict): each one names failing cases the baseline will show
+_GEN_PROBE_KEYS = ("family_pre", "compound_pre", "compound_today", "compound_merge", "mutation_pre", "single_seconds",
+                   "solver_too_slow", "crash", "parallel_sets")
+
+
+def watch_sets(res, d, mode, sdir):
+    """(targets, fill, reject_free) for the generalize green watcher / duel from a baseline replay:
+    targets = verified cases that fail; fill = unverified cases with EMPTY fields (green once complete; full replay: the
+    watcher never fired, all three generalize workers ran to their own end); reject_free (C2, GREEN_REJECT_FREE) =
+    unverified cases carrying GM rejections that the solver still reproduces (green once complete + rejection-free).
+    Correctness of the unverified ones is still judged by the accept step + the GM retry."""
+    res = res or []
+    targets = {r["case"] for r in res if not r.get("ok") and not r.get("unverified")}
+    rfree = {r["case"] for r in res if GREEN_REJECT_FREE and r.get("unverified") and r.get("rejected_n")
+             and not r.get("reject_free") and not r.get("dup_of")}
+    fill = {r["case"] for r in res if r.get("unverified") and r.get("answered", 0) < r.get("total", 0)} - rfree
+    if (d or {}).get("solver_too_slow"):
+        # Speed-only generalize: every case may already PASS, just slowly -> targets/fill empty, the watcher never
+        # started and the worker ran to its own end (blind D7 replay: binary sped up 6 s -> 0.3 s by call 7, ~60 s
+        # in, then re-derived every answer by hand until 284 s). Watch the slow case(s) for SPEED instead: green
+        # once they come in under 2 s with nothing broken (_watch_green's need_fast check).
+        slow_t, slow_f = speed_watch_sets(res, sdir, mode)
+        targets |= slow_t
+        fill |= slow_f - rfree
+    return targets, fill, rfree
+
+
+class GenBaseline:
+    """C1: the pre-worker regression baseline of one generalize, replayed on the solver SNAPSHOT in a thread while the
+    worker already runs. `known` = results reused from the last accepted suite run on this exact code (available at
+    once), `pending` = the case names replaying now. join() -> the full result list (None: the replay failed).
+    ready_fn() -> a blocking callable for the watcher / duel threads that applies the results exactly once."""
+
+    def __init__(self, snap, known, pending, full, on_done=None):
+        self.snap, self.known, self.pending, self.full = snap, list(known or []), list(pending or []), full
+        self.res, self.err, self.seconds = None, None, None
+        self.done, self.cancelled = threading.Event(), threading.Event()
+        self._applied, self._lock = False, threading.Lock()
+        self._on_done = on_done
+        self.thread = None
+
+    def start(self):
+        if not self.pending and not self.full:
+            self.res = list(self.known)
+            self.seconds = 0.0
+            self.done.set()
+            return self
+        self.thread = threading.Thread(target=self._run, daemon=True, name="gen-baseline")
+        self.thread.start()
+        return self
+
+    def _run(self):
+        t0 = time.time()
+        try:
+            fresh = solvers.test_solver(self.snap, timeout=BASELINE_CASE_TIMEOUT,
+                                        cases=None if self.full else self.pending)
+            if self.full:
+                self.res = list(fresh)
+            else:
+                by = {r["case"]: r for r in fresh}
+                old = {r["case"]: r for r in self.known}
+                self.res = [by.get(n) or old[n] for n in sorted(set(by) | set(old))]
+        except Exception as e:  # noqa: BLE001 - the accept step then replays the snapshot itself
+            self.err = repr(e)
+        self.seconds = time.time() - t0
+        self.done.set()
+        if self._on_done is not None and not self.cancelled.is_set():
+            try:
+                self._on_done(self)
+            except Exception:  # noqa: BLE001 - advisory
+                pass
+
+    def join(self, timeout=None):
+        self.done.wait(timeout)
+        return self.res if self.done.is_set() else None
+
+    def cancel(self):
+        self.cancelled.set()
+
+    def ready_fn(self, apply, stop=None):
+        """A callable(): wait for the baseline (or `stop`), run apply(results) once, True when the results are in."""
+        def ready():
+            while not self.done.wait(0.25):
+                if stop is not None and stop.is_set():
+                    return False
+            with self._lock:
+                if not self._applied:
+                    self._applied = True
+                    apply(self.res or [])
+            return True
+        return ready
+
+
 def failing_artifacts(sdir, mode, ids):
     """(newest variant-<mode> case dir, [artifact names the failing ids ask about]) or (None, [])."""
     var = sorted((Path(sdir) / "cases").glob(f"variant-{mode}-*/"), key=lambda p: p.stat().st_mtime)
@@ -2191,6 +2435,8 @@ def wait_until_expired(cid, extra=3):
 class Chain:
     def __init__(self, base, entries, pools, gov, only_modes=None):
         self.base, self.pools, self.gov = base, pools, gov
+        with _af_lock:
+            _af_chains.add(base)   # D25 D4: the auto answer-first cap counts the day's chains (web included)
         self.entries = {e["mode"]: e for e in entries}
         ss = self.entries.get("single_solve") or next(iter(self.entries.values()))
         self.lane, self.name = ss.get("lane", "misc"), ss.get("name", base)
@@ -2374,7 +2620,7 @@ class Chain:
         right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
         worker is told the truth — "timing" only when every field was actually judged correct."""
         self._handoff_join("generalize")   # its case + probes + baseline (D24 #5 async handoff)
-        if FAST_LIVE_ACCEPT and live is not None and (live.passed or cli.is_complete(cid)):
+        if self._racer_passed(cid, live):
             # D23 script Mastery: CORRECT already on the GM, yet 55 s of prep + three workers spawned only to be killed
             say(f"[{cid}] mode already CORRECT on the GM (live answer): no generalize")
             return
@@ -2398,12 +2644,23 @@ class Chain:
         # 120s/case run here plus a second baseline run: 141s before the worker spawned, replay run 2).
         ensure_case_and_test(paths.base_id(cid), self.sdir, full=False)
         tg["case"] = time.time()
-        res = self._baseline_results()
+        gbase = None
+        if GEN_BASELINE_ASYNC and (self.sdir / "solve.py").exists():
+            # C1: snapshot now (the transactional restore point AND what the baseline replays), baseline in a thread
+            self._snapshot_copy()
+            gbase = self._gen_baseline_start(cid)
+            res = gbase.known
+        else:
+            res = self._baseline_results()
+            self._pre_res = res
         tg["baseline"] = time.time()
-        self._pre_res = res
         for r in (res or []):
             if not r.get("ok"):
                 probs.append(_case_problem(r))
+        if gbase is not None and gbase.pending:
+            probs.append(f"(the harness is replaying {len(gbase.pending)} case(s) on the pre-worker solver beside you: "
+                         "the failing ones arrive as a HARNESS UPDATE within ~10-30 s -- start from the GM verdicts "
+                         "below; every case must pass `hctf solver-test` before you stop)")
         lines = []
         for a, v in (wrong or []):
             if fixed and a in fixed:
@@ -2498,6 +2755,15 @@ class Chain:
                          "make it route each set by its own artifact / question text (no one-family-per-contract "
                          "assumption, no hard-coded set count or delivery name), without breaking any case.\n"
                          + "\n".join("    " + ln for ln in d["compound_merge"].splitlines()))
+        if d.get("pool_rehearsal"):
+            gm_wrong += ("\n  - POOL REHEARSAL (the Mastery runs its sets in a 2-process fork pool on the 2-vCPU Homebase VM: "
+                         "each process solves several sets in turn): the `rehearsal-pool-*` case is today's Single + Time "
+                         "Trial (different variants, GM-verified answers) as one multi-set Mastery. It passes "
+                         "single-process but NOT on the pool, so state leaks from one set into the next. Usual cause: a "
+                         "module cache keyed on id(obj) -- a freed member's id() comes back for the next set's member. "
+                         "Store (obj, value) and check `entry[0] is obj`, key on content, or clear the caches at the start "
+                         "of each set's solve; `hctf solver-test` replays multi-set cases on the same 2-process pool.\n"
+                         + "\n".join("    " + ln for ln in d["pool_rehearsal"].splitlines()))
         if d.get("mutation_pre"):
             gm_wrong += ("\n  - NO TIMED ATTEMPT HAS RUN YET: the single is CORRECT, but the solver breaks on ANSWER-INVARIANT "
                          "mutations of its own case (the `mutation-*` cases: same member bytes and names, same expected "
@@ -2590,33 +2856,36 @@ class Chain:
                                 evidence=(evidence[:EVIDENCE_MAX_CHARS] + "\n... (evidence truncated; open the variant-* case for the rest)" if len(evidence or "") > EVIDENCE_MAX_CHARS else evidence) or
                                 "(not extracted -- open the newest variant-* case yourself)")
         set_state(self.base, stage=f"{mode}:generalizing")
-        targets = {r["case"] for r in (res or []) if not r.get("ok") and not r.get("unverified")}
-        # A failed variant has no GM-verified answers (unverified), so "passes" can't be judged -- but fields the solver
-        # left EMPTY can: green once it answers every field of such a case (full replay: the watcher never fired, all
-        # three generalize workers ran to their own end). Correctness is still checked by the accept step + GM retry.
-        fill = {r["case"] for r in (res or []) if r.get("unverified") and r.get("answered", 0) < r.get("total", 0)}
-        if d.get("solver_too_slow"):
-            # Speed-only generalize: every case may already PASS, just slowly -> targets/fill empty, the watcher never
-            # started and the worker ran to its own end (blind D7 replay: binary sped up 6 s -> 0.3 s by call 7, ~60 s
-            # in, then re-derived every answer by hand until 284 s). Watch the slow case(s) for SPEED instead: green
-            # once they come in under 2 s with nothing broken (_watch_green's need_fast check).
-            slow_t, slow_f = speed_watch_sets(res, self.sdir, mode)
-            targets |= slow_t
-            fill |= slow_f
+        # targets / fill / reject-free: filled in place (the async baseline completes them after the worker started)
+        targets, fill, rfree = set(), set(), set()
+        if gbase is None:
+            self._gen_watch_sets(res, d, mode, targets, fill, rfree)
         tg["prompt"] = time.time()
-        self._snapshot_solver()
+        if gbase is None:
+            self._snapshot_solver()
         tg["snapshot"] = time.time()
-        say(f"[{cid}] generalize prep {tg['snapshot'] - tg['t0']:.1f}s before the worker: case-check "
-            f"{tg['case'] - tg['t0']:.1f}s, baseline replay {tg['baseline'] - tg['case']:.1f}s ({len(res or [])} cases), "
-            f"evidence/prompt {tg['prompt'] - tg['baseline']:.1f}s, snapshot {tg['snapshot'] - tg['prompt']:.1f}s")
-        if FAST_LIVE_ACCEPT and live is not None and (live.passed or cli.is_complete(cid)):
+        if gbase is None:
+            say(f"[{cid}] generalize prep {tg['snapshot'] - tg['t0']:.1f}s before the worker: case-check "
+                f"{tg['case'] - tg['t0']:.1f}s, baseline replay {tg['baseline'] - tg['case']:.1f}s ({len(res or [])} "
+                f"cases), evidence/prompt {tg['prompt'] - tg['baseline']:.1f}s, snapshot {tg['snapshot'] - tg['prompt']:.1f}s")
+        else:
+            say(f"[{cid}] generalize prep {tg['snapshot'] - tg['t0']:.1f}s before the worker: case-check "
+                f"{tg['case'] - tg['t0']:.1f}s, snapshot + async baseline start {tg['baseline'] - tg['case']:.1f}s "
+                f"({len(gbase.known)} case(s) reused, {len(gbase.pending)} replaying beside the worker), "
+                f"evidence/prompt {tg['prompt'] - tg['baseline']:.1f}s")
+        if self._racer_passed(cid, live):
             # the live answer passed the mode DURING the prep: no worker ran, nothing to judge
+            if gbase is not None:
+                gbase.cancel()
+                self._gen_base = None
             shutil.rmtree(self._snap_dir(), ignore_errors=True)
             say(f"[{cid}] the live answer passed the mode during the generalize prep: no worker")
             return
         green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
         if live is not None:
             live.link(green)   # a live-answer pass ends this worker (its edits are still judged by _accept_or_restore)
+        if getattr(self, "_lib_racer", None) is not None:
+            self._lib_racer.link(green)   # C3b: so does a lib-racer pass
         if harvest:
             harvesting.set()
         from . import webtarget  # noqa: E402
@@ -2626,10 +2895,20 @@ class Chain:
         # re-attempt needs; requiring `fast` made a correct-but-slow racer lose to a 12-min local grind (Day 21).
         web_m = webtarget.is_live_lane(self.lane) and mode == "mastery"
         need_fast = bool(d.get("solver_too_slow")) and not web_m
+        if gbase is None:
+            base_set, ready = set(self._baseline), None
+            likely = bool(targets or fill or rfree)
+        else:
+            # C1: the watcher starts with the worker and waits for the async baseline (it fills the sets in place; an
+            # empty result ends the watcher); the duel starts once the baseline names a target (_gen_duel_later)
+            base_set = set()
+            ready = gbase.ready_fn(lambda r: (self._gen_watch_sets(r, d, mode, targets, fill, rfree),
+                                              base_set.update(x["case"] for x in r if x.get("ok"))), done)
+            likely = True
         watch = threading.Thread(target=self._watch_green, daemon=True,
-                                 args=(targets, set(self._baseline), need_fast, green, done, fill,
-                                       harvesting))
-        if (targets or fill) and STOP_WHEN_READY:
+                                 args=(targets, base_set, need_fast, green, done, fill,
+                                       harvesting, rfree, ready))
+        if likely and STOP_WHEN_READY:
             watch.start()
         reaper = None
         if harvest:   # starts after the snapshot: the harvest judges new variants with the PRE-worker solver
@@ -2640,14 +2919,21 @@ class Chain:
         gcount = self._genx()[1]
         gcount[cid] = gcount.get(cid, 0) + 1
         gen_duel = None
-        if not harvest and (targets or fill) and STOP_WHEN_READY:
+        duel_box = {"closed": False, "duel": None, "lock": threading.Lock()}
+        if not harvest and (targets or fill or rfree or gbase is not None) and STOP_WHEN_READY:
             lab = label_only_failure(wrong)
-            # E1b: an untimed Mastery generalize is the chain's LAST mode -- backgrounding it can't hide it (nothing
-            # else to do), so instead RACE it (like web) so a racer cancels the solo local worker (Day 21: warmups
-            # Mastery ran an 82 s solo generalize with no racer). Partial-emit (lib.solverrt) usually avoids it entirely.
-            um = mode == "mastery" and self._expect_untimed()
-            gen_duel = self._maybe_start_gen_duel(cid, prompt, targets, fill, need_fast, green,
-                                                  first=lab or need_fast or web_m or um, quick=lab)
+
+            def kw():
+                # E1b: an untimed Mastery generalize is the chain's LAST mode -- backgrounding it can't hide it (nothing
+                # else to do), so instead RACE it (like web) so a racer cancels the solo local worker (Day 21: warmups
+                # Mastery ran an 82 s solo generalize with no racer). Partial-emit (lib.solverrt) usually avoids it.
+                um = mode == "mastery" and self._expect_untimed()
+                return dict(first=lab or need_fast or web_m or um, quick=lab, rfree=rfree, baseline=base_set)
+            if gbase is None:
+                gen_duel = self._maybe_start_gen_duel(cid, prompt, targets, fill, need_fast, green, **kw())
+            else:
+                threading.Thread(target=self._gen_duel_later, daemon=True, name=f"gen-duel-later-{self.base}",
+                                 args=(cid, prompt, targets, fill, need_fast, green, done, ready, duel_box, kw)).start()
         try:
             self._gen_prompt = prompt   # a background generalize after a live pass reuses it (_start_bg_gen)
             self.run_worker(cid, "generalize", prompt, WEB_MASTERY_GEN_TIMEOUT if web_m else GENERALIZE_TIMEOUT,
@@ -2655,6 +2941,9 @@ class Chain:
         finally:
             self._restore_expected(cid, expected_before)
             done.set()
+            with duel_box["lock"]:
+                duel_box["closed"] = True
+                gen_duel = gen_duel or duel_box["duel"]
             if gen_duel is not None:
                 gen_duel.stop()
             if watch.is_alive():
@@ -2675,7 +2964,7 @@ class Chain:
                 reaper.join(timeout=HARVEST_JOIN_MAX)
                 if reaper.is_alive():
                     say(f"[{cid}] harvest still busy {HARVEST_JOIN_MAX:g}s after the worker ended: not waiting for it")
-            if FAST_LIVE_ACCEPT and live is not None and (live.passed or cli.is_complete(cid)):
+            if self._racer_passed(cid, live):
                 self._accept_after_live(cid, mode)
             else:
                 self._accept_or_restore(cid)
@@ -2688,6 +2977,7 @@ class Chain:
     #    generalize worker on the failed variant while hb_timed still localizes in-window (~15 s on D13 warmups Mastery).
     def _early_kw(self, cid, untimed=False):
         self._early = None
+        self._elive_state = None   # C4: per-set verdicts of THIS run (an early live answer of an earlier run is kept apart)
         if workers.EARLY_GENERALIZE and not untimed:
             return {"on_event": lambda data: self._early_event(cid, data)}
         if AUTO_EARLY:
@@ -2714,17 +3004,27 @@ class Chain:
         return cache[mode]
 
     def _early_event(self, cid, data):
+        if data.get("event") in ("per_set", "set_localized"):
+            self._early_live_event(cid, data)
+            return
         if data.get("event") != "solved" or not data.get("local") or getattr(self, "_early", None) is not None:
             return
+        pool = {}
         if not workers.EARLY_GENERALIZE:
             missing = list(data.get("missing") or [])
             mode = solvers.mode_of(cid)
             ahead = self._ahead_new(mode)
-            if data.get("result") != "solver_incomplete" or not (
-                    len(missing) >= EARLY_MIN_MISSING or (missing and ahead >= AHEAD_MIN_NEW)):
+            # A2: a pool rehearsal that found a leak while this Mastery attempt ran -> its answers are suspect on the
+            # same pool: generalize now, beside the attempt's banking / in-attempt localization
+            pool = self._pool_rehearsal_result(cid) if mode == "mastery" else {}
+            if not pool and (data.get("result") != "solver_incomplete" or not (
+                    len(missing) >= EARLY_MIN_MISSING or (missing and ahead >= AHEAD_MIN_NEW))):
                 return
-            say(f"[{cid}] contract-ahead: the solver left {len(missing)} field(s) empty (status-time contract: {ahead} "
-                f"id(s) new to the lane) -- the attempt can't pass as is: generalizing NOW, beside its banking")
+            if pool:
+                say(f"[{cid}] pool rehearsal leak landed during the attempt: generalizing NOW, beside its banking")
+            else:
+                say(f"[{cid}] contract-ahead: the solver left {len(missing)} field(s) empty (status-time contract: "
+                    f"{ahead} id(s) new to the lane) -- the attempt can't pass as is: generalizing NOW, beside its banking")
         tc = json.loads((Path(data["local"]) / "contract.json").read_text())
         if not data.get("attempt_id") or cli.attempt_id(tc) != data["attempt_id"]:
             return
@@ -2734,13 +3034,69 @@ class Chain:
         if case is None:
             return
         missing = list(data.get("missing") or [])
-        diag = {"early": True, "variant_case": case.name, "window": data.get("window"), "phases": data.get("phases")}
+        diag = {"early": True, "variant_case": case.name, "window": data.get("window"), "phases": data.get("phases"),
+                **pool}
         say(f"[{cid}] early generalize: solver {data.get('result')} ({len(missing)} empty) -- starting the worker on "
             f"{case.name} while the attempt is still judged")
         t = threading.Thread(target=self.generalize, daemon=True,
                              args=(cid, [(a, None) for a in missing] or None, {}, diag))
         self._early = {"thread": t, "case": case, "attempt": data["attempt_id"], "sig": _code_sig(self.sdir)}
         t.start()
+
+    def _early_live_event(self, cid, data):
+        """D25 C4: hb_timed's per-set verdicts ("per_set": which sets the GM judged incorrect) and each failed set's
+        localized wrong fields ("set_localized", before its label retries) -> once every bad set is localized, the live
+        answer starts on the still-open no-clock attempt instead of after the runner's label retries, resubmit, return
+        and variant pull (binary D25 Mastery: the live worker started ~60 s after the first per-set verdicts). Only
+        when this run's bytes are local (the timed dir holds the attempt's contract + the failing deliveries)."""
+        if not (EARLY_LIVE and LIVE_ANSWER and LIVE_FIRST) or data.get("deadline") is not None:
+            return
+        att = data.get("attempt_id")
+        st = getattr(self, "_elive_state", None)
+        if not att or st is None and data.get("event") != "per_set":
+            return
+        if data.get("event") == "per_set":
+            self._elive_state = st = {"attempt": att, "bad": set(data.get("bad_sets") or []), "done": set(),
+                                      "wrong": {}, "started": False}
+            return
+        if st["attempt"] != att or st["started"]:
+            return
+        st["done"].add(data.get("set"))
+        for pair in data.get("set_wrong") or []:
+            if isinstance(pair, (list, tuple)) and len(pair) == 2:
+                st["wrong"][pair[0]] = pair[1]
+        if not st["bad"] <= st["done"] or not st["wrong"]:
+            return
+        st["started"] = True
+        fields = list(st["wrong"])
+        if not live_fields_ok(fields):
+            return
+        try:
+            tdir = Path(data.get("local") or timed.timed_dir(cid))
+            tc = json.loads((tdir / "contract.json").read_text())
+            need = _art_need(tc, fields)
+            if cli.attempt_id(tc) != att or not need <= {p.name for p in tdir.iterdir()}:
+                return   # the bytes are not here (a Homebase run): the blocked path starts the live answer as before
+            cli.save(cid, "start.json", tc)     # the live worker's `hctf submit` goes to start.json's attempt
+            cli.save(cid, "contract.json", tc)
+            wrong = [[a, v] for a, v in st["wrong"].items()]
+            say(f"[{cid}] early live answer: {len(st['bad'])} bad set(s) localized ({len(fields)} wrong field(s)) -- "
+                "starting it while the runner still retries labels")
+            self._early_live = self._start_live(cid, {"attempt_id": att, "no_clock": True, "wrong": wrong},
+                                                fields, wrong, {})
+        except Exception as e:  # noqa: BLE001 - the blocked path starts it otherwise
+            say(f"[{cid}] early live answer note: {e}")
+
+    def _early_live_take(self, last):
+        """The early live answer (C4) still working on `last`'s attempt -> the blocked path adopts it; one on another
+        attempt / finished is ended. None when there is none."""
+        live, self._early_live = getattr(self, "_early_live", None), None
+        if live is None:
+            return None
+        if live.attempt == (last or {}).get("attempt_id") and not live.done.is_set():
+            return live
+        self._end_live(live)
+        return None
 
     def _early_join(self, cid):
         """After the attempt's final result: fold its GM verdicts into the early variant case (and into the running
@@ -2902,13 +3258,20 @@ class Chain:
                 return False
         return not done.is_set()
 
-    def _watch_green(self, targets, baseline, need_fast, green, done, fill=frozenset(), harvesting=None):
+    def _watch_green(self, targets, baseline, need_fast, green, done, fill=frozenset(), harvesting=None,
+                     rfree=frozenset(), ready=None):
         """Beside a generalize worker: once solver code has been quiet 3s and the failing target case(s) pass with no
         previously-passing case broken (and fast, for a speed fix), end the worker -- the replays' generalize workers
         spent 22-46s after the fix on solver-test reruns, robustness checks and notes. While a variant harvest is
-        still running (`harvesting` set) the worker is never ended: more failing variants may be on the way."""
+        still running (`harvesting` set) the worker is never ended: more failing variants may be on the way.
+        `rfree` (C2): unverified cases with GM rejections -- green once complete with no rejected value. `ready` (C1):
+        blocks until the async baseline filled targets / fill / rfree / baseline in place (False: the worker ended)."""
         start, checked = self._solver_mtimes(), None
         self._fill_only_said = False
+        if ready is not None and not ready():
+            return
+        if not (targets or fill or rfree):
+            return   # the baseline found nothing to watch
         while not done.wait(GREEN_POLL):
             m = self._solver_mtimes()
             if not m or m == start or time.time() - max(m.values()) < GREEN_QUIET:
@@ -2920,7 +3283,7 @@ class Chain:
             checked = key
             try:
                 # targets / fill first: the whole corpus only once they pass (most edits still fail their target)
-                if not solvers.targets_pass(self.sdir, targets, fill, timeout=BASELINE_CASE_TIMEOUT):
+                if not solvers.targets_pass(self.sdir, targets, fill, timeout=BASELINE_CASE_TIMEOUT, reject_free=rfree):
                     continue
                 res = solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
             except Exception:  # noqa: BLE001
@@ -2928,6 +3291,7 @@ class Chain:
             if self._solver_mtimes() != m:
                 continue  # edited while testing
             ok = {r["case"] for r in res if r.get("ok")}
+            rf_ok = {r["case"] for r in res if r.get("reject_free")}
             filled = {r["case"] for r in res if r.get("total") and r.get("answered") == r.get("total") and not r.get("error")}
             tg, fl = targets, set(fill)
             if workers.EARLY_GENERALIZE:
@@ -2936,8 +3300,8 @@ class Chain:
                 now = {r["case"] for r in res if not r.get("unverified")}
                 tg, fl = targets | (fl & now), fl - now
             fast = all(r.get("seconds", 99) < 2.0 for r in res if r["case"] in (tg | fl))
-            if tg <= ok and fl <= filled and baseline <= ok and (fast or not need_fast):
-                if VERIFIED_GREEN and fl and not (tg & ok):
+            if tg <= ok and fl <= filled and set(rfree) <= rf_ok and baseline <= ok and (fast or not need_fast):
+                if VERIFIED_GREEN and fl and not (tg & ok) and not rfree:
                     # Fill-only evidence (every field answered, nothing GM-verified among the targets -- D12: "green"
                     # on an unverified variant, then 11/58 wrong): never end the worker early on that alone.
                     if not getattr(self, "_fill_only_said", False):
@@ -2949,8 +3313,8 @@ class Chain:
                     if green.is_set():
                         return   # the duel went green first
                     self._green_res = (m, self._case_names(), res)  # _accept_or_restore reuses it (same code + cases)
-                    say(f"[{self.base}] generalize green ({sorted(targets | set(fill))[:3]} pass/complete, no "
-                        "regressions) -> ending the worker")
+                    say(f"[{self.base}] generalize green ({sorted(targets | set(fill) | set(rfree))[:3]} pass/complete"
+                        f"{', no GM-rejected value' if rfree else ''}, no regressions) -> ending the worker")
                     green.set()
                 return
 
@@ -2998,7 +3362,66 @@ class Chain:
             return [fresh.get(n) or old[n] for n in names if n in fresh or n in old]
         return solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
 
+    def _gen_watch_sets(self, res, d, mode, targets, fill, rfree):
+        """watch_sets() merged IN PLACE into the generalize's target / fill / reject-free sets (watcher + duel hold them)."""
+        t, f, r = watch_sets(res, d, mode, self.sdir)
+        targets |= t
+        fill |= f
+        rfree |= r
+
+    def _gen_baseline_start(self, cid):
+        """C1: start the pre-worker baseline on the snapshot (taken just before) -> GenBaseline. Reuses the last accepted
+        suite run when it was on THIS exact code (only the cases added since replay); never waits for the background
+        pre-baseline (D25: a 60 s join, then the suite again in the foreground)."""
+        self._handoff_join("baseline")   # the handoff's case + probe bookkeeping (cheap)
+        names = self._case_names()
+        acc = getattr(self, "_accepted_res", None)
+        if acc and acc[0] == self._solver_mtimes():
+            old = {r.get("case"): r for r in acc[2]}
+            known = [old[n] for n in names if n in old]
+            pending, full = [n for n in names if n not in old], False
+        else:
+            known, pending, full = [], names, True
+        prior = {r.get("case") for r in known if not r.get("ok")}
+
+        def on_done(gb):
+            # failing cases the prompt could not list yet -> the running worker's inbox (hctf/inbox.py -> nudge.py)
+            if gb.res is None:
+                say(f"[{cid}] async baseline failed ({str(gb.err)[:120]}): the accept step replays the snapshot")
+                return
+            bad = [r for r in gb.res if r.get("case") not in prior and not solvers.gate_ok(r)]
+            say(f"[{cid}] async baseline: {len(gb.res)} case(s) in {gb.seconds:.1f}s beside the worker, "
+                f"{len(bad)} failing")
+            if bad:
+                from . import inbox
+                inbox.post(cli.cdir(cid), "BASELINE REPLAY of the pre-worker solver finished: these case(s) fail -- make "
+                           "every one pass `hctf solver-test` (never edit expected.json):\n"
+                           + _cap_lines([f"  - {_case_problem(r)}" for r in bad], PROBS_MAX_CHARS // 4),
+                           key="baseline")
+        gb = GenBaseline(self._snap_dir(), known, pending, full, on_done=on_done).start()
+        self._gen_base = gb
+        return gb
+
+    def _gen_baseline_join(self):
+        """The async baseline (C1) of the current generalize -> self._baseline (ok cases); a failed replay re-runs the
+        snapshot here (it is still the pre-worker code). No-op when the generalize ran the blocking baseline."""
+        gb, self._gen_base = getattr(self, "_gen_base", None), None
+        if gb is None:
+            return
+        res = gb.join()
+        if res is None and self._snap_dir().exists():
+            try:
+                res = solvers.test_solver(self._snap_dir(), timeout=BASELINE_CASE_TIMEOUT)
+            except Exception:  # noqa: BLE001
+                res = None
+        self._baseline = {r.get("case") for r in (res or []) if r.get("ok")}
+
     def _snapshot_solver(self):
+        self._snapshot_copy()
+        self._snapshot_baseline()
+
+    def _snapshot_copy(self):
+        """The transactional restore point (C1: also what the async baseline replays)."""
         snap = self._snap_dir()
         if snap.exists():
             shutil.rmtree(snap)
@@ -3006,6 +3429,8 @@ class Chain:
             # case artifacts hard-linked (write-once GM bytes; the script corpus is ~30 MB): the snapshot sits on the
             # critical path between "blocked" and the generalize worker's launch
             shutil.copytree(self.sdir, snap, ignore=shutil.ignore_patterns("__pycache__"), copy_function=_link_or_copy)
+
+    def _snapshot_baseline(self):
         # Baseline: which cases pass BEFORE the worker. Unverified variant cases are legitimately red; the bar is
         # "nothing that passed may break", not "everything green".
         try:
@@ -3068,6 +3493,7 @@ class Chain:
         snap = self._snap_dir()
         if not snap.exists():
             return
+        self._gen_baseline_join()   # C1: the async baseline must be in before "nothing that passed may break" is judged
         cached, self._green_res = getattr(self, "_green_res", None), None
         try:
             if cached and cached[0] == self._solver_mtimes() and cached[1] == self._case_names():
@@ -3101,6 +3527,10 @@ class Chain:
         snap = self._snap_dir()
         if not snap.exists():
             return
+        gb = getattr(self, "_gen_base", None)
+        if gb is not None and (mode != "time_trial" or _code_sig(self.sdir) == _code_sig(snap)):
+            self._gen_base = None   # C1: nothing left to judge against it (the snapshot moves / goes)
+            gb.cancel()
         if _code_sig(self.sdir) == _code_sig(snap):
             shutil.rmtree(snap, ignore_errors=True)
             return
@@ -3611,10 +4041,30 @@ class Chain:
         threading.Thread(target=d.watch_single, name=f"duel-watch-{self.base}", daemon=True,
                          args=(lambda: (getattr(self, "_cur_ready", None), self._ready_lock), say)).start()
 
-    def _maybe_start_gen_duel(self, cid, prompt, targets, fill, need_fast, green, first=False, quick=False):
+    def _gen_duel_later(self, cid, prompt, targets, fill, need_fast, green, done, ready, box, kw):
+        """C1: the generalize duel once the async baseline is in -- same rule as before (a target, a fill or a
+        reject-free case), its solver copied from the pre-worker snapshot (the worker may be editing already)."""
+        try:
+            if not ready() or done.is_set():
+                return
+            kw = kw()
+            if not (targets or fill or kw.get("rfree")):
+                return
+            with box["lock"]:
+                if box["closed"] or done.is_set():
+                    return
+                box["duel"] = self._maybe_start_gen_duel(cid, prompt, targets, fill, need_fast, green,
+                                                         src=self._snap_dir(), **kw)
+        except Exception as e:  # noqa: BLE001 - the duel is optional
+            say(f"[{cid}] generalize duel note: {e}")
+
+    def _maybe_start_gen_duel(self, cid, prompt, targets, fill, need_fast, green, first=False, quick=False,
+                              rfree=frozenset(), baseline=None, ready=None, src=None):
         """From the (duel.GEN_AFTER+1)-th generalize of this mode on -- or the FIRST one when `first` (label-only or
         speed-only failures: the high-variance cases, rehearsal D13 replay) -- a second generalize worker on a copy of the
-        solver + cases; the first to go green wins (D12-D14 warmups Mastery: 2 serial generalizes per day)."""
+        solver + cases; the first to go green wins (D12-D14 warmups Mastery: 2 serial generalizes per day).
+        `ready` (C1): the green watch first waits for the async baseline and reads targets / fill / rfree / baseline as
+        filled in place. `src`: copy the solver from there (C1: started after the worker -> the pre-worker snapshot)."""
         from . import duel
         if duel.GEN_AFTER < 0 or (self._genx()[1].get(cid, 0) <= duel.GEN_AFTER and not (first and duel.GEN_FIRST)):
             return None
@@ -3624,10 +4074,13 @@ class Chain:
             return None
         try:
             d = duel.make(self, cid, "generalize", prompt, GENERALIZE_TIMEOUT, cases=True,
-                          note_extra=duel.QUICK_FIX_NOTE if quick else "")
+                          note_extra=duel.QUICK_FIX_NOTE if quick else "", src=src)
             d.start(log=say)
+            if ready is None:
+                targets, rfree, baseline = set(targets), set(rfree), set(self._baseline if baseline is None else baseline)
             threading.Thread(target=d.watch_green, name=f"duel-green-{self.base}", daemon=True,
-                             args=(set(targets), set(self._baseline), need_fast, fill, green, say)).start()
+                             args=(targets, baseline, need_fast, fill, green, say),
+                             kwargs={"reject_free": rfree, "ready": ready}).start()
             return d
         except Exception as e:  # noqa: BLE001 - the duel is optional
             say(f"[{cid}] generalize duel note: {e}")
@@ -4369,6 +4822,68 @@ class Chain:
         self._today_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(today_probe, owner_tag=self.base), self.sdir,
                                                                    60 if kind == "merge" else 30, kind)
 
+    def _start_pool_rehearsal(self, tt_cid):
+        """Background pool rehearsal (POOL_REHEARSAL above) for the Time Trial `tt_cid` just passed; once per chain."""
+        if not POOL_REHEARSAL or not tt_cid or getattr(self, "_pool_fut", None) is not None:
+            return
+        from . import webtarget
+        m = self.entries.get("mastery")
+        if (m is None or cli.is_complete(m["id"]) or webtarget.is_live_lane(getattr(self, "lane", None))
+                or not (self.sdir / "solve.py").exists()):
+            return
+        mc = cli.load(f"{self.base}/mastery", "contract.json") or {}
+        if mc.get("answer_ids") and solvers._set_count(mc) < 2:
+            return   # a one-set Mastery never forks a pool
+        contract = cli.load(tt_cid, "start.json") or {}
+        art = timed.latest_artifacts(tt_cid) or _timed_bytes_of(tt_cid, cli.attempt_id(contract))
+        conf = cli.confirmed_answers(tt_cid)
+        if not (contract and art and conf):
+            say(f"[{m['id']}] pool rehearsal skipped: the Time Trial's contract / bytes / confirmed answers are not on disk")
+            return
+        sample = next((c for c in (str(q.get("artifact") or "").split("->")[0].strip()
+                                   for q in mc.get("questions") or []) if c), "")
+        mcid, tag = m["id"], f"tt{(cli.attempt_id(contract) or 'x')[:8]}"
+
+        def run():
+            from . import today_probe as tp
+            res = tp.pool_rehearsal(self.sdir, (contract, Path(art), conf), sample=sample, tag=tag,
+                                    deadline=time.time() + POOL_REHEARSAL_SECONDS)
+            st, p = res.get("status"), res.get("pooled") or {}
+            if st == "leak":
+                say(f"[{mcid}] pool rehearsal: LEAK -- {tp.POOL_SETS} sets of Single+TT pass single-process but only "
+                    f"{p.get('correct')}/{p.get('expected')} fields on a {tp.POOL_PROCS}-process pool "
+                    f"({res.get('seconds')}s): cross-set state in the solver; generalizing before / beside Mastery")
+            else:
+                say(f"[{mcid}] pool rehearsal: {st} ({res.get('seconds')}s"
+                    + (f"; {str(res.get('error'))[:160]}" if res.get("error") else "")
+                    + ("; single-process also misses -- shape, left to the probes" if st == "shape" else "") + ")")
+            return res
+        self._pool_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(run, owner_tag=self.base))
+        say(f"[{mcid}] pool rehearsal started: Single + Time Trial {tag[2:]} as one multi-set "
+            "Mastery on a 2-process pool (background, never waited for)")
+
+    def _pool_rehearsal_result(self, cid):
+        """-> {"pool_rehearsal": text} ONCE when the finished rehearsal found a leak (its case adopted), else {}.
+        Never waits (a running rehearsal stays pending for the next consumer)."""
+        fut = getattr(self, "_pool_fut", None)
+        if fut is None or not fut.done():
+            return {}
+        with _pool_lock:
+            if getattr(self, "_pool_done", False):
+                return {}
+            self._pool_done = True
+        try:
+            res = fut.result()
+        except Exception as e:  # noqa: BLE001
+            say(f"!!! [{cid}] pool rehearsal FAILED ({e}) -- the Mastery attempt runs WITHOUT it")
+            return {}
+        if res.get("status") != "leak":
+            return {}
+        from . import today_probe as tp
+        name = tp.adopt_pool(self.sdir, res)
+        say(f"[{cid}] pool rehearsal: leak case {name} adopted as a regression case")
+        return {"pool_rehearsal": tp.pool_summary(res)}
+
     def _today_kind(self):
         lane = getattr(self, "lane", None)
         if TODAY_PROBE and lane in TODAY_PROBE_LANES:
@@ -4422,6 +4937,12 @@ class Chain:
             # rehearsal D13 replay: `cannot import name 'warmups_codecs'` was logged as a plain status line and the Mastery
             # attempt went out unprotected (41/63 sets wrong, then a 117 s generalize)
             say(f"!!! [{cid}] today-probe FAILED ({str(res.get('error'))[:200]}) -- the Mastery attempt runs WITHOUT "
+                "its rehearsal")
+        elif st in ("no-cases", "no-base") and res.get("codec"):
+            # D22-D25: a .prefetch.json in the base case's artifacts made every probe `no-cases`, logged as a plain
+            # status line -- the warmups Mastery went out unrehearsed four days running (D25: 123/123 wrong)
+            say(f"!!! [{cid}] today-probe: {st} although today's codec `{res.get('codec')}` was identified "
+                f"(base {Path(res['base']).name if res.get('base') else 'none'}) -- the Mastery attempt runs WITHOUT "
                 "its rehearsal")
         else:
             say(f"[{cid}] today-probe: {st} (codec {res.get('codec')}, {res.get('seconds')}s)")
@@ -4494,9 +5015,8 @@ class Chain:
         to this attempt and waits out `preparing` (hb_timed._await_live). No clock: web TT is regular untimed play."""
         from . import webtarget
         tt = self.entries.get("time_trial")
-        if not (WEB_TT_KICK and tt and webtarget.is_live_lane(self.lane)) or getattr(self, "_web_kicked", False):
+        if not (WEB_TT_KICK and tt and webtarget.is_live_lane(self.lane)) or not _kick_once(self, "_web_kicked"):
             return
-        self._web_kicked = True
         if cli.is_complete(tt["id"]) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
             return
         mcid = tt["id"]
@@ -4516,9 +5036,8 @@ class Chain:
         own start reconnects to this attempt. Same rules as _web_tt_kick (the TT is banked here; no clock)."""
         from . import webtarget
         m = self.entries.get("mastery")
-        if not (WEB_TT_KICK and m and webtarget.is_live_lane(self.lane)) or getattr(self, "_web_m_kicked", False):
+        if not (WEB_TT_KICK and m and webtarget.is_live_lane(self.lane)) or not _kick_once(self, "_web_m_kicked"):
             return
-        self._web_m_kicked = True
         if cli.is_complete(m["id"]) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
             return
         mcid = m["id"]
@@ -4580,6 +5099,8 @@ class Chain:
         from . import webtarget
         if webtarget.is_live_lane(getattr(self, "lane", None)):
             return False   # web: live targets have their own kicks (_web_tt_kick / _web_mastery_kick)
+        if not workers.prestart_useful(e["id"]):
+            return False   # D25 B1: this mode runs on Homebase regardless -- its runner never reads local bytes
         mcid = e["id"]
         label = "TT" if mode == "time_trial" else "Mastery"
 
@@ -4707,6 +5228,7 @@ class Chain:
         if solvers.mode_of(cid) == "mastery":
             # today-probe: before Mastery (bounded wait of its own, whatever `wait` says) or a Mastery-failure generalize
             pre.update(self._today_pre_result(cid, wait=wait))
+            pre.update(self._pool_rehearsal_result(cid))     # only if already done: never waited for
         if not getattr(self, "_cmp_late_done", False):
             ctxt, hard = self._compound_pre_result(wait=wait)
             if hard or ctxt or wait:
@@ -4907,8 +5429,24 @@ class Chain:
             return
         if all(cli.is_complete(e["id"]) for m, e in self.entries.items() if m in ("time_trial", "mastery")):
             return
+        # D25 D2: the answer-first worker promotes a VERIFIED plugin before it submits (lib.web.plugin: atomic, only after
+        # a proof on a live target), so an existing file is complete and working -- no import check on this path
+        plug = web_plugin_path(self.sdir)
+        pre = self._web_plugin_pre = plug.exists()
+        if pre:
+            try:
+                age = f"{time.time() - plug.stat().st_mtime:.0f}s old"
+            except OSError:
+                age = "?"
+            say(f"[{cid}] web plugin {plug.name} already in place at the single's CORRECT ({age}): the timed modes "
+                "dispatch to it on their first run" + ("; codify hardens it" if WEB_CODIFY_HARDEN else "; no codify"))
+            if not WEB_CODIFY_HARDEN:
+                self._codify = False
+                return
         try:
-            self._codify = WebCodify(self, cid).start()
+            c = WebCodify(self, cid)
+            c.prelanded = pre
+            self._codify = c.start()
         except Exception as e:  # noqa: BLE001 - an optimization only
             self._codify = False
             say(f"[{cid}] web codify not started: {e}")
@@ -5358,7 +5896,7 @@ class Chain:
                 say(f"[{cid}] web live compound check still running "
                     + ("but the Mastery target is ready" if rdy is not None and rdy.is_set()
                        else f"after {WEB_COMPOUND_WAIT:g}s") + ": Mastery starts now")
-            if late and mode == "mastery" and self._tt_pool_untimed() and not web_m:
+            if late and mode == "mastery" and self._tt_pool_untimed() and not web_m and "pool_rehearsal" not in late:
                 # misses are adopted as cases already; the failure generalize (if Mastery fails at all) gets the diag
                 self._late_held = late
                 say(f"[{cid}] probes found misses ({', '.join(sorted(late))}), but the pool is UNTIMED: Mastery now "
@@ -5393,8 +5931,13 @@ class Chain:
         attempt = -1
         skip_rerun = False
         par, web_restart = None, False    # D24 #11: the parallel web TT live answer; a codify reconnect (op=start)
+        t_ret = None                      # C4: when timed.run returned (timing mark on the `result:` line)
         while attempt < MAX_TIMED_RETRIES:
             attempt += 1
+            if getattr(self, "_lib_racer", None) is not None:   # C3b: a racer never outlives its blocked attempt's cycle
+                self._lib_racer.finish()
+                self._lib_racer = None
+            self._end_live(self._early_live_take({}))   # C4: an early live answer the blocked path did not adopt
             while not self.gov.allow_timed():
                 set_state(self.base, stage=f"{mode}:waiting-credits")
                 time.sleep(300)
@@ -5456,12 +5999,14 @@ class Chain:
                 self._mark(f"{mode}:run", cid)
                 res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed),
                                 **self._on_correct_kw(mode))
+                t_ret = time.time()
                 res = self._web_par_settle(cid, par, res)
             if res == "error:exec" and self._gm_passed(cid):
                 res = "correct"
             if res == "correct" and mode == "time_trial":
                 self._mark("time_trial:correct")
-                self._prefetch_mastery_start()   # the Mastery start + bytes overlap the TT bookkeeping + pre-Mastery block
+                self._tt_pass_kick()   # the Mastery start + bytes (web: its target) overlap the TT bookkeeping + pre-Mastery
+                self._start_pool_rehearsal(cid)  # A2: background, beside the same bookkeeping
             if res == "blocked" and LOCAL_RERUN_SLOW and self._slow_vm_no_clock(cid):
                 # No clock + a CPU-bound solve that ran out of its budget on the slow VM: the attempt is still live, so
                 # re-run it HERE (12 cores, x5-11 per core) before a speed generalize. D17 warmups Mastery: 60 s cap on
@@ -5471,12 +6016,16 @@ class Chain:
                 res = timed.run(cid, self.sdir, log=say, op="start", force_local=True)
                 if res == "error:exec" and self._gm_passed(cid):
                     res = "correct"
-            say(f"[{cid}] result: {res}{' (untimed)' if untimed else ''}")
+            post = time.time() - t_ret if t_ret else 0.0
+            say(f"[{cid}] result: {res}{' (untimed)' if untimed else ''}"
+                + (f" (+{post:.1f}s after the runner returned)" if workers.TIMING_MARKS and post >= 1.0 else ""))
+            t_ret = None
             set_state(self.base, **{f"{mode}_result": res})
             if self._early_join(cid) and res in ("expired", "blocked"):
                 continue   # an early generalize already worked on this variant (verdicts merged): retry
             if res == "correct":
                 self._end_live(self._web_par_take(par, {}))
+                self._end_live(self._early_live_take({}))
                 if untimed:
                     say(f"[{cid}] passed on an UNTIMED attempt (fresh timed pool spent): flag + points, no Hall of Fame")
                     set_state(self.base, stage=f"{mode}:untimed-pass")
@@ -5585,6 +6134,7 @@ class Chain:
                 continue
             got_w, par = self._web_codify_gen_wait(cid, mode, par, last)
             if got_w == "correct":
+                say(f"[{cid}] result: correct (live answer, codify wait)")   # D25 D1: was uncounted by feed/kpi
                 set_state(self.base, **{f"{mode}_result": "correct"})
                 self._live_pass_prefetch(mode)
                 record_timed_case(cid, self.sdir)
@@ -5662,6 +6212,7 @@ class Chain:
                     # The probe's own submits passed this mode (replay run 3 binary TT: it went CORRECT, then the harness
                     # retried anyway and failed again -- 33s wasted after the pass).
                     say(f"[{cid}] the probe attempt itself passed the mode")
+                    say(f"[{cid}] result: correct (probe attempt)")
                     set_state(self.base, **{f"{mode}_result": "correct"})
                     record_timed_case(cid, self.sdir)
                     return True
@@ -5670,8 +6221,14 @@ class Chain:
             # Mastery's label probes ran ~10 min before any LLM looked at the 18 fields' bytes).
             live = self._web_par_take(par, last)
             par = None
+            if live is None:
+                live = self._early_live_take(last)   # C4: started on the per-set events
+                if live is not None:
+                    say(f"[{cid}] live answer already running since the per-set verdicts (attempt {str(live.attempt)[:8]})")
             fields = _live_fields(last, wrong, fixed) if LIVE_ANSWER else []
-            if LIVE_FIRST and fields and len(fields) <= LIVE_MAX_FIELDS and live is None:
+            # C3b: the lane's lib decoder races first (no LLM; seconds), beside the live answer
+            racer = self._start_lib_racer(cid, last, _live_fields(last, wrong, fixed))
+            if LIVE_FIRST and live_fields_ok(fields) and live is None:
                 live = self._start_live(cid, last, fields, wrong, fixed)
             # Online resolution (parallel probes, time-bounded): GM-judged spellings for closed-vocab label fields and
             # ORDER/format alternates for list-valued fields (D23 metadata TT: the CD-order list was wrong, the sorted
@@ -5694,6 +6251,10 @@ class Chain:
                 self._end_live(live)
                 say(f"[{cid}] passed during the online resolution"
                     + (" / live answer" if live is not None and live.passed else ""))
+                # D25 D1: one recognised line per timed pass (feed / timeline / kpi / effort_report: TIMED_PASSED)
+                say(f"[{cid}] result: correct ("
+                    + ("live answer, online resolution" if live is not None and live.passed else "online resolution")
+                    + ")")
                 set_state(self.base, **{f"{mode}_result": "correct"})
                 self._live_pass_prefetch(mode)
                 record_timed_case(cid, self.sdir)
@@ -5730,11 +6291,20 @@ class Chain:
             if held:
                 self._late_held = None
                 diag.update({k: v for k, v in held.items() if k not in diag})
-            if live is None and fields and len(fields) <= LIVE_MAX_FIELDS:
+            if live is None and live_fields_ok(fields):
                 live = self._start_live(cid, last, fields, wrong, fixed)
             sig = _code_sig(self.sdir)
             self._codify_yield(cid, mode)
             self.generalize(cid, wrong=wrong, fixed=fixed, diag=diag, live=live)
+            if racer is not None:
+                racer.finish()
+                self._lib_racer = None
+                if live is None and cli.is_complete(cid):
+                    say(f"[{cid}] passed by the lib racer (attempt {str(racer.attempt)[:8]})")
+                    set_state(self.base, **{f"{mode}_result": "correct"})
+                    self._live_pass_prefetch(mode)
+                    record_timed_case(cid, self.sdir)
+                    return True
             if live is not None:
                 live.finish()
                 if live.passed or cli.is_complete(cid):
@@ -5756,17 +6326,26 @@ class Chain:
                 # resubmits the values already rejected there: D23 script TT re-bisected 593 answers for 100 s.)
                 skip_rerun = True
         self._end_live(self._web_par_take(par, {}))
+        self._end_live(self._early_live_take({}))
+        if getattr(self, "_lib_racer", None) is not None:
+            self._lib_racer.finish()
+            self._lib_racer = None
         set_state(self.base, stage=f"{mode}:blocked")
         return False
 
     def _web_par_live(self, cid, mode, attempt, resumed):
         """D24 #11: start the parallel live-answer binder for the FIRST web TT attempt when the codify plugin hasn't
-        landed (a landed plugin -> the runner's solver dispatches to it first-try). -> WebParLive or None."""
+        landed (a landed plugin -> the runner's solver dispatches to it first-try). D25 D2: nor when the single's worker
+        promoted a verified plugin before CORRECT. -> WebParLive or None."""
         from . import webtarget
         if not (WEB_PAR_LIVE and LIVE_ANSWER and mode == "time_trial" and attempt == 0 and not resumed
                 and webtarget.is_live_lane(getattr(self, "lane", None))):
             return None
         c = getattr(self, "_codify", None)
+        if getattr(self, "_web_plugin_pre", False) or (c and getattr(c, "prelanded", False)):
+            say(f"[{cid}] web plugin from the single in place: no parallel live answer (the runner dispatches to it; "
+                "a block still gets one)")
+            return None
         if c and c.plugin.exists() and c.plugin.stat().st_mtime >= c.t0:
             return None
         try:
@@ -5809,14 +6388,15 @@ class Chain:
     def _codify_alive(self, cid):
         from . import webtarget
         c = getattr(self, "_codify", None)
-        return bool(WEB_CODIFY_IS_GEN and c and not c.done.is_set() and solvers.mode_of(cid) == "time_trial"
+        return bool(WEB_CODIFY_IS_GEN and c and not c.done.is_set() and solvers.mode_of(cid) in _codify_modes()
                     and webtarget.is_live_lane(getattr(self, "lane", None)))
 
     def _web_codify_gen_wait(self, cid, mode, par, last):
-        """D24 #11 (CODIFY_IS_GEN): a blocked web TT while codify is alive waits up to WEB_CODIFY_GEN_WAIT s for the live
-        answer ("correct") or the codify plugin ("restart": reconnect with start, the solver re-dispatches) before any
-        generalize. -> (verdict or None, the parallel live answer to keep for the blocked path)."""
-        if mode != "time_trial" or not self._codify_alive(cid) or WEB_CODIFY_GEN_WAIT <= 0:
+        """D24 #11 (CODIFY_IS_GEN): a blocked web TT (D25 D3: or Mastery) while codify is alive waits up to
+        WEB_CODIFY_GEN_WAIT s for the live answer ("correct") or the codify plugin ("restart": reconnect with start, the
+        solver re-dispatches) before any generalize. A Time Trial's live pass requests the Mastery target AT ONCE
+        (_tt_pass_kick), before the live worker is ended. -> (verdict or None, the parallel live answer to keep)."""
+        if mode not in _codify_modes() or not self._codify_alive(cid) or WEB_CODIFY_GEN_WAIT <= 0:
             return None, par
         c = self._codify
         live = par.close() if par is not None else None
@@ -5825,7 +6405,7 @@ class Chain:
             live = None
         if live is None and LIVE_ANSWER:
             fields = _live_fields(last, None, None)
-            if fields and len(fields) <= LIVE_MAX_FIELDS:
+            if live_fields_ok(fields):
                 live = self._start_live(cid, last, fields, None, None)
         held = _HeldLive(live)
         say(f"[{cid}] blocked while the web codify worker runs: waiting up to {WEB_CODIFY_GEN_WAIT:g}s for the live "
@@ -5833,6 +6413,8 @@ class Chain:
         t0 = time.time()
         while time.time() - t0 < WEB_CODIFY_GEN_WAIT:
             if cli.is_complete(cid) or (live is not None and live._state()[0]):
+                if mode == "time_trial":
+                    self._tt_pass_kick()   # D25 D3: Mastery's target before the live worker's 5 s join + the handoff
                 if live is not None:
                     live.passed = True
                 self._end_live(live)
@@ -5853,7 +6435,7 @@ class Chain:
 
     def _codify_yield(self, cid, mode):
         """No two writers on one plugin file: a generalize past the codify wait ends a still-running codify worker."""
-        if mode == "time_trial" and self._codify_alive(cid):
+        if mode in _codify_modes() and self._codify_alive(cid):
             say(f"[{cid}] web codify worker ended: the generalize takes over {self._codify.plugin.name}")
             self._stop_codify()
 
@@ -5902,14 +6484,59 @@ class Chain:
         """A Time Trial passed off the runner's own path (live answer / online resolution): pre-start Mastery now, as a
         runner pass does (record_timed_case + the bg generalize otherwise sit in front of its start + download)."""
         if mode == "time_trial":
-            try:
+            self._tt_pass_kick()
+
+    def _tt_pass_kick(self):
+        """The Time Trial is CORRECT on the GM (any route): pre-start Mastery (untimed pools) and, on web, request its
+        live target now (D25 D3: a live-answer TT pass requested it only after the 2 s poll, the live worker's join and
+        the stage handoff -- 4-13 s later). Both are once-per-chain; never raises."""
+        try:
+            with _KICK_LOCK:   # the live watcher thread and the timed stage may both get here
                 self._prefetch_mastery_start()
-            except Exception as e:  # noqa: BLE001 - an optimisation only
-                say(f"[{self.base}] Mastery pre-start note: {e}")
+        except Exception as e:  # noqa: BLE001 - an optimisation only
+            say(f"[{self.base}] Mastery pre-start note: {e}")
+        try:
+            from . import webtarget
+            if webtarget.is_live_lane(getattr(self, "lane", None)):
+                self._web_mastery_kick()
+        except Exception as e:  # noqa: BLE001
+            say(f"[{self.base}] web Mastery kick note: {e}")
+
+    def _racer_passed(self, cid, live):
+        """FAST_LIVE_ACCEPT: the mode passed through a racer on the open attempt -- the live answer, or (C3b) the lib
+        racer -- so the generalize is not judged on the critical path (_accept_after_live)."""
+        racer = getattr(self, "_lib_racer", None)
+        return FAST_LIVE_ACCEPT and (live is not None or racer is not None) and (
+            (live is not None and live.passed) or (racer is not None and racer.passed) or cli.is_complete(cid))
+
+    def _start_lib_racer(self, cid, last, fields):
+        """C3b: the lane's no-LLM lib decoder on the blocked no-clock attempt's bytes (hctf/libracer.py), beside the live
+        answer / generalize. -> LibRacer or None (lane not registered / clock / no fields / no bytes)."""
+        from . import libracer
+        self._lib_racer = None
+        if not (libracer.ENABLED and fields and getattr(self, "lane", None) in libracer.lanes() and _no_clock(last)
+                and last.get("attempt_id")):
+            return None
+        try:
+            if cli.attempt_id(cli.load(cid, "start.json")) != last["attempt_id"]:
+                return None   # start.json is another attempt: cli.submit would send these values there
+            contract = cli.cdir(cid) / "start.json"
+            art = attempt_art_dir(cid, _art_need(cli.load(cid, "start.json"), fields), "lib racer")
+            say(f"[{cid}] lib racer ({self.lane}): lib decoder on {len(fields)} field(s) of attempt "
+                f"{str(last['attempt_id'])[:8]}, GM-rejected values excluded")
+            self._lib_racer = libracer.LibRacer(cid, self.lane, last, fields, art, contract, log=say).start()
+            return self._lib_racer
+        except Exception as e:  # noqa: BLE001 - a racer never costs the chain
+            say(f"[{cid}] lib racer not started: {e}")
+            return None
 
     def _start_live(self, cid, last, fields, wrong, fixed):
         try:
-            return LiveAnswer(self, cid, last, fields, wrong, fixed).start()
+            live = LiveAnswer(self, cid, last, fields, wrong, fixed)
+            from . import webtarget
+            if solvers.mode_of(cid) == "time_trial" and webtarget.is_live_lane(getattr(self, "lane", None)):
+                live.on_pass.append(self._tt_pass_kick)   # D25 D3: the web Mastery target at the GM's CORRECT
+            return live.start()
         except Exception as e:  # noqa: BLE001 - the generalize path stands on its own
             say(f"[{cid}] live-answer not started: {e}")
             return None
@@ -6056,6 +6683,7 @@ class Chain:
         n = len(s.get("rounds") or [])
         if s.get("last_correct") or cli.is_complete(cid):
             say(f"[{cid}] label scouting: a scout round passed the mode ({n} round(s), {time.time() - t0:.0f}s)")
+            say(f"[{cid}] result: correct (label scout)")
             set_state(self.base, **{f"{mode}_result": "correct"})
             record_timed_case(cid, self.sdir)
             return True
@@ -6112,7 +6740,7 @@ class Chain:
             res = timed.run(cid, self.sdir, log=say)
             last = timed.last_result(cid) or {}
             fields = _live_fields(last, last.get("wrong"), last.get("fixed")) if res == "blocked" else []
-            if fields and len(fields) <= LIVE_MAX_FIELDS:
+            if live_fields_ok(fields):
                 # rehearsal fair D16: the re-pass resumed an attempt the solver can't complete (missing field) and spun
                 # 3 x 20 s with no live answer -- answer exactly those fields on that attempt, as the TT stage would
                 live = LiveAnswer(self, cid, last, fields, last.get("wrong"), last.get("fixed")).start()
@@ -6216,6 +6844,8 @@ class Chain:
         for mode in ("time_trial", "mastery"):
             if mode == "mastery" and mode in modes:
                 self.scout_stage()   # no-op unless SCOUT_ROUNDS > 0
+                # A2 pool rehearsal for a TT passed by any other path (live answer, race, an earlier run); once per chain
+                self._start_pool_rehearsal((self.entries.get("time_trial") or {}).get("id"))
             if mode in modes and mode in self.entries and not self._web_slot(mode, self.timed_stage, mode):
                 return
         self._bg_gen_take(self.base, "chain complete")

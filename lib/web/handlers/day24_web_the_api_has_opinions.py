@@ -50,5 +50,9 @@ def exploit(base, clues):
     return None
 
 
-KEY_MAP = [(r"inventory_route|protected_reference", "day24_web_the_api_has_opinions")]
+# protected_reference alone is not this class (D25: Day 18's GraphQL kit carries it without an inventory): it only
+# dispatches beside its companion inventory_route (lib.web.handlers KEY_COMPANIONS)
+KEY_MAP = [(r"inventory_route", "day24_web_the_api_has_opinions"),
+           (r"protected_reference", "day24_web_the_api_has_opinions")]
+KEY_COMPANIONS = {r"protected_reference": r"inventory_route"}
 HANDLERS = {"day24_web_the_api_has_opinions": exploit}

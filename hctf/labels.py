@@ -186,6 +186,9 @@ def record_values(cid, conf, log=None):
         if str(val) in existing.get(ending(aid), set()):
             continue
         record(aid, str(val))
+        # D25 C4: one vocab.json rewrite per NEW value, not per field carrying it (2654 verified binary Mastery answers
+        # -- the same few labels in every set -- sat in the 14 s between "saved regression case" and "result: blocked")
+        existing.setdefault(ending(aid), set()).add(str(val))
         added.append((aid, str(val)))
     if added and log:
         log(f"[{cid}] recorded {len(added)} confirmed label(s) to vocab.json: "

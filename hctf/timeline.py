@@ -17,6 +17,20 @@ SINGLE_SOLVED = ("single complete -> ending the answer-first worker", "after wor
                  "live-target lane: single CORRECT")
 
 
+# Log lines that mean a TIMED mode (Time Trial / Mastery) passed without a `timed: {..."correct"}` line (feed + timeline +
+# kpi + effort_report share these). D25: two web TTs passed by the live answer during the codify wait (`passed by the
+# live answer after 19s of the codify wait`) and returned with no recognised line -> feed 22/24 / kpi web 7/9 while the
+# GM had 24/24. orchestrate now also logs `result: correct (<how>)` at every such exit; the list keeps older logs right.
+TIMED_PASSED = ("result: correct", "passed by the live-answer worker", "passed by the live answer",
+                "passed during the online resolution", "passed by the parallel live answer",
+                "the probe attempt itself passed the mode")
+
+
+def timed_passed(msg):
+    """A line saying the tagged timed mode passed (any route: runner, live answer, online resolution, probe)."""
+    return msg.startswith(TIMED_PASSED)
+
+
 def timed_correct(msg):
     """A `timed: {...}` line whose attempt the GM judged CORRECT (the moment the mode is solved)."""
     return msg.startswith("timed: {") and '"result": "correct"' in msg[:120]
@@ -93,8 +107,7 @@ def parse(lines):
             c["slot_wait"] += float(sw.group(1))
         if single_solved(msg, mode) and "single_solve" not in c["done"]:
             c["done"]["single_solve"] = t
-        if (msg.startswith("result: correct") or msg.startswith("passed by the live-answer worker")) \
-                and mode not in c["done"]:
+        if timed_passed(msg) and mode not in c["done"]:
             c["done"][mode] = t   # a live-answer pass returns from timed_stage without a `result: correct` line
         if msg.startswith("timed: "):
             c["attempts"][mode] += 1

@@ -2,6 +2,8 @@
 - the critical property: a submit is NEVER sent twice -- any relay failure after the request left -> Unreachable,
   today's path is not called; only a request the relay never took (channel down / write failed) goes today's way
 - start: any relay failure -> today's path (it resumes the attempt); status: hedged, first judged reply wins
+- D25 B2: start hedged (faster path first, the other after HEDGE_START_S unless the first failed); a reply sized
+  > 32 KB by TODAY's <mode>/contract.json goes today's path alone; differing attempt ids -> `!!!`
 - decide(): relay only when its average < 0.8 x local - 0.1 s; unmeasured -> local; > 32 KB request/reply -> local
 - kill switch HCTF_GM_RELAY=0 / not activated / a replay's stand-in GM: remote.gm = today's path, gmroute untouched
 - hb_relays(): 2 channels, own ssh connection (no ControlMaster), INSIDE_GM, NO bearer; two missed pings = down
@@ -181,6 +183,97 @@ with patched({**QUIET, (gmroute, "_chan"): lambda: ch}):
     env = gmroute.call(["status", "warmups-day-25"], 30,
                        local_fn_factory(env={"http": 404, "body": {"error": "not_found"}}, delay=0.1))
 check("2 status: both 404 -> 404 (not released yet)", env.get("http") == 404, env)
+
+# ---------------------------------------------------------------- 2b. start hedged (D25 B2)
+SMALL = {(gmroute, "_size_ok"): lambda a: True, (gmroute, "HEDGE_START_S"): 0.3}
+ch = Chan(lambda kw: (_ for _ in ()).throw(workers.DaemonError("daemon gm timed out after 60s")), delay=5.0)
+local_calls.clear()
+reset(relay=0.1, local=2.0)
+with patched({**QUIET, **SMALL, (gmroute, "_chan"): lambda: ch}):
+    t0 = time.time()
+    env = gmroute.call(["start", "script-analysis-day-25-x/mastery"], 30, local_fn_factory(delay=0.1))
+    took = time.time() - t0
+check("2b start: a relay channel that hangs (D25 38 s) -> today's path answers after the hedge lag, not the timeout",
+      env["body"]["result"] == "local" and took < 1.5 and len(local_calls) == 1, (env, took))
+
+ch = Chan(ok_reply, delay=0.05)
+local_calls.clear()
+reset(relay=0.1, local=2.0)
+with patched({**QUIET, **SMALL, (gmroute, "_chan"): lambda: ch}):
+    env = gmroute.call(["start", "warmups-day-25-x/time_trial"], 30, local_fn_factory(delay=0.1))
+time.sleep(0.5)
+check("2b start: the faster relay answers inside the lag -> the second start is NEVER sent",
+      env["transport"] == "relay0" and not local_calls and len(ch.calls) == 1, (env, local_calls, ch.calls))
+
+ch = Chan(ok_reply, delay=0.05)
+local_calls.clear()
+reset(relay=3.0, local=1.0)
+with patched({**QUIET, **SMALL, (gmroute, "_chan"): lambda: ch}):
+    env = gmroute.call(["start", "warmups-day-25-x/time_trial"], 30, local_fn_factory(delay=0.05))
+time.sleep(0.5)
+check("2b start: local measured faster -> local goes first, the relay never sent",
+      env["body"]["result"] == "local" and len(local_calls) == 1 and not ch.calls, (env, ch.calls))
+
+ch = Chan(lambda kw: (_ for _ in ()).throw(workers.DaemonError("daemon not running")))
+local_calls.clear()
+reset(relay=0.1, local=2.0)
+with patched({**QUIET, **SMALL, (gmroute, "_chan"): lambda: ch, (gmroute, "HEDGE_START_S"): 5.0}):
+    t0 = time.time()
+    env = gmroute.call(["start", "warmups-day-25-x/time_trial"], 30, local_fn_factory())
+    took = time.time() - t0
+check("2b start: the first path FAILING starts the second at once (no wait for the lag)",
+      env["body"]["result"] == "local" and took < 1.0, (env, took))
+
+said = []
+ch = Chan(lambda kw: {"ok": True, "http": 200, "body": {"attempt_id": "bbbbbbbb-2"}}, delay=0.4)
+local_calls.clear()
+reset(relay=3.0, local=1.0)
+with patched({(gmroute, "_say"): said.append, **SMALL, (gmroute, "_chan"): lambda: ch, (gmroute, "HEDGE_START_S"): 0.1}):
+    env = gmroute.call(["start", "warmups-day-25-x/time_trial"], 30,
+                       local_fn_factory(env={"http": 503, "body": {"error": "x"}}, delay=0.3))
+    time.sleep(0.1)
+check("2b start: an unjudged local 503 does not win; the relay's judged reply does", env.get("http") == 200, env)
+ch = Chan(lambda kw: {"ok": True, "http": 200, "body": {"attempt_id": "bbbbbbbb-2"}}, delay=0.4)
+with patched({(gmroute, "_say"): said.append, **SMALL, (gmroute, "_chan"): lambda: ch, (gmroute, "HEDGE_START_S"): 0.1}):
+    env = gmroute.call(["start", "warmups-day-25-x/time_trial"], 30,
+                       local_fn_factory(env={"http": 200, "body": {"attempt_id": "aaaaaaaa-1"}}, delay=0.15))
+    time.sleep(0.6)
+check("2b start: two different attempt ids -> the first wins and a `!!!` line names both",
+      env["body"]["attempt_id"] == "aaaaaaaa-1" and any(m.startswith("!!!") and "bbbbbbbb" in m for m in said), said)
+
+with patched({**QUIET, (gmroute, "_chan"): lambda: Chan(ok_reply), (gmroute, "START_HEDGE"): False,
+              (gmroute, "_size_ok"): lambda a: True}):
+    reset(relay=0.1, local=2.0)
+    local_calls.clear()
+    env = gmroute.call(["start", "warmups-day-25-x/time_trial"], 30, local_fn_factory())
+check("2b HCTF_GM_START_HEDGE=0: the old relay-only start", env["transport"] == "relay0" and not local_calls)
+
+# start sizing from TODAY's status-time contract (<mode dir>/contract.json), not an earlier day's start.json
+import tempfile  # noqa: E402
+from hctf import paths  # noqa: E402
+_tmpc = Path(tempfile.mkdtemp(prefix="gmroute-contract-"))
+(_tmpc / "day25" / "scripting-x" / "mastery").mkdir(parents=True)
+(_tmpc / "day25" / "scripting-x" / "time_trial").mkdir(parents=True)
+(_tmpc / "day25" / "scripting-x" / "mastery" / "contract.json").write_text("x" * 200_000)
+(_tmpc / "day25" / "scripting-x" / "time_trial" / "contract.json").write_text("x" * 9_000)
+_idx = {"script-analysis-day-25-x": {"dir": "day25/scripting-x", "day": 25, "lane": "script-analysis"}}
+with patched({(paths, "CHALLENGES"): _tmpc, (paths, "lookup"): lambda cid: _idx.get(paths.base_id(cid))}):
+    gmroute._reply.clear()
+    gmroute._reply[("start", "script-analysis/mastery")] = 1_000      # an earlier day's small start: must not decide
+    big_ok = gmroute._size_ok(["start", "script-analysis-day-25-x/mastery"])
+    small_ok = gmroute._size_ok(["start", "script-analysis-day-25-x/time_trial"])
+    none = gmroute._contract_bytes("script-analysis-day-25-x")
+    ch = Chan(ok_reply)
+    local_calls.clear()
+    reset(relay=0.1, local=2.0)
+    with patched({**QUIET, (gmroute, "_chan"): lambda: ch}):
+        gmroute.call(["start", "script-analysis-day-25-x/mastery"], 30, local_fn_factory())
+check("2b today's 200 KB Mastery contract -> too big for the relay (an earlier day's 1 KB start is ignored)",
+      big_ok is False and small_ok is True, (big_ok, small_ok))
+check("2b no contract on disk for the mode -> None (the earlier-day estimate decides)", none is None, none)
+check("2b a big start goes today's path ALONE (no relay request, no hedge)", not ch.calls and len(local_calls) == 1,
+      (ch.calls, local_calls))
+gmroute._reply.clear()
 
 # ---------------------------------------------------------------- 3. decide + size limits
 reset(relay=0.2, local=1.4)

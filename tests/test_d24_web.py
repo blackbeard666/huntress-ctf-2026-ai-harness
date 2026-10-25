@@ -333,6 +333,7 @@ class _Gov:
 
 
 PROG = {}
+GM_CALLS = []
 
 
 def web_chain(codify=None, live_pass_after=None):
@@ -350,7 +351,9 @@ def web_chain(codify=None, live_pass_after=None):
     ch._bg_gen_take = lambda cid, why, only_won=False: False
     ch._late_probes = lambda cid, wait=False, defer_compound=False: {}
     ch._prefetch_mastery_start = lambda: ch.calls["prefetch"].append(1)
-    ch.calls = {"run": [], "gen": [], "lives": [], "gm_passed": [], "prefetch": []}
+    # D25 D3: a web TT pass requests the Mastery target at once (_tt_pass_kick) -- stubbed: never a GM call in a test
+    ch._web_mastery_kick = lambda: ch.calls["kick"].append(1)
+    ch.calls = {"run": [], "gen": [], "lives": [], "gm_passed": [], "prefetch": [], "kick": []}
 
     def gen(cid, **kw):
         ch.calls["gen"].append(kw.get("live"))
@@ -394,6 +397,7 @@ def drive(ch, results, bind=True, hold=1.0, extra=None):
            (orchestrate, "WEB_GEN_WAIT_POLL"): 0.05,
            (cli, "is_complete"): lambda cid: False, (cli, "gm_solved"): lambda cid: False,
            (cli, "save"): lambda *a, **k: None,
+           (cli, "call"): lambda *a, **k: (GM_CALLS.append(a), {"http": 0, "body": {}})[1],   # never the real GM
            (timed, "run"): runner(ch, results, bind, hold), (timed, "last_result"): lambda cid: dict(LAST),
            (timed, "timed_dir"): lambda cid: TD / "tdir", (timed, "ensure_started"): lambda cid: (None, None),
            (timed, "resolve_format_alternates"): lambda *a, **k: set(),
@@ -413,6 +417,8 @@ check("#11 first web TT attempt: a live answer is bound to the runner's attempt 
 check("#11 the runner passing ends the parallel live answer; no generalize, no _gm_passed",
       ok is True and lv is not None and lv.finished >= 1 and not ch.calls["gen"] and not ch.calls["gm_passed"],
       (ok, ch.calls))
+
+check("#11 (D25 D3) the TT pass requests the web Mastery target", ch.calls["kick"], ch.calls)
 
 # the live answer passes while the runner blocks: correct at once, no generalize, no extra GM round trip
 ch = web_chain(codify=FakeCodify(), live_pass_after=0.2)
@@ -485,6 +491,9 @@ with patched({(orchestrate, "say"): lambda m, *a, **k: says.append(m), (orchestr
     orchestrate.Chain._start_bg_gen(ch, TT, dict(LAST))
 check("#11 a live pass starts no background generalize while codify is alive",
       any("codify worker is still writing" in m for m in says), says)
+
+time.sleep(0.3)   # any background kick thread
+check("#11 the timed-stage drives never reached the real GM (cli.call stubbed and unused)", not GM_CALLS, GM_CALLS)
 
 
 if __name__ == "__main__":

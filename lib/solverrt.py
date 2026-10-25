@@ -81,6 +81,21 @@ def arm_deadline(out, pool, margin=0.6):
     return t
 
 
+def max_procs(n, io_bound=False):
+    """Fork-pool size for `n` independent jobs (Mastery sets): min(n, cpus) (`io_bound`: n), capped at
+    HCTF_SOLVER_MAX_PROCS when that is set. The harness sets it to 2 for case replays and the TT->Mastery rehearsal:
+    Homebase has 2 vCPUs, so each pool process there solves several sets in turn, and state that leaks from one set
+    into the next (D25: caches keyed on the id() of a freed member) only shows with fewer processes than sets."""
+    n = max(1, int(n))
+    if not io_bound:
+        n = min(n, os.cpu_count() or 2)
+    try:
+        cap = int(os.environ.get("HCTF_SOLVER_MAX_PROCS") or 0)
+    except ValueError:
+        cap = 0
+    return min(n, cap) if cap > 0 else n
+
+
 def run_sets(jobs, solve_fn, out, pool, io_bound=False):
     """Run solve_fn(job)->dict for each job, merging each result into `out` AS IT COMPLETES (so `out`
     holds partials if we are cut off), and recording live pool procs into `pool` (so arm_deadline's
@@ -91,7 +106,7 @@ def run_sets(jobs, solve_fn, out, pool, io_bound=False):
     if len(jobs) >= 2 and os.environ.get("HCTF_SOLVER_PARALLEL", "1") != "0":
         import multiprocessing as mp
         from concurrent.futures import ProcessPoolExecutor, as_completed
-        workers = len(jobs) if io_bound else min(len(jobs), os.cpu_count() or 2)
+        workers = max_procs(len(jobs), io_bound)
         try:
             ex = ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("fork"))
             futs = [ex.submit(solve_fn, j) for j in jobs]

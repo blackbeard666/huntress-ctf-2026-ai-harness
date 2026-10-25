@@ -1121,34 +1121,54 @@ TIMING_MARKS = os.environ.get("HCTF_TIMING_MARKS", "1") != "0"   # D24 #1: per-p
 
 
 def _local_event_poller(cid, env, on_event):
-    """Arm hb_timed's mid-attempt event for a LOCAL run: it writes the "solved" event to a file, this thread calls
-    on_event(data + "local") once. -> the Event that stops the poller (set when the run returns)."""
+    """Arm hb_timed's mid-attempt events for a LOCAL run: it appends every event to `<file>l` (and the first-event file),
+    this thread calls on_event(data + "local") for each, in order (D25 C4: the per-set verdicts follow the "solved"
+    event). -> the Event that stops the poller (set when the run returns)."""
     import re as _re
     local = ROOT / ".run" / "tmp-timed" / _re.sub(r"[^A-Za-z0-9]+", "_", cid)
     evf = ROOT / ".run" / "tmp-timed" / (_re.sub(r"[^A-Za-z0-9]+", "_", cid) + ".event.json")
-    try:
-        evf.parent.mkdir(parents=True, exist_ok=True)
-        evf.unlink()
-    except OSError:
-        pass
+    evl = evf.with_name(evf.name + "l")
+    for f in (evf, evl):
+        try:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.unlink()
+        except OSError:
+            pass
     env["HCTF_EARLY_GENERALIZE"] = "1"
     env["HCTF_EARLY_EVENT_FILE"] = str(evf)
     stop = threading.Event()
 
+    def deliver(data):
+        data["local"] = str(local)
+        try:
+            on_event(data)
+        except Exception as e:  # noqa: BLE001 - an event must never cost the attempt
+            print(f"[{cid}] early event note: {e}", flush=True)
+
     def watch():
+        off, single = 0, False
         while not stop.wait(0.3):
-            if not evf.exists():
+            try:
+                raw = evl.read_bytes()
+            except OSError:
+                raw = None
+            if raw is not None:
+                end = raw.rfind(b"\n") + 1          # whole lines only (the runner may be mid-append)
+                for ln in raw[off:end].splitlines():
+                    try:
+                        deliver(json.loads(ln))
+                    except ValueError:
+                        continue
+                off = max(off, end)
+                continue
+            if single or not evf.exists():   # an older runner: only the first-event file, delivered once
                 continue
             try:
                 data = json.loads(evf.read_text())
             except (OSError, ValueError):
                 continue
-            data["local"] = str(local)
-            try:
-                on_event(data)
-            except Exception as e:  # noqa: BLE001 - an event must never cost the attempt
-                print(f"[{cid}] early event note: {e}", flush=True)
-            return
+            single = True
+            deliver(data)
     threading.Thread(target=watch, daemon=True, name=f"early-evt-{cid}").start()
     return stop
 
@@ -1355,6 +1375,57 @@ def no_clock_local(cid, log=None):
     return True
 
 
+# D25 B1: no clock = local. With HCTF_RUN_FOR_TIME != 1 the timed modes run the UNTIMED regular pool (every attempt since
+# D15). Homebase-first was for 6-13 s windows; without one it only costs: D25 kickoff push + daemon round trip 26.6 s
+# (metadata Mastery, a 2.7 s run), 30.0 s (script Mastery), mobile TT push 11.9 s -- while the local runner reuses the
+# orchestrator's pre-start (start body + bytes in .run/tmp-timed/<cid>, hb_timed._prestarted_body), so a first-try pass
+# makes ONE public GM call (the submit, ~1.5 s); localization calls only happen on a failure. Binary Mastery's 322 MB
+# pre-start then also stops being dead weight on the VPN. Homebase stays the fallback when the local runner fails for
+# environment reasons (exec_error). HCTF_NO_CLOCK_LOCAL=0 = the old Homebase-first routing.
+NO_CLOCK_LOCAL = os.environ.get("HCTF_NO_CLOCK_LOCAL", "1") != "0"
+
+
+def no_clock_evidence(cid):
+    """EVIDENCE (not the run_for_time policy guess) that this mode's attempt runs without a clock: the runner's dir holds
+    an attempt body for it with answer ids and no deadline (the orchestrator's pre-start writes one only for an untimed
+    start), or this mode's / the chain's Time Trial's last attempt came back untimed. The GM gives ONE timed attempt per
+    mode: unknown = maybe clocked = Homebase as before."""
+    from . import timed
+    try:
+        body = json.loads((timed.timed_dir(cid) / "contract.json").read_text())
+        if isinstance(body, dict) and body.get("answer_ids") and not body.get("deadline") and (
+                body.get("attempt_id") or body.get("attempt")):
+            return True
+    except (OSError, ValueError):
+        pass
+    for c in dict.fromkeys((cid, f"{paths.base_id(cid)}/time_trial")):
+        last = timed.last_result(c) or {}
+        if (last.get("attempt_id") and last.get("deadline") is None and last.get("run_for_time") is not True
+                and (last.get("untimed") or last.get("no_clock") or last.get("run_for_time") is False)):
+            return True
+    return False
+
+
+def no_clock_routes_local(cid, win="?"):
+    """B1: True when this timed mode runs HERE because it has no clock (window unknown, run_for_time not forced,
+    evidence of an untimed attempt)."""
+    if not NO_CLOCK_LOCAL or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
+        return False
+    if (known_window(cid) if win == "?" else win) is not None:
+        return False
+    return no_clock_evidence(cid)
+
+
+def prestart_useful(cid):
+    """Is the orchestrator's local pre-start (start + download into the local runner's dir) worth doing for this mode?
+    False only when the mode runs on Homebase whatever happens (forced ssh transport, or HCTF_NO_CLOCK_LOCAL=0 with
+    Homebase on): the VM's runner never reads local bytes -- D25 binary Mastery's 322 MB local pre-start went unused by
+    its Homebase run and saturated the VPN beside it."""
+    if remote.gm_transport() != "local":
+        return False
+    return NO_CLOCK_LOCAL or not AUTO_HOMEBASE or TIGHT_WINDOW <= 0
+
+
 VM_METER_S = float(os.environ.get("HCTF_HB_METER_S", "60"))   # how often a reachable VM's uptime is booked
 
 
@@ -1530,7 +1601,10 @@ def _run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event
         return res
     win = known_window(cid)
     tight = win is None or win <= TIGHT_WINDOW
-    if tight and win is None and no_clock_local(cid, log):
+    no_clock_here = tight and no_clock_routes_local(cid, win)
+    if no_clock_here:
+        tight = False   # B1: no clock -> the local runner (it reuses the pre-start); Homebase only as the fallback
+    elif tight and win is None and no_clock_local(cid, log):
         tight = False
     elif tight and slow_vm() and (win is None or win > SLOW_VM_WINDOW) and not homebase_cheaper(cid, log):
         tight = False
@@ -1569,7 +1643,19 @@ def _run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event
             return res
         log(f"[{cid}] Homebase run failed ({str(res.get('detail'))[:120]}); falling back to local")
     res = run_timed(solver_dir, cid, op=op, timeout=timeout, **_ev(on_event))
-    res.setdefault("routed", "local" if not tight else "local (Homebase unavailable)")
+    res.setdefault("routed", "local (no clock)" if no_clock_here else "local" if not tight
+                   else "local (Homebase unavailable)")
+    if no_clock_here and _local_env_failure(res) and AUTO_HOMEBASE and _homebase_ready(log):
+        # the LOCAL runner itself broke (did not start / crashed / no parsable result): the same attempt on Homebase.
+        # `start` resumes the attempt the local run opened (a retry would re-roll it); a GM refusal / rate limit / solver
+        # timeout is returned as-is -- Homebase meets the same GM and the same solver.
+        log(f"[{cid}] local no-clock run failed ({str(res.get('detail'))[:120]}); falling back to Homebase")
+        hb = run_hb_timed(solver_dir, cid, op="start" if res.get("attempt_id") else op, timeout=timeout,
+                          on_event=on_event)
+        if str(hb.get("result", "")).lower() != "exec_error":
+            hb["routed"] = "homebase (local no-clock run failed)"
+            return hb
+        log(f"[{cid}] Homebase fallback failed too ({str(hb.get('detail'))[:120]})")
     w = res.get("window") or win
     if w is not None and w <= TIGHT_WINDOW and str(res.get("result", "")).lower() == "expired":
         _mark_expired_locally(cid, w)
@@ -1578,6 +1664,15 @@ def _run_timed_auto(solver_dir, cid, op="start", timeout=60, log=print, on_event
             res = run_hb_timed(solver_dir, cid, op="start", timeout=timeout)
             res["routed"] = f"homebase after local expiry (window {w:g}s)"
     return res
+
+
+def _local_env_failure(res):
+    """A local runner result that blames the environment, not the GM or the solver: exec_error without a GM rate limit,
+    a solver timeout, or a runner deadline (a re-run elsewhere would only repeat those)."""
+    if str((res or {}).get("result", "")).lower() != "exec_error" or res.get("gm_rate_limited"):
+        return False
+    d = str(res.get("detail", ""))
+    return not (("solve.py" in d and ("timed out" in d or "TimeoutExpired" in d)) or "hb_timed timed out" in d)
 
 
 def _window_file(cid):
@@ -2090,13 +2185,6 @@ def public_pull(res, slug, local, cid):
     if not isinstance(body, dict) or body.get("attempt_id") != res.get("attempt_id") or not body.get("answer_ids"):
         raise RuntimeError(f"public start did not resume attempt {str(res.get('attempt_id'))[:8]}: "
                            f"{str((body or {}).get('error') or (body or {}).get('result') or 'other attempt')[:80]}")
-    if local.exists():
-        for f in local.glob("*"):
-            if f.is_file():
-                f.unlink()
-    local.mkdir(parents=True, exist_ok=True)
-    (local / "contract.json").write_text(json.dumps(body))
-    (local / "result.json").write_text(json.dumps({k: v for k, v in res.items() if not callable(v)}, default=str))
     plan = dict(ht._plan(body))
     names = [n for n in deliveries_for(res, body) if n in plan]
     shas = {a.get("sha256") for a in body.get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")}
@@ -2106,14 +2194,42 @@ def public_pull(res, slug, local, cid):
             shas = shas | {body["sha256"]}
     if not names:
         raise RuntimeError(f"no failing-set delivery in the public contract (have {sorted(plan)[:6]})")
+    # D25 B4: the dir usually already holds THIS attempt's deliveries (the orchestrator's pre-start downloaded them into
+    # it): keep a needed file whose sha256 is one of the contract's (binary: 12 s of re-download); delete the rest.
+    have = set()
+    if local.exists():
+        for f in local.glob("*"):
+            if not f.is_file():
+                continue
+            if PULL_KEEP_SHA and shas and f.name in names and _sha256_file(f) in shas:
+                have.add(f.name)
+                continue
+            f.unlink()
+    local.mkdir(parents=True, exist_ok=True)
+    (local / "contract.json").write_text(json.dumps(body))
+    (local / "result.json").write_text(json.dumps({k: v for k, v in res.items() if not callable(v)}, default=str))
 
     def fetch(n):
         (local / n).write_bytes(ht._get_bytes(plan[n]))
         if shas and hashlib.sha256((local / n).read_bytes()).hexdigest() not in shas:
             raise RuntimeError(f"{n}: sha256 not in the contract's artifacts")
-    with _TPE(max_workers=min(8, len(names))) as ex:
-        list(ex.map(fetch, names))
+    todo = [n for n in names if n not in have]
+    if todo:
+        with _TPE(max_workers=min(8, len(todo))) as ex:
+            list(ex.map(fetch, todo))
     return names
+
+
+PULL_KEEP_SHA = os.environ.get("HCTF_PULL_KEEP_SHA", "1") != "0"   # public_pull: keep sha-matching files (0 = refetch all)
+
+
+def _sha256_file(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def deliveries_for(res, contract):
@@ -2190,9 +2306,13 @@ def scoped_pull(res, slug, local):
     (parallel byte ranges, sha256-checked against the contract). Returns the fetched container names."""
     import hashlib
     rdir = f"{HB_WORK}/.run/tmp-timed/{slug}"
+    kept = {}    # D25 B4: the local pre-start's files of THIS attempt (sha-checked below) are not pulled again
     if local.exists():
         for f in local.glob("*"):
             if f.is_file():
+                if PULL_KEEP_SHA and not f.name.startswith(".") and not f.name.endswith(".json"):
+                    kept[f.name] = _sha256_file(f)
+                    continue
                 f.unlink()
     local.mkdir(parents=True, exist_ok=True)
     listing = remote.ssh(f"cd ~/{rdir} && find . -maxdepth 1 -type f -printf '%s\\t%P\\n'", timeout=30, check=False)
@@ -2216,9 +2336,14 @@ def scoped_pull(res, slug, local):
             names = files
             if contract.get("sha256"):
                 shas = shas | {contract["sha256"]}
+    for n, sha in kept.items():
+        if not (n in names and shas and sha in shas):
+            (local / n).unlink(missing_ok=True)
     if not names:
         raise RuntimeError(f"no failing-set delivery found on Homebase (have {sorted(sizes)[:6]})")
     for n in names:
+        if shas and kept.get(n) in shas:
+            continue
         remote.fetch_file(f"{rdir}/{n}", local / n, sizes[n])
         if shas and hashlib.sha256((local / n).read_bytes()).hexdigest() not in shas:
             raise RuntimeError(f"{n}: sha256 not in the contract's artifacts")

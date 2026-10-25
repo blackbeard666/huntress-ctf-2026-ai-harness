@@ -102,11 +102,24 @@ LANES = {
         "regress_lane": "script-analysis",
         "requires": ("lib/codec.py:decode",),
     },
+    # D25 D5: generic web class handlers for the coverage atlas gaps (lib/web/handlers/prebuilt/prebuilt_<id>.py,
+    # auto-loaded by lib.web.handlers) + recorded-kit fixtures. The gate is OFFLINE: tests/test_web_fixtures.py replays
+    # every fixture on a 127.0.0.1 mock and fails on any other host. No regress_lane: a web solver case replays a live
+    # target (410 after CORRECT; solvers.test_solver skips them) -- the recorded kits are the regression corpus.
+    # Opt-in for the post-run batch: HCTF_PREBUILD_WEB=1 (or list `web` in HCTF_PREBUILD_LANES); same budget caps.
+    "web": {
+        "brief": "prebuild_web",
+        "writable": ("lib/web/handlers/prebuilt/", "tests/data/web_fixtures/"),
+        "snapshot": ("lib", "tests/data"),
+        "targets": "tests/data/web_fixtures/TARGETS.json",
+        "gate": ("tests/test_web_fixtures.py",),
+        "requires": ("lib/web/handlers/__init__.py:_load_plugins", "lib/web/handlers/prebuilt/__init__.py"),
+    },
 }
 for _k, _c in LANES.items():
     _c.setdefault("atlas", f"reference/coverage/{_k}.md")   # coverage atlas: ranked readiness gaps (D1, 2026-10-15)
 LANE_ALIASES = {"metadata": "metadata-forensics", "binary": "binary-reverse-engineering", "mobile": "mobile-android",
-                "script": "script-analysis"}
+                "script": "script-analysis", "web-exploitation": "web"}
 CODE_DIRS = ("hctf", "lib", "tests", "bin", "skills", "reference", "setup", ".claude")   # outside writable -> revert
 
 ALLOWED_IMPORTS = {
@@ -192,6 +205,9 @@ def targets(cfg):
     for g in gaps:
         if g["priority"] <= 1:
             add(g)
+    for x in base:   # a hand-ranked entry marked priority 1 (web: the D25 classes' generic forms) joins the first group
+        if prio.get(x.get("id"), 2) >= 2 and str(x.get("priority", "")) == "1":
+            add(x)
     for x in base:
         if prio.get(x.get("id"), 2) >= 2:
             add(x)
@@ -1091,6 +1107,10 @@ AFTER_RATCHET = os.environ.get("HCTF_PREBUILD_AFTER_RATCHET", "1") != "0"
 AUTO_LANES = [x.strip() for x in os.environ.get("HCTF_PREBUILD_LANES", "metadata-forensics,warmups,"
                                                  "binary-reverse-engineering,mobile-android,script-analysis").split(",")
               if x.strip()]
+# D25 D5: the web lane joins the post-run batch only on opt-in (~$17/night like a regular lane, under the same
+# HCTF_PREBUILD_BUDGET_USD cap per lane); `hctf prebuild --lane web` runs it by hand regardless.
+if os.environ.get("HCTF_PREBUILD_WEB", "0") == "1" and "web" not in AUTO_LANES:
+    AUTO_LANES.append("web")
 
 
 SYSTEMD = os.environ.get("HCTF_PREBUILD_SYSTEMD", "1") != "0"

@@ -1,0 +1,46 @@
+{
+ "handler": "day24_web_fetch_quest",
+ "expected": null,
+ "decoy": true,
+ "source": "kit shape measured on the D24 Fetch Quest single + TT (lane-day 15), as recorded in lib/web/handlers/day24_web_fetch_quest.py's docstring; the internal service is unreachable on every port (patched)",
+ "oracle": "no rule returns a proof: any proof the handler returns is invented",
+ "routes": [
+  {
+   "method": "GET",
+   "path": "/api/clues",
+   "response": {
+    "framework": "flask",
+    "feature_route": "/api/fetch",
+    "secondary_route": "/internal/status",
+    "current_role": "analyst"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/internal/status",
+   "status": 403,
+   "response": {
+    "error": "internal_only"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/fetch",
+   "query": {
+    "url": "."
+   },
+   "status": 502,
+   "response": {
+    "error": "fetch_failed"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/fetch",
+   "status": 400,
+   "response": {
+    "error": "absolute_url_required"
+   }
+  }
+ ]
+}
