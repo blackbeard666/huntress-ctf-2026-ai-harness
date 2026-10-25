@@ -324,6 +324,7 @@ finally:
     shutil.rmtree(cdir, ignore_errors=True)
 
 # ---- D3: Mastery waits on codify's plugin like the TT; a TT live pass kicks the Mastery target at once ------------------
+GM_CALLS = []
 MCID = "web-exploitation-day-25-x/mastery"
 TCID = "web-exploitation-day-25-x/time_trial"
 MLAST = {"result": "solver_incomplete", "attempt_id": "att-m", "no_clock": True, "deadline": None,
@@ -422,6 +423,7 @@ def m_drive(ch, results, extra=None):
            (orchestrate, "WEB_GEN_WAIT_POLL"): 0.05,
            (cli, "is_complete"): lambda cid: False, (cli, "gm_solved"): lambda cid: False,
            (cli, "save"): lambda *a, **k: None,
+           (cli, "call"): lambda *a, **k: (GM_CALLS.append(a), {"http": 0, "body": {}})[1],   # never the real GM
            (timed, "run"): run, (timed, "last_result"): lambda cid: dict(MLAST),
            (timed, "timed_dir"): lambda cid: TD / "tdir", (timed, "ensure_started"): lambda cid: (None, None),
            (timed, "resolve_format_alternates"): lambda *a, **k: set(),
@@ -455,6 +457,8 @@ ok = m_drive(ch, ["blocked"], extra={(orchestrate, "WEB_CODIFY_MASTERY"): False,
                                      (orchestrate, "WEB_CODIFY_GEN_WAIT"): 5})
 check("D3 HCTF_WEB_CODIFY_MASTERY=0: a Mastery block goes straight to the generalize (old behaviour)",
       len(ch.calls["gen"]) == 1 and len(ch.calls["run"]) == 1, ch.calls)
+
+check("D3 the Mastery drives never reached the real GM", not GM_CALLS, GM_CALLS)
 
 # a TT live pass in the codify wait kicks the Mastery target BEFORE the live worker is joined
 ch = m_chain(FakeCodify())

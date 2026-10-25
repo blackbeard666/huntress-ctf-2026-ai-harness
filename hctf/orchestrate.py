@@ -6037,7 +6037,8 @@ class Chain:
         live target now (D25 D3: a live-answer TT pass requested it only after the 2 s poll, the live worker's join and
         the stage handoff -- 4-13 s later). Both are once-per-chain; never raises."""
         try:
-            self._prefetch_mastery_start()
+            with _KICK_LOCK:   # the live watcher thread and the timed stage may both get here
+                self._prefetch_mastery_start()
         except Exception as e:  # noqa: BLE001 - an optimisation only
             say(f"[{self.base}] Mastery pre-start note: {e}")
         try:
@@ -6050,8 +6051,9 @@ class Chain:
     def _start_live(self, cid, last, fields, wrong, fixed):
         try:
             live = LiveAnswer(self, cid, last, fields, wrong, fixed)
-            if solvers.mode_of(cid) == "time_trial":
-                live.on_pass.append(self._tt_pass_kick)   # D25 D3: Mastery's start / web target at the GM's CORRECT
+            from . import webtarget
+            if solvers.mode_of(cid) == "time_trial" and webtarget.is_live_lane(getattr(self, "lane", None)):
+                live.on_pass.append(self._tt_pass_kick)   # D25 D3: the web Mastery target at the GM's CORRECT
             return live.start()
         except Exception as e:  # noqa: BLE001 - the generalize path stands on its own
             say(f"[{cid}] live-answer not started: {e}")
