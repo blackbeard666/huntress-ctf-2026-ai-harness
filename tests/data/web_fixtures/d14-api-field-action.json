@@ -1,0 +1,75 @@
+{
+ "handler": "day24_web_the_api_has_opinions",
+ "expected": "proof_0d9e8c7b6a5f4e3d2c1b0a9f8e7d6c5b",
+ "decoy": false,
+ "source": "kit shape measured on the D24 The API Has Opinions single (lane-day 14), as recorded in lib/web/handlers/day24_web_the_api_has_opinions.py's docstring",
+ "oracle": "synthetic proof planted on the one (field, action) pair that skips the check (single: note+export); the GM accepted this request shape on D24",
+ "routes": [
+  {
+   "method": "GET",
+   "path": "/api/clues",
+   "response": {
+    "framework": "express",
+    "feature_route": "/api/records",
+    "inventory_route": "/api/inventory",
+    "current_role": "analyst",
+    "protected_reference": "rec-7"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/inventory",
+   "response": {
+    "route": "/api/records",
+    "query_parameters": [
+     "id",
+     "fields",
+     "action"
+    ],
+    "fields": [
+     "title",
+     "note"
+    ],
+    "actions": [
+     "view",
+     "export"
+    ],
+    "public_reference": "rec-1",
+    "sample": "/api/records?id=rec-1&fields=title&action=view"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/records",
+   "query": {
+    "id": "^rec-7$",
+    "fields": "^note$",
+    "action": "^export$"
+   },
+   "response": {
+    "ok": true,
+    "effect": "api_field_action_authorization_bypassed",
+    "evidence": "proof_0d9e8c7b6a5f4e3d2c1b0a9f8e7d6c5b"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/records",
+   "query": {
+    "id": "."
+   },
+   "status": 403,
+   "response": {
+    "error": "field_action_forbidden"
+   }
+  },
+  {
+   "method": "GET",
+   "path": "/api/records",
+   "status": 400,
+   "response": {
+    "error": "id_fields_action_required"
+   }
+  }
+ ]
+}

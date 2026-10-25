@@ -381,11 +381,17 @@ def _load_plugins():
     import importlib
     import sys
     from pathlib import Path
-    for p in sorted(Path(__file__).parent.glob("*.py")):
+    here = Path(__file__).parent
+    # D25 D5: + the off-peak web prebuild's generic class handlers (lib/web/handlers/prebuilt/prebuilt_<id>.py, gated
+    # offline on recorded-kit fixtures by tests/test_web_fixtures.py); per-day plugins first, so a day's own handler
+    # keeps its place in the race order
+    mods = [(f"{__name__}.{p.stem}", p) for p in sorted(here.glob("*.py"))]
+    mods += [(f"{__name__}.prebuilt.{p.stem}", p) for p in sorted((here / "prebuilt").glob("*.py"))]
+    for modname, p in mods:
         if p.name.startswith("_"):
             continue
         try:
-            mod = importlib.import_module(f"{__name__}.{p.stem}")
+            mod = importlib.import_module(modname)
             hs = dict(getattr(mod, "HANDLERS", None) or {})
             comp = dict(getattr(mod, "KEY_COMPANIONS", None) or {})
             for pat, name in list(getattr(mod, "KEY_MAP", None) or []):

@@ -8,7 +8,10 @@ D2: lib.web.plugin verifies a draft plugin on a (local mock) target and promotes
     single's CORRECT makes codify a hardening pass and skips the TT's parallel live answer.
 D3: a blocked web Mastery waits for codify's plugin (reconnect with start) like the TT; a TT live pass requests the
     Mastery target before the live worker is joined; the target kicks are once-per-chain under concurrency.
-D4: companion-key routing (protected_reference without inventory_route is not Day 14's class).
+D4: companion-key routing (protected_reference without inventory_route is not Day 14's class); the answer-first cap
+    scales with the day's chains.
+D5: the web prebuild lane: config, ranking, opt-in, and its offline gate (tests/test_web_fixtures.py) accepting a good
+    prebuilt module and rejecting a furniture-keyed one / one that reaches a non-local host.
 No GM, no live targets, no workers: fakes + a 127.0.0.1 mock server.
 
 Run:  source bin/env.sh && python3 tests/test_d25_web.py      (exit 0 = all pass)
@@ -110,6 +113,8 @@ import os  # noqa: E402
 import threading  # noqa: E402
 import time  # noqa: E402
 import urllib.parse  # noqa: E402
+
+import shutil  # noqa: E402
 
 from lib.web import plugin as webplugin  # noqa: E402
 
@@ -316,7 +321,6 @@ try:
         af = orchestrate.AnswerFirst(ch, "warmups-day-25")
         check("D2 non-web answer-first prompt unchanged (no plugin text)", "PLUGIN FIRST" not in af.prompt)
 finally:
-    import shutil
     shutil.rmtree(cdir, ignore_errors=True)
 
 # ---- D3: Mastery waits on codify's plugin like the TT; a TT live pass kicks the Mastery target at once ------------------
@@ -544,6 +548,96 @@ with patched({(duel, "_mem_avail_gb"): lambda: 99.0, (orchestrate, "ANSWER_FIRST
               (orchestrate, "_af_chains"): {f"c{i}" for i in range(8)}, (orchestrate, "_af_live"): {"a", "b", "c"}}):
     ok, why = orchestrate.answer_first_eligible("web", 1)
     check("D4 HCTF_ANSWER_FIRST_MAX=3: the old fixed cap", not ok and "cap 3" in why, why)
+
+# ---- D5: the web prebuild lane --------------------------------------------------------------------------------------
+import subprocess  # noqa: E402
+
+from hctf import prebuild  # noqa: E402
+
+cfg = prebuild.LANES.get("web") or {}
+check("D5 prebuild has a `web` lane, enabled, writable = prebuilt handlers + web fixtures only",
+      "web" in prebuild.enabled_lanes()
+      and cfg.get("writable") == ("lib/web/handlers/prebuilt/", "tests/data/web_fixtures/")
+      and prebuild.lane_key("web-exploitation") == "web", cfg)
+check("D5 its gate is the offline fixture suite (no live-target regress replay)",
+      prebuild.gate_suites("web", cfg) == ["tests/test_web_fixtures.py"] and not cfg.get("regress_lane"),
+      prebuild.gate_suites("web", cfg))
+ids = [t["id"] for t in prebuild.targets(cfg)]
+check("D5 targets: the D25 classes' generic forms (cmd injection, GraphQL, reset token) rank before priority-2 gaps",
+      {"cmd-injection-generic", "graphql-generic", "reset-token-generic"} <= set(ids)
+      and max(ids.index(x) for x in ("cmd-injection-generic", "graphql-generic", "reset-token-generic"))
+      < min((ids.index(g["id"]) for g in prebuild.atlas_gaps(cfg) if g["priority"] >= 2), default=10 ** 6), ids[:30])
+check("D5 the post-run batch leaves web out unless HCTF_PREBUILD_WEB=1", "web" not in prebuild.AUTO_LANES)
+r = subprocess.run([sys.executable, "-c", "from hctf import prebuild; print('web' in prebuild.AUTO_LANES)"], cwd=ROOT,
+                   capture_output=True, text=True, timeout=120, env=dict(os.environ, HCTF_PREBUILD_WEB="1"))
+check("D5 HCTF_PREBUILD_WEB=1 adds web to AUTO_LANES", r.stdout.strip().endswith("True"), r.stdout + r.stderr)
+txt = prebuild._render("web", cfg, {"id": "cmd-injection-generic", "goal": "x"}, 10, prebuild.default_deadline())
+check("D5 the web brief is rendered (prebuilt module path, recorded-kit fixtures, offline rule)",
+      "lib/web/handlers/prebuilt/prebuilt_" in txt and "tests/test_web_fixtures.py" in txt
+      and "NEVER contact a live target" in txt)
+
+PB = ROOT / "lib" / "web" / "handlers" / "prebuilt"
+MODSRC = """import re
+import urllib.parse
+
+from lib import websolve
+
+
+def exploit(base, clues):
+    route = clues.get("feature_route") if isinstance(clues, dict) else None
+    if not route or "zz_concept" not in clues:
+        return None
+    return websolve.proof(websolve.fetch(urllib.parse.urljoin(base, route) + "?" + urllib.parse.urlencode(
+        {"zz": clues["zz_concept"] + ";cat"}))[1])
+
+
+KEY_MAP = [(r"^zz_concept$", "prebuilt_zz_selftest")]
+HANDLERS = {"prebuilt_zz_selftest": exploit}
+"""
+kit = {"framework": "x", "feature_route": "/api/zz", "current_role": "analyst", "zz_concept": "v"}
+
+
+def fixture(decoy):
+    routes = [{"method": "GET", "path": "/api/clues", "response": kit}]
+    if not decoy:
+        routes.append({"method": "GET", "path": "/api/zz", "query": {"zz": "^v;cat$"},
+                       "response": {"stdout": "proof_abcdefabcdefabcdefabcdefabcdef12"}})
+    routes.append({"method": "GET", "path": "/api/zz", "response": {"stdout": "nothing"}})
+    return {"handler": "prebuilt_zz_selftest", "expected": None if decoy else "proof_abcdefabcdefabcdefabcdefabcdef12",
+            "decoy": decoy, "source": "self-test", "oracle": "self-test", "routes": routes}
+
+
+def gate_run(modsrc):
+    fxd = Path(tempfile.mkdtemp())
+    (fxd / "zz-plain.json").write_text(json.dumps(fixture(False)))
+    (fxd / "zz-decoy.json").write_text(json.dumps(fixture(True)))
+    mod = PB / "prebuilt_zz_selftest.py"
+    try:
+        mod.write_text(modsrc)
+        return subprocess.run([sys.executable, "tests/test_web_fixtures.py"], cwd=ROOT, capture_output=True, text=True,
+                              timeout=180, env=dict(os.environ, HCTF_WEB_FIXTURES=str(fxd)))
+    finally:
+        mod.unlink(missing_ok=True)
+        shutil.rmtree(PB / "__pycache__", ignore_errors=True)
+        shutil.rmtree(fxd, ignore_errors=True)
+
+
+r = gate_run(MODSRC)
+check("D5 gate: a concept-keyed prebuilt module with a plain + decoy recorded kit passes offline",
+      r.returncode == 0 and "2/2 web fixture(s) ok" in r.stdout, r.stdout[-600:] + r.stderr[-300:])
+r = gate_run(MODSRC.replace('r"^zz_concept$"', 'r"feature_route|zz_concept"'))
+check("D5 gate: a prebuilt KEY_MAP on kit furniture (feature_route) is rejected",
+      r.returncode == 1 and "kit furniture" in r.stdout, r.stdout[-600:])
+r = gate_run(MODSRC.replace("return websolve.proof(websolve.fetch(urllib.parse.urljoin(base, route)",
+                            "websolve.fetch('https://example.invalid/x')\n    return websolve.proof(websolve.fetch("
+                            "urllib.parse.urljoin(base, route)"))
+check("D5 gate: a handler reaching a non-local host fails the offline gate",
+      r.returncode == 1 and "non-local host" in r.stdout, r.stdout[-600:])
+check("D5 prebuild AST gate still bans urllib.request / socket in a prebuilt module",
+      [m for m in prebuild._imports("import urllib.request\nimport socket\nfrom lib import websolve\n")[0]
+       if not prebuild._allowed(m)] == ["socket", "urllib.request"]
+      or sorted(m for m in prebuild._imports("import urllib.request\nimport socket\nfrom lib import websolve\n")[0]
+                if not prebuild._allowed(m)) == ["socket", "urllib.request"])
 
 srv.shutdown()
 
