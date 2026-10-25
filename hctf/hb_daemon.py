@@ -9,8 +9,11 @@ rule stays in hb_timed; only the solver launch (hb_timed.SOLVER -> a zygote, see
 Protocol: JSON lines on stdin/stdout.
   first line  {"hello": 1, "gm": "<GM base url>", "token": "<bearer or null>"}   (token kept in memory only: never
               env/argv/disk/log -- the solvers' environment never sees it)
-  requests    {"id", "op": "ping" | "warm" | "attempt" | "shutdown", ...}
+  requests    {"id", "op": "ping" | "warm" | "gm" | "attempt" | "race" | "shutdown", ...}
               warm    {"solver": "<dir rel to ~/hw>"}
+              race    {"cid", "solvers": ["<dir rel to ~/hw>", ...], "solve_timeout": s, "attempt_id": "<the client's>"}
+                      -> {"attempt_id", "answer_ids", "outs": {solver: [answers, err, secs]}, "start_s", "dl_s",
+                      "bytes", "files"}: the in-network reuse race (see _race); NO-BEARER channels only
               attempt {"cid", "solver", "op": "start"|"retry", "min_left", "opts": {HCTF_* knobs},
                        "inline_max": bytes (optional: a failed attempt's files <= this come back as result._inline),
                        "events": true (optional, HCTF_EARLY_GENERALIZE: {"id", "event": "solved", "data", "_inline"}
@@ -224,6 +227,85 @@ def _gm_call(hb_timed, req):
             "elapsed": round(time.time() - t0, 3), "retries": int(slept > 0), "slept": slept}
 
 
+RACE_DIR = HW / ".run" / "tmp-race"
+RACE_PARALLEL = 2      # the VM has 2 vCPUs (t3.small): more solver processes only queue
+
+
+def _race(hb_timed, req):
+    """In-network reuse race for a big Single Solve (orchestrate._hb_race, D25: the binary single's 35.7 MB took 68.6 s
+    at 0.52 MB/s over the public path at the drop, 1.67 s inside the network). `start` here only RECONNECTS: the client
+    sends this after its own start landed (attempt_id) and the GM resumes the open attempt, so two first starts never
+    race. Then the deliveries over the VM's own network and the given prior solvers on them (warm zygotes). Answers
+    only come back -- no GM submit happens here; the client gates, merges and submits. Refused on a channel that holds
+    the bearer: the relay daemons talk to the in-network proxy with no credentials (event guidance: none on Homebase)."""
+    import re
+    import shutil
+    from concurrent.futures import ThreadPoolExecutor
+    if hb_timed._token():
+        raise ValueError("race runs only on a no-bearer channel (relay daemon)")
+    cid, sols = req.get("cid"), [str(x) for x in req.get("solvers") or []]
+    if not cid or not sols:
+        raise ValueError("race needs cid + solvers")
+    timeout = float(req.get("solve_timeout") or 20)
+    t0 = time.time()
+    body = hb_timed._post_once({"op": "start", "challenge": cid})
+    att = hb_timed._body_attempt_id(body) if isinstance(body, dict) else None
+    out = {"attempt_id": att, "answer_ids": list((body or {}).get("answer_ids") or []), "outs": {},
+           "start_s": round(time.time() - t0, 2)}
+    if not att or (body or {}).get("error"):
+        out["error"] = f"start: {str((body or {}).get('error') or 'no attempt id')[:200]}"
+        return out
+    if req.get("attempt_id") and req["attempt_id"] != att:
+        out["error"] = f"attempt mismatch: GM resumed {att}, client has {req['attempt_id']}"
+        return out
+    plan = hb_timed._plan(body)
+    safe = re.sub(r"[^A-Za-z0-9]+", "_", cid)
+    if RACE_DIR.exists():
+        for old in RACE_DIR.iterdir():          # one race dir per challenge, only the latest attempt (VM disk is small)
+            if old.name.startswith(safe + "__") and old.name != f"{safe}__{att}":
+                shutil.rmtree(old, ignore_errors=True)
+    adir = RACE_DIR / f"{safe}__{att}"
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / "contract.json").write_text(json.dumps(body))
+    t1 = time.time()
+
+    def fetch(item):
+        name, cap = item
+        dst = adir / name
+        if not dst.exists():
+            tmp = dst.with_name(dst.name + ".part")
+            tmp.write_bytes(hb_timed._get_bytes(cap))
+            tmp.replace(dst)
+        return dst.stat().st_size
+    with ThreadPoolExecutor(max_workers=max(1, min(4, len(plan)))) as ex:
+        sizes = list(ex.map(fetch, plan))
+    out.update(dl_s=round(time.time() - t1, 2), bytes=sum(sizes), files=len(sizes))
+    env = hb_timed._solver_env()
+    env.setdefault("HCTF_SOLVER_MAX_PROCS", "2")
+
+    def one(rel):
+        solve = HW / rel / "solve.py"
+        if not solve.exists():
+            return rel, [{}, f"no solver on Homebase at {rel}", 0.0]
+        ts = time.time()
+        try:
+            r = hb_timed._run_solver(solve, adir / "contract.json", adir, timeout, env)
+        except Exception as e:  # noqa: BLE001 - one solver's failure is that solver's verdict
+            return rel, [{}, f"{type(e).__name__}: {str(e)[:300]}", round(time.time() - ts, 2)]
+        dt = round(time.time() - ts, 2)
+        if getattr(r, "returncode", 1):
+            return rel, [{}, f"exit {r.returncode}: {(r.stderr or '').strip()[-600:]}", dt]
+        try:
+            got = json.loads((r.stdout or "").strip().splitlines()[-1])
+            return rel, [got if isinstance(got, dict) else {}, None if isinstance(got, dict) else "not a JSON object", dt]
+        except (IndexError, ValueError):
+            return rel, [{}, f"stdout is not JSON: {(r.stdout or '')[-200:]!r}", dt]
+    with ThreadPoolExecutor(max_workers=RACE_PARALLEL) as ex:
+        out["outs"] = dict(ex.map(one, sols))
+    out["race_s"] = round(time.time() - t0, 2)
+    return out
+
+
 def main():
     hello = json.loads(sys.stdin.readline() or "{}")
     if hello.get("gm"):
@@ -231,6 +313,9 @@ def main():
     sys.path.insert(0, str(HW / "hctf"))
     import hb_timed
     hb_timed._TOKEN = hello.get("token") or None
+    if not hb_timed._TOKEN:
+        # a no-bearer channel (the relay daemons -> in-network proxy): never hb_timed's env / secrets-file fallback
+        hb_timed._token = lambda: None
     zyg = Zygotes()
     hb_timed.SOLVER = zyg.solve
     try:
@@ -252,6 +337,11 @@ def main():
                 # One GM call on the warm pool (no ssh exec, no interpreter start): the run's Single Solve start /
                 # submit. D12: per-call ssh + `python3 gm.py` on the busy VM put a single start out 2-6 s late.
                 send({"id": rid, "ok": True, **_gm_call(hb_timed, req)})
+            elif op == "race":
+                res = _race(hb_timed, req)
+                log(f"race {req.get('cid')}: {res.get('error') or 'ok'} {res.get('bytes')} B dl {res.get('dl_s')}s "
+                    f"total {res.get('race_s')}s")
+                send({"id": rid, "ok": True, "result": res})
             elif op == "attempt":
                 t = time.time()
                 on_event = None

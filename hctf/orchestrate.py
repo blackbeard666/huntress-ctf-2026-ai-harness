@@ -1038,6 +1038,12 @@ RACE_SNAP_FIRST = os.environ.get("HCTF_RACE_SNAP_FIRST", "1") != "0"
 # needs a worker) -> the worker path runs exactly as before. 0 = off.
 RACE_FIRST_HANDOFF = os.environ.get("HCTF_RACE_FIRST_HANDOFF", "1") != "0"
 RACE_FIRST_WAIT = float(os.environ.get("HCTF_RACE_FIRST_WAIT", "12"))
+# In-network race (D25 post-mortem B3b, workers.hb_race; HCTF_HB_RACE / HCTF_HB_RACE_MIN_MB there): a lane whose last
+# single shipped >= 10 MB (binary: 32-35 MB D20-D25) ALSO races on Homebase over in-network bytes, from the moment the
+# local `start` lands, beside the local download. First race plan to reach the submit claims it (_race_claim); a win
+# before the local bytes land hands the timed modes over at once (race-first), the single's bookkeeping then waits for
+# its download (_single_dl_fut). HB_RACE_WAIT_START: how long it waits for the local start body.
+HB_RACE_WAIT_START = float(os.environ.get("HCTF_HB_RACE_WAIT_START", "30"))
 # On a pool with EVIDENCE of no clock (_untimed_evidence) a missed carry-over / new-id field is fixed in-attempt (localize,
 # bank, live answer), so the handoff holds are capped: carry-check wait (was CARRY_CHECK_MAX + 5 = 17 s), synchronous
 # new-id dry run skipped above SKIP_IDS new ids (D23 script: 12k-id contracts) else capped. 0 = no cap / no skip.
@@ -3581,40 +3587,118 @@ class Chain:
                 plan = solvers.reuse_plan(contract, art, self.lane, exclude=[self.sdir], timeout=REUSE_RACE_TIMEOUT,
                                           limit=REUSE_RACE_SOLVERS, by_question=False, rank=rank)
             tr["plan"] = time.time()
-            high, spec = dict(plan["high"]), dict(plan["spec"])
-            dropped = self._race_gate(contract, high, spec) if RACE_FORMAT_GATE else []
-            merged = {a: high.get(a, spec.get(a)) for a in ids if a in high or a in spec}
-            say(f"[{cid}] reuse race: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
-                f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s"
-                + (f"; dropped {len(dropped)} implausible value(s) {dropped[:4]}" if dropped else ""))
-            presnap = None
-            if RACE_PRESNAP and plan.get("best") and len(merged) == len(ids):
-                presnap = self._race_presnap(plan["best"])   # copy + carry-over check beside the submit (D24 #6)
-            if not RACE_PARTIAL:
-                if len(merged) < len(ids):
-                    return  # can't finish the single: leave it to the worker (its dry-run note covers the gaps)
-                used = self._race_narrow(cid, merged, REUSE_RACE_PROBES)
-            else:
-                used = self._race_bank(cid, ids, high, spec, merged, plan)
-            tr["submit"] = time.time()
-            if cli.is_complete(cid):
-                self._single_correct(cid, "reuse race")
-                set_state(self.base, stage="single:reuse-won")
-                snap = self._race_snapshot(cid, plan["best"], contract, art,
-                                           plan_out=(plan.get("outs") or {}).get(plan["best"]), presnap=presnap)
-                say(f"[{cid}] reuse race WON: single CORRECT at +{time.time() - t0:.1f}s from prior solver output "
-                    f"[rank {tr['rank'] - t0:.1f}s, {len(plan['runs'])} solver run(s) {tr['plan'] - tr['rank']:.1f}s, "
-                    f"{used} submit(s) {tr['submit'] - tr['plan']:.1f}s, seed verify {time.time() - tr['submit']:.1f}s] "
-                    f"(seed {plan['best'] and Path(plan['best']).parent.name}; "
-                    + ("seed verified -> the ready-watcher hands it to the timed modes)" if snap else
-                       "seed does not reproduce every answer -> waiting for the worker's solver)"))
-            else:
-                say(f"[{cid}] reuse race: not complete after {used} submit(s) "
-                    f"({len(cli.confirmed_answers(cid))}/{len(ids)} confirmed); the worker continues")
-                if RACE_PARTIAL:
-                    self._deliver_note(cid, self._race_note(cid, ids, merged, plan), key="race")
+            self._race_submit(cid, contract, ids, plan, art, t0, tr)
         except Exception as e:  # noqa: BLE001 - the race is an optimization; the worker path is unaffected
             say(f"[{cid}] reuse race note: {e}")
+
+    def _race_claimed(self, cid):
+        """True for the FIRST race plan to reach the submit for this attempt (local or in-network); every later one
+        stands down: one bisector per attempt (rehearsal fair D16: two at once bisected the same 1095 fields)."""
+        key = (cid, cli.attempt_id(cli.load(cid, "start.json")))
+        if key[1] is None:
+            return True    # no attempt id to key on (a stand-in contract): nothing to share
+        with self.__dict__.setdefault("_race_claim", threading.Lock()):
+            if getattr(self, "_race_claim_by", None) == key:
+                return False
+            self._race_claim_by = key
+            return True
+
+    def _race_submit(self, cid, contract, ids, plan, art, t0, tr, where=""):
+        """The race's gate -> merge -> submit/bank -> seed snapshot, for a reuse_plan()-shaped plan (local or in-network:
+        art=None, then the seed is verified from the plan's own run). where: tags the log lines (" (in-network)")."""
+        if cli.is_complete(cid) or not self._race_claimed(cid):
+            return
+        high, spec = dict(plan["high"]), dict(plan["spec"])
+        dropped = self._race_gate(contract, high, spec) if RACE_FORMAT_GATE else []
+        merged = {a: high.get(a, spec.get(a)) for a in ids if a in high or a in spec}
+        say(f"[{cid}] reuse race{where}: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
+            f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s"
+            + (f"; dropped {len(dropped)} implausible value(s) {dropped[:4]}" if dropped else ""))
+        presnap = None
+        if RACE_PRESNAP and plan.get("best") and len(merged) == len(ids):
+            presnap = self._race_presnap(plan["best"])   # copy + carry-over check beside the submit (D24 #6)
+        if not RACE_PARTIAL:
+            if len(merged) < len(ids):
+                return  # can't finish the single: leave it to the worker (its dry-run note covers the gaps)
+            used = self._race_narrow(cid, merged, REUSE_RACE_PROBES)
+        else:
+            used = self._race_bank(cid, ids, high, spec, merged, plan)
+        tr["submit"] = time.time()
+        if cli.is_complete(cid):
+            self._single_correct(cid, "reuse race")
+            set_state(self.base, stage="single:reuse-won")
+            snap = self._race_snapshot(cid, plan["best"], contract, art,
+                                       plan_out=(plan.get("outs") or {}).get(plan["best"]), presnap=presnap)
+            say(f"[{cid}] reuse race WON{where}: single CORRECT at +{time.time() - t0:.1f}s from prior solver output "
+                f"[rank {tr['rank'] - t0:.1f}s, {len(plan['runs'])} solver run(s) {tr['plan'] - tr['rank']:.1f}s, "
+                f"{used} submit(s) {tr['submit'] - tr['plan']:.1f}s, seed verify {time.time() - tr['submit']:.1f}s] "
+                f"(seed {plan['best'] and Path(plan['best']).parent.name}; "
+                + ("seed verified -> the ready-watcher hands it to the timed modes)" if snap else
+                   "seed does not reproduce every answer -> waiting for the worker's solver)"))
+        else:
+            say(f"[{cid}] reuse race{where}: not complete after {used} submit(s) "
+                f"({len(cli.confirmed_answers(cid))}/{len(ids)} confirmed); the worker continues")
+            if RACE_PARTIAL:
+                self._deliver_note(cid, self._race_note(cid, ids, merged, plan), key="race")
+
+    def _hb_race_wanted(self):
+        """In-network race for this single: the race is on for a lane that is not live-target web, and the lane's newest
+        earlier single shipped >= HB_RACE_MIN_MB (D20-D25: binary 32-35 MB, every other lane ~1 MB)."""
+        from . import webtarget
+        if (not workers.HB_RACE or not REUSE_RACE or REUSE_OLD_SOLVERS or self.lane not in REUSE_RACE_LANES
+                or self.lane == "welcome" or webtarget.is_live_lane(self.lane)):
+            return False
+        return _lane_last_single_mb(self.lane, self.sdir.parent.parent.name) >= workers.HB_RACE_MIN_MB
+
+    def _hb_race(self, cid, start_fut):
+        """Background from the single's start: the race solvers on Homebase over in-network bytes (workers.hb_race),
+        then the same gate/merge/submit as the local race. Waits for the LOCAL start body first, so the VM's `start`
+        only reconnects to that attempt (checked by id both ends). Stands down when the local bytes land first."""
+        t0 = time.time()
+        try:
+            cands, lane_dirs = solvers.reuse_cands(self.lane, exclude=[self.sdir], limit=REUSE_RACE_SOLVERS)
+            if not cands:
+                return
+            workers.hb_race_prepare(cands, say)   # a no-op when the pre-drop prepare already pushed + warmed them
+            contract, p = None, cli.cdir(cid) / "start.json"
+            while time.time() - t0 < HB_RACE_WAIT_START:
+                st = cli.load(cid, "start.json")
+                if st and cli.attempt_id(st) and p.stat().st_mtime >= getattr(self, "_chain_t0", t0) - 1:
+                    contract = st
+                    break
+                if start_fut.done():
+                    break
+                time.sleep(0.1)
+            if contract is None or start_fut.done() or cli.is_complete(cid):
+                say(f"[{cid}] in-network race: stands down ("
+                    + ("no start body" if contract is None else "the local bytes landed first") + ")")
+                return
+            ids = list(contract.get("answer_ids") or [])
+            tr = {"rank": time.time()}
+            res = workers.hb_race(cid, cands, cli.attempt_id(contract), REUSE_RACE_TIMEOUT, say)
+            if res is None:
+                say(f"[{cid}] in-network race: no relay channel up -- the local race runs when the bytes land")
+                return
+            if res.get("error") or res.get("attempt_id") != cli.attempt_id(cli.load(cid, "start.json")):
+                say(f"[{cid}] in-network race: not used ({res.get('error') or 'attempt changed'})")
+                return
+            outs = {sd: ({k: solvers.answer_str(v) for k, v in (o[0] or {}).items()}, o[1], o[2])
+                    for sd, o in res["outs"].items()}
+            say(f"[{cid}] in-network race: {(res.get('bytes') or 0) / 1e6:.1f} MB in {res.get('dl_s')}s on Homebase "
+                f"(start {res.get('start_s')}s), {len(outs)} solver run(s), {res.get('race_s')}s on the VM, "
+                f"+{time.time() - t0:.1f}s from the single's start")
+            plan = solvers.reuse_merge(contract, cands, lane_dirs, outs)
+            tr["plan"] = time.time()
+            if start_fut.done() and timed.latest_artifacts(cid):
+                art = timed.latest_artifacts(cid)
+            else:
+                art = None
+            self._race_submit(cid, contract, ids, plan, art, t0, tr, where=" (in-network)")
+        except Exception as e:  # noqa: BLE001 - an optimization: the local race + worker paths are unaffected
+            say(f"[{cid}] in-network race note: {str(e)[:300]}")
+        finally:
+            if cli.is_complete(cid) and getattr(self, "_race_done", None) is not None:
+                self._race_done.set()
 
     def _race_gate(self, contract, high, spec):
         """Drop (in place) race values the local format checks or the slug gate refuse -> [dropped ids]."""
@@ -3792,8 +3876,10 @@ class Chain:
         if presnap is None:
             self._race_copy(seed, snap)
         conf = cli.confirmed_answers(cid)
-        if RACE_VERIFY_FROM_PLAN and plan_out is not None:
+        if (RACE_VERIFY_FROM_PLAN or art is None) and plan_out is not None:
             got, err, _dt = plan_out
+        elif art is None:
+            return None
         else:
             got, err, _dt = solvers.run_solver(snap, contract, art)
         if err or not conf or any(got.get(k) != v for k, v in conf.items()):
@@ -4178,6 +4264,14 @@ class Chain:
         start_pool = ThreadPoolExecutor(max_workers=1)
         start_fut = start_pool.submit(timed.ensure_started, cid)
         start_pool.shutdown(wait=False)
+        self._race_done = threading.Event()   # wakes the duel (hctf/duel.py) the moment the race has its answer
+        self._correct_evt = threading.Event()   # the single's first GM CORRECT (_single_correct), whoever got it
+        self._hb_race_fut = None
+        if not welcome and self._hb_race_wanted():
+            hpool = ThreadPoolExecutor(max_workers=1)
+            self._hb_race_fut = hpool.submit(self._hb_race, cid, start_fut)
+            hpool.shutdown(wait=False)
+            say(f"[{cid}] in-network race armed (the lane's last single was >= {workers.HB_RACE_MIN_MB:g} MB)")
         self._warm = None
         if WARM_WORKERS and not welcome:
             try:
@@ -4201,12 +4295,19 @@ class Chain:
         tfuts = [tpool.submit(fetch, m) for m in tmodes]
         tpool.shutdown(wait=False)
         self._go_lock, self._go_sent, self._go_pending = threading.Lock(), False, []
+        if self._hb_race_fut is not None and RACE_FIRST_HANDOFF:
+            # the in-network race can win while the local download is still running: hand over from here
+            while not start_fut.done():
+                if self._race_first_ready(cid):
+                    self._single_dl_fut = start_fut   # the handoff bookkeeping (regression case) waits for the bytes
+                    if self._race_first_handoff(cid, None, tfuts, "in-network race, the single's download still running"):
+                        return True
+                    break
+                time.sleep(0.25)
         body, err = start_fut.result()
         self._pre_t = {"dl": time.time()}   # prelude timing (go text line): where the single's first seconds go
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
         self._start_prior_dry_run(cid)
-        self._race_done = threading.Event()   # wakes the duel (hctf/duel.py) the moment the race has its answer
-        self._correct_evt = threading.Event()   # the single's first GM CORRECT (_single_correct), whoever got it
         if not welcome and REUSE_RACE and not REUSE_OLD_SOLVERS and self.lane in REUSE_RACE_LANES:
             def race():
                 try:
@@ -4613,6 +4714,9 @@ class Chain:
         def body():
             t0 = time.time()
             try:
+                dl = getattr(self, "_single_dl_fut", None)
+                if dl is not None:   # in-network race win: the regression case needs the single's local bytes
+                    dl.result()
                 self._join_prior_cases(cid)
                 ensure_case_and_test(cid, self.sdir, full=False)
                 self._start_family_pre(cid)
@@ -7308,6 +7412,50 @@ class _EarlyChains:
         self._ex.shutdown(wait=True)
 
 
+def _lane_last_single_mb(lane, before_day=None):
+    """MB of the newest earlier Single Solve delivery of `lane` (its artifacts/latest), 0.0 when there is none."""
+    best = None
+    for m in ROOT.glob("challenges/day*/*/meta.json"):
+        d = m.parent.parent.name
+        if before_day and d >= before_day:
+            continue
+        latest = m.parent / "single_solve" / "artifacts" / "latest"
+        if not latest.exists() or (best is not None and d <= best[0]):
+            continue
+        try:
+            if json.loads(m.read_text()).get("lane") == lane:
+                best = (d, latest)
+        except (OSError, ValueError):
+            continue
+    if best is None:
+        return 0.0
+    try:
+        return sum(f.stat().st_size for f in best[1].resolve().iterdir()
+                   if f.is_file() and f.name != "manifest.json") / 1e6
+    except OSError:
+        return 0.0
+
+
+def _hb_race_predrop(log=say, wait_s=900):
+    """While armed: push + warm the in-network race's solvers (Chain._hb_race) for every lane that qualifies, once a
+    relay channel is up -- the drop then pays only start + in-network download + the solve."""
+    from . import webtarget
+    try:
+        lanes = sorted(ln for ln in REUSE_RACE_LANES if ln != "welcome" and not webtarget.is_live_lane(ln)
+                       and _lane_last_single_mb(ln) >= workers.HB_RACE_MIN_MB)
+        if not lanes:
+            return
+        t0 = time.time()
+        while workers.hb_race_chan(log) is None and time.time() - t0 < wait_s:
+            time.sleep(5)
+        for ln in lanes:
+            cands, _ = solvers.reuse_cands(ln, limit=REUSE_RACE_SOLVERS)
+            rels = workers.hb_race_prepare(cands, log)
+            log(f"[hb-race] {ln}: {len(rels)}/{len(cands)} race solver(s) pushed + warm on Homebase before the drop")
+    except Exception as e:  # noqa: BLE001 - the chain prepares on demand
+        log(f"[hb-race] pre-drop prepare note: {str(e)[:200]}")
+
+
 def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_homebase=None, keep_homebase=None,
         scout_rounds=None, wait_release=False):
     global SCOUT_ROUNDS
@@ -7337,6 +7485,8 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
             gmroute.activate(log=say)
         except Exception as e:  # noqa: BLE001 - today's paths
             say(f"[gmroute] not activated ({str(e)[:120]})")
+        if workers.HB_RACE and REUSE_RACE:
+            threading.Thread(target=_hb_race_predrop, daemon=True, name="hb-race-predrop").start()
     if RETRIEVAL:   # before the release wait: ready long before the drop (a missing index = no retrieval block)
         from . import retrieval
         retrieval.build_async(log=say)

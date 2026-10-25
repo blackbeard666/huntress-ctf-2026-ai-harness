@@ -624,7 +624,7 @@ check("B7_ a clocked pre-start body latches the feature off (no untimed evidence
 
 # the call sites: _watch_ready's first is_complete, the race win, answer-first's watch
 srcw = __import__("inspect").getsource(orchestrate.Chain._watch_ready)
-srcr = __import__("inspect").getsource(orchestrate.Chain._reuse_race)
+srcr = __import__("inspect").getsource(orchestrate.Chain._race_submit)   # _reuse_race's submit half (D25 B3b)
 srca = __import__("inspect").getsource(orchestrate.AnswerFirst._watch)
 check("B7_ _single_correct is called at the watcher's first is_complete, right after the race submit, and by answer-first",
       "_single_correct(cid" in srcw and srcr.index("_single_correct(cid") < srcr.index("_race_snapshot(cid")

@@ -2010,6 +2010,63 @@ def hb_relays(log=print, start=True, health=True):
         return [c for c in _relays["chans"] if c.alive()]
 
 
+# In-network reuse race (D25 post-mortem B3b): for a lane whose previous Single Solve shipped >= HB_RACE_MIN_MB, the
+# race's prior solvers ALSO run on Homebase against bytes fetched over the VM's own network, beside the local download
+# (D25 binary: 35.7 MB over the public path at 0.52 MB/s = 68.6 s; 1.67 s in-network). Relay channels only (in-network
+# proxy, NO bearer -- the daemon refuses the op otherwise); answers come back, the client gates + submits. The solvers
+# (minus cases/) are pushed and warmed on relay channel 0 before the drop (hb_race_prepare). HCTF_HB_RACE=0 = off.
+HB_RACE = os.environ.get("HCTF_HB_RACE", "1") != "0"
+HB_RACE_MIN_MB = float(os.environ.get("HCTF_HB_RACE_MIN_MB", "10"))
+HB_RACE_RPC_S = float(os.environ.get("HCTF_HB_RACE_RPC_S", "75"))   # whole op: start + download + the solver runs
+_race_ready = {}   # solver dir -> signature pushed + warmed for the race
+
+
+def hb_race_chan(log=print):
+    """The relay channel the race uses: channel 0 when alive (its zygotes were warmed), else any live one, else None."""
+    chans = hb_relays(log, start=False)
+    return next((c for c in chans if c.k == 0), chans[0] if chans else None)
+
+
+def hb_race_prepare(sdirs, log=print):
+    """Push (minus cases/) + warm each race solver on the race channel; idempotent per code signature. -> [rel] ready."""
+    ch = hb_race_chan(log)
+    if ch is None:
+        return []
+    sync_homebase_base()
+    ready = []
+    for sd in sdirs:
+        sd = Path(sd)
+        try:
+            rel = sd.resolve().relative_to(ROOT.resolve())
+            sig = _solver_sig(sd)
+            if _race_ready.get(str(sd)) != sig:
+                if _pushed.get(str(sd)) != sig:
+                    push_solver(sd, rel)
+                    _pushed[str(sd)] = sig
+                w = ch.call("warm", timeout=60, solver=str(rel))
+                _race_ready[str(sd)] = sig
+                log(f"[hb-race] {rel} pushed + warm ({w.get('warm_ms')} ms load"
+                    + (f", note: {str(w.get('error'))[:120]}" if w.get("error") else "") + ")")
+            ready.append(str(rel))
+        except Exception as e:  # noqa: BLE001 - that solver just isn't in the in-network race
+            log(f"[hb-race] prepare {sd.parent.name} note: {str(e)[:200]}")
+    return ready
+
+
+def hb_race(cid, sdirs, attempt_id, solve_timeout=20.0, log=print):
+    """Run the race solvers on Homebase over in-network bytes -> {"outs": {local sdir: (answers, err, secs)},
+    "attempt_id", "answer_ids", "start_s", "dl_s", "bytes", "files", "race_s", "error"?}, or None (no relay channel)."""
+    rels = hb_race_prepare(sdirs, log)
+    ch = hb_race_chan(log)
+    if ch is None or not rels:
+        return None
+    by_rel = {str(Path(sd).resolve().relative_to(ROOT.resolve())): Path(sd) for sd in sdirs}
+    res = ch.call("race", timeout=HB_RACE_RPC_S, cid=cid, solvers=rels, attempt_id=attempt_id,
+                  solve_timeout=solve_timeout).get("result") or {}
+    res["outs"] = {by_rel[r]: tuple(v) for r, v in (res.get("outs") or {}).items() if r in by_rel}
+    return res
+
+
 # Early generalize (default OFF): the daemon reports "solved" (answers + missing + the attempt's bytes inline) BEFORE
 # hb_timed's in-window partial submit / localization, so the orchestrator can start the generalize worker ~15 s sooner
 # (D13 warmups Mastery: submit phase 15.5 s); the verdicts land in the variant case's gm_feedback.json afterwards.

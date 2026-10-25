@@ -805,12 +805,24 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
     (newest such solver wins); spec = produced only by solvers that never had that field verified."""
     from concurrent.futures import ThreadPoolExecutor
     ids = list(contract.get("answer_ids") or [])
+    cands, lane_dirs = reuse_cands(lane, exclude, limit, rank, contract if by_question else None)
+    if not cands or not ids:
+        return {"high": {}, "spec": {}, "source": {}, "runs": {}, "best": None, "alts": {}, "outs": {}}
+    with ThreadPoolExecutor(max_workers=max_parallel) as ex:
+        outs = dict(zip(cands, ex.map(lambda s: run_solver(s, contract, artifacts, timeout), cands)))
+    return reuse_merge(contract, cands, lane_dirs, outs)
+
+
+def reuse_cands(lane, exclude=(), limit=None, rank=None, question_contract=None):
+    """reuse_plan's solver choice -> (candidate dirs newest-first with the lane solver(s) first, the lane solver dirs).
+    Needs no bytes (the in-network race picks + pushes them before the single's download lands); question_contract:
+    also every solver whose cases match its question texts (by_question)."""
     excl = {Path(e).resolve() for e in exclude}
     lane_dirs = [d for d in lane_solver_dirs(lane) if Path(d).resolve() not in excl]
     cands = {p for p in all_solver_dirs() if _lane_of(p) == lane}
-    if by_question:   # the question-text index is pure-Python over every solver's cases: ~2 s idle, 18-24 s at a drop
+    if question_contract is not None:   # the question-text index is pure-Python over every solver's cases: ~2 s idle, 18-24 s at a drop
         try:
-            cands |= set(dispatch(contract)[0])
+            cands |= set(dispatch(question_contract)[0])
         except Exception:  # noqa: BLE001 - question index is optional here
             pass
     cands = sorted((c for c in cands if Path(c).resolve() not in excl), key=_day_key, reverse=True)
@@ -822,11 +834,16 @@ def reuse_plan(contract, artifacts, lane, exclude=(), timeout=60, max_parallel=6
         cands = sorted([cands[0]] + rest[:limit - 1], key=_day_key, reverse=True)
     elif limit:
         cands = cands[:limit]   # newest first: a cumulative lane's latest solver already covers the earlier families
-    cands = lane_dirs + [c for c in cands if c not in lane_dirs]   # the lane solver first, never sliced away
+    return lane_dirs + [c for c in cands if c not in lane_dirs], lane_dirs   # the lane solver first, never sliced away
+
+
+def reuse_merge(contract, cands, lane_dirs, outs):
+    """reuse_plan's per-field merge of every candidate's (answers, err, secs) in `outs` (run locally, or on Homebase by
+    the in-network race) -> the reuse_plan dict."""
+    ids = list(contract.get("answer_ids") or [])
     if not cands or not ids:
         return {"high": {}, "spec": {}, "source": {}, "runs": {}, "best": None, "alts": {}, "outs": {}}
-    with ThreadPoolExecutor(max_workers=max_parallel) as ex:
-        outs = dict(zip(cands, ex.map(lambda s: run_solver(s, contract, artifacts, timeout), cands)))
+    outs = {c: outs.get(c) or ({}, "not run", 0.0) for c in cands}
     high, spec, source, runs, alts = {}, {}, {}, {}, {}
     qs = dict(paired_questions(contract)) if lane_dirs else {}
     for sdir in cands:                      # newest first: the first producer of a field wins
