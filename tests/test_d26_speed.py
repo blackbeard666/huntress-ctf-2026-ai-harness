@@ -304,5 +304,48 @@ with patched({**TRI, (triage, "_extract_all"): lambda files, dest, depth=2: ["",
     path = triage.triage("tri", defer_recon=lambda: False, log=logs.append)
 check("A5 not deferrable -> extract inline as before", "INLINE-MEMBERS" in path.read_text())
 
+# A6: a parallel live answer is narrowed to the runner's unresolved fields (rehearsal replay D26 mobile Mastery: bound on 10,
+#     the runner then had 9 accepted + set10 missing, the worker kept all 10 ~80 s)
+import os as _os  # noqa: E402
+import subprocess  # noqa: E402
+from hctf import inbox  # noqa: E402
+ldir = TD / "live" / "mastery"
+ldir.mkdir(parents=True)
+la = orchestrate.LiveAnswer.__new__(orchestrate.LiveAnswer)
+la.cid, la.attempt, la.done = "mobile-x/mastery", "5108e014-aaaa", threading.Event()
+la.fields = [f"set{i}.answer" for i in range(1, 11)]
+la._qmap = {a: {"question": f"q {a}", "artifact": "delivery 10: split.apks"} for a in la.fields}
+said.clear()
+with patched({(cli, "cdir"): lambda cid: ldir, (orchestrate, "say"): lambda *a, **k: said.append(a[0] if a else "")}):
+    shrank = la.narrow(["set10.answer"], {"attempt_id": "5108e014-aaaa", "missing": ["set10.answer"]})
+    same = la.narrow(["set10.answer"], {})
+owed = json.loads((ldir / ".live_fields.json").read_text())
+msgs = [json.loads(x) for x in (ldir / inbox.NAME).read_text().splitlines()]
+check("A6 narrowed to the runner's 1 unresolved field: list, Stop-gate owe file and an inbox note",
+      shrank and la.fields == ["set10.answer"] and owed["fields"] == ["set10.answer"]
+      and len(msgs) == 1 and msgs[0]["key"] == "live-narrow" and "`set10.answer`" in msgs[0]["text"]
+      and "set1.answer" not in msgs[0]["text"], (la.fields, owed, msgs))
+check("A6 ... no second note when nothing shrinks", same is False and len((ldir / inbox.NAME).read_text().splitlines()) == 1)
+
+
+def hook(stage, start):
+    env = {**_os.environ, "HCTF_STAGE": stage, "HCTF_CHAL": "mobile-x/mastery", "HCTF_CHAL_DIR": str(ldir),
+           "HCTF_WORKER_START": str(start)}
+    r = subprocess.run([sys.executable, str(ROOT / ".claude" / "hooks" / "nudge.py")], env=env, input="{}",
+                       capture_output=True, text=True, timeout=30)
+    return r.stdout
+
+
+inbox.post(ldir, "solver-writer note", key="dry-run")
+t_start = _t.time() + 0.01
+_t.sleep(0.05)
+inbox.post(ldir, "fresh narrowing", key="live-narrow")
+out = hook("live", t_start)
+check("A6 hook: a live worker gets its own attempt's live note, not the older one nor solver-writer notes",
+      "fresh narrowing" in out and "set10" not in out and "solver-writer" not in out, out[:300])
+out = hook("generalize", t_start - 100)
+check("A6 hook: generalize delivery unchanged (every unread note)", "solver-writer" in out and "fresh narrowing" in out,
+      out[:300])
+
 print(f"\n{len(failures)} failure(s)" + (": " + ", ".join(failures) if failures else ""))
 sys.exit(1 if failures else 0)

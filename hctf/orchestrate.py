@@ -255,6 +255,8 @@ LIVE_TIMEOUT = float(os.environ.get("HCTF_LIVE_TIMEOUT", "900"))
 # Rehearsal fair D26 (user, 10-27): a live answer on <= LIVE_SMALL_FIELDS fields runs at LIVE_SMALL_EFFORT (mobile Mastery: ~95 s
 # at high for ONE field). An exception to the high-effort floor like duels / answer-first; "" = the lane's worker effort.
 LIVE_SMALL_FIELDS = int(os.environ.get("HCTF_LIVE_SMALL_FIELDS", "5"))
+# a parallel live answer adopted by the blocked path is narrowed to the runner's unresolved fields (inbox note)
+LIVE_NARROW = os.environ.get("HCTF_LIVE_NARROW", "1") != "0"
 LIVE_SMALL_EFFORT = os.environ.get("HCTF_LIVE_SMALL_EFFORT", "medium").strip()
 # D23 post-mortem (reference/D23_POSTMORTEM.md):
 # #1b the live answer starts at the block, BESIDE the online label/format resolution (it used to wait behind ~10 min of
@@ -509,6 +511,7 @@ class LiveAnswer:
         except (OSError, ValueError):
             contract = cli.load(cid, "start.json") or {}
         qmap = {q.get("id"): q for q in contract.get("questions") or [] if isinstance(q, dict)}
+        self._qmap = qmap
         sub = dict(wrong or [])
         rejected = {}
         for a, v in (last.get("wrong") or []) + (last.get("partial_wrong") or []):
@@ -623,6 +626,36 @@ class LiveAnswer:
                 break
             self.done.wait(2.0)
         self.passed, self.all_accepted = self._state()
+
+    def narrow(self, remaining, last):
+        """The runner returned on this worker's attempt (a parallel live answer is bound before it knows what the solver
+        misses): cut the list to the still-unresolved `remaining` ids and tell the worker via its inbox. Rehearsal replay D26
+        mobile Mastery: bound on all 10 fields, 6 s later the runner had 9 accepted and only set10 missing -- the worker
+        kept deriving all 10 (~80 s). -> True when the list shrank."""
+        keep = set(remaining or ())
+        new = [a for a in self.fields if a in keep]
+        if not new or len(new) == len(self.fields) or self.done.is_set():
+            return False
+        sub = dict(last.get("wrong") or [])
+        lines = []
+        for a in new:
+            q = self._qmap.get(a) or {}
+            lines.append(f"  - `{a}`: {str(q.get('question') or '?')[:220]} | artifact `{q.get('artifact') or '?'}` | "
+                         f"format {json.dumps(q.get('answer_format') or {})[:160]} | solver gave {sub.get(a)!r}")
+        self.fields = new
+        self._shapes = {field_shape(a) for a in new}
+        try:   # the Stop gate owes only these now
+            (cli.cdir(self.cid) / ".live_fields.json").write_text(json.dumps({"attempt": self.attempt, "fields": new}))
+        except OSError:
+            pass
+        from . import inbox
+        inbox.post(cli.cdir(self.cid),
+                   f"The timed runner FINISHED attempt {str(self.attempt)[:8]}: the GM already ACCEPTED the solver's "
+                   f"answers for every other field. Work ONLY on these {len(new)} remaining field(s) -- do not derive, "
+                   "check or re-submit any other id:\n" + "\n".join(lines), key="live-narrow")
+        say(f"[{self.cid}] parallel live answer narrowed to the runner's {len(new)} unresolved field(s): "
+            + ", ".join(new[:6]) + (" ..." if len(new) > 6 else ""))
+        return True
 
     def finish(self, wait=5.0):
         self.stop_evt.set()
@@ -6484,6 +6517,11 @@ class Chain:
             # Mastery's label probes ran ~10 min before any LLM looked at the 18 fields' bytes).
             live = self._web_par_take(par, last)
             par = None
+            if live is not None and LIVE_NARROW:
+                try:
+                    live.narrow(_live_fields(last, wrong, fixed), last)
+                except Exception as e:  # noqa: BLE001 - the full list still passes the mode
+                    say(f"[{cid}] live-answer narrowing note: {e}")
             if live is None:
                 live = self._early_live_take(last)   # C4: started on the per-set events
                 if live is not None:
