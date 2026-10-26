@@ -393,5 +393,60 @@ with patched({(workers, "HbDaemon"): FakeDaemon, (workers, "RELAY_PING_S"): 0.05
         workers._hb.update(ok=False, provisioned=False)
         workers.RELAY_CHANNELS = 0    # park the keeper thread (it keeps running in this process)
 
+# ---------------------------------------------------------------- 6. D26: big timed starts never ride Homebase
+# script Mastery's 9.5 MB start reply took 59.6 s on the Homebase daemon (GM 1.75 s): gmroute sent the big start
+# "today's path", and today's path (_gm_public) put every start on the daemon -- Singles alone were size-gated.
+pub_calls = []
+
+
+def public_fn_factory(env=None):
+    def fn():
+        pub_calls.append(1)
+        return dict(env or {"http": 200, "body": {"result": "public"}, "transport": "inproc"})
+    return fn
+
+
+ch = Chan(ok_reply)
+local_calls.clear()
+pub_calls.clear()
+reset(relay=0.1, local=2.0)
+with patched({**QUIET, (gmroute, "_chan"): lambda: ch, (gmroute, "_size_ok"): lambda a: False}):
+    env = gmroute.call(["start", "script-analysis-day-26-x/mastery"], 30, local_fn_factory(), public_fn=public_fn_factory())
+check("6 big start: the public client alone (not the daemon-routed local_fn, not the relay)",
+      env["body"]["result"] == "public" and pub_calls and not local_calls and not ch.calls, (env, local_calls, ch.calls))
+
+ch = Chan(lambda kw: (_ for _ in ()).throw(workers.DaemonError("daemon gm timed out after 60s")))
+local_calls.clear()
+pub_calls.clear()
+reset(relay=0.1, local=2.0)
+with patched({**QUIET, (gmroute, "_chan"): lambda: ch, (gmroute, "_size_ok"): lambda a: True}):
+    env = gmroute.call(["start", "warmups-day-26-x/time_trial"], 30, local_fn_factory(), public_fn=public_fn_factory())
+check("6 hedged start: the non-relay leg is the public client (independent of Homebase)",
+      env["body"]["result"] == "public" and pub_calls and not local_calls, (env, local_calls))
+
+seen = {}
+with patched({(remote, "_public_gm"): lambda: True,
+              (gmroute, "_contract_bytes"): lambda cid: 9_563_544,
+              (remote, "_gm_local"): lambda a, t: seen.setdefault("local", a) and {"http": 200, "transport": "inproc"},
+              (remote, "_gm_via_daemon"): lambda a, t: seen.setdefault("daemon", a)}):
+    remote._gm_public(["start", "script-analysis-day-26-x/mastery"], 30)
+check("6 _gm_public: a timed-mode start whose contract.json > 200 KB goes public, never the daemon",
+      "local" in seen and "daemon" not in seen, seen)
+
+seen = {}
+with patched({(remote, "_public_gm"): lambda: True,
+              (gmroute, "_contract_bytes"): lambda cid: 4_025,
+              (remote, "_gm_local"): lambda a, t: seen.setdefault("local", a) and {"http": 200},
+              (remote, "_gm_via_daemon"): lambda a, t: seen.setdefault("daemon", a) and {"http": 200}}):
+    remote._gm_public(["start", "mobile-android-day-26-x/time_trial"], 30)
+check("6 _gm_public: a small timed-mode start still takes the warm daemon", "daemon" in seen and "local" not in seen, seen)
+
+logs = []
+with patched({(gmroute, "_say"): logs.append}):
+    gmroute.note_slow("start", "s/mastery", {"client_elapsed": 59.6, "elapsed": 1.75, "transport": "hb-daemon"})
+    gmroute.note_slow("start", "w/time_trial", {"client_elapsed": 1.2, "elapsed": 0.9, "transport": "relay0"})
+check("6 note_slow: a 58 s transport gap is flagged `!!!`, a 0.3 s one is not",
+      len(logs) == 1 and logs[0].startswith("!!! [gmroute] slow transport"), logs)
+
 print(f"\n{len(failures)} failure(s)" + (": " + ", ".join(failures) if failures else ""))
 sys.exit(1 if failures else 0)

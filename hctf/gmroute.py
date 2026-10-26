@@ -162,6 +162,21 @@ def _chan():
     return min(chans, key=lambda c: c.busy) if chans else None
 
 
+SLOW_S = float(os.environ.get("HCTF_GM_SLOW_TRANSPORT_S", "5"))
+
+
+def note_slow(op, cid, env):
+    """Flag a Homebase-carried GM call whose client time exceeds the GM's own by > SLOW_S (D26: 59.6 s vs 1.75 s went
+    unnoticed until the post-mortem read client_elapsed out of log.jsonl)."""
+    try:
+        gap = float(env.get("client_elapsed") or 0) - float(env.get("elapsed") or 0)
+    except (TypeError, ValueError):
+        return
+    if gap > SLOW_S:
+        _say(f"!!! [gmroute] slow transport: {op} {cid} took {env.get('client_elapsed')}s on {env.get('transport')} "
+             f"for a {env.get('elapsed')}s GM call ({_reply_bytes(env) // 1024} KB reply)")
+
+
 def _relay_call(chan, args, timeout):
     """One GM call over a relay channel -> gm.py-shaped envelope (transport relay). _NotSent when the request never
     left this process; any other failure raises as is (the caller decides what it means per op)."""
@@ -185,6 +200,7 @@ def _relay_call(chan, args, timeout):
     env["client_elapsed"] = round(time.time() - t0, 3)
     if env.get("http") in (0, None):
         raise RuntimeError(f"relay: GM unreachable from the VM ({str(env.get('body'))[:120]})")
+    note_slow(kind, kw["cid"], env)
     return env
 
 
@@ -217,11 +233,15 @@ def _judged(env):
     return isinstance(env, dict) and env.get("http") not in (0, None, 429, 503)
 
 
-def call(args, timeout, local_fn):
-    """remote.gm's hook for status / start / submit: the routed envelope. local_fn() = today's path, unchanged."""
+def call(args, timeout, local_fn, public_fn=None):
+    """remote.gm's hook for status / start / submit: the routed envelope. local_fn() = today's path, unchanged.
+    public_fn() = the public GM client alone (never Homebase): a big start and the hedged start's non-relay leg use it.
+    D26: local_fn sends `start` through the Homebase daemon, so the "local" leg shared the VPN with the relay and a
+    9.5 MB Mastery reply crossed it at ~160 KB/s (59.6 s for a 1.75 s GM call)."""
     op = str(args[0])
     if len(args) > 1:
         _state["last_cid"] = str(args[1])
+    pub = public_fn or local_fn
     chan = _chan()
     if chan is None or op not in OPS:
         return _timed(local_fn, op, "local")
@@ -230,9 +250,9 @@ def call(args, timeout, local_fn):
     how = decide(op)
     if op == "start" and START_HEDGE:
         if not _size_ok(args):
-            return _timed(local_fn, op, "local")   # a big reply never rides the relay (not hedged either)
+            return _timed(pub, op, "local")   # a big reply never rides the relay or the daemon (not hedged either)
         _note_decision(op, _how(op))
-        env = _hedge(args, timeout, chan, local_fn, op="start", first=how, lag=HEDGE_START_S)
+        env = _hedge(args, timeout, chan, pub, op="start", first=how, lag=HEDGE_START_S)
         if str(env.get("transport") or "").startswith("relay"):
             with _lock:
                 _reply[("start", _shape(args[1]))] = _reply_bytes(env)

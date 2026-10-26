@@ -216,7 +216,8 @@ def gm(*args, timeout=180):
     if GM_RELAY and args and args[0] in ("status", "start", "submit") and _public_gm():
         from . import gmroute   # D24 #13: measured relay vs today's path -- only once orchestrate.run() activated it
         if gmroute.active():
-            return gmroute.call(args, timeout, lambda: _gm_public(args, timeout))
+            return gmroute.call(args, timeout, lambda: _gm_public(args, timeout),
+                                public_fn=lambda: _gm_local(args, timeout))
     return _gm_public(args, timeout)
 
 
@@ -227,10 +228,12 @@ GM_RELAY = os.environ.get("HCTF_GM_RELAY", "1") != "0"
 def _gm_public(args, timeout):
     """Today's public-GM routing (local transport): big start -> local; start/submit via the warm daemon / Homebase;
     else the in-process client."""
-    if args and args[0] == "start" and len(args) > 1 and _public_gm() and _big_start(str(args[1])):
+    if args and args[0] == "start" and len(args) > 1 and _public_gm() and _start_off_hb(str(args[1])):
         # A large start reply (script: ~650 KB contract) crosses the VPN at ~130 KB/s on the daemon's ONE stdio
         # channel and holds up every reply queued behind it: D15 script 8.9 s + binary (80 KB) 9.4 s client time for
-        # GM calls of 2.4-2.6 s; the three small lanes 2.6-2.9 s. The public GM returns it directly.
+        # GM calls of 2.4-2.6 s; the three small lanes 2.6-2.9 s. The public GM returns it directly. D26: the guard
+        # covered Singles only -- script Mastery's 9.5 MB start took 59.6 s on the daemon (GM 1.75 s) and binary's TT
+        # start sat 40 s queued behind it.
         return _gm_local(args, timeout)
     if args and args[0] in ("start", "submit") and GM_VIA_DAEMON and _public_gm():
         env = _gm_via_daemon(args, timeout)      # the run's warm Homebase daemon, when this process has one
@@ -287,6 +290,21 @@ def _big_start(cid):
             break
         _BIG_START[(lane, day)] = size > START_VIA_HB_MAX_KB * 1024
     return _BIG_START[(lane, day)]
+
+
+def _start_off_hb(cid):
+    """True when `cid`'s start reply is too big for the Homebase daemon / ssh channel: Singles by the lane's earlier
+    single start (_big_start); Time Trial / Mastery by TODAY's status-time contract of that mode (a start reply carries
+    the same questions + answer_ids), else the lane's earlier start of the mode."""
+    if "/" not in cid:
+        return _big_start(cid)
+    if START_VIA_HB_MAX_KB <= 0:
+        return False
+    from . import gmroute
+    n = gmroute._contract_bytes(cid)
+    if n is None:
+        n = gmroute._earlier_start_bytes(cid)
+    return n > START_VIA_HB_MAX_KB * 1024
 _EXEC_MARK = "HCTF-EXEC"
 # Single Solve start / submit over the run's long-lived Homebase daemon (warm GM pool, one stdio channel) instead of an
 # ssh exec + `python3 gm.py` per call: D12's five drop-time starts went out 2-6 s late on the busy 2-vCPU VM. Only in the
@@ -348,6 +366,8 @@ def _gm_via_daemon(args, timeout):
     # client wall time vs the VM-measured `elapsed`: the gap is the ssh channel (D14 race submits sat ~3-4 s between
     # the local solve and the GM call while pre-pushes shared the ControlMaster -- unproven without this number)
     env["client_elapsed"] = round(time.time() - t0, 3)
+    from . import gmroute
+    gmroute.note_slow(kind, kw["cid"], env)
     return env
 
 
