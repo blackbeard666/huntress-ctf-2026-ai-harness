@@ -51,6 +51,10 @@ EXTRA_MIN_AVAIL_GB = float(os.environ.get("HCTF_DUEL_EXTRA_MIN_AVAIL_GB", "1.5")
 # processes at the CPU peak (load 28 on 12 CPUs) -> they run niced; the chain's own worker and answer-first keep the CPU.
 # "" = not niced (old).
 SINGLE_NICE = os.environ.get("HCTF_DUEL_SINGLE_NICE", "10").strip()
+# Rehearsal fair D26 (user, 10-27): single-duel racers are OFF at the drop -- still 0 first CORRECTs, and the host was the
+# critical path (15 claude processes at T+0:21, load 24-26, binary's 7z extract 47.8 s vs 0.55 s idle). Generalize duels
+# stay. HCTF_DUEL_SINGLE=1 = the old best-of-3 singles.
+SINGLE = os.environ.get("HCTF_DUEL_SINGLE", "0") != "0"
 DELAY = float(os.environ.get("HCTF_DUEL_DELAY", "15"))    # single: give the reuse race its 3-9 s first
 GEN_AFTER = int(os.environ.get("HCTF_DUEL_GENERALIZE_AFTER", "1"))   # duel the 2nd+ generalize of a mode; -1 = never
 GEN_FIRST = os.environ.get("HCTF_DUEL_GENERALIZE_FIRST", "1") != "0"  # ... and the 1st when label-only / speed-only
@@ -64,11 +68,13 @@ _live_extra = set()
 _live_lock = threading.Lock()
 
 
-def eligible(lane, key=None):
+def eligible(lane, key=None, stage=None):
     """(ok, why). Checks only: the slot is taken at the actual launch (_reserve), after the single's DELAY -- rehearsal D14
     replay: duels still waiting out their delay (singles already won by the reuse race) blocked script's duel."""
     if not ENABLED:
         return False, "HCTF_DUEL=0"
+    if stage == "single" and not SINGLE:
+        return False, "single duels off (HCTF_DUEL_SINGLE=0)"
     if lane not in LANES and not _binary_ok(lane):
         return False, f"lane {lane} not in HCTF_DUEL_LANES"
     with _live_lock:

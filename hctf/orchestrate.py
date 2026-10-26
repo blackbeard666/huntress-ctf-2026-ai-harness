@@ -238,6 +238,11 @@ LIVE_UNIFORM_MAX = int(os.environ.get("HCTF_LIVE_UNIFORM_MAX", "600"))
 EARLY_LIVE = os.environ.get("HCTF_EARLY_LIVE", "1") != "0"
 
 
+def live_effort_env(n):
+    """env_extra for a live-answer worker on `n` fields: LIVE_SMALL_EFFORT when the list is short, else {} (lane effort)."""
+    return {"HCTF_X_EFFORT": LIVE_SMALL_EFFORT} if LIVE_SMALL_EFFORT and 0 < n <= LIVE_SMALL_FIELDS else {}
+
+
 def live_fields_ok(fields):
     """Few enough fields for a live-answer worker: <= LIVE_MAX_FIELDS, or <= LIVE_UNIFORM_MAX of one field shape."""
     n = len(fields or ())
@@ -247,6 +252,10 @@ def live_fields_ok(fields):
         return True
     return n <= LIVE_UNIFORM_MAX and len({field_shape(a) for a in fields}) == 1
 LIVE_TIMEOUT = float(os.environ.get("HCTF_LIVE_TIMEOUT", "900"))
+# Rehearsal fair D26 (user, 10-27): a live answer on <= LIVE_SMALL_FIELDS fields runs at LIVE_SMALL_EFFORT (mobile Mastery: ~95 s
+# at high for ONE field). An exception to the high-effort floor like duels / answer-first; "" = the lane's worker effort.
+LIVE_SMALL_FIELDS = int(os.environ.get("HCTF_LIVE_SMALL_FIELDS", "5"))
+LIVE_SMALL_EFFORT = os.environ.get("HCTF_LIVE_SMALL_EFFORT", "medium").strip()
 # D23 post-mortem (reference/D23_POSTMORTEM.md):
 # #1b the live answer starts at the block, BESIDE the online label/format resolution (it used to wait behind ~10 min of
 #     label probes on script Mastery); #1e an attempt is never re-run on a solver the generalize left unchanged (the TT
@@ -563,7 +572,8 @@ class LiveAnswer:
         try:
             art = self._art_dir()
             self.prompt = workers.render("live", art_dir=Path(art).relative_to(ROOT), **self._render)
-            self.chain.run_worker(self.cid, "live", self.prompt, LIVE_TIMEOUT, urgent=True, stop=self.stop_evt)
+            self.chain.run_worker(self.cid, "live", self.prompt, LIVE_TIMEOUT, urgent=True, stop=self.stop_evt,
+                                  env_extra=live_effort_env(len(self.fields)))
         except Exception as e:  # noqa: BLE001 - the generalize carries on regardless
             say(f"[{self.cid}] live-answer worker failed: {str(e)[:200]}")
         finally:
@@ -1426,11 +1436,21 @@ def lane_known_shapes(lane, day):
     for the process -- earlier days' contracts never change mid-run -- and warmed before the drop
     (warm_lane_shapes_async): D22 post-mortem #10, built AT the drop under this lock it held web's single prompt 9-14 s
     (web's mastery_delta is the one that asks for it) while the other lanes' scans ran on a saturated host."""
+    return set(_lane_known(lane, day)[0])
+
+
+def lane_known_exts(lane, day):
+    """Artifact member extensions this lane's contracts shipped on any EARLIER day (same cache as lane_known_shapes)."""
+    return set(_lane_known(lane, day)[1])
+
+
+def _lane_known(lane, day):
     key = (lane, int(day))
     with _SHAPE_LOCK:   # five lanes build their single prompts at once at the drop
         if key not in _SHAPE_MEMO:
-            _SHAPE_MEMO[key] = frozenset(_lane_known_shapes(lane, day))
-        return set(_SHAPE_MEMO[key])
+            shapes, exts = _lane_known_shapes(lane, int(day))
+            _SHAPE_MEMO[key] = (frozenset(shapes), frozenset(exts))
+        return _SHAPE_MEMO[key]
 
 
 def warm_lane_shapes_async(day, log=None):
@@ -1463,7 +1483,7 @@ def _lane_known_shapes(lane, day):
         cache = json.loads(cache_p.read_text())
     except (OSError, ValueError):
         cache = {}
-    known, dirty = set(), False
+    known, exts, dirty = set(), set(), False
     for m in sorted(ROOT.glob("challenges/day*/*/meta.json")):
         dm = re.match(r"day(\d+)$", m.parent.parent.name)
         if not dm or int(dm.group(1)) >= day:
@@ -1477,11 +1497,14 @@ def _lane_known_shapes(lane, day):
             try:
                 st = f.stat()
                 key, sig = str(f.relative_to(ROOT)), f"{st.st_size}:{int(st.st_mtime)}"
-                if (cache.get(key) or {}).get("sig") != sig:
-                    cache[key] = {"sig": sig, "shapes": sorted({field_shape(a) for a in
-                                                                _contract_ids(json.loads(f.read_text()))})}
+                ent = cache.get(key) or {}
+                if ent.get("sig") != sig or "exts" not in ent:
+                    c = json.loads(f.read_text())
+                    cache[key] = {"sig": sig, "shapes": sorted({field_shape(a) for a in _contract_ids(c)}),
+                                  "exts": sorted(_contract_shape(c)[1])}
                     dirty = True
                 known |= set(cache[key]["shapes"])
+                exts |= set(cache[key]["exts"])
             except (OSError, ValueError):
                 continue
     if dirty:
@@ -1491,7 +1514,7 @@ def _lane_known_shapes(lane, day):
             tmp.replace(cache_p)
         except OSError:
             pass
-    return known
+    return known, exts
 
 
 DELTA_NOVEL_CHARS = int(os.environ.get("HCTF_DELTA_NOVEL_CHARS", "1500"))
@@ -4233,7 +4256,7 @@ class Chain:
         """Second, differently-configured local Single Solve worker on a copy of the solver (hctf/duel.py). Launched
         after duel.DELAY s -- skipped if the reuse race (or anything else) completed the single by then."""
         from . import duel
-        ok, why = duel.eligible(self.lane)
+        ok, why = duel.eligible(self.lane, stage="single")
         if not ok:
             say(f"[{cid}] no duel: {why}")
             return
@@ -6607,6 +6630,13 @@ class Chain:
         why = self._gap_predicted(mode)
         if not why:
             return None
+        ids = list((cli.load(f"{self.base}/{mode}", "contract.json") or {}).get("answer_ids") or [])
+        n = len(ids)
+        if ids and not live_fields_ok(ids):
+            # rehearsal fair D26 script: 1677 / 16770 ids -> the binder would never start a live worker on them, yet the
+            # runner's solver would still be capped to PAR_LIVE_BUDGET
+            say(f"[{cid}] solver gap predicted ({why}) but {n} fields are too many for a live answer: runner alone")
+            return None
         try:
             par = WebParLive(self, cid, time.time() - 1.0)
             par.budget = PAR_LIVE_BUDGET
@@ -6628,6 +6658,11 @@ class Chain:
             single = cli.load(self.base, "start.json") or cli.load(self.base, "contract.json") or {}
             tc = cli.load(f"{self.base}/{mode}", "contract.json") or {}
             extra = _contract_shape(tc)[1] - _contract_shape(single)[1]
+            if extra:
+                # rehearsal fair D26: metadata's timed modes always ship ~20 kinds its Single doesn't (a mixed corpus) -> a
+                # kind the lane shipped on an earlier day is covered by the solver's regression cases, not a gap
+                dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
+                extra -= lane_known_exts(self.lane, int(dm.group(1))) if dm else set()
             if extra:
                 return "artifact kinds the Single doesn't ship: " + ", ".join(f".{e}" for e in sorted(extra))
             lp = getattr(self, "_live_passed", None)

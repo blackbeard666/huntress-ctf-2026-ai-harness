@@ -454,6 +454,8 @@ def _extract_all(files, dest, depth=2):
     return (["", "## Extracted (pre-unpacked for you -- read these instead of unzipping again)", ""] + lines) if lines else []
 
 
+# unpack in the background when recon is deferrable at triage start (D26 binary: 7z 12.7-47.8 s on the go-text path)
+EXTRACT_DEFER = os.environ.get("HCTF_TRIAGE_EXTRACT_DEFER", "1") != "0"
 RECON_WAIT = float(os.environ.get("HCTF_TRIAGE_RECON_WAIT", "5"))   # s the go text waits for recon
 TOOLCHAIN_WAIT = float(os.environ.get("HCTF_TRIAGE_TOOLCHAIN_WAIT", "1.0"))   # s the go text waits for the toolchain scan
 
@@ -508,11 +510,39 @@ def triage(cid, defer_recon=None, log=None, stop=None):
     for f in files:
         out += _describe(f)
     tm["describe"] = _time.time()
-    out += _extract_all(files, mdir / "work" / "extracted")
-    tm["extract"] = _time.time()
+    # D26 binary: the 7z extract took 12.7 s (main) / 47.8 s (rehearsal) on a saturated host while the prior solver's dry run
+    # already answered 310/312 -> when recon is deferrable before the extract, unpack in the background too (recon and
+    # the toolchain scan read the members, so they wait for it); the worker starts on the dry run's delta now.
+    early = False
+    if EXTRACT_DEFER and defer_recon is not None:
+        try:
+            early = bool(defer_recon())
+        except Exception:  # noqa: BLE001
+            early = False
     from concurrent.futures import ThreadPoolExecutor
-    pool = ThreadPoolExecutor(max_workers=2)
-    recon_fut = pool.submit(_recon, cid, mdir / "work" / "extracted", **({"stop": stop} if stop else {}))
+    pool = ThreadPoolExecutor(max_workers=3)
+    if early:
+        ext_fut = pool.submit(_extract_all, files, mdir / "work" / "extracted")
+        ext = ["", "## Extracted", "", f"_Unpacking into `{mdir / 'work' / 'extracted'}` in the background: the member "
+               f"list replaces this note in `{mdir / 'triage.md'}` within seconds._"]
+    else:
+        ext_fut = None
+        ext = _extract_all(files, mdir / "work" / "extracted")
+    tm["extract"] = _time.time()
+
+    def ext_now(wait=True):
+        """The Extracted section: the background unpack's lines once done (or waited for), else the note."""
+        if ext_fut is None or not (wait or ext_fut.done()):
+            return ext
+        try:
+            return ext_fut.result()
+        except Exception as e:  # noqa: BLE001 - the worker can unzip itself
+            return ["", f"_background extract failed: {e}_"]
+
+    def after_extract(fn, *a, **kw):
+        ext_now()
+        return fn(*a, **kw)
+    recon_fut = pool.submit(after_extract, _recon, cid, mdir / "work" / "extracted", **({"stop": stop} if stop else {}))
 
     def toolchain_check():
         # Which toolchain built each member and is its preferred standard tool installed? Missing ones with a recipe
@@ -520,6 +550,7 @@ def triage(cid, defer_recon=None, log=None, stop=None):
         # fallback); the worker is told, and `hctf tool-wait <tool>` blocks until it lands.
         try:
             from . import toolchain
+            ext_now()
             ex = mdir / "work" / "extracted"
             members = toolchain.scan_order(ex)
             return toolchain.check(files + members, cid=cid, text=toolchain.challenge_text(contract))
@@ -542,8 +573,9 @@ def triage(cid, defer_recon=None, log=None, stop=None):
     def timing(recon):
         # D16 binary: go text at +64 s with no breakdown (3 s uncontended); the next slow triage says where it went
         if log:
-            log(f"[{cid}] triage timing: describe {tm['describe'] - tm['t0']:.1f}s, extract "
-                f"{tm['extract'] - tm['describe']:.1f}s, toolchain {tm['toolchain'] - tm['extract']:.1f}s, recon {recon}")
+            ext_t = "deferred" if early else f"{tm['extract'] - tm['describe']:.1f}s"
+            log(f"[{cid}] triage timing: describe {tm['describe'] - tm['t0']:.1f}s, extract {ext_t}, "
+                f"toolchain {tm['toolchain'] - tm['extract']:.1f}s, recon {recon}")
     tail = ["", "_Deterministic triage (no LLM). Verify against the bytes; see the routed lane skill._"]
     path = mdir / "triage.md"
 
@@ -568,11 +600,11 @@ def triage(cid, defer_recon=None, log=None, stop=None):
         t_r = _time.time()
         lines = recon_lines()
         timing(f"{_time.time() - t_r:.1f}s (inline)")
-        path.write_text("\n".join(out + tc_lines + lines + tail), encoding="utf-8")
+        path.write_text("\n".join(out + ext_now(False) + tc_lines + lines + tail), encoding="utf-8")
         return path
     timing("deferred" if deferred else "inline" if tc_lines is not None else "pending")
     recon_now = None if deferred else recon_lines()
-    path.write_text("\n".join(out + (tc_lines if tc_lines is not None else tc_note)
+    path.write_text("\n".join(out + ext_now(False) + (tc_lines if tc_lines is not None else tc_note)
                               + (recon_now if recon_now is not None else
                                  ["", "## Recon (standard tools, pre-run for you -- facts, not answers)", "",
                                   f"_Still running in the background: it replaces this note in `{path}` within "
@@ -587,9 +619,10 @@ def triage(cid, defer_recon=None, log=None, stop=None):
                 log(f"[{cid}] triage: deferred recon/toolchain dropped (the single is CORRECT)")
             return
         try:
-            path.write_text("\n".join(out + tcl + lines + tail), encoding="utf-8")
+            path.write_text("\n".join(out + ext_now() + tcl + lines + tail), encoding="utf-8")
             if log:
-                what = [n for n, pending in (("toolchain", tc_lines is None), ("recon", recon_now is None)) if pending]
+                what = [n for n, pending in (("extract", early), ("toolchain", tc_lines is None),
+                                             ("recon", recon_now is None)) if pending]
                 log(f"[{cid}] triage {' + '.join(what)} landed (deferred) in {path.name} "
                     f"(toolchain {tm['toolchain'] - tm['extract']:.1f}s)")
         except OSError:

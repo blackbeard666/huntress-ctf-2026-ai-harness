@@ -5,6 +5,9 @@ P2: a non-web TT / Mastery gets the parallel live answer (WebParLive) on its fir
     predicted -- id shapes new to the lane, artifact kinds the Single doesn't ship, an earlier mode of the chain passed
     only by a live answer, or the lane's same mode needed a live answer / generalize the day before -- with the racing
     solver capped; nothing predicted / a clocked pool / a retry -> no parallel live answer.
+A1-A5 (rehearsal fair D26 follow-ups, 10-27): single duels off by default, earlier-day artifact kinds are no gap, a field list
+    too long for a live answer leaves the runner uncapped, small live answers at medium effort, background triage
+    extract when recon is deferrable.
 No GM, no workers: fakes only.
 
 Run:  source bin/env.sh && python3 tests/test_d26_speed.py      (exit 0 = all pass)
@@ -214,6 +217,92 @@ check("P5 a slow mastery_delta: the go text gets '' after DELTA_WAIT, the text f
 fut = ThreadPoolExecutor(max_workers=1).submit(lambda: "MASTERY COMPOUNDS: y")
 fut.result()
 check("P5 a ready mastery_delta is inlined as before", orchestrate.Chain._delta_or_late(ch, "w", fut) == "MASTERY COMPOUNDS: y")
+
+# ---- rehearsal fair D26 follow-ups (10-27): host load at the drop, noisy gap trigger, slow small live answers ---------------
+# A1: single duels are off by default; generalize duels are not
+check("A1 single duel off by default (HCTF_DUEL_SINGLE=0)",
+      duel.eligible("warmups", stage="single") == (False, "single duels off (HCTF_DUEL_SINGLE=0)"))
+check("A1 generalize duels unaffected", duel.eligible("warmups")[0] is True)
+with patched({(duel, "SINGLE"): True}):
+    check("A1 HCTF_DUEL_SINGLE=1 -> single duels as before", duel.eligible("warmups", stage="single")[0] is True)
+
+# A2: an artifact kind the lane shipped on an earlier day is not a gap (rehearsal D26 metadata: ~20 kinds every timed mode)
+with patched(ENV):
+    orchestrate._SHAPE_MEMO.clear()
+    (TD / ".run").mkdir(exist_ok=True)
+    old = TD / "challenges" / "day24" / "meta-old"
+    (old / "mastery").mkdir(parents=True)
+    (old / "meta.json").write_text(json.dumps({"lane": "metadata-forensics"}))
+    (old / "mastery" / "contract.json").write_text(json.dumps(contract(["set1.a", "set2.b"], ["x.evtx", "y.lnk"])))
+    loads.clear(); started.clear(); said.clear()
+    loads[("metadata-forensics-day-26-x", "start.json")] = contract(["answer"], ["notes.txt"])
+    loads[("metadata-forensics-day-26-x/time_trial", "contract.json")] = contract(["set1.a", "set2.b"],
+                                                                               ["a.evtx", "b.lnk"])
+    ch = bare_chain("metadata-forensics", "metadata-forensics-day-26-x", "meta-x")
+    r = orchestrate.Chain._web_par_live(ch, "metadata-forensics-day-26-x/time_trial", "time_trial", 0, False)
+    check("A2 kinds shipped on an earlier day (.evtx/.lnk) -> no predicted gap", r is None and not started, said[-2:])
+    loads[("metadata-forensics-day-26-x/time_trial", "contract.json")] = contract(["set1.a", "set2.b"],
+                                                                               ["a.evtx", "b.pcap"])
+    r = orchestrate.Chain._web_par_live(ch, "metadata-forensics-day-26-x/time_trial", "time_trial", 0, False)
+    check("A2 ... a kind NEW to the lane (.pcap) still predicts one",
+          r is not None and any(".pcap" in m and ".evtx" not in m for m in said), said[-1:])
+
+    # A3: more fields than a live answer takes -> the runner alone, its solver NOT capped (rehearsal D26 script: 16770 ids)
+    started.clear(); said.clear()
+    loads[("warmups-day-26", "start.json")] = SINGLE
+    loads[("warmups-day-26/mastery", "contract.json")] = {"answer_ids": [f"set{i}.q{i}-x{i % 7}" for i in range(2000)]}
+    with patched({(orchestrate.Chain, "_ahead_new"): lambda self, mode: 1677}):
+        r = orchestrate.Chain._web_par_live(bare_chain(), "warmups-day-26/mastery", "mastery", 0, False)
+    check("A3 2000 fields + a predicted gap -> no parallel live answer (runner uncapped)",
+          r is None and not started and any("too many for a live answer" in m for m in said), said[-1:])
+
+# A4: a live answer on a few fields runs at medium effort; a longer list keeps the lane's effort
+check("A4 live answer on 1 field -> medium", orchestrate.live_effort_env(1) == {"HCTF_X_EFFORT": "medium"})
+check("A4 live answer on 10 fields -> lane effort", orchestrate.live_effort_env(10) == {})
+with patched({(orchestrate, "LIVE_SMALL_EFFORT"): ""}):
+    check("A4 HCTF_LIVE_SMALL_EFFORT='' -> lane effort", orchestrate.live_effort_env(1) == {})
+
+# A5: triage unpacks in the background when recon is deferrable at its start (D26 binary: 7z 12.7-47.8 s on the go path)
+import time as _t  # noqa: E402
+from hctf import triage, toolchain  # noqa: E402
+mdir = TD / "tri" / "single_solve"
+(mdir / "artifacts" / "latest").mkdir(parents=True)
+(mdir / "artifacts" / "latest" / "crash.zip").write_bytes(b"PK")
+ext_gate = threading.Event()
+logs = []
+
+
+def slow_extract(files, dest, depth=2):
+    ext_gate.wait(5)
+    return ["", "## Extracted (pre-unpacked for you -- read these instead of unzipping again)", "", "- MEMBERS-LISTED"]
+
+
+TRI = {(cli, "cdir"): lambda cid: mdir, (cli, "load"): lambda cid, name: {"answer_ids": ["a"]},
+       (cli, "confirmed_answers"): lambda cid: {}, (triage, "check_shape"): lambda *a, **k: None,
+       (triage, "_describe"): lambda f: [f"- {f.name}"], (triage, "_extract_all"): slow_extract,
+       (triage, "_recon"): lambda cid, ex, **k: ["", "## Recon", "RECON-LINES"],
+       (toolchain, "scan_order"): lambda ex: [], (toolchain, "check"): lambda *a, **k: ["", "## Toolchain", "TC"],
+       (toolchain, "challenge_text"): lambda *a, **k: "", (triage, "TOOLCHAIN_WAIT"): 0.1}
+with patched(TRI):
+    t0 = _t.time()
+    path = triage.triage("tri", defer_recon=lambda: True, log=logs.append)
+    took = _t.time() - t0
+    first = path.read_text()
+    ext_gate.set()
+    for _ in range(50):
+        if "MEMBERS-LISTED" in path.read_text() and "RECON-LINES" in path.read_text():
+            break
+        _t.sleep(0.1)
+    final = path.read_text()
+check("A5 deferrable recon at triage start -> the go path does not wait for the extract",
+      took < 2 and "in the background" in first and "MEMBERS-LISTED" not in first, (took, first[-400:]))
+check("A5 ... the member list + recon + toolchain land in triage.md afterwards",
+      "MEMBERS-LISTED" in final and "RECON-LINES" in final and "TC" in final
+      and any("extract" in m and "landed" in m for m in logs), (final[-400:], logs))
+ext_gate.clear()
+with patched({**TRI, (triage, "_extract_all"): lambda files, dest, depth=2: ["", "- INLINE-MEMBERS"]}):
+    path = triage.triage("tri", defer_recon=lambda: False, log=logs.append)
+check("A5 not deferrable -> extract inline as before", "INLINE-MEMBERS" in path.read_text())
 
 print(f"\n{len(failures)} failure(s)" + (": " + ", ".join(failures) if failures else ""))
 sys.exit(1 if failures else 0)
