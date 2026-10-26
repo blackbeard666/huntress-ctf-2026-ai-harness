@@ -283,6 +283,14 @@ WEB_CODIFY_HOLD = float(os.environ.get("HCTF_WEB_CODIFY_HOLD", "0"))
 #              wait codify is ended before the generalize takes over the same plugin file (never two writers), and a live
 #              pass starts no background generalize while codify runs. 0 = the old blocked path.
 WEB_PAR_LIVE = os.environ.get("HCTF_WEB_PAR_LIVE", "1") != "0"
+# D26 post-mortem: the same parallel live answer on EVERY lane's first no-clock TT / Mastery attempt when a solver gap is
+# PREDICTED (_gap_predicted: id shapes new to the lane, artifact kinds the Single doesn't ship, an earlier mode of this
+# chain passed only by a live answer, or the lane's same mode needed a live answer / generalize yesterday). D26 warmups
+# Mastery: the solver ran 65 s and left 128 fields empty before a cold live answer (70 s) started; mobile's TT / Mastery
+# live answers started only after the runner returned. PAR_LIVE_BUDGET caps the racing solver (no clock: the attempt
+# stays open for the live answer; script Mastery's 16,770 fields solve in ~6 s). HCTF_PAR_LIVE=0 = web only (old).
+PAR_LIVE = os.environ.get("HCTF_PAR_LIVE", "1") != "0"
+PAR_LIVE_BUDGET = float(os.environ.get("HCTF_PAR_LIVE_BUDGET", "25"))
 WEB_CODIFY_IS_GEN = os.environ.get("HCTF_WEB_CODIFY_IS_GEN", "1") != "0"
 WEB_CODIFY_GEN_WAIT = float(os.environ.get("HCTF_WEB_CODIFY_GEN_WAIT", "90"))
 WEB_PAR_LIVE_BIND = float(os.environ.get("HCTF_WEB_PAR_LIVE_BIND", "120"))   # s to wait for the runner's attempt id
@@ -1542,6 +1550,36 @@ def mastery_delta(single_contract, timed_contracts, known=None):
     return ("MASTERY COMPOUNDS: the Time Trial / Mastery contracts (status-time, under this challenge's time_trial/ and "
             "mastery/ dirs) ask " + "; ".join(parts) + ". solve.py must answer those too from the timed bytes -- "
             "dispatch on question text / artifact type; reuse earlier days' parsing for earlier days' concepts.")
+
+
+def _lane_mode_needed_help(lane, sdir, mode):
+    """'a live answer' / 'a generalize' when the newest EARLIER day's challenge of `lane` left a live-answer or a
+    generalize worker log in its `mode` dir (D25: warmups + binary Mastery did; D26 repeated both), else ''."""
+    try:
+        dm = re.match(r"day(\d+)$", Path(sdir).parent.parent.name)
+        if not dm:
+            return ""
+        day = int(dm.group(1))
+        for d in range(day - 1, max(day - 4, 0), -1):
+            hits = []
+            for meta in ROOT.glob(f"challenges/day{d:02d}/*/meta.json"):
+                try:
+                    if paths.canonical_lane(json.loads(meta.read_text()).get("lane")) != paths.canonical_lane(lane):
+                        continue
+                except (OSError, ValueError):
+                    continue
+                hits.append(meta.parent / mode)
+            if not hits:
+                continue          # the lane had no challenge that day: look one day further back
+            for h in hits:
+                if any(h.glob("worker-live-*.log")):
+                    return "a live answer"
+                if any(h.glob("worker-generalize-*.log")):
+                    return "a generalize"
+            return ""
+    except Exception:  # noqa: BLE001 - advisory
+        return ""
+    return ""
 
 
 def _is_skeleton(sdir):
@@ -6151,6 +6189,8 @@ class Chain:
                     f"{str((timed.last_result(cid) or {}).get('attempt_id'))[:8]} (same verdicts) -- straight to the next fix")
             else:
                 par = par or self._web_par_live(cid, mode, attempt, untimed or live_banked)
+                if par is not None and getattr(par, "budget", None) and not lf:
+                    lf = {"budget": par.budget}
                 self._mark(f"{mode}:run", cid)
                 res = timed.run(cid, self.sdir, log=say, **op, **lf, **self._early_kw(cid, untimed),
                                 **self._on_correct_kw(mode))
@@ -6464,6 +6504,7 @@ class Chain:
                 live.finish()
                 if live.passed or cli.is_complete(cid):
                     say(f"[{cid}] passed by the live-answer worker (attempt {str(live.attempt)[:8]})")
+                    self.__dict__.setdefault("_live_passed", set()).add(mode)
                     set_state(self.base, **{f"{mode}_result": "correct"})
                     self._live_pass_prefetch(mode)
                     record_timed_case(cid, self.sdir)
@@ -6491,10 +6532,12 @@ class Chain:
     def _web_par_live(self, cid, mode, attempt, resumed):
         """D24 #11: start the parallel live-answer binder for the FIRST web TT attempt when the codify plugin hasn't
         landed (a landed plugin -> the runner's solver dispatches to it first-try). D25 D2: nor when the single's worker
-        promoted a verified plugin before CORRECT. -> WebParLive or None."""
+        promoted a verified plugin before CORRECT. D26: other lanes' first TT / Mastery attempt too when _gap_predicted
+        names a reason (its `budget` caps the racing solver). -> WebParLive or None."""
         from . import webtarget
-        if not (WEB_PAR_LIVE and LIVE_ANSWER and mode == "time_trial" and attempt == 0 and not resumed
-                and webtarget.is_live_lane(getattr(self, "lane", None))):
+        if not webtarget.is_live_lane(getattr(self, "lane", None)):
+            return self._par_live(cid, mode, attempt, resumed)
+        if not (WEB_PAR_LIVE and LIVE_ANSWER and mode == "time_trial" and attempt == 0 and not resumed):
             return None
         c = getattr(self, "_codify", None)
         if getattr(self, "_web_plugin_pre", False) or (c and getattr(c, "prelanded", False)):
@@ -6508,6 +6551,49 @@ class Chain:
         except Exception as e:  # noqa: BLE001 - the runner path stands on its own
             say(f"[{cid}] parallel live answer not started: {e}")
             return None
+
+    def _par_live(self, cid, mode, attempt, resumed):
+        """Non-web parallel live answer (D26): the first attempt of a TT / Mastery expected without a clock, when a
+        solver gap is predicted. The binder only attaches to a NO-CLOCK attempt (WebParLive._bound), so a clocked pool
+        never gets one."""
+        if not (PAR_LIVE and LIVE_ANSWER and LIVE_FIRST and mode in ("time_trial", "mastery") and attempt == 0
+                and not resumed and self._expect_untimed()):
+            return None
+        why = self._gap_predicted(mode)
+        if not why:
+            return None
+        try:
+            par = WebParLive(self, cid, time.time() - 1.0)
+            par.budget = PAR_LIVE_BUDGET
+            say(f"[{cid}] solver gap predicted ({why}): a live answer races the runner on this attempt "
+                f"(solver capped to {PAR_LIVE_BUDGET:g}s)")
+            return par.start()
+        except Exception as e:  # noqa: BLE001 - the runner path stands on its own
+            say(f"[{cid}] parallel live answer not started: {e}")
+            return None
+
+    def _gap_predicted(self, mode):
+        """Why this chain's solver will probably miss fields of `mode` ('' = no reason): status-time contract-ahead (id
+        shapes new to the lane), artifact kinds the Single doesn't ship, an earlier mode of THIS chain passed only by a
+        live answer, or the lane's same mode needed a live answer / generalize on the previous day. Metadata only."""
+        try:
+            ahead = self._ahead_new(mode)
+            if ahead >= AHEAD_MIN_NEW:
+                return f"{ahead} id shape(s) new to the lane"
+            single = cli.load(self.base, "start.json") or cli.load(self.base, "contract.json") or {}
+            tc = cli.load(f"{self.base}/{mode}", "contract.json") or {}
+            extra = _contract_shape(tc)[1] - _contract_shape(single)[1]
+            if extra:
+                return "artifact kinds the Single doesn't ship: " + ", ".join(f".{e}" for e in sorted(extra))
+            lp = getattr(self, "_live_passed", None)
+            if lp:
+                return f"the {'/'.join(sorted(lp))} passed only by a live answer"
+            prev = _lane_mode_needed_help(self.lane, self.sdir, mode)
+            if prev:
+                return f"the lane's {mode} needed {prev} yesterday"
+        except Exception as e:  # noqa: BLE001 - advisory
+            say(f"[{self.base}] gap prediction note: {e}")
+        return ""
 
     def _web_par_settle(self, cid, par, res):
         """After the runner returns: no new parallel live answer; a runner pass ends a running one; its own pass maps a
@@ -6526,6 +6612,7 @@ class Chain:
             live.passed = True
             self._end_live(live)
             say(f"[{cid}] passed by the parallel live answer (attempt {str(live.attempt)[:8]}; runner said {res})")
+            self.__dict__.setdefault("_live_passed", set()).add(solvers.mode_of(cid))
             return "correct"
         return res
 
