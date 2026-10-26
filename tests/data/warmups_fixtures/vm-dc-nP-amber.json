@@ -1,0 +1,9 @@
+{
+ "codec": "vm-dc",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "78P105P99P101P32P119P111P114P107P32P100P101P99P111P100P105P110P103P32P116P104P105P115P32P119P97P114P109P117P112P33P32P84P111P32P115P111P108P118P101P44P32P115P117P98P109P105P116P32P116P104P105P115P32P101P120P97P99P116P32P97P110P115P119P101P114P32P116P111P32P116P104P101P32P71P97P109P101P32P77P97P115P116P101P114P58P32P97P109P98P101P114P45P102P97P108P99P111P110P45P52P50P",
+ "generator_cmd": "perl -e '@c = unpack \"U*\", $ARGV[0]; print map { \"${_}P\" } @c' \"$plain\"",
+ "oracle_cmd": "tools/vmlangs/usr/bin/dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

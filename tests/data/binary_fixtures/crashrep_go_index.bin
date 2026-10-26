@@ -1,0 +1,7 @@
+panic: runtime error: index out of range [5] with length 3
+
+goroutine 1 [running]:
+main.pick({0x13678ba84f38?, 0x13678b9f8050?, 0x70?}, 0x0?)
+	/home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/g/main.go:3 +0x19
+main.main()
+	/home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/g/main.go:4 +0x46

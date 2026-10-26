@@ -1,0 +1,54 @@
+"""Stdlib struct writer for legacy .evt fixtures (ELF_LOGFILE_HEADER + EVENTLOGRECORD per MS-EVEN / libevt docs)."""
+import struct, sys
+
+def rec(num, tgen, eid, etype, src, comp, strings=(), sid=None):
+    body = bytearray(56)
+    body += (src + "\0").encode("utf-16-le") + (comp + "\0").encode("utf-16-le")
+    while len(body) % 4: body += b"\0"
+    sid_off = sid_len = 0
+    if sid:
+        sid_off, sid_len = len(body), len(sid); body += sid
+        while len(body) % 4: body += b"\0"
+    str_off = len(body)
+    for s in strings: body += (s + "\0").encode("utf-16-le")
+    while len(body) % 4: body += b"\0"
+    data_off = len(body)
+    ln = len(body) + 4
+    struct.pack_into("<6I4H6I", body, 0, ln, 0x654c664c, num, tgen, tgen + 1, eid, etype, len(strings),
+                     0, 0, 0, str_off, sid_len, sid_off, 0, data_off)
+    return bytes(body) + struct.pack("<I", ln)
+
+def eof(begin, end, cur, oldest):
+    return struct.pack("<I", 0x28) + bytes.fromhex("11111111222222223333333344444444") + struct.pack("<IIIII", begin, end, cur, oldest, 0x28)
+
+def header(start, end, cur, oldest, maxsize, flags):
+    return struct.pack("<12I", 0x30, 0x654c664c, 1, 1, start, end, cur, oldest, maxsize, flags, 604800, 0x30)
+
+sid = bytes([1, 2, 0, 0, 0, 0, 0, 5, 32, 0, 0, 0, 32, 2, 0, 0])   # S-1-5-32-544
+which = sys.argv[1]
+if which == "simple":
+    rs = [rec(1, 1700000000, 6005, 4, "EventLog", "WKSTN-07"),
+          rec(2, 1700000060, 0x40001B7C, 4, "Service Control Manager", "WKSTN-07", ["Print Spooler", "running"]),
+          rec(3, 1700000125, 0xC0000403, 1, "Userenv", "WKSTN-07", ["x"], sid)]
+    body = b"".join(rs)
+    endoff = 0x30 + len(body)
+    out = header(0x30, endoff, 4, 1, 0x1000, 0) + body + eof(0x30, endoff, 4, 1)
+    out += b"\0" * (0x1000 - len(out))
+elif which == "wrapped":
+    size = 0x280
+    rs = {n: rec(n, 1700001000 + n * 10, 4624 if n % 2 else 4634, 8, "Security", "DC01" if n < 9 else "DC02", ["u%d" % n]) for n in range(5, 10)}
+    # oldest (5) starts at 0x100; records 5,6 fit; record 7 is split across the end; 8,9 + EOF after the header
+    area = bytearray(size)
+    pos = 0x200
+    for n in range(5, 10):
+        for byte in rs[n]:
+            if pos >= size: pos = 0x30
+            area[pos] = byte; pos += 1
+    endoff = pos
+    for byte in eof(0x200, endoff, 10, 5):
+        if pos >= size: pos = 0x30
+        area[pos] = byte; pos += 1
+    hdr = header(0x200, endoff, 10, 5, size, int(sys.argv[2]) if len(sys.argv) > 2 else 2)
+    area[0:0x30] = hdr
+    out = bytes(area)
+sys.stdout.buffer.write(out)

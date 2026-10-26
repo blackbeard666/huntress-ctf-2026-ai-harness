@@ -1,0 +1,8 @@
+{
+ "field": "eventlog_report.record_count",
+ "expected": "4",
+ "generator_cmd": "python3 csv.writer (Event Viewer 'Save as CSV' layout: Level,Date and Time,Source,Event ID,Task Category + description, UTF-8 BOM, CRLF, multi-line quoted field)",
+ "oracle_cmd": "python3 -c \"import csv,io; r=list(csv.reader(io.open('evviewer.csv',encoding='utf-8-sig',newline=''))); print(len(r)-1)\" -> 4",
+ "decoy": false,
+ "member": "System_report.csv"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "report.event_ids",
+ "expected": "[11707,1000,1033]",
+ "generator_cmd": "printf: wevtutil qe Application /f:text layout (Event[N]: blocks, CRLF; a description line also says 'Event ID: 9999')",
+ "oracle_cmd": "grep -E '^  Event ID:' wevtutil.txt | awk '{print $3}' -> 11707,1000,1033",
+ "decoy": false,
+ "member": "app_events.txt"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "bf-dialect*",
+ "plain": null,
+ "encoded": "-. .. -.-. . / .-- --- .-. -.-",
+ "generator_cmd": "perl -e '%m=(N=>\"-.\",i=>\"..\",c=>\"-.-.\",e=>\".\",w=>\".--\",o=>\"---\",r=>\".-.\",k=>\"-.-\"); print join(\" \", map { $_ eq \" \" ? \"/\" : $m{$_} } split //, \"Nice work\")'",
+ "oracle_cmd": "printf %s \"$encoded\"   # International Morse (dits/dahs, '/' word gap): no Ook word, no 3..8-token BF map",
+ "oracle_plain": "-. .. -.-. . / .-- --- .-. -.-",
+ "decoy": true,
+ "expected": "none"
+}

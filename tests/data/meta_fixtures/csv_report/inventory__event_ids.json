@@ -1,0 +1,8 @@
+{
+ "field": "csv_report.event_ids",
+ "expected": "none",
+ "generator_cmd": "python3 csv.writer name,size,sha256 rows (non-event CSV)",
+ "oracle_cmd": "python3 csv.DictReader -> fieldnames ['name','size','sha256']: no Event ID / Id column",
+ "decoy": true,
+ "member": "report.csv"
+}

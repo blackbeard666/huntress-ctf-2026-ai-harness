@@ -1,0 +1,32 @@
+{
+ "kind": "jvm_niche_facts",
+ "decoy": false,
+ "question": "JRuby AOT unit beacon.rb: primary classfile, Ruby methods, and the class holding the HCFG string?",
+ "encoding": "classfile_cp_base64",
+ "expected_offset": null,
+ "expected": {
+  "niche_language": "jruby",
+  "niche_classes": "[\"beacon$Cfg.class\",\"beacon.class\"]",
+  "niche_class_count": "2",
+  "niche_primary_classfile": "beacon.class",
+  "niche_primary_class": "beacon",
+  "niche_source_file": "beacon.rb",
+  "niche_hcfg_classfile": "beacon$Cfg.class",
+  "niche_hcfg_in_primary": "false",
+  "references_niche_runtime": "true",
+  "jython_module": "none",
+  "jython_code_objects": "none",
+  "jruby_methods": "[\"connect\",\"decode\"]",
+  "ceylon_module_class": "none",
+  "ceylon_module": "none",
+  "kotlin_script_class": "none",
+  "kotlin_script_base": "none"
+ },
+ "expected_config": {
+  "c2": "https://niche.example/gate",
+  "id": "day27-niche"
+ },
+ "generator_cmd": "bash jvmniche_gen.sh   # javac/jar OpenJDK 21 against stub runtime classes (not packed); SourceFile Utf8 renamed by stdlib; HCFG base64 via coreutils base64 -w0",
+ "oracle_cmd": "python3 jvmniche_oracle.py jvmniche_jruby_jar.bin --unit beacon.rb   # unzip -Z1/-p + javap -v -p text (OpenJDK 21); HCFG via stdlib base64+crc32",
+ "note": "beacon extends AbstractScript with RUBY$script/RUBY$method$*; HCFG in helper beacon$Cfg (not primary)"
+}

@@ -1,0 +1,10 @@
+{
+ "codec": "deadfish*",
+ "plain": null,
+ "encoded": "XKCD dxkc ccd kxd",
+ "generator_cmd": "printf %s 'XKCD dxkc ccd kxd'",
+ "oracle_cmd": "node tests/data/warmups_fixtures/deadfish_oracle.mjs xkcd   # -> exits 1: letters of the XKCD set that print control bytes",
+ "oracle_plain": "XKCD dxkc ccd kxd",
+ "decoy": true,
+ "expected": "none"
+}

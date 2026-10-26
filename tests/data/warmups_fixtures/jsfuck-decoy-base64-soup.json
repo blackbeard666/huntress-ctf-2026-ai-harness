@@ -1,0 +1,9 @@
+{
+ "codec": "jsfuck*",
+ "plain": null,
+ "encoded": "TmljZSB3b3JrIGRlY29kaW5nIHRoaXMgd2FybXVwISBUbyBzb2x2ZSwgc3VibWl0IHRoaXMgZXhhY3QgYW5zd2VyIHRvIHRoZSBHYW1lIE1hc3RlcjogbWFwbGUtdmlwZXItMzE=",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "python3 -c 'import base64,sys; print(base64.b64encode(sys.argv[1].encode()).decode())' \"$plain\"",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/node/bin/node tests/data/warmups_fixtures/jsfuck_oracle.js  # throws (exit 1): not a JSFuck program"
+}

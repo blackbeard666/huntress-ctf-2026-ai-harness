@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-F9259BBFFDAE567C",
+ "decoy": false,
+ "_why": "D26 v2 split read (rows 58, 102): base Release.code(Context) -> Assets.readSplit(ctx, \"huntress_feature.bin\") walks getApplicationInfo().splitSourceDirs with java.util.zip.ZipFile, getEntry null -> close + next (feature_a lacks it), 16 B via read(buf, off, len) loop from feature_b, ByteBuffer.wrap(b).order(BIG_ENDIAN).getLong() x2 folded by Util.mergeFeatureHi/Lo",
+ "generator_cmd": "python3 tests/data/android_fixtures/split_src/gen_split.py zip_two_splits tests/data/android_fixtures/splitread_zip_two_splits.apks && mv tests/data/android_fixtures/splitread_zip_two_splits.apks tests/data/android_fixtures/splitread_zip_two_splits.zip  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool aapt2 link (base / split=\"feature_x\" manifests) + zipfile (assets, classes.dex) + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml <member>` for split= names (base = no split), then java -Dctx.base=<base.apk> -Dctx.splits=<split paths in bundle order> -Dctx.names=<split names> -cp <javac out> com.huntress.arena.split1.Probe runs Release.code(new Context()) on the host JVM, real java.util.zip.ZipFile over the extracted members -> ANS-F9259BBFFDAE567C"
+}

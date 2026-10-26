@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-9F5B1B6F3137F75A",
+ "decoy": false,
+ "_why": "split-config-device-select (rows 58, 104): split_config.{arm64_v8a,x86_64,xhdpi,xxhdpi,fr,en}.apk each carry a {part, part_index} fragment, decoys first in bundle order; the pinned x86_64 / 420 dpi / en-US device installs x86_64 + xxhdpi + en (all-splits first-fill would pick the arm64/xhdpi/fr decoys)",
+ "generator_cmd": "python3 tests/data/android_fixtures/cfgsplit_src/gen_cfgsplit.py abi_dpi_lang tests/data/android_fixtures/cfgsplit_abi_dpi_lang.zip  # apktool-bundled aapt2 link -I android-framework.jar (split= / configForSplit / android:isFeatureSplit manifests) + python zipfile assets + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml <member>` for split= / configForSplit, install set from the script's own device table (x86_64>x86>arm64_v8a, smallest density >= 420 dpi else largest below, language en; base + feature splits always), `unzip -p <member> assets/huntress_split.json` fragments into the base puzzle slots -> ANS-9F5B1B6F3137F75A"
+}

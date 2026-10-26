@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.host_of_svchost_exe_1234abcd_pf",
+ "expected": "SRV-DB01",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/synthesis/GENERATOR_prefetch_hosts.py.txt $T -> pfhost_a.zip (stdlib SCCA v23/v26/v30 + MAM\\x04 Xpress-Huffman writer from ../prefetch/GENERATOR_prefetch.py.txt, pylnk3 LinkInfo VolumeID + TrackerDataBlock shortcuts, stdlib zipfile)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/ORACLE_prefetch_hosts.py.txt pfhost_a.zip (libyal pyscca volume serial/device path/creation time/last runs + dissect.util lzxpress_huffman + LnkParse3 drive_serial_number/machine_identifier; key 'host_of_svchost_exe_1234abcd_pf')",
+ "decoy": false
+}

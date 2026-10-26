@@ -149,6 +149,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Out of Bounds"
   },
+  "binary-reverse-engineering-day-26-crash-triage": {
+    "day": 26,
+    "dir": "day26/binary-crash-course",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Crash Course"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -299,6 +305,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Hive Mind"
   },
+  "metadata-forensics-day-26-before-you-go": {
+    "day": 26,
+    "dir": "day26/metadata-before-you-go",
+    "lane": "metadata-forensics",
+    "name": "🔎 Before You Go"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -448,6 +460,12 @@
     "dir": "day25/mobile-integrity-signals",
     "lane": "mobile-android",
     "name": "📱 Integrity Signals"
+  },
+  "mobile-android-day-26-split-decision": {
+    "day": 26,
+    "dir": "day26/mobile-split-decision",
+    "lane": "mobile-android",
+    "name": "📱 Split Decision"
   },
   "read-the-rules": {
     "day": 1,
@@ -605,6 +623,12 @@
     "lane": "script-analysis",
     "name": "📜 Ashes to Assets"
   },
+  "script-analysis-day-26-beam-message-flow": {
+    "day": 26,
+    "dir": "day26/scripting-mixed-signals",
+    "lane": "script-analysis",
+    "name": "📜 Mixed Signals"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -755,6 +779,12 @@
     "lane": "warmups",
     "name": "👶 You Have a Point"
   },
+  "warmups-day-26": {
+    "day": 26,
+    "dir": "day26/warmups-food-for-thought",
+    "lane": "warmups",
+    "name": "👶 Food for Thought"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -862,6 +892,18 @@
     "dir": "day25/web-resolver-revolt",
     "lane": "web",
     "name": "🌐 Resolver Revolt"
+  },
+  "web-exploitation-day-19-trust-the-webhook": {
+    "day": 26,
+    "dir": "day26/web-trust-the-webhook",
+    "lane": "web",
+    "name": "🌐 Trust the Webhook"
+  },
+  "web-exploitation-day-20-serialized-offender": {
+    "day": 26,
+    "dir": "day26/web-serialized-offender",
+    "lane": "web",
+    "name": "🌐 Serialized Offender"
   },
   "welcome-robots": {
     "day": 1,

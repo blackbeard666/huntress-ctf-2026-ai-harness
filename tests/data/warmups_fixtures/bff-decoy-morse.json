@@ -1,0 +1,10 @@
+{
+ "codec": "bf-full*",
+ "plain": null,
+ "encoded": "-. .. -.-. . / .-- --- .-. -.- / -.. . -.-. --- -.. .. -. --.",
+ "generator_cmd": "printf %s '-. .. -.-. . / .-- --- .-. -.- / -.. . -.-. --- -.. .. -. --.'",
+ "oracle_cmd": "node tests/data/warmups_fixtures/bff_oracle.mjs   # -> junk bytes (Morse '.'/'-' run as BF prints 0xff..): not claimed",
+ "oracle_plain": "",
+ "decoy": true,
+ "expected": "none"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "jmx",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/jvmpair_gen.py  (jvmpair_jmx_decoy_unresolved)",
+ "oracle_cmd": "python3 -I -c 'import sys,xml.etree.ElementTree as E; print([e.text for e in E.parse(sys.argv[1]).iter(\"stringProp\") if e.get(\"name\")==\"Argument.name\"])' tests/data/script_fixtures/jvmpair_jmx_decoy_unresolved.jmx  # dpMissing is never defined: the descriptor never resolves to a plan"
+}

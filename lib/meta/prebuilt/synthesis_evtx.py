@@ -18,7 +18,8 @@ Fields (names verbatim as listed / stored in the zip; lists and maps -> compact 
   record_count_order = names by walked record count ascending, ties by name ("descending" in the text reverses);
   earliest_member / latest_member = the log whose FIRST written time (record header FILETIME, lowest id) is the
     earliest / latest, ties by name.
-A set with no ElfFile member but >= 1 regf hive hands host_groups / *_by_host / earliest / latest to synthesis_regf.py."""
+A set with >= 1 prefetch trace hands host_groups / host_group_map / files_by_host to synthesis_prefetch.py;
+a set with no ElfFile member but >= 1 regf hive hands host_groups / *_by_host / earliest / latest to synthesis_regf.py."""
 import re
 import struct
 
@@ -172,6 +173,10 @@ def evtx_synthesis_value(data, ctx):
         q = ctx.get("question")
         text = re.sub(r"Files:\s*\[.*?\]", "", str((q.get("question") if isinstance(q, dict) else q) or ""), flags=re.S)
         field = ctx.get("field") or ""
+        if field in ("host_groups", "host_group_map", "files_by_host"):
+            from .synthesis_prefetch import any_trace, prefetch_synthesis_value
+            if any_trace(names, read):
+                return prefetch_synthesis_value(data, ctx)   # prefetch traces: the cross-trace host synthesis
         if field.startswith(("host", "computer", "logs_by", "files_by", "earliest", "latest")):
             from .synthesis_regf import any_regf, regf_synthesis_value
             if not any(bytes((read(n) or b"")[:8]) == b"ElfFile\x00" for n in names) and any_regf(names, read):

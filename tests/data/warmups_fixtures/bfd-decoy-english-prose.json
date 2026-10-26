@@ -1,0 +1,10 @@
+{
+ "codec": "bf-dialect*",
+ "plain": null,
+ "encoded": "Ook. Ook? said the librarian, and the orangutan went back to sorting the stacks.",
+ "generator_cmd": "printf %s 'Ook. Ook? said the librarian, and the orangutan went back to sorting the stacks.'",
+ "oracle_cmd": "node tests/data/warmups_fixtures/bfd_oracle.mjs ook   # -> throws: the marks pair into a junk program, the line is prose",
+ "oracle_plain": "Ook. Ook? said the librarian, and the orangutan went back to sorting the stacks.",
+ "decoy": true,
+ "expected": "none"
+}

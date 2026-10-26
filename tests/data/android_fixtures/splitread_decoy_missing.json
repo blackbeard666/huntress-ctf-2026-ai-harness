@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: zip_two_splits layout but neither split ships assets/huntress_feature.bin (feature_b has huntress_feature.bln) -> readSplit throws FileNotFoundException, no token",
+ "generator_cmd": "python3 tests/data/android_fixtures/split_src/gen_split.py decoy_missing tests/data/android_fixtures/splitread_decoy_missing.apks && mv tests/data/android_fixtures/splitread_decoy_missing.apks tests/data/android_fixtures/splitread_decoy_missing.zip  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool aapt2 link (base / split=\"feature_x\" manifests) + zipfile (assets, classes.dex) + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml <member>` for split= names (base = no split), then java -Dctx.base=<base.apk> -Dctx.splits=<split paths in bundle order> -Dctx.names=<split names> -cp <javac out> com.huntress.arena.split3.Probe runs Release.code(new Context()) on the host JVM, real java.util.zip.ZipFile over the extracted members -> java.io.FileNotFoundException: huntress_feature.bin (no token)"
+}

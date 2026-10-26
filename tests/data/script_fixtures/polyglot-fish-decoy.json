@@ -1,0 +1,10 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "language": "fish",
+ "role": "decoy",
+ "family": "polyglot-fish",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/zf_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/polyglot-fish-decoy.fish | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:B64-//' | base64 -d",
+ "oracle_stdout": "status=ok;inert-analysis-fixture;no plan here"
+}

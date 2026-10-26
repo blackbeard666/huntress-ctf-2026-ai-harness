@@ -1,0 +1,184 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGSEGV (0xb) at pc=0x00007f3dfd85adc5, pid=2473239, tid=2473240
+#
+# JRE version: OpenJDK Runtime Environment (25.0.4.1+1) (build 25.0.4.1+1-1-26.04.4-Ubuntu)
+# Java VM: OpenJDK 64-Bit Server VM (25.0.4.1+1-1-26.04.4-Ubuntu, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, linux-amd64)
+# Problematic frame:
+# V  [libjvm.so+0x125adc5]  Unsafe_PutLong+0xb5
+#
+# CreateCoredumpOnCrash turned off, no core file dumped
+#
+# If you would like to submit a bug report, please visit:
+#   https://bugs.launchpad.net/ubuntu/+source/openjdk-25
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -XX:ErrorFile=/home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/hs_err_pid%p.log -XX:-CreateCoredumpOnCrash Unsafe
+
+Host: 12th Gen Intel(R) Core(TM) i7-1255U, 12 cores, 7G, Ubuntu 26.04 LTS
+Time: Mon Oct 26 23:08:18 2026 PST elapsed time: 0.074585 seconds (0d 0h 0m 0s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x00007f3df8019170):  JavaThread "main"             [_thread_in_vm, id=2473240, stack(0x00007f3dfc500000,0x00007f3dfc600000) (1024K)]
+
+Stack: [0x00007f3dfc500000,0x00007f3dfc600000],  sp=0x00007f3dfc5fe680,  free space=1017k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+V  [libjvm.so+0x125adc5]  Unsafe_PutLong+0xb5
+j  jdk.internal.misc.Unsafe.putLong(Ljava/lang/Object;JJ)V+0 java.base@25.0.4.1
+j  jdk.internal.misc.Unsafe.putAddress(Ljava/lang/Object;JJ)V+24 java.base@25.0.4.1
+j  jdk.internal.misc.Unsafe.putAddress(JJ)V+4 java.base@25.0.4.1
+j  sun.misc.Unsafe.putAddress(JJ)V+8 jdk.unsupported@25.0.4.1
+j  Unsafe.main([Ljava/lang/String;)V+27
+v  ~StubRoutines::call_stub 0x00007f3de7b36fa6
+V  [libjvm.so+0xa357d5]  JavaCalls::call_helper(JavaValue*, methodHandle const&, JavaCallArguments*, JavaThread*)+0x295
+V  [libjvm.so+0xafe6a4]  jni_invoke_static(JNIEnv_*, JavaValue*, _jobject*, JNICallType, _jmethodID*, JNI_ArgumentPusher*, JavaThread*) [clone .constprop.1]+0x354
+V  [libjvm.so+0xb10df3]  jni_CallStaticVoidMethod+0x243
+C  [libjli.so+0x400e]  invokeStaticMainWithArgs+0x4e
+C  [libjli.so+0x512d]  JavaMain+0xf3d
+C  [libjli.so+0x888d]  ThreadJavaMain+0xd
+C  [libc.so.6+0xa3dfa]
+Java frames: (J=compiled Java code, j=interpreted, Vv=VM code)
+j  jdk.internal.misc.Unsafe.putLong(Ljava/lang/Object;JJ)V+0 java.base@25.0.4.1
+j  jdk.internal.misc.Unsafe.putAddress(Ljava/lang/Object;JJ)V+24 java.base@25.0.4.1
+j  jdk.internal.misc.Unsafe.putAddress(JJ)V+4 java.base@25.0.4.1
+j  sun.misc.Unsafe.putAddress(JJ)V+8 jdk.unsupported@25.0.4.1
+j  Unsafe.main([Ljava/lang/String;)V+27
+v  ~StubRoutines::call_stub 0x00007f3de7b36fa6
+
+siginfo: si_signo: 11 (SIGSEGV), si_code: 1 (SEGV_MAPERR), si_addr: 0x0000000000000010
+
+Registers:
+RAX=0x0000000000000000, RBX=0x00007f3df8019170, RCX=0x0000000000000010, RDX=0x0000000000000000
+RSP=0x00007f3dfc5fe680, RBP=0x00007f3dfc5fe6a0, RSI=0x00007f3dfc5fe770, RDI=0x00007f3df80197d0
+R8 =0x0000000000000001, R9 =0x00007f3df801afc0, R10=0x00007f3de7b4301e, R11=0x0000000000000101
+R12=0x0000000000000001, R13=0x0000000000000000, R14=0x0000000000000010, R15=0x00007f3df8019170
+RIP=0x00007f3dfd85adc5, EFLAGS=0x0000000000010202, CSGSFS=0x002b000000000033, ERR=0x0000000000000006
+  TRAPNO=0x000000000000000e
+
+XMM[0]=0x0f4800f87e8349d2 0x33f8468d49368d49
+XMM[1]=0x4e8b49d0450f4800 0xf87e8349d233f846
+XMM[2]=0x00007f3df801aa98 0x00007f3df801aa80
+XMM[3]=0x72656469736e6f63 0x20657361656c5020
+XMM[4]=0x656e6961746e6961 0x6d20656874206f74
+XMM[5]=0x61206e6920646576 0x6f6d657220656220
+XMM[6]=0x3a656661736e552e 0x6373696d2e6e7573
+XMM[7]=0x207373616c632066 0x6f207372656e6961
+XMM[8]=0x7420676e6974726f 0x7065722072656469
+XMM[9]=0xffffffffffffffff 0xffffffffffffffff
+XMM[10]=0x0000000000000001 0x0000000000000001
+XMM[11]=0x0000000000000000 0x9999999999999999
+XMM[12]=0x0000000000000000 0x2020202020202020
+XMM[13]=0x0000000000000000 0x0000000000fe00fa
+XMM[14]=0x0000000000000000 0x0000000000000000
+XMM[15]=0x0000000000000000 0x0000000000000000
+  MXCSR=0x00001fa2
+
+
+Register to memory mapping:
+
+RAX=0x0 is null
+RBX=0x00007f3df8019170 is a thread
+RCX=0x0000000000000010 is an unknown value
+RDX=0x0 is null
+RSP=0x00007f3dfc5fe680 is pointing into the stack for thread: 0x00007f3df8019170
+RBP=0x00007f3dfc5fe6a0 is pointing into the stack for thread: 0x00007f3df8019170
+RSI=0x00007f3dfc5fe770 is pointing into the stack for thread: 0x00007f3df8019170
+RDI=0x00007f3df80197d0 points into unknown readable memory: 0x00007f3df8019170 | 70 91 01 f8 3d 7f 00 00
+R8 =0x0000000000000001 is an unknown value
+R9 =0x00007f3df801afc0 points into unknown readable memory: 0x00007f3db4400328 | 28 03 40 b4 3d 7f 00 00
+R10=0x00007f3de7b4301e is at code_begin+1150 in an Interpreter codelet
+native method entry point (kind = native)  [0x00007f3de7b42ba0, 0x00007f3de7b436d8]  2872 bytes
+R11=0x0000000000000101 is an unknown value
+R12=0x0000000000000001 is an unknown value
+R13=0x0 is null
+R14=0x0000000000000010 is an unknown value
+R15=0x00007f3df8019170 is a thread
+
+Top of Stack: (sp=0x00007f3dfc5fe680)
+0x00007f3dfc5fe680:   000000001c1db5b8 0000000000000000   ................
+0x00007f3dfc5fe690:   000000001c7c6210 00007f3dfc5fe770   .b|.....p._.=...
+0x00007f3dfc5fe6a0:   00007f3dfc5fe728 00007f3de7b42f85   (._.=..../..=...
+0x00007f3dfc5fe6b0:   000000001c1db5b8 0000000000000000   ................
+0x00007f3dfc5fe6c0:   00007f3dfc5fe728 00007f3de7b42c83   (._.=....,..=...
+0x00007f3dfc5fe6d0:   000000001c1debc0 00007f3de7b42c4b   ........K,..=...
+0x00007f3dfc5fe6e0:   fffffffffffffff7 000000001c7c6210   .........b|.....
+0x00007f3dfc5fe6f0:   0000000000000009 000000001c1da6c8   ................
+0x00007f3dfc5fe700:   0000000000000000 00000000ffe889c0   ................
+0x00007f3dfc5fe710:   000000001c1db5b8 0000000000000000   ................
+0x00007f3dfc5fe720:   00007f3dfc5fe748 00007f3dfc5fe7c0   H._.=....._.=...
+0x00007f3dfc5fe730:   00007f3de7b3e438 0000000000000000   8...=...........
+0x00007f3dfc5fe740:   00007f3de7b40437 0000000000000001   7...=...........
+0x00007f3dfc5fe750:   0000000000000000 0000000000000010   ................
+0x00007f3dfc5fe760:   0000000000000000 0000000000000000   ................
+0x00007f3dfc5fe770:   000000008db03300 fffffffffffffff7   .3..............
+0x00007f3dfc5fe780:   000000001c7cab50 0000000000000007   P.|.............
+0x00007f3dfc5fe790:   000000001c1da6c8 0000000000000000   ................
+0x00007f3dfc5fe7a0:   00000000ffe889c0 000000001c1debc0   ................
+0x00007f3dfc5fe7b0:   fffffffffffffff1 00007f3dfc5fe7d0   .........._.=...
+0x00007f3dfc5fe7c0:   00007f3dfc5fe848 00007f3de7b3e438   H._.=...8...=...
+0x00007f3dfc5fe7d0:   0000000000000001 0000000000000000   ................
+0x00007f3dfc5fe7e0:   0000000000000010 0000000000000000   ................
+0x00007f3dfc5fe7f0:   0000000000000000 000000008db03300   .........3......
+0x00007f3dfc5fe800:   fffffffffffffff7 000000001c7cabd4   ..........|.....
+0x00007f3dfc5fe810:   0000000000000006 000000001c1da6c8   ................
+0x00007f3dfc5fe820:   0000000000000000 00000000ffe889c0   ................
+0x00007f3dfc5fe830:   000000001c1dec18 fffffffffffffff1   ................
+0x00007f3dfc5fe840:   00007f3dfc5fe858 00007f3dfc5fe8c8   X._.=....._.=...
+0x00007f3dfc5fe850:   00007f3de7b3e438 0000000000000001   8...=...........
+0x00007f3dfc5fe860:   0000000000000000 0000000000000010   ................
+0x00007f3dfc5fe870:   0000000000000000 000000008db03300   .........3......
+
+Instructions: (pc=0x00007f3dfd85adc5)
+  0x00007f3dfd85acc5:   0f 1f 00 48 8b bb a8 01 00 00 e8 5c 37 8d ff 48
+  0x00007f3dfd85acd5:   8d bb 80 04 00 00 e8 40 87 64 ff c7 83 2c 05 00
+  0x00007f3dfd85ace5:   00 04 00 00 00 5b 41 5c 41 5d 41 5e 5d c3 0f 1f
+  0x00007f3dfd85acf5:   44 00 00 49 8d 7c 24 fe ff 15 0d f3 51 00 e9 f5
+  0x00007f3dfd85ad05:   fe ff ff 0f 1f 84 00 00 00 00 00 f3 0f 1e fa 55
+  0x00007f3dfd85ad15:   48 89 e5 41 56 49 89 ce 41 55 49 89 d5 41 54 4d
+  0x00007f3dfd85ad25:   89 c4 53 48 8d 9f 60 fb ff ff 8b 83 40 05 00 00
+  0x00007f3dfd85ad35:   2d ad de 00 00 83 f8 01 0f 86 35 01 00 00 48 8d
+  0x00007f3dfd85ad45:   05 76 3b 56 00 80 38 00 c7 83 2c 05 00 00 06 00
+  0x00007f3dfd85ad55:   00 00 75 05 f0 83 04 24 00 48 8b 43 28 a8 01 0f
+  0x00007f3dfd85ad65:   85 f6 00 00 00 8b 83 28 05 00 00 a8 08 0f 85 d8
+  0x00007f3dfd85ad75:   00 00 00 c7 83 2c 05 00 00 06 00 00 00 48 8d bb
+  0x00007f3dfd85ad85:   60 06 00 00 e8 e2 c4 76 ff 84 c0 0f 85 f2 00 00
+  0x00007f3dfd85ad95:   00 31 c0 4d 85 ed 74 1e 4c 89 e8 83 e0 03 48 83
+  0x00007f3dfd85ada5:   f8 01 0f 84 8b 00 00 00 48 83 f8 02 0f 84 01 01
+  0x00007f3dfd85adb5:   00 00 49 8b 45 00 49 01 c6 c6 83 48 05 00 00 01
+=>0x00007f3dfd85adc5:   4d 89 26 4c 8b a3 a8 01 00 00 c6 83 48 05 00 00
+  0x00007f3dfd85add5:   00 49 8b 54 24 10 48 83 3a 00 74 0d 4c 89 e7 e8
+  0x00007f3dfd85ade5:   17 b6 76 ff 49 8b 54 24 10 49 8b 4c 24 08 48 8d
+  0x00007f3dfd85adf5:   bb 80 04 00 00 48 89 51 18 49 8b 54 24 08 49 8b
+  0x00007f3dfd85ae05:   4c 24 18 48 89 4a 20 49 8b 54 24 08 49 8b 44 24
+  0x00007f3dfd85ae15:   20 48 89 42 28 e8 01 86 64 ff c7 83 2c 05 00 00
+  0x00007f3dfd85ae25:   04 00 00 00 5b 41 5c 41 5d 41 5e 5d c3 66 0f 1f
+  0x00007f3dfd85ae35:   44 00 00 49 8d 7d ff ff 15 0e 42 52 00 e9 74 ff
+  0x00007f3dfd85ae45:   ff ff 66 0f 1f 84 00 00 00 00 00 48 89 df e8 28
+  0x00007f3dfd85ae55:   7b 7f ff e9 1b ff ff ff 0f 1f 00 31 d2 be 01 00
+  0x00007f3dfd85ae65:   00 00 48 89 df e8 21 3e d0 ff e9 f6 fe ff ff 0f
+  0x00007f3dfd85ae75:   1f 40 00 48 89 df e8 c0 66 7f ff e9 be fe ff ff
+  0x00007f3dfd85ae85:   0f 1f 00 48 8b bb a8 01 00 00 e8 9c 35 8d ff 48
+  0x00007f3dfd85ae95:   8d bb 80 04 00 00 e8 80 85 64 ff c7 83 2c 05 00
+  0x00007f3dfd85aea5:   00 04 00 00 00 5b 41 5c 41 5d 41 5e 5d c3 0f 1f
+  0x00007f3dfd85aeb5:   44 00 00 49 8d 7d fe ff 15 4e f1 51 00 e9 f4 fe
+
+
+Stack slot to memory mapping:
+
+stack at sp + 0 slots: {method} {0x000000001c1db5b8} 'putLong' '(Ljava/lang/Object;JJ)V' in 'jdk/internal/misc/Unsafe'
+stack at sp + 1 slots: 0x0 is null
+stack at sp + 2 slots: 0x000000001c7c6210 is pointing into metadata
+stack at sp + 3 slots: 0x00007f3dfc5fe770 is pointing into the stack for thread: 0x00007f3df8019170
+stack at sp + 4 slots: 0x00007f3dfc5fe728 is pointing into the stack for thread: 0x00007f3df8019170
+stack at sp + 5 slots: 0x00007f3de7b42f85 is at code_begin+997 in an Interpreter codelet
+native method entry point (kind = native)  [0x00007f3de7b42ba0, 0x00007f3de7b436d8]  2872 bytes
+stack at sp + 6 slots: {method} {0x000000001c1db5b8} 'putLong' '(Ljava/lang/Object;JJ)V' in 'jdk/internal/misc/Unsafe'
+stack at sp + 7 slots: 0x0 is null
+
+Lock stack of current Java thread (top to bottom):
+
+

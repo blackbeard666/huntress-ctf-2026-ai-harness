@@ -1,0 +1,10 @@
+{
+ "codec": "deadfish*",
+ "plain": null,
+ "encoded": "dido is odd so i do did so ids odds",
+ "generator_cmd": "printf %s 'dido is odd so i do did so ids odds'",
+ "oracle_cmd": "node tests/data/warmups_fixtures/deadfish_oracle.mjs idso   # -> exits 1: English words of i/d/s/o print control bytes, not text",
+ "oracle_plain": "dido is odd so i do did so ids odds",
+ "decoy": true,
+ "expected": "none"
+}

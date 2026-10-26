@@ -1,0 +1,7 @@
+{
+ "entry": "extract_answer",
+ "expected": "ANS-b70f2d9e4c18a536",
+ "_why": "Janus polyglot (rows 62, 105): prepended dex holds base64(token) in a const-string (no literal); classes.dex has a LITERAL zip-view decoy ANS-6f2b90c4e7a1d385 that raw_entry_scan / dex_strings would return first without the runtime-view decision",
+ "generator_cmd": "python3 tests/data/android_fixtures/janus_src/gen_janus.py prepended_b64 tests/data/android_fixtures/janus_prepended_b64.apk  # javac --release 8 + dex2jar d2j-jar2dex; Info-ZIP zip -X base APK (minSdk 23, v1-only); cat payload.dex base.apk; zip -A; file_size patched; d2j-dex-recompute-checksum",
+ "oracle_cmd": "head -c 8 janus_prepended_b64.apk | xxd; unzip -tq janus_prepended_b64.apk; python3 -I -c \"import sys,struct,base64,re; from androguard.core.dex import DEX; b=open(sys.argv[1],'rb').read(); o=0 if b[:4]==b'dex\\n' else b.rfind(b'dex\\n0'); d=b[o:]; d=d[:struct.unpack_from('<I',d,0x20)[0]]; ss=list(DEX(d).get_strings()); print(o,[s for s in ss if 'ANS' in s],[base64.b64decode(s) for s in ss if re.fullmatch(r'[A-Za-z0-9+/]{20,}={0,2}',s)])\" janus_prepended_b64.apk"
+}

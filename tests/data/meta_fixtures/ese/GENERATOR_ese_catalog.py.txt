@@ -1,0 +1,230 @@
+"""Stdlib struct writer for synthetic ESE (JET Blue) databases WITH a catalog -- no Windows ESE engine on this host.
+Layout = open-source ESE daedef.hxx / cpage.hxx / node.hxx (DBFILEHDR, PGHDR(+PGHDR2 for > 8 KiB pages), TAG
+array at the page end, RECHDR fixed/variable/tagged record format) -- the structures dissect.esedb reads.
+Logical page n at (n+1)*page_size; MSysObjects FDP root = logical page 4.
+Usage: python3 -I GENERATOR_ese_catalog.py.txt <outdir>"""
+import os
+import struct
+import sys
+
+LEAF, ROOT, PARENT, NEWFMT = 0x2, 0x1, 0x4, 0x2800   # fPageNewRecordFormat 0x800 | fPageNewChecksumFormat 0x2000
+SID = bytes([1, 5, 0, 0, 0, 0, 0, 5]) + struct.pack("<5I", 21, 1004336348, 1177238915, 682003330, 1001)
+
+
+def header(ps):
+    h = bytearray(ps)
+    struct.pack_into("<IIIiQ", h, 0, 0, 0x89ABCDEF, 0x620, 0, 0x4242)
+    struct.pack_into("<I", h, 24, 0x5EED1234)
+    h[28:36] = bytes([30, 20, 10, 15, 3, 124, 0, 0])
+    struct.pack_into("<I", h, 52, 3)
+    struct.pack_into("<I", h, 104, 1)
+    struct.pack_into("<IIII", h, 216, 10, 0, 19041, 0)
+    struct.pack_into("<II", h, 232, 0x14, ps)
+    x = 0x89ABCDEF
+    for (w,) in struct.iter_unpack("<I", bytes(h[4:4096])):
+        x ^= w
+    struct.pack_into("<I", h, 0, x)
+    return h
+
+
+def sevenbit(text, wide):
+    """ESE 7-bit compression of an ASCII string (JET compression scheme 1 = 7BITASCII, 2 = 7BITUNICODE)."""
+    out, val, shift = bytearray(), 0, 0
+    for ch in text.encode("ascii"):
+        val |= (ch & 0x7F) << shift
+        shift += 7
+        while shift >= 8:
+            out.append(val & 0xFF)
+            val >>= 8
+            shift -= 8
+    if shift:
+        out.append(val & 0xFF)
+    return bytes([((2 if wide else 1) << 3) | ((shift or 8) - 1)]) + bytes(out)
+
+
+class Rec:
+    """fixed: [(width, bytes|None)] ids 1..n; var: [bytes|None] ids 128..; tagged: [(id, bytes, hdrflags)]"""
+
+    def __init__(self, fixed=(), var=(), tagged=()):
+        self.fixed, self.var, self.tagged = list(fixed), list(var), list(tagged)
+
+    def build(self, small):
+        fd = b"".join((v if v is not None else bytes(w)) for w, v in self.fixed)
+        nbm = (len(self.fixed) + 7) // 8
+        bm = bytearray(nbm)
+        for i, (_w, v) in enumerate(self.fixed):
+            if v is None:
+                bm[i // 8] |= 1 << (i % 8)
+        ibend = 4 + len(fd) + nbm
+        offs, vdata = [], b""
+        for v in self.var:
+            if v is None:
+                offs.append(len(vdata) | 0x8000)
+            else:
+                vdata += v
+                offs.append(len(vdata))
+        vlast = 127 + len(self.var)
+        tarr, tdata = b"", b""
+        n = len(self.tagged)
+        for cid, val, hf in sorted(self.tagged):
+            ib = 4 * n + len(tdata)
+            if small:
+                ib |= 0x4000           # fExtendedInfo: one TAGFLD_HEADER byte precedes the value
+            tarr += struct.pack("<HH", cid, ib)
+            tdata += bytes([hf]) + val
+        return struct.pack("<BBH", len(self.fixed), vlast, ibend) + fd + bytes(bm) + \
+            b"".join(struct.pack("<H", o) for o in offs) + vdata + tarr + tdata
+
+
+def page(ps, flags, nodes, objid, nxt=0, prev=0):
+    """nodes: [(key, data)] -> one page; tag 0 = 16-byte external header (empty on non-root pages)."""
+    small = ps <= 8192
+    start = 40 if small else 80
+    ext = bytes(16) if flags & ROOT else b""
+    blobs = [ext] + [struct.pack("<H", len(k)) + k + d for k, d in nodes]
+    buf = bytearray(ps)
+    data, tags = b"", []
+    for b in blobs:
+        tags.append((len(b), len(data)))
+        data += b
+    assert start + len(data) + 4 * len(tags) <= ps, "page overflow"
+    buf[start:start + len(data)] = data
+    for i, (cb, ib) in enumerate(tags):
+        struct.pack_into("<HH", buf, ps - 4 * (i + 1), cb, ib)
+    struct.pack_into("<QQIIIHHHHI", buf, 0, 0, 0x4242, prev, nxt, objid,
+                     ps - start - len(data) - 4 * len(tags), 0, len(data), len(tags), flags | NEWFMT)
+    return buf
+
+
+def i32(v):
+    return struct.pack("<i", v)
+
+
+def text16(s):
+    return s.encode("utf-16-le")
+
+
+def catalog_records(tables):
+    """tables: [(name, objid, pgno, [(colid, name, coltyp, size, codepage)])] -> catalog leaf nodes."""
+    nodes = []
+    for name, objid, pgno, cols in tables:
+        recs = [(1, objid, pgno, 0, 0, name)] + [(2, cid, ct, sz, cp, cn) for cid, cn, ct, sz, cp in cols]
+        for typ, rid, colpg, space, pages, nm in recs:
+            r = Rec(fixed=[(4, i32(objid)), (2, struct.pack("<H", typ)), (4, i32(rid)), (4, i32(colpg)),
+                           (4, i32(space)), (4, i32(0)), (4, i32(pages))], var=[nm.encode("ascii")])
+            nodes.append((struct.pack(">IHI", objid, typ, rid), r))
+    return nodes
+
+
+def database(ps, tables, rows, split=()):
+    """rows: {table name: [Rec]}; tables whose name is in `split` get a branch root over two leaf pages."""
+    small = ps <= 8192
+    pages = {}
+    nxt_free = [10]
+
+    def alloc():
+        p = nxt_free[0]
+        nxt_free[0] += 1
+        return p
+
+    tdefs = []
+    for name, objid, cols in tables:
+        pg = 4 if name == "MSysObjects" else alloc()
+        tdefs.append((name, objid, pg, cols))
+    cat = catalog_records(tdefs)
+    pages[4] = page(ps, ROOT | LEAF, [(k, r.build(small)) for k, r in cat], 2)
+    for name, objid, pg, cols in tdefs:
+        if name == "MSysObjects":
+            continue
+        recs = [(struct.pack(">I", i + 1), r.build(small)) for i, r in enumerate(rows.get(name, []))]
+        if name in split and len(recs) >= 2:
+            a, b = alloc(), alloc()
+            half = len(recs) // 2
+            pages[a] = page(ps, LEAF, recs[:half], objid, nxt=b)
+            pages[b] = page(ps, LEAF, recs[half:], objid, prev=a)
+            pages[pg] = page(ps, ROOT | PARENT, [(recs[half - 1][0], struct.pack("<I", a)),
+                                                  (b"", struct.pack("<I", b))], objid)
+        else:
+            pages[pg] = page(ps, ROOT | LEAF, recs, objid)
+    npg = max(pages) + 1
+    h = header(ps)
+    out = bytearray(h + h)
+    for n in range(1, npg):
+        out += pages.get(n, bytearray(ps))
+    return bytes(out)
+
+
+# ---- SRUDB.dat (4 KiB pages) --------------------------------------------------------------------------------
+APP = "{D10CA2FE-6FCF-4F6D-848E-B2E99266FA89}"
+NET = "{973F5D5C-1D90-4944-BE8E-24B94231A174}"
+CONN = "{DD6636C4-8929-4683-974E-22C046A43763}"
+srum_tables = [
+    ("MSysObjects", 2, []),
+    ("MSysObjectsShadow", 3, []),
+    ("SruDbIdMapTable", 5, [(1, "IdType", 2, 1, 0), (2, "IdIndex", 4, 4, 0), (256, "IdBlob", 11, 0, 0)]),
+    (APP, 6, [(1, "AutoIncId", 4, 4, 0), (2, "TimeStamp", 8, 8, 0), (3, "AppId", 4, 4, 0), (4, "UserId", 4, 4, 0),
+              (5, "ForegroundCycleTime", 15, 8, 0), (6, "BackgroundCycleTime", 15, 8, 0)]),
+    (NET, 7, [(1, "AutoIncId", 4, 4, 0), (2, "TimeStamp", 8, 8, 0), (3, "AppId", 4, 4, 0), (4, "UserId", 4, 4, 0),
+              (5, "InterfaceLuid", 15, 8, 0), (6, "BytesSent", 15, 8, 0), (7, "BytesRecvd", 15, 8, 0)]),
+    (CONN, 8, [(1, "AutoIncId", 4, 4, 0), (2, "TimeStamp", 8, 8, 0), (3, "AppId", 4, 4, 0)]),
+    ("SruDbCheckpointTable", 9, [(1, "Id", 4, 4, 0), (2, "Time", 8, 8, 0)]),
+]
+idmap = [(0, 1, text16("\\Device\\HarddiskVolume3\\Windows\\System32\\svchost.exe")),
+         (0, 2, text16("\\Device\\HarddiskVolume3\\Users\\jdoe\\AppData\\Local\\Temp\\upd4te.exe")),
+         (1, 3, text16("DiagTrack")),
+         (2, 4, text16("Microsoft.WindowsStore_8wekyb3d8bbwe!App")),
+         (3, 5, SID),
+         (0, 6, text16("\\Device\\HarddiskVolume3\\Program Files\\Mozilla Firefox\\firefox.exe"))]
+srum_rows = {
+    "SruDbIdMapTable": [Rec(fixed=[(1, bytes([t])), (4, i32(i))], tagged=[(256, b, 0x01)]) for t, i, b in idmap],
+    APP: [Rec(fixed=[(4, i32(k)), (8, struct.pack("<d", 45367.5 + k)), (4, i32(1 + k % 6)), (4, i32(5)),
+                     (8, struct.pack("<q", 1000 * k)), (8, None)]) for k in range(1, 8)],
+    NET: [Rec(fixed=[(4, i32(k)), (8, struct.pack("<d", 45367.5 + k)), (4, i32(2)), (4, i32(5)),
+                     (8, struct.pack("<q", 71)), (8, struct.pack("<q", 4096 * k)), (8, struct.pack("<q", 99))])
+          for k in range(1, 4)],
+    CONN: [],
+    "SruDbCheckpointTable": [Rec(fixed=[(4, i32(1)), (8, struct.pack("<d", 45368.0))])],
+}
+
+# ---- WebCacheV01.dat (32 KiB pages) -------------------------------------------------------------------------
+web_tables = [
+    ("MSysObjects", 2, []),
+    ("MSysObjectsShadow", 3, []),
+    ("MSysLocales", 4, []),
+    ("Containers", 5, [(1, "ContainerId", 15, 8, 0), (2, "SetId", 4, 4, 0), (3, "Flags", 4, 4, 0),
+                       (4, "Size", 15, 8, 0), (128, "Name", 10, 0, 1200), (129, "PartitionId", 10, 0, 1200),
+                       (256, "Directory", 12, 0, 1200), (257, "SecureDirectories", 12, 0, 1200)]),
+    ("Container_1", 6, [(1, "EntryId", 15, 8, 0), (2, "ContainerId", 15, 8, 0), (256, "Url", 12, 0, 1200)]),
+    ("Container_2", 7, [(1, "EntryId", 15, 8, 0), (2, "ContainerId", 15, 8, 0), (256, "Url", 12, 0, 1200)]),
+    ("LeakFiles", 8, [(1, "LeakId", 15, 8, 0), (256, "Filename", 12, 0, 1200)]),
+    ("Partitions", 9, [(128, "Id", 10, 0, 1200), (2, "Time", 15, 8, 0)]),
+]
+conts = [(1, "Content", "C:\\Users\\jdoe\\AppData\\Local\\Microsoft\\Windows\\INetCache\\IE\\", False),
+         (2, "History", "C:\\Users\\jdoe\\AppData\\Local\\Microsoft\\Windows\\History\\History.IE5\\", True),
+         (3, "Cookies", "C:\\Users\\jdoe\\AppData\\Local\\Microsoft\\Windows\\INetCookies\\", False),
+         (4, "iedownload", "C:\\Users\\jdoe\\AppData\\Local\\Microsoft\\Windows\\IEDownloadHistory\\", True),
+         (5, "DOMStore", None, False)]
+web_rows = {
+    "Containers": [Rec(fixed=[(8, struct.pack("<q", cid)), (4, i32(0)), (4, i32(0x40)), (8, struct.pack("<q", 0))],
+                       var=[text16(nm), text16("L")],
+                       tagged=([] if d is None else [(256, sevenbit(d, True) if comp else text16(d),
+                                                      0x03 if comp else 0x01)]))
+                   for cid, nm, d, comp in conts],
+    "Container_1": [Rec(fixed=[(8, struct.pack("<q", k)), (8, struct.pack("<q", 1))],
+                        tagged=[(256, text16("https://example.test/p%d" % k), 0x01)]) for k in range(1, 4)],
+    "Container_2": [Rec(fixed=[(8, struct.pack("<q", k)), (8, struct.pack("<q", 2))],
+                        tagged=[(256, text16("Visited: jdoe@https://evil.test/x%d" % k), 0x01)]) for k in range(1, 9)],
+    "LeakFiles": [],
+    "Partitions": [Rec(fixed=[None and 0 or (0, b"")][:0] or [(8, struct.pack("<q", 0)), (8, struct.pack("<q", 7))],
+                       var=[text16("L")])],
+}
+# Partitions has fixed id 2 only via column list; keep fixed ids contiguous: ids 1..2 (id 1 unused -> NULL)
+web_rows["Partitions"] = [Rec(fixed=[(8, None), (8, struct.pack("<q", 7))], var=[text16("L")])]
+web_tables[-1] = ("Partitions", 9, [(2, "Time", 15, 8, 0), (128, "Id", 10, 0, 1200)])
+
+out = sys.argv[1]
+os.makedirs(out, exist_ok=True)
+for name, b in {"srum_catalog_4k": database(4096, srum_tables, srum_rows, split=(APP,)),
+                "webcache_catalog_32k": database(32768, web_tables, web_rows, split=("Container_2",))}.items():
+    with open(os.path.join(out, name + ".bin"), "wb") as f:
+        f.write(b)

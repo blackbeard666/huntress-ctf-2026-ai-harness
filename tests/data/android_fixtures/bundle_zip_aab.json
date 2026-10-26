@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-7803f86c262912f4",
+ "decoy": false,
+ "_why": "bundle-container-formats (rows 58, 62): zip-in-zip: outer zip holds app.aab; base/ module puzzle + fragment, feature module dyn/assets fragments",
+ "generator_cmd": "python3 tests/data/android_fixtures/bundle_src/gen_bundle.py zip_aab tests/data/android_fixtures/bundle_zip_aab.zip  # google.protobuf dynamic-message toc.pb writer (bundletool field numbers) + apktool-bundled aapt2 link [--proto-format] manifests + python zipfile layouts",
+ "oracle_cmd": "same script, oracle stage: google.protobuf BuildApksResult.FromString(toc.pb) split ids / zipfile reads of the .obb / nested .aab, install set from the script's device table (x86_64, xxhdpi, en), fragments into the puzzle slots -> prints ANS-7803f86c262912f4"
+}

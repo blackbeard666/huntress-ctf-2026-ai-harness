@@ -1,0 +1,12 @@
+{
+ "kind": "jvm_niche_facts",
+ "decoy": true,
+ "question": "Which JVM language built this jar?",
+ "encoding": "classfile_cp_base64",
+ "expected_offset": null,
+ "expected": null,
+ "expected_config": null,
+ "generator_cmd": "bash jvmniche_gen.sh   # javac/jar OpenJDK 21 against stub runtime classes (not packed); SourceFile Utf8 renamed by stdlib; HCFG base64 via coreutils base64 -w0",
+ "oracle_cmd": "python3 jvmniche_oracle.py jvmniche_decoy_trunc.bin   # unzip -Z1/-p + javap -v -p text (OpenJDK 21); HCFG via stdlib base64+crc32",
+ "note": "DECOY: first 200 bytes of a jar -> None"
+}

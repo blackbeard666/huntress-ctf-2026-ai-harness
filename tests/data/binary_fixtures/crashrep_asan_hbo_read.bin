@@ -1,0 +1,50 @@
+=================================================================
+==2472857==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x6c977a7e001c at pc 0x654b7c340228 bp 0x7fff66727b60 sp 0x7fff66727b50
+READ of size 4 at 0x6c977a7e001c thread T0
+    #0 0x654b7c340227 in victim /home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/asan.c:2
+    #1 0x654b7c340260 in main /home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/asan.c:3
+    #2 0x70777b42a600 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:59
+    #3 0x70777b42a717 in __libc_start_main_impl ../csu/libc-start.c:360
+    #4 0x654b7c340104 in _start (/home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/asan+0x1104) (BuildId: 867868dd6315f23596a994cd7e7dce7bc51adf35)
+
+0x6c977a7e001c is located 0 bytes after 12-byte region [0x6c977a7e0010,0x6c977a7e001c)
+allocated by thread T0 here:
+    #0 0x70777b92b60f in malloc ../../../../src/libsanitizer/asan/asan_malloc_linux.cpp:67
+    #1 0x654b7c340248 in main /home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/asan.c:3
+    #2 0x70777b42a600 in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:59
+    #3 0x70777b42a717 in __libc_start_main_impl ../csu/libc-start.c:360
+    #4 0x654b7c340104 in _start (/home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/asan+0x1104) (BuildId: 867868dd6315f23596a994cd7e7dce7bc51adf35)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/asan.c:2 in victim
+Shadow bytes around the buggy address:
+  0x6c977a7dfd80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x6c977a7dfe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x6c977a7dfe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x6c977a7dff00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x6c977a7dff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x6c977a7e0000: fa fa 00[04]fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6c977a7e0080: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6c977a7e0100: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6c977a7e0180: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6c977a7e0200: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x6c977a7e0280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==2472857==ABORTING

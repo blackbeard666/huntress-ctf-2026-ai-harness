@@ -1,0 +1,30 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "e2fdbbd8-baae-439f-9940-b1ae08428922",
+  "window": null,
+  "elapsed": 13.27,
+  "in_window": 8.52,
+  "phases": {
+    "start": 4.76,
+    "download": 0.0,
+    "solve": 5.11,
+    "submit": 3.41
+  },
+  "routed": "local (web live target)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "proof-4": "proof_00f84d2323664728b4d883857a34b07f",
+    "proof-3": "proof_a85426e58ede4f78a4365929ea1bd884",
+    "proof-2": "proof_68e80d7b7d15453287ac5c161761cfb7",
+    "proof-1": "proof_6fcae28eb4894e21810902e2c2a8d807"
+  },
+  "attempts_remaining": 8,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 8,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 4
+}

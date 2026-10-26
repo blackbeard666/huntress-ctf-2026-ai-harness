@@ -1,0 +1,8 @@
+{
+ "field": "logfile.rcrd_page_count",
+ "expected": "none",
+ "generator_cmd": "truncate -s 8M b.img && tools/fsroot/usr/sbin/mkntfs -F -Q -q -s 512 -c 4096 b.img (ntfs-3g 2022.10.3); python3 -I tests/data/meta_fixtures/logfile/GENERATOR_ntfs_logfile_indx.py.txt a.img b.img <out> (stdlib struct LFS writer, update-sequence fixups applied -> logfile_fresh_ff.bin)",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dfirntfs python3 -P tests/data/meta_fixtures/logfile/ORACLE_dfir_ntfs.py.txt logfile logfile_fresh_ff.bin (dfir_ntfs 1.1.20 RestartPage/RestartArea/LogRecordPage, IndexBuffer + MFT.SlackSpace.carve) -> no RCRD page",
+ "decoy": true,
+ "member": "$LogFile"
+}

@@ -1,0 +1,27 @@
+{
+ "expected_plain": "v=3|language=zsh|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=ZSH-54958f46|url=https://zsh-54958f4611.example.invalid/stage|file_path=/tmp/huntress-zsh/.54958f461190dc3c.stage",
+ "decoy": false,
+ "language": "zsh",
+ "role": "staged-chain",
+ "family": "polyglot-zsh",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/zf_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/polyglot-zsh-staged-chain.zsh | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:FRAG-//' | tr -d . | xxd -r -p",
+ "expected_fields": {
+  "language": "zsh",
+  "role": "staged_chain",
+  "verdict": "suspicious",
+  "attack": "T1059",
+  "adapter": "operation_graph",
+  "host_profile": "standalone",
+  "obfuscation_profile": "fragmented_hex",
+  "stage_profile": "cross_language_handoff",
+  "next_language": "vbscript",
+  "stage_count": "3",
+  "steps": "profile_host,decode_configuration,dispatch_language",
+  "campaign_id": "ZSH-54958f46",
+  "url": "https://zsh-54958f4611.example.invalid/stage",
+  "file_path": "/tmp/huntress-zsh/.54958f461190dc3c.stage",
+  "url_host": "zsh-54958f4611.example.invalid",
+  "file_dir": "/tmp/huntress-zsh/"
+ }
+}

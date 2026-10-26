@@ -1,0 +1,18 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "false",
+    "format": "none",
+    "kind": "none",
+    "fault_function": "none",
+    "fault_addr": "none",
+    "cwe": "none"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # DECOY: ASan-instrumented ELF itself (format strings, no report)",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_decoy_asan_elf.bin",
+  "decoy": true,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

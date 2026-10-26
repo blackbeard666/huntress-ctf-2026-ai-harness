@@ -1,0 +1,8 @@
+{
+ "field": "report.first_time_utc",
+ "expected": "2026-10-25T23:30:00Z",
+ "generator_cmd": "python3 csv.writer (Event Viewer 'Save as CSV' layout, newest first)",
+ "oracle_cmd": "python3 csv.reader + datetime.strptime('%m/%d/%Y %I:%M:%S %p') min -> 2026-10-25 23:30:00",
+ "decoy": false,
+ "member": "System_report.csv"
+}

@@ -1,0 +1,31 @@
+{
+ "family": "crash_verdict",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "exploitability": "EXPLOITABLE",
+  "exploitable_rule": "ReturnAv",
+  "fault_class": "stack_overrun",
+  "cwe": "CWE-121",
+  "signal_number": "11",
+  "si_code": "128",
+  "fault_address": "0x0",
+  "fault_address_class": "non_canonical",
+  "canary": "false",
+  "nx": "false",
+  "pie": "false",
+  "relro": "none",
+  "fortify": "false",
+  "cfg": "false"
+ },
+ "companion": "cverdict_retov_exe.elf",
+ "oracle_other_tags": [
+  "PossibleStackCorruption",
+  "AccessViolation"
+ ],
+ "generator_cmd": "bash cverdict_gen.sh   # gcc crasher, gdb run -> generate-core-file at the fatal signal",
+ "oracle_cmd": "python3 -I cverdict_oracle.py retov   # CERT GDB exploitable plugin (tools/exploitable) + gdb $_siginfo / info proc mappings / bt + readelf -lWd --dyn-syms",
+ "decoy": false,
+ "note": "lib.binary.crash_verdict_field(core, key, exe=companion); fact names SPECULATIVE (GM label not seen)"
+}

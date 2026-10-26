@@ -1,0 +1,45 @@
+Event[0]:
+  Log Name: Application
+  Source: MsiInstaller
+  Date: 2026-10-22T14:05:31.4410000Z
+  Event ID: 11707
+  Task: N/A
+  Level: Information
+  Opcode: N/A
+  Keyword: Classic
+  User: S-1-5-21-111-222-333-1001
+  User Name: CORP\jdoe
+  Computer: LAPTOP-19
+  Description: 
+Product: Remote Helper -- Installation completed successfully.
+
+Event[1]:
+  Log Name: Application
+  Source: Application Error
+  Date: 2026-10-22T14:07:02.0000000Z
+  Event ID: 1000
+  Task: Application Crashing Events
+  Level: Error
+  Opcode: N/A
+  Keyword: Classic
+  User: N/A
+  User Name: N/A
+  Computer: LAPTOP-19
+  Description: 
+Faulting application name: helper.exe, version: 1.0.0.0
+Event ID: 9999 (text inside a description)
+
+Event[2]:
+  Log Name: Application
+  Source: MsiInstaller
+  Date: 2026-10-22T13:59:00.0000000Z
+  Event ID: 1033
+  Task: N/A
+  Level: Information
+  Opcode: N/A
+  Keyword: Classic
+  User: S-1-5-21-111-222-333-1001
+  User Name: CORP\jdoe
+  Computer: LAPTOP-19
+  Description: 
+Windows Installer installed the product.

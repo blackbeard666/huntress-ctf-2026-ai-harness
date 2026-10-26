@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-fd36f80db5903817",
+ "decoy": false,
+ "_why": "bundle-container-formats (rows 58, 62): bundletool .apks: opaque splits/sN.apk paths, manifests without split=; only toc.pb names config.x86_64/xxhdpi/en; decoy arm64/xhdpi/fr fragments first in zip order",
+ "generator_cmd": "python3 tests/data/android_fixtures/bundle_src/gen_bundle.py toc_opaque tests/data/android_fixtures/bundle_toc_opaque.zip  # google.protobuf dynamic-message toc.pb writer (bundletool field numbers) + apktool-bundled aapt2 link [--proto-format] manifests + python zipfile layouts",
+ "oracle_cmd": "same script, oracle stage: google.protobuf BuildApksResult.FromString(toc.pb) split ids / zipfile reads of the .obb / nested .aab, install set from the script's device table (x86_64, xxhdpi, en), fragments into the puzzle slots -> prints ANS-fd36f80db5903817"
+}

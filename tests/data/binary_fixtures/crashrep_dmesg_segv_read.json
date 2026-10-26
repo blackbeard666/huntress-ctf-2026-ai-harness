@@ -1,0 +1,24 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "dmesg",
+    "kind": "segfault",
+    "signal": "SIGSEGV",
+    "program": "vuln",
+    "pid": "31337",
+    "fault_addr": "0x0",
+    "pc": "0x55d0c4a0113d",
+    "error_code": "4",
+    "access_type": "READ",
+    "module_offset": "0x13d",
+    "cwe": "CWE-476"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # printf with the kernel segfault printk layout",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_dmesg_segv_read.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

@@ -98,6 +98,54 @@ def uplus_dec(t):
     return "".join(chr(int(h, 16)) for h in _UTOK.findall(t))
 
 
+def bf_enc(s):
+    """D26: the GM's Brainfuck form -- one cell, per UTF-8 byte the +/- delta from the previous byte then '.'."""
+    out, cur = [], 0
+    for b in _u(s):
+        out.append(("+" * (b - cur) if b > cur else "-" * (cur - b)) + ".")
+        cur = b
+    return "".join(out)
+
+
+def bf_dec(t, max_steps=5_000_000):
+    """D26: run a Brainfuck program (8-bit wrapping cells, no input) -> its output text; raises unless the WHOLE
+    text is Brainfuck with a '+' and a '.' (a Morse run of '-'/'.' is not)."""
+    if not re.fullmatch(r"[+\-<>\[\].,\s]+", t) or "." not in t or "+" not in t:
+        raise ValueError("not a Brainfuck program")
+    c = re.sub(r"[^+\-<>\[\].]", "", t)
+    st, jmp = [], {}
+    for j, ch in enumerate(c):
+        if ch == "[":
+            st.append(j)
+        elif ch == "]":
+            if not st:
+                raise ValueError("unbalanced ]")
+            k = st.pop()
+            jmp[k], jmp[j] = j, k
+    if st:
+        raise ValueError("unbalanced [")
+    tape, p, i, n, out = bytearray(65536), 0, 0, 0, bytearray()
+    while i < len(c) and n < max_steps:
+        ch = c[i]
+        if ch == "+":
+            tape[p] = (tape[p] + 1) & 255
+        elif ch == "-":
+            tape[p] = (tape[p] - 1) & 255
+        elif ch == ">":
+            p += 1
+        elif ch == "<":
+            p -= 1
+        elif ch == ".":
+            out.append(tape[p])
+        elif ch == "[" and not tape[p]:
+            i = jmp[i]
+        elif ch == "]" and tape[p]:
+            i = jmp[i]
+        i += 1
+        n += 1
+    return _t(bytes(out))
+
+
 def _gz9f(b):
     """gzip as the GM writes it (D21): zlib wbits 31 (mtime 0, OS 3), level 9 (XFL 2), memLevel 8, Z_FILTERED."""
     c = zlib.compressobj(9, zlib.DEFLATED, 31, 8, zlib.Z_FILTERED)
@@ -172,6 +220,10 @@ DAYS = [
     # D25 "You Have a Point": one Unicode code point per character, `U+XXXX` (uppercase hex, >= 4 digits), single
     # spaces (byte-exact on the Single, TT 76bfa85f and 123/123 Mastery 0b1ae1d0 line 25)
     (25, "uplus", lambda s: " ".join(f"U+{ord(c):04X}" for c in s), uplus_dec, False),
+    # D26 "Food for Thought": a Brainfuck program printing the text from ONE cell -- per UTF-8 byte the +/- delta from
+    # the previous byte, then '.', no separators (byte-exact on the Single, TT 2b70c93f and 256/256 Mastery
+    # ca7796e4 line 26)
+    (26, "brainfuck", bf_enc, bf_dec, False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N
@@ -19870,6 +19922,2924 @@ SPECULATIVE_FREE = (
     ("script-letter-map", scriptmap_free),
     ("ascii-art-dotmatrix", asciiart_free),
 )
+
+
+# ------------------------------------------- Brainfuck token dialects ("same language, other words", D26's sibling)
+# Ook! / Blub (word + mark, PAIRED: '. ?' = >, '? .' = <, '. .' = +, '! !' = -, '! .' = ., '. !' = ,, '! ?' = [,
+# '? !' = ]; short Ook = the bare marks), COW (moO > mOo < MoO + MOo - Moo out oom in MOO [ moo ] OOO zero), Pikalang
+# (pipi > pichu < pi + ka - pikachu . pikapi , pika [ chu ]), Alphuck (a c e i j o p s = > < + - . , [ ]), ReverseFuck
+# (+/- and </> swapped; or every command by its opposite, . , and [ ] too), Binaryfuck 3-bit (000..111 = > < + - . , [ ]).
+# Any other <= 8-token set (Roadrunner's Meep case variants, a custom word map): tokens assigned to commands by the crib
+# (the output must read 'Nice work' / a sentence piece), '[' ']' first by count + balance, '>' / '<' by first use (a
+# mirrored tape prints the same), each try run-length compiled and dropped at its first off-crib / control byte.
+_BF_OPS = "><+-.,[]"
+_OOK_PAIRS = {".?": ">", "?.": "<", "..": "+", "!!": "-", "!.": ".", ".!": ",", "!?": "[", "?!": "]"}
+_OOK_MARK = {v: k for k, v in _OOK_PAIRS.items()}
+_BFD_WORDS = {
+    "cow": {**dict(zip("moO mOo MoO MOo Moo oom MOO moo".split(), _BF_OPS)), "OOO": "z"},
+    "pikalang": dict(zip("pipi pichu pi ka pikachu pikapi pika chu".split(), _BF_OPS)),
+    "binaryfuck": dict(zip("000 001 010 011 100 101 110 111".split(), _BF_OPS)),
+}
+_BFD_CHARS = {
+    "alphuck": dict(zip("aceijops", _BF_OPS)),
+    "reversefuck": dict(zip("<>-+.,[]", _BF_OPS)),
+    "reversefuck-full": dict(zip("<>-+,.][", _BF_OPS)),
+}
+_BFD_LOOSE = ("alphuck", "reversefuck", "reversefuck-full", "binaryfuck")   # single chars / bits: a piece needs the crib
+_OOK_TOK = re.compile(r"(?:ook|blub)\s*([.?!])", re.I)
+
+
+def bfd_enc(s, dialect="ook", sep=" "):
+    """The GM's D26 Brainfuck (bf_enc) re-spelled in a token dialect: ook / blub / ook-short / cow / pikalang / alphuck
+    / reversefuck / binaryfuck."""
+    bf = bf_enc(s)
+    if dialect in ("ook", "blub"):
+        w = dialect.capitalize()
+        return sep.join(f"{w}{_OOK_MARK[c][0]} {w}{_OOK_MARK[c][1]}" for c in bf)
+    if dialect == "ook-short":
+        return sep.join(_OOK_MARK[c] for c in bf)
+    table = _BFD_WORDS.get(dialect) or _BFD_CHARS[dialect]
+    inv = {v: k for k, v in table.items() if v != "z"}
+    return sep.join(inv[c] for c in bf) if dialect in _BFD_WORDS else "".join(inv[c] for c in bf)
+
+
+def _bf_run(code, want=b"", max_steps=600_000, quiet=25_000):
+    """Run Brainfuck `code` ('z' = zero the cell; ',' reads nothing) run-length compiled -> output bytes, else None:
+    unbalanced, a control byte, a byte off `want` (the output's required prefix), the step cap or a long silence."""
+    ops, st = [], []
+    for ch in code:
+        if ch in "+-<>" and ops and ops[-1][0] == ch:
+            ops[-1][1] += 1
+        elif ch == "[":
+            st.append(len(ops))
+            ops.append(["[", 0])
+        elif ch == "]":
+            if not st:
+                return None
+            k = st.pop()
+            ops[k][1] = len(ops)
+            ops.append(["]", k])
+        elif ch in "+-<>.z":
+            ops.append([ch, 1])
+    if st:
+        return None
+    tape, p, i, n, last, out, L = bytearray(65536), 0, 0, 0, 0, bytearray(), len(ops)
+    while i < L:
+        o, a = ops[i]
+        if o == "+":
+            tape[p] = (tape[p] + a) & 255
+        elif o == "-":
+            tape[p] = (tape[p] - a) & 255
+        elif o == ">":
+            p = (p + a) & 65535
+        elif o == "<":
+            p = (p - a) & 65535
+        elif o == ".":
+            b = tape[p]
+            if b < 9 or 13 < b < 32 or b == 127 or (len(out) < len(want) and b != want[len(out)]):
+                return None
+            out.append(b)
+            last = n
+        elif o == "z":
+            tape[p] = 0
+        elif o == "[":
+            if not tape[p]:
+                i = a
+        elif tape[p]:
+            i = a
+        i += 1
+        n += 1
+        if n > max_steps or n - last > quiet:
+            return None
+    return bytes(out)
+
+
+def bfd_codes(t):
+    """[(dialect, brainfuck)] for every named token dialect that spells the WHOLE text, strict first."""
+    t = t.strip()
+    out = []
+    if _OOK_TOK.search(t) and not _OOK_TOK.sub("", t).strip():
+        marks = _OOK_TOK.findall(t)
+    elif re.fullmatch(r"[.?!\s]+", t) and re.search(r"[?!]", t):
+        marks = re.findall(r"[.?!]", t)
+    else:
+        marks = None
+    if marks and len(marks) % 2 == 0:
+        out.append(("ook", "".join(_OOK_PAIRS[a + b] for a, b in zip(marks[::2], marks[1::2]))))
+    toks = t.split()
+    for name, table in _BFD_WORDS.items():
+        if name == "binaryfuck" and len(toks) == 1 and re.fullmatch(r"(?:[01]{3})+", t):
+            toks = [t[k:k + 3] for k in range(0, len(t), 3)]
+        if toks and all(x in table for x in toks):
+            out.append((name, "".join("[-]" if table[x] == "z" else table[x] for x in toks)))
+    c = re.sub(r"\s", "", t)
+    for name, table in _BFD_CHARS.items():
+        if c and all(x in table for x in c):
+            out.append((name, "".join(table[x] for x in c)))
+    return out
+
+
+def _bfd_text(b):
+    try:
+        x = b.decode("utf-8")
+    except (UnicodeError, AttributeError):
+        return None
+    return x if x.strip() else None
+
+
+def _bf_balanced(toks, a, b):
+    d = 0
+    for x in toks:
+        d += (x == a) - (x == b)
+        if d < 0:
+            return False
+    return d == 0
+
+
+def bfd_solve(t, want=b"", piece=False, budget=0.6):
+    """A <= 8-token Brainfuck dialect with unknown words: [(text, map)] for the command assignments whose output starts
+    with `want` (whole blob) or is a sentence piece (`piece`), best first; [] when none fits within `budget` seconds."""
+    toks = t.split()
+    if len(toks) < 2:
+        toks = list(re.sub(r"\s", "", t))
+    distinct = list(dict.fromkeys(toks))
+    if not 3 <= len(distinct) <= 8 or len(toks) < 12:
+        return []
+    cnt = collections.Counter(toks)
+    pairs = [(a, b) for a in distinct for b in distinct if a != b and cnt[a] == cnt[b] and _bf_balanced(toks, a, b)]
+    pairs = ([None] + pairs) if len(distinct) <= 5 else (pairs + [None])
+    t0, found = time.monotonic(), []
+    for pr in pairs:
+        rest = [x for x in distinct if not pr or x not in pr]
+        if len(rest) > 6:
+            continue
+        for perm in itertools.permutations("><+-.," if len(rest) == 6 else "><+-.", len(rest)):
+            if time.monotonic() - t0 > budget:
+                return found
+            if "." not in perm or ("+" not in perm and "-" not in perm):
+                continue
+            if ">" in perm and "<" in perm and perm.index("<") < perm.index(">"):
+                continue   # the mirrored tape prints the same text
+            m = dict(zip(rest, perm))
+            if pr:
+                m[pr[0]], m[pr[1]] = "[", "]"
+            out = _bfd_text(_bf_run("".join(m[x] for x in toks), want))
+            if out is None or (want and not out.encode().startswith(want)):
+                continue
+            if piece and not _crib_piece(out):
+                continue
+            found.append((out, m))
+            if not piece:
+                return found
+    found.sort(key=lambda om: -_crib_piece(om[0]))
+    return found
+
+
+def bfd_dec(t):
+    """Undo a Brainfuck token dialect (named first, then the crib-solved unknown map) -> the printed text; raises."""
+    for _name, code in bfd_codes(t):
+        out = _bfd_text(_bf_run(code, max_steps=5_000_000, quiet=500_000))
+        if out:
+            return out
+    got = bfd_solve(t, _CRIB[:9].encode())
+    if got:
+        return got[0][0]
+    raise ValueError("not a Brainfuck token dialect")
+
+
+def bfd_free(p):
+    """Mastery free line: a named token dialect's output (a loose single-char / bit dialect only as a sentence piece),
+    else the crib-solved unknown word map's sentence pieces."""
+    try:
+        outs = []
+        for name, code in bfd_codes(p):
+            out = _bfd_text(_bf_run(code))
+            if out and out not in outs and (name not in _BFD_LOOSE or _crib_piece(out)):
+                outs.append(out)
+        if not outs and len(p.split()) >= 20:
+            outs = [o for o, _m in bfd_solve(p, piece=True, budget=0.3)[:3]]
+        return outs
+    except (ValueError, IndexError, KeyError, TypeError):
+        return []
+
+
+CANDIDATES += [(f"bf-{d}", (lambda d: lambda s: bfd_enc(s, d))(d), bfd_dec)
+               for d in ("ook", "blub", "ook-short", "cow", "pikalang", "alphuck", "reversefuck", "binaryfuck")]
+CANDIDATES += [("bf-ook-short-run", lambda s: bfd_enc(s, "ook-short", ""), bfd_dec),
+               ("bf-binaryfuck-run", lambda s: bfd_enc(s, "binaryfuck", ""), bfd_dec),
+               ("bf-token-map", lambda s: None, bfd_dec)]   # crib-solved unknown map: this entry's enc never matches
+SPECULATIVE_FREE += (("bf-dialect", bfd_free),)
+
+
+# ------------------------------------------- Full Brainfuck programs (D26's family beyond the GM's one-cell delta)
+# Any real program: multiply loops (n = a*b + c per char), cell-per-char text generators ('++++++++++[>+++++++>++++++++
+# ++>+++<<<-]>++.>+.'), comment text between the commands (everything but the 8 commands is a comment), pointer moves
+# below cell 0 (wrap), ',' input (reads 0 / EOF=-1 / unchanged), 16-bit or unbounded cells when 8-bit wrap prints junk.
+# Also behind a peel: a base64 / base32 / hex / gzip-zlib-bz2-lzma layer whose bytes are Brainfuck soup. Only claimed
+# when the printed text is printable and passes the slug / crib gate (Morse '.'/'-' lines print junk -> not claimed).
+_BFF_CMDS = re.compile(r"[^+\-<>\[\].,]")
+
+
+def bf_run(prog, steps=10**7, cells=65536, bits=8, eof=0, quiet=None):
+    """Run Brainfuck `prog` (non-command chars = comments) -> [output cell values], or None when unbalanced or over
+    `steps` (run-length compiled ops; '[-]' / '[+]' = clear). bits=8/16 wrap, bits=0 unbounded ints; ',' stores
+    `eof` (0, -1, or None = leave the cell); the pointer wraps over `cells`; `quiet` = max ops between outputs."""
+    c = _BFF_CMDS.sub("", prog)
+    c = c.replace("[-]", "z").replace("[+]", "z")
+    ops, st = [], []
+    for ch in c:
+        if ch in "+-<>" and ops and ops[-1][0] == ch:
+            ops[-1][1] += 1
+        elif ch == "[":
+            st.append(len(ops))
+            ops.append(["[", 0])
+        elif ch == "]":
+            if not st:
+                return None
+            k = st.pop()
+            ops[k][1] = len(ops)
+            ops.append(["]", k])
+        else:
+            ops.append([ch, 1])
+    if st:
+        return None
+    mask = (1 << bits) - 1 if bits else None
+    tape, p, i, n, last, out, L = [0] * cells, 0, 0, 0, 0, [], len(ops)
+    while i < L:
+        o, a = ops[i]
+        if o == "+":
+            v = tape[p] + a
+            tape[p] = v & mask if mask else v
+        elif o == "-":
+            v = tape[p] - a
+            tape[p] = v & mask if mask else v
+        elif o == ">":
+            p = (p + a) % cells
+        elif o == "<":
+            p = (p - a) % cells
+        elif o == ".":
+            out.append(tape[p])
+            last = n
+        elif o == "z":
+            tape[p] = 0
+        elif o == ",":
+            if eof is not None:
+                tape[p] = eof & mask if mask else eof
+        elif o == "[":
+            if not tape[p]:
+                i = a
+        elif tape[p]:
+            i = a
+        i += 1
+        n += 1
+        if n > steps or (quiet and n - last > quiet):
+            return None
+    return out
+
+
+def _bff_text(vals):
+    """Printed cell values -> text (UTF-8 bytes when every value is a byte, else code points); None = junk/control."""
+    if not vals:
+        return None
+    try:
+        x = bytes(vals).decode("utf-8") if all(0 <= v < 256 for v in vals) else "".join(chr(v) for v in vals)
+    except (ValueError, UnicodeError, OverflowError):
+        return None
+    if not x.strip() or any((ord(ch) < 32 and ch not in "\t\n\r") or 127 <= ord(ch) < 160 for ch in x):
+        return None
+    return x
+
+
+def _bff_soup(t):
+    """The command string of `t` when it reads as a Brainfuck program: balanced, >= 1 '.', a cell change."""
+    c = _BFF_CMDS.sub("", t)
+    if "." not in c or not re.search(r"[+-]", c):
+        return None
+    d = 0
+    for ch in c:
+        d += (ch == "[") - (ch == "]")
+        if d < 0:
+            return None
+    return c if d == 0 else None
+
+
+def _bff_outs(t, steps=2_000_000):
+    """Every distinct printable output of `t` run as Brainfuck: 8-bit wrap, then 16-bit, then unbounded cells, each
+    with ',' = 0, then (only when the program reads) EOF=-1 and 'unchanged'."""
+    c = _bff_soup(t)
+    if c is None:
+        return []
+    outs = []
+    for bits in (8, 16, 0):
+        for eof in ((0, -1, None) if "," in c else (0,)):
+            x = _bff_text(bf_run(c, steps=steps, bits=bits, eof=eof, quiet=steps // 4))
+            if x and x not in outs:
+                outs.append(x)
+        if outs:
+            break
+    return outs
+
+
+def _bff_gate(x, piece=False):
+    if piece:
+        return _crib_piece(x) > 0
+    return bool(_crib_piece(x) or SLUG.search(x))
+
+
+def _bff_peel(t, depth=3):
+    """Texts under base64 / base32 / hex / compression layers of `t` (decompress-then-redecode stacks), `t` first."""
+    seen, todo, out = set(), [(t.strip(), 0)], []
+    while todo and len(out) < 24:
+        x, k = todo.pop(0)
+        if x in seen:
+            continue
+        seen.add(x)
+        out.append(x)
+        if k >= depth:
+            continue
+        s = re.sub(r"\s", "", x)
+        raws = []
+        if re.fullmatch(r"(?:[0-9A-Fa-f]{2})+", s):
+            raws.append(bytes.fromhex(s))
+        if re.fullmatch(r"[A-Za-z0-9+/_-]{8,}={0,2}", s):
+            try:
+                raws.append(base64.b64decode(s.replace("-", "+").replace("_", "/") + "=" * (-len(s) % 4)))
+            except (binascii.Error, ValueError):
+                pass
+        if re.fullmatch(r"[A-Z2-7]{8,}=*", s):
+            try:
+                raws.append(base64.b32decode(s + "=" * (-len(s) % 8)))
+            except (binascii.Error, ValueError):
+                pass
+        for raw in raws:
+            for b in _bff_unpack(raw):
+                try:
+                    todo.append((b.decode("utf-8").strip(), k + 1))
+                except UnicodeError:
+                    pass
+    return out
+
+
+def _bff_unpack(raw):
+    import bz2
+    import lzma
+    out = [raw]
+    for fn in (gzip.decompress, zlib.decompress, lambda b: zlib.decompress(b, -15), bz2.decompress, lzma.decompress):
+        try:
+            out.append(fn(raw)[:1 << 20])
+        except Exception:  # noqa: BLE001 - not this container
+            pass
+    return out
+
+
+def bff_dec(t):
+    """A full Brainfuck program (comments, loops, 8/16-bit/unbounded cells, ',' input), possibly under a base64 / hex /
+    compression peel -> the printed sentence; raises unless the output is printable and passes the slug / crib gate."""
+    for x in _bff_peel(t):
+        for out in _bff_outs(x):
+            if _bff_gate(out):
+                return out
+    raise ValueError("not a Brainfuck program")
+
+
+def bff_free(p):
+    """Mastery free line: the printed text of a full Brainfuck program (or one under a peel) when it is a crib piece."""
+    try:
+        return [o for x in _bff_peel(p, 2) for o in _bff_outs(x, 1_000_000) if _bff_gate(o, True)][:3]
+    except (ValueError, IndexError, KeyError, TypeError, RecursionError, MemoryError):
+        return []
+
+
+def bff_mul_enc(s):
+    """Multiply-loop generator: per UTF-8 byte n = a*b + c from a cleared cell -> '>' + a '+'s + '[<' b '+'s '>-]<' +
+    c '+'s '.[-]' (a ~ sqrt n)."""
+    out = []
+    for n in _u(s):
+        a = max(1, int(math.isqrt(n)))
+        b, c = divmod(n, a)
+        out.append(">" + "+" * a + "[<" + "+" * b + ">-]<" + "+" * c + ".[-]")
+    return "".join(out)
+
+
+def bff_gen_enc(s):
+    """The common 'bf text generator' output: a shared 10x loop seeds one cell per distinct byte (n//10 *10), then each
+    char moves to its cell, trims by +/- and prints."""
+    bs = list(_u(s))
+    distinct = sorted(set(bs))
+    head = "+" * 10 + "[" + "".join(">" + "+" * (n // 10) for n in distinct) + "<" * len(distinct) + "-]"
+    vals, cur, out = {n: n // 10 * 10 for n in distinct}, 0, [head]
+    for n in bs:
+        cell = distinct.index(n) + 1
+        out.append(">" * (cell - cur) if cell > cur else "<" * (cur - cell))
+        cur, d = cell, n - vals[n]
+        out.append("+" * d if d > 0 else "-" * -d)
+        vals[n] = n
+        out.append(".")
+    return "".join(out)
+
+
+CANDIDATES += [("bf-full-delta", bf_enc, bff_dec), ("bf-full-mul", bff_mul_enc, bff_dec),
+               ("bf-full-gen", bff_gen_enc, bff_dec)]
+SPECULATIVE_FREE += (("bf-full", bff_free),)
+
+
+# ------------------------------------------------------------------- Deadfish ("a very small language", 4 commands)
+# One accumulator v = 0: i +1, d -1, s v*v, o output (chr(v) in the text-printing variant); after EVERY op v == -1 or
+# v == 256 resets to 0. XKCD variant: x +1, k square, c output, d -1. Either case. A line of English words spelled
+# only from i/d/s/o ('dido is odd') prints control bytes -> not claimed.
+_DF_SETS = {"idso": "idso", "xkcd": "xdkc"}   # dialect -> its letters for (inc, dec, square, out)
+_DF_CAP = 1 << 32
+
+
+def deadfish_enc(s, style="delta", xkcd=False, sep="", upper=False):
+    """Deadfish printing each UTF-8 byte: 'delta' = i/d runs from the last value then o; 'square' = the cheaper of a run
+    or (run to r, s, run to n) per byte."""
+    out, v = [], 0
+    for n in _u(s):
+        best = "i" * (n - v) if n >= v else "d" * (v - n)
+        if style == "square":
+            for r in range(16):
+                c = ("i" * (r - v) if r >= v else "d" * (v - r)) + "s" + ("i" * (n - r * r) if n >= r * r
+                                                                          else "d" * (r * r - n))
+                if len(c) < len(best):
+                    best = c
+        out.append(best + "o")
+        v = n
+    t = sep.join(out)
+    if xkcd:
+        t = t.translate(str.maketrans("idso", "xdkc"))
+    return t.upper() if upper else t
+
+
+def deadfish_vals(t):
+    """The numbers a Deadfish / XKCD-Deadfish program outputs, else None (a foreign char, no output, a runaway v)."""
+    c = re.sub(r"\s", "", t or "").lower()
+    if not c:
+        return None
+    for letters in _DF_SETS.values():
+        if set(c) <= set(letters) and letters[3] in c:
+            inc, dec, sq, out = letters
+            v, vals = 0, []
+            for ch in c:
+                if ch == inc:
+                    v += 1
+                elif ch == dec:
+                    v -= 1
+                elif ch == sq:
+                    v *= v
+                else:
+                    vals.append(v)
+                if v == -1 or v == 256:
+                    v = 0
+                if v > _DF_CAP:
+                    return None
+            return vals
+    return None
+
+
+def _df_text(vals):
+    if all(0 <= n < 256 for n in vals):
+        b = bytes(vals)
+        try:
+            x = b.decode("utf-8")
+        except UnicodeError:
+            x = b.decode("latin-1")
+    elif all(0 <= n < 0x110000 for n in vals):
+        x = "".join(map(chr, vals))
+    else:
+        return None
+    return x if x.strip() and all(ch.isprintable() or ch in "\t\n\r" for ch in x) else None
+
+
+def deadfish_dec(t):
+    """Undo Deadfish / XKCD Deadfish (chr of each output) -> the printed text; raises on a non-program / junk output."""
+    vals = deadfish_vals(t)
+    x = _df_text(vals) if vals else None
+    if x is None:
+        raise ValueError("not a Deadfish program")
+    return x
+
+
+def deadfish_free(p):
+    """Mastery free line: a Deadfish program's printed text (crib / slug piece or prose-like), else its numbers."""
+    try:
+        vals = deadfish_vals(p)
+        if not vals:
+            return []
+        x = _df_text(vals)
+        if x and (_crib_piece(x) or _texty(x) >= 0.9):
+            return [x]
+        return []
+    except (ValueError, TypeError, OverflowError):
+        return []
+
+
+CANDIDATES += [("deadfish-delta", deadfish_enc, deadfish_dec),
+               ("deadfish-delta-sp", lambda s: deadfish_enc(s, sep=" "), deadfish_dec),
+               ("deadfish-square", lambda s: deadfish_enc(s, "square"), deadfish_dec),
+               ("deadfish-square-sp", lambda s: deadfish_enc(s, "square", sep=" "), deadfish_dec),
+               ("deadfish-xkcd-delta", lambda s: deadfish_enc(s, xkcd=True), deadfish_dec),
+               ("deadfish-xkcd-square", lambda s: deadfish_enc(s, "square", xkcd=True), deadfish_dec),
+               ("deadfish-xkcd-square-sp", lambda s: deadfish_enc(s, "square", True, " "), deadfish_dec),
+               ("deadfish-square-sp-upper", lambda s: deadfish_enc(s, "square", sep=" ", upper=True), deadfish_dec)]
+SPECULATIVE_FREE += (("deadfish", deadfish_free),)
+
+
+# ------------------------------------------- Whitespace (the esolang, D26's sibling: a program, not whitespace stego)
+# Only ' ' (S), '\t' (T) and '\n' (L) are code, every other char a comment; or the visible spellings: S/T/L (or S/T/N)
+# letters, [Space]/[Tab]/[LF] tokens. IMPs: S stack (S n push, LS dup, TS n copy, LT swap, LL drop, TL n slide), TS
+# arithmetic (SS + ST - SL * TS / TT %), TT heap (S store, T fetch), L flow (SS mark, ST call, SL jump, TS jz, TT jneg,
+# TL ret, LL end), TL I/O (SS out char, ST out num, TS/TT read -> 0). Numbers: sign S=+ T=-, bits S=0 T=1, L ends;
+# labels: S/T bits, L ends. Typical generator output = push+outchar per char then LLL; loop forms (a 0-terminated
+# stack/heap string printed by a labelled loop) run under a step cap. Claimed only when the WHOLE code parses, the run
+# ends cleanly and prints printable text; an 8-bit space/tab stego blob (no LF, or junk parse) falls to ws_cands.
+_WSL_BRACKET = re.compile(r"\[\s*(space|spc|sp|s|tab|t|lf|line\s*feed|newline|nl|n|l)\s*\]", re.I)
+_WSL_TOK = {"space": "S", "spc": "S", "sp": "S", "s": "S", "tab": "T", "t": "T"}
+_WSL_OPS = (("SS", "push", 1), ("SLS", "dup", 0), ("STS", "copy", 1), ("SLT", "swap", 0), ("SLL", "drop", 0),
+            ("STL", "slide", 1), ("TSSS", "add", 0), ("TSST", "sub", 0), ("TSSL", "mul", 0), ("TSTS", "div", 0),
+            ("TSTT", "mod", 0), ("TTS", "store", 0), ("TTT", "fetch", 0), ("LSS", "mark", 2), ("LST", "call", 2),
+            ("LSL", "jump", 2), ("LTS", "jz", 2), ("LTT", "jneg", 2), ("LTL", "ret", 0), ("LLL", "end", 0),
+            ("TLSS", "outc", 0), ("TLST", "outn", 0), ("TLTS", "readc", 0), ("TLTT", "readn", 0))
+
+
+def wsl_enc(s, form="raw", loop=False):
+    """Whitespace program printing s: push + output-char per code point then end (`loop`: push a 0 then the chars
+    reversed, print with a dup/jz/outc/jump loop). form raw (real space/tab/LF) / stl (letters) / bracket tokens."""
+    def num(n):
+        return ("T" if n < 0 else "S") + format(abs(n), "b").replace("0", "S").replace("1", "T") + "L"
+    if loop:
+        c = "SS" + num(0) + "".join("SS" + num(ord(ch)) for ch in reversed(s))
+        c += "LSS" + "SL" + "SLS" + "LTS" + "TL" + "TLSS" + "LSL" + "SL" + "LSS" + "TL" + "LLL"
+    else:
+        c = "".join("SS" + num(ord(ch)) + "TLSS" for ch in s) + "LLL"
+    if form == "stl":
+        return c
+    if form == "bracket":
+        return "".join({"S": "[Space]", "T": "[Tab]", "L": "[LF]\n"}[x] for x in c)
+    return c.translate(str.maketrans("STL", " \t\n"))
+
+
+def _wsl_code(t):
+    """The S/T/L command string of t (bracket tokens, S/T/L|N letters, else the raw space/tab/LF), or None."""
+    if not isinstance(t, str) or len(t) > 400000:
+        return None
+    toks = _WSL_BRACKET.findall(t)
+    if len(toks) >= 8 and not _WSL_BRACKET.sub("", t).strip(" \t\r\n,;|"):
+        return "".join(_WSL_TOK.get(re.sub(r"\s", "", x).lower(), "L") for x in toks)
+    c = re.sub(r"\s", "", t)
+    if len(c) >= 8 and (re.fullmatch(r"[STL]+", c) or re.fullmatch(r"[STN]+", c)) and "T" in c and c[-1] in "LN":
+        return c.replace("N", "L")
+    if "\t" in t and "\n" in t:
+        return re.sub(r"[^ \t\n]", "", t).translate(str.maketrans(" \t\n", "STL"))
+    return None
+
+
+def _wsl_parse(c):
+    """[(op, arg)] + {label: index} for the WHOLE command string c (a dangling tail after an `end` is dropped), or
+    None on an unknown / unterminated instruction or a duplicate label."""
+    prog, labels, i, n, ended = [], {}, 0, len(c), False
+    while i < n:
+        for pre, op, kind in _WSL_OPS:
+            if c.startswith(pre, i):
+                break
+        else:
+            return (prog, labels) if ended else None
+        i += len(pre)
+        arg = None
+        if kind:
+            j = c.find("L", i)
+            if j < 0:
+                return (prog, labels) if ended else None
+            body = c[i:j]
+            i = j + 1
+            if kind == 1:
+                bits = body[1:] if body[:1] in ("S", "T") else body
+                arg = int(bits.replace("S", "0").replace("T", "1") or "0", 2) * (-1 if body[:1] == "T" else 1)
+            else:
+                arg = body
+        if op == "mark":
+            if arg in labels:
+                return None
+            labels[arg] = len(prog)
+        else:
+            prog.append((op, arg))
+            ended = ended or op == "end"
+    return prog, labels
+
+
+def wsl_run(c, steps=300_000):
+    """Run a Whitespace command string -> the printed text, else None (bad parse / label / stack, step cap, nothing
+    printed, a control or non-text char out)."""
+    got = _wsl_parse(c)
+    if not got:
+        return None
+    prog, labels = got
+    if any(op in ("call", "jump", "jz", "jneg") and a not in labels for op, a in prog):
+        return None
+    st, heap, calls, out, pc, k, L = [], {}, [], [], 0, 0, len(prog)
+    try:
+        while pc < L:
+            k += 1
+            if k > steps or len(st) > 100000:
+                return None
+            op, a = prog[pc]
+            pc += 1
+            if op == "push":
+                st.append(a)
+            elif op == "dup":
+                st.append(st[-1])
+            elif op == "copy":
+                if a < 0:
+                    return None
+                st.append(st[-1 - a])
+            elif op == "swap":
+                st[-1], st[-2] = st[-2], st[-1]
+            elif op == "drop":
+                st.pop()
+            elif op == "slide":
+                top = st.pop()
+                del st[len(st) - max(a, 0):]
+                st.append(top)
+            elif op in ("add", "sub", "mul", "div", "mod"):
+                y, x = st.pop(), st.pop()
+                if op in ("div", "mod") and not y:
+                    return None
+                st.append({"add": x + y, "sub": x - y, "mul": x * y, "div": x // y if op == "div" else 0,
+                           "mod": x % y if op == "mod" else 0}[op])
+                if abs(st[-1]) > 1 << 64:
+                    return None
+            elif op == "store":
+                v, addr = st.pop(), st.pop()
+                heap[addr] = v
+            elif op == "fetch":
+                st.append(heap.get(st.pop(), 0))
+            elif op == "call":
+                calls.append(pc)
+                pc = labels[a]
+            elif op == "jump":
+                pc = labels[a]
+            elif op == "jz":
+                if st.pop() == 0:
+                    pc = labels[a]
+            elif op == "jneg":
+                if st.pop() < 0:
+                    pc = labels[a]
+            elif op == "ret":
+                pc = calls.pop()
+            elif op == "end":
+                break
+            elif op == "outc":
+                v = st.pop()
+                if not 0 <= v < 0x110000:
+                    return None
+                out.append(chr(v))
+            elif op == "outn":
+                out.append(str(st.pop()))
+            elif op in ("readc", "readn"):
+                heap[st.pop()] = 0
+    except IndexError:
+        return None
+    x = "".join(out)
+    if x and max(map(ord, x)) < 256 and re.search(r"[\x80-\xff]", x):
+        try:
+            x = x.encode("latin-1").decode("utf-8")
+        except UnicodeError:
+            pass
+    if not x.strip() or any((ord(ch) < 32 and ch not in "\t\n\r") or 127 <= ord(ch) < 160 for ch in x):
+        return None
+    return x
+
+
+def wsl_text(t):
+    """The text a Whitespace program (raw or visible notation) prints, else None. Never raises."""
+    try:
+        c = _wsl_code(t)
+        if not c or "TLS" not in c:
+            return None
+        x = wsl_run(c)
+        return x if x and any(ch.isalpha() for ch in x) else None
+    except (ValueError, TypeError, RecursionError, MemoryError):
+        return None
+
+
+def wsl_dec(t):
+    """Undo a Whitespace-language program -> the printed text; raises when t is not one."""
+    x = wsl_text(t)
+    if x is None:
+        raise ValueError("not a Whitespace program")
+    return x
+
+
+def wsl_free(p):
+    """Mastery free line: a Whitespace program's printed text when it is a crib / slug piece or prose-like."""
+    x = wsl_text(p)
+    return [x] if x and (_crib_piece(x) or SLUG.search(x) or _texty(x) >= 0.9) else []
+
+
+_k = next(i for i, c in enumerate(CANDIDATES) if c[0] == "zw-bits8")   # before zero-width / whitespace stego
+CANDIDATES[_k:_k] = [("ws-lang", wsl_enc, wsl_dec), ("ws-lang-loop", lambda s: wsl_enc(s, loop=True), wsl_dec),
+                     ("ws-lang-stl", lambda s: wsl_enc(s, "stl"), wsl_dec),
+                     ("ws-lang-bracket", lambda s: wsl_enc(s, "bracket"), wsl_dec)]
+_k = next(i for i, c in enumerate(SPECULATIVE_FREE) if c[0] == "zerowidth")
+SPECULATIVE_FREE = SPECULATIVE_FREE[:_k] + (("whitespace-lang", wsl_free),) + SPECULATIVE_FREE[_k:]
+del _k
+
+
+# ------------------------------------------- Befunge-93/98 and ><> (Fish): 2-D grid languages ("think in two dimensions")
+# One stack, a PC at (0,0) moving right over a torus of the program's lines. Befunge: 0-9 (98: a-f) push, + - * / %
+# (x/0 -> 0), ! ` > < ^ v (? = > deterministic), _ | ifs, " string mode pushes ords, : \ $ . , # g p & (0) ~ (-1), @
+# end; 98 extras ; ' s j n r [ ] w q z; unknown = nop. Grid = max(80x25, text bounds) first (93 wrap), then the text
+# bounds (98). ><>: 0-9a-f, + - * , % = ) (, ! ? trampolines, mirrors / \ | _ # and arrows, x = >, : ~ $ @ } { r l, o n
+# output, ' " strings, g p . & i (-1), ; end, anything else / an error -> no read. Claimed only when the run ends and
+# prints printable text with a letter (an ASCII-art banner of / \ | _ @ prints nothing or junk -> not claimed).
+_BEF_CAP, _BEF_IDLE = 1_000_000, 60_000
+
+
+def _bef_num(n, top=9, hexd=False):
+    """Digits pushing n >= 0 under a digit limit `top`: d | ab* | ab*c+ | (recursive) xb*c+."""
+    dig = "0123456789abcdef"
+    if n <= top:
+        return dig[n]
+    for a in range(top, 1, -1):
+        if n % a == 0 and n // a <= top:
+            return dig[a] + dig[n // a] + "*"
+    q, r = divmod(n, top)
+    return _bef_num(q, top) + dig[top] + "*" + (dig[r] + "+" if r else "")
+
+
+def _bef_str(s, q='"', top=9):
+    """String-mode push of s (pushed left to right), a quote char pushed numerically between string runs."""
+    out, run = [], ""
+    for ch in s:
+        if ch == q:
+            if run:
+                out.append(q + run + q)
+                run = ""
+            out.append(_bef_num(ord(q), top))
+        else:
+            run += ch
+    if run:
+        out.append(q + run + q)
+    return "".join(out)
+
+
+def befunge_enc(s, style="line", w=60):
+    """Befunge-93 printing s: 'line' = the classic `"<s reversed>">:#,_@`; 'grid' = the 0 + reversed sentence pushed
+    in w-char rows (`>"..."  v` / `v  <` pairs) then a `>:#,_@` print row."""
+    r = s[::-1]
+    if style == "line":
+        return _bef_str(r) + ">:#,_@"
+    rows = [_bef_str(r[i:i + w]) for i in range(0, len(r), w)] or [""]
+    rows[0] = "0" + rows[0]
+    wid = max(len(x) for x in rows) + 2
+    out = []
+    for x in rows:
+        out.append((">" + x).ljust(wid) + "v")
+        out.append("v".ljust(wid) + "<")
+    out.append(">:#,_@")
+    return "\n".join(out)
+
+
+def fish_enc(s, style="mirror"):
+    """><> printing s: 'mirror' = the classic `"<s>"r\\` over `o;!?l<`; 'line' = `"<s reversed>"` then a looped
+    one-row printer reached by a v / < return row."""
+    q = "'" if '"' in s and "'" not in s else '"'
+    if style == "mirror":
+        top = _bef_str(s, q, 15) + "r\\"
+        return top + "\n" + " " * (len(top) - 6) + "o;!?l<"
+    top = _bef_str(s[::-1], q, 15) + "v"
+    return top + "\n" + "o;!?l".rjust(len(top) - 1) + "<"
+
+
+def _grid(t, w=0, h=0):
+    lines = t.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    while len(lines) > 1 and not lines[-1].strip():
+        lines.pop()
+    W, H = max(w, max(len(x) for x in lines)), max(h, len(lines))
+    g = [[ord(ch) for ch in x.ljust(W)] for x in lines] + [[32] * W for _ in range(H - len(lines))]
+    return g, W, H
+
+
+def _out_text(out):
+    x = "".join(out)
+    if x and max(map(ord, x)) < 256 and re.search(r"[\x80-\xff]", x):
+        try:
+            x = x.encode("latin-1").decode("utf-8")
+        except UnicodeError:
+            pass
+    if not x.strip() or not any(ch.isalpha() for ch in x) or \
+            any((ord(ch) < 32 and ch not in "\t\n\r") or 127 <= ord(ch) < 160 for ch in x):
+        return None
+    return x.rstrip("\n") if x.count("\n") == 1 and x.endswith("\n") else x
+
+
+def befunge_run(t, w=80, h=25):
+    """Run a Befunge-93/98 program on a max(w x h, text-bounds) torus -> its printed text, else None."""
+    g, W, H = _grid(t, w, h)
+    st, out, x, y, dx, dy, sm, k, last = [], [], 0, 0, 1, 0, False, 0, 0
+    pop = lambda: st.pop() if st else 0  # noqa: E731
+    while True:
+        k += 1
+        if k > _BEF_CAP or k - last > _BEF_IDLE or len(st) > 200000 or len(out) > 100000:
+            return None
+        c = g[y][x]
+        if sm:
+            if c == 34:
+                sm = False
+            else:
+                st.append(c)
+        elif 48 <= c <= 57:
+            st.append(c - 48)
+        elif 97 <= c <= 102:
+            st.append(c - 87)
+        else:
+            ch = chr(c)
+            if ch == '"':
+                sm = True
+            elif ch in "+-*/%`w":
+                b, a = pop(), pop()
+                if ch == "w":
+                    if a < b:
+                        dx, dy = dy, -dx
+                    elif a > b:
+                        dx, dy = -dy, dx
+                else:
+                    v = (a + b if ch == "+" else a - b if ch == "-" else a * b if ch == "*" else int(a > b) if ch == "`"
+                         else 0 if not b else int(a / b) if ch == "/" else a - b * int(a / b))
+                    if abs(v) > 1 << 64:
+                        return None
+                    st.append(v)
+            elif ch == "!":
+                st.append(int(not pop()))
+            elif ch in "><^v?":
+                dx, dy = {">": (1, 0), "?": (1, 0), "<": (-1, 0), "^": (0, -1), "v": (0, 1)}[ch]
+            elif ch == "_":
+                dx, dy = (-1 if pop() else 1), 0
+            elif ch == "|":
+                dx, dy = 0, (-1 if pop() else 1)
+            elif ch == ":":
+                v = pop()
+                st += [v, v]
+            elif ch == "\\":
+                b, a = pop(), pop()
+                st += [b, a]
+            elif ch == "$":
+                pop()
+            elif ch == ".":
+                out.append("%d " % pop())
+                last = k
+            elif ch == ",":
+                v = pop()
+                if not 0 <= v < 0x110000:
+                    return None
+                out.append(chr(v))
+                last = k
+            elif ch == "#":
+                x, y = (x + dx) % W, (y + dy) % H
+            elif ch in "gp":
+                yy, xx = pop(), pop()
+                ok = 0 <= xx < W and 0 <= yy < H
+                if ch == "g":
+                    st.append(g[yy][xx] if ok else 32)
+                else:
+                    v = pop()
+                    if ok:
+                        g[yy][xx] = v
+            elif ch == "&":
+                st.append(0)
+            elif ch == "~":
+                st.append(-1)
+            elif ch in "@q":
+                return _out_text(out)
+            elif ch == ";":   # 98 comment: jump past the matching ;
+                x, y = (x + dx) % W, (y + dy) % H
+                n = 0
+                while g[y][x] != 59 and n < W * H:
+                    x, y, n = (x + dx) % W, (y + dy) % H, n + 1
+            elif ch == "'":
+                x, y = (x + dx) % W, (y + dy) % H
+                st.append(g[y][x])
+            elif ch == "s":
+                x, y = (x + dx) % W, (y + dy) % H
+                g[y][x] = pop()
+            elif ch == "j":
+                n = pop()
+                x, y = (x + dx * n) % W, (y + dy * n) % H
+            elif ch == "n":
+                st.clear()
+            elif ch == "r":
+                dx, dy = -dx, -dy
+            elif ch == "[":
+                dx, dy = dy, -dx
+            elif ch == "]":
+                dx, dy = -dy, dx
+        x, y = (x + dx) % W, (y + dy) % H
+
+
+def fish_run(t):
+    """Run a ><> program on its text-bounds torus -> its printed text, else None (an error = 'something smells
+    fishy', an unknown instruction, the step cap, no text)."""
+    g, W, H = _grid(t)
+    st, out, x, y, dx, dy, sq, k, last, reg = [], [], 0, 0, 1, 0, 0, 0, 0, None
+    mir = {"/": lambda a, b: (-b, -a), "\\": lambda a, b: (b, a), "|": lambda a, b: (-a, b),
+           "_": lambda a, b: (a, -b), "#": lambda a, b: (-a, -b)}
+    try:
+        while True:
+            k += 1
+            if k > _BEF_CAP or k - last > _BEF_IDLE or len(st) > 200000 or len(out) > 100000:
+                return None
+            c = g[y][x]
+            ch = chr(c)
+            if sq:
+                if c == sq:
+                    sq = 0
+                else:
+                    st.append(c)
+            elif ch in "0123456789abcdef":
+                st.append(int(ch, 16))
+            elif ch in "\"'":
+                sq = c
+            elif ch in "><^vx":
+                dx, dy = {">": (1, 0), "x": (1, 0), "<": (-1, 0), "^": (0, -1), "v": (0, 1)}[ch]
+            elif ch in mir:
+                dx, dy = mir[ch](dx, dy)
+            elif ch in "+-*,%=)(":
+                b, a = st.pop(), st.pop()
+                if ch in ",%" and not b:
+                    return None
+                v = (a + b if ch == "+" else a - b if ch == "-" else a * b if ch == "*" else int(a == b) if ch == "="
+                     else int(a > b) if ch == ")" else int(a < b) if ch == "(" else a % b if ch == "%"
+                     else a // b if isinstance(a, int) and isinstance(b, int) and a % b == 0 else a / b)
+                if abs(v) > 1 << 64:
+                    return None
+                st.append(v)
+            elif ch == "!":
+                x, y = (x + dx) % W, (y + dy) % H
+            elif ch == "?":
+                if not st.pop():
+                    x, y = (x + dx) % W, (y + dy) % H
+            elif ch == ".":
+                yy, xx = st.pop(), st.pop()
+                if not (0 <= xx < W and 0 <= yy < H):
+                    return None
+                x, y = int(xx), int(yy)
+            elif ch == ":":
+                st.append(st[-1])
+            elif ch == "~":
+                st.pop()
+            elif ch == "$":
+                st[-1], st[-2] = st[-2], st[-1]
+            elif ch == "@":
+                st[-3:] = [st[-1], st[-3], st[-2]]
+            elif ch == "}":
+                st.insert(0, st.pop())
+            elif ch == "{":
+                st.append(st.pop(0))
+            elif ch == "r":
+                st.reverse()
+            elif ch == "l":
+                st.append(len(st))
+            elif ch in "on":
+                v = st.pop()
+                if ch == "n":
+                    out.append(str(int(v)) if v == int(v) else str(v))
+                else:
+                    if v != int(v) or not 0 <= v < 0x110000:
+                        return None
+                    out.append(chr(int(v)))
+                last = k
+            elif ch == "&":
+                if reg is None:
+                    reg = st.pop()
+                else:
+                    st.append(reg)
+                    reg = None
+            elif ch in "gp":
+                yy, xx = st.pop(), st.pop()
+                ok = 0 <= xx < W and 0 <= yy < H
+                if ch == "g":
+                    st.append(g[int(yy)][int(xx)] if ok else 0)
+                else:
+                    v = st.pop()
+                    if not ok or v != int(v):
+                        return None
+                    g[int(yy)][int(xx)] = int(v)
+            elif ch == "i":
+                st.append(-1)
+            elif ch == ";":
+                return _out_text(out)
+            elif ch != " " and c != 0:
+                return None
+            x, y = (x + dx) % W, (y + dy) % H
+    except (IndexError, TypeError, ValueError, OverflowError, ZeroDivisionError):
+        return None
+
+
+def grid_text(t):
+    """The text a Befunge-93/98 or ><> program prints, else None. Never raises."""
+    try:
+        if not isinstance(t, str) or not t.strip() or len(t) > 100000 or not any(ch in t for ch in "\"'0123456789"):
+            return None
+        reads = []
+        if ("@" in t or "q" in t) and ("," in t or "." in t):
+            reads += [lambda: befunge_run(t), lambda: befunge_run(t, 0, 0)]
+        if ";" in t and ("o" in t or "n" in t):
+            reads.append(lambda: fish_run(t))
+        for rd in reads:
+            x = rd()
+            if x:
+                return x
+    except (ValueError, TypeError, IndexError, RecursionError, MemoryError, OverflowError):
+        pass
+    return None
+
+
+def befunge_dec(t):
+    """Undo a Befunge-93/98 / ><> program -> the printed text; raises when t is not one."""
+    x = grid_text(t)
+    if x is None:
+        raise ValueError("not a Befunge / ><> program")
+    return x
+
+
+def befunge_free(p):
+    """Mastery free line: a one-row Befunge / ><> program's printed text when it is a crib / slug piece or prose."""
+    x = grid_text(p)
+    return [x] if x and (_crib_piece(x) or SLUG.search(x) or _texty(x) >= 0.9) else []
+
+
+CANDIDATES += [("befunge-line", befunge_enc, befunge_dec),
+               ("befunge-grid", lambda s: befunge_enc(s, "grid"), befunge_dec),
+               ("fish-mirror", fish_enc, befunge_dec),
+               ("fish-line", lambda s: fish_enc(s, "line"), befunge_dec)]
+SPECULATIVE_FREE += (("befunge", befunge_free),)
+
+
+# ------------------------------------------- JSFuck ([]()! + only): a pure-python evaluator, NEVER node / eval
+# The six-symbol program is evaluated over a small JS value model (arrays, booleans, numbers with JS Number::toString,
+# strings, undefined, native functions with "function NAME() { [native code] }" source text, iterator / RegExp / Date
+# objects) with the ~40 primitives jsfuck.com 0.4 / 0.5 build on: [] / ![] / +[] / []+[], indexing, ["flat"/"at"/
+# "filter"/"entries"/"concat"/"fontcolor"/"italics"/"split"/"join"/...], (n)["toString"](radix), String.fromCharCode,
+# and Function(body) whose body is one of the encoder's fixed forms (return escape / unescape / Date / this / eval /
+# /re/ / new Date(n) / "string literal"). Any other body is the wrapped PROGRAM (eval mode): never run, its string
+# literal(s) are the answer (alert("...") / console.log('...') / document.write(...)), else the program text.
+_JSF_CH = frozenset("[]()!+")
+
+
+class _JsUndef:
+    __slots__ = ()
+
+
+_JU = _JsUndef()
+
+
+class _JsFn:
+    __slots__ = ("name", "impl", "props")
+
+    def __init__(self, name, impl=None, props=None):
+        self.name, self.impl, self.props = name, impl, props or {}
+
+
+class _JsObj:
+    __slots__ = ("text", "kind", "props")
+
+    def __init__(self, text, kind="object", props=None):
+        self.text, self.kind, self.props = text, kind, props or {}
+
+
+class _JsProg(_JsObj):
+    """The body handed to Function(...)() / eval(...) that is not one of the encoder's fixed primitives."""
+
+
+def _jsn(x):
+    """ECMAScript Number::toString(10)."""
+    if x != x:
+        return "NaN"
+    if x in (math.inf, -math.inf):
+        return "Infinity" if x > 0 else "-Infinity"
+    if x == 0:
+        return "0"
+    if x < 0:
+        return "-" + _jsn(-x)
+    m = re.fullmatch(r"(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?", repr(float(x)))
+    i, f, e = m.group(1), m.group(2) or "", int(m.group(3) or 0)
+    s = i + f
+    lz = len(s) - len(s.lstrip("0"))
+    s = s.lstrip("0").rstrip("0")
+    n, k = len(i) + e - lz, len(s)
+    if k <= n <= 21:
+        return s + "0" * (n - k)
+    if 0 < n <= 21:
+        return s[:n] + "." + s[n:]
+    if -6 < n <= 0:
+        return "0." + "0" * -n + s
+    e = n - 1
+    return s[0] + ("." + s[1:] if k > 1 else "") + "e" + ("+" if e >= 0 else "-") + str(abs(e))
+
+
+def _jss(v):
+    """ToString."""
+    if isinstance(v, str):
+        return v
+    if v is True or v is False:
+        return "true" if v else "false"
+    if v is _JU:
+        return "undefined"
+    if v is None:
+        return "null"
+    if isinstance(v, float):
+        return _jsn(v)
+    if isinstance(v, list):
+        return ",".join("" if e is _JU or e is None else _jss(e) for e in v)
+    if isinstance(v, _JsFn):
+        return f"function {v.name}() {{ [native code] }}"
+    return v.text
+
+
+def _jsnum(v):
+    """ToNumber."""
+    if v is True or v is False:
+        return 1.0 if v else 0.0
+    if isinstance(v, float):
+        return v
+    if v is _JU:
+        return math.nan
+    if v is None:
+        return 0.0
+    s = _jss(v).strip(" \t\n\r\v\f\u00a0\ufeff")
+    if not s:
+        return 0.0
+    if re.fullmatch(r"[+-]?Infinity", s):
+        return -math.inf if s[0] == "-" else math.inf
+    m = re.fullmatch(r"0([xob])([0-9a-f]+)", s, re.I)
+    if m:
+        try:
+            return float(int(m.group(2), {"x": 16, "o": 8, "b": 2}[m.group(1).lower()]))
+        except ValueError:
+            return math.nan
+    if re.fullmatch(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?", s):
+        return float(s)
+    return math.nan
+
+
+def _jstruth(v):
+    if isinstance(v, str):
+        return bool(v)
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, float):
+        return not (v == 0 or v != v)
+    return not (v is _JU or v is None)
+
+
+def _jsadd(a, b):
+    pa = _jss(a) if isinstance(a, (list, _JsFn, _JsObj)) else a
+    pb = _jss(b) if isinstance(b, (list, _JsFn, _JsObj)) else b
+    if isinstance(pa, str) or isinstance(pb, str):
+        return _jss(pa) + _jss(pb)
+    return _jsnum(pa) + _jsnum(pb)
+
+
+def _jsint(v, dflt=0):
+    if v is _JU:
+        return dflt
+    x = _jsnum(v)
+    return 0 if x != x else (int(x) if abs(x) < 1e15 else (10 ** 15 if x > 0 else -10 ** 15))
+
+
+def _jsarg(a, k):
+    return a[k] if len(a) > k else _JU
+
+
+def _js_at(this, a):
+    s = this if isinstance(this, list) else _jss(this)
+    k = _jsint(_jsarg(a, 0))
+    k = k + len(s) if k < 0 else k
+    return s[k] if 0 <= k < len(s) else _JU
+
+
+def _js_slice(this, a):
+    s = this if isinstance(this, list) else _jss(this)
+    n = len(s)
+    b, e = _jsint(_jsarg(a, 0)), _jsint(_jsarg(a, 1), n)
+    b, e = (max(n + b, 0) if b < 0 else min(b, n)), (max(n + e, 0) if e < 0 else min(e, n))
+    return s[b:e] if isinstance(s, str) else list(s[b:e])
+
+
+def _js_concat(this, a):
+    if isinstance(this, list):
+        out = list(this)
+        for x in a:
+            out.extend(x) if isinstance(x, list) else out.append(x)
+        return out
+    return _jss(this) + "".join(_jss(x) for x in a)
+
+
+def _js_tostring(this, a):
+    if isinstance(this, float) and a and a[0] is not _JU:
+        r = _jsint(a[0])
+        if not 2 <= r <= 36:
+            raise ValueError("radix")
+        if this != this or this in (math.inf, -math.inf) or this != int(this):
+            if this == this and this not in (math.inf, -math.inf):
+                raise ValueError("fractional radix toString unsupported")
+            return _jsn(this)
+        n, neg, out = abs(int(this)), this < 0, ""
+        while True:
+            n, d = divmod(n, r)
+            out = "0123456789abcdefghijklmnopqrstuvwxyz"[d] + out
+            if not n:
+                break
+        return "-" + out if neg else out
+    return _jss(this)
+
+
+def _js_split(this, a):
+    s, sep = _jss(this), _jsarg(a, 0)
+    if sep is _JU:
+        return [s]
+    sep = _jss(sep)
+    return list(s) if sep == "" else s.split(sep)
+
+
+def _js_join(this, a):
+    sep = "," if _jsarg(a, 0) is _JU else _jss(a[0])
+    return sep.join("" if e is _JU or e is None else _jss(e) for e in this)
+
+
+def _js_html(tag, attr=None):
+    def f(this, a):
+        at = "" if attr is None else f' {attr}="' + _jss(_jsarg(a, 0)).replace('"', "&quot;") + '"'
+        return f"<{tag}{at}>{_jss(this)}</{tag}>"
+    return f
+
+
+def _js_escape(this, a):
+    out = []
+    for c in _jss(_jsarg(a, 0)):
+        o = ord(c)
+        out.append(c if c.isascii() and (c.isalnum() or c in "@*_+-./") else "%%%02X" % o if o < 256 else "%%u%04X" % o)
+    return "".join(out)
+
+
+def _js_unescape(this, a):
+    return re.sub(r"%u([0-9a-fA-F]{4})|%([0-9a-fA-F]{2})", lambda m: chr(int(m.group(1) or m.group(2), 16)),
+                  _jss(_jsarg(a, 0)))
+
+
+def _js_date_text(ms):
+    t = time.gmtime(ms / 1000.0)
+    return time.strftime("%a %b %d %Y %H:%M:%S", t) + " GMT+0000 (Coordinated Universal Time)"
+
+
+def _js_regexp_obj(src, flags=""):
+    return _JsObj("/" + (src or "(?:)") + "/" + flags, "regexp", {"source": src or "(?:)"})
+
+
+def _js_regexp(this, a):
+    src = "" if _jsarg(a, 0) is _JU else _jss(a[0])
+    return _js_regexp_obj(re.sub(r"(?<!\\)/", r"\\/", src), "" if _jsarg(a, 1) is _JU else _jss(a[1]))
+
+
+def _js_function(this, a):
+    body = _jss(a[-1]) if a else ""
+    return _JsFn("anonymous", lambda t, x: _jsf_body(body))
+
+
+_JSF_STR_METHODS = {
+    "at": _js_at, "charAt": lambda t, a: (_js_at(t, a) if _jsint(_jsarg(a, 0)) >= 0 else _JU) or "",
+    "concat": _js_concat, "slice": _js_slice, "split": _js_split, "toString": _js_tostring, "valueOf": lambda t, a: t,
+    "substr": lambda t, a: _jss(t)[_jsint(_jsarg(a, 0)):][:_jsint(_jsarg(a, 1), 1 << 30)],
+    "toUpperCase": lambda t, a: _jss(t).upper(), "toLowerCase": lambda t, a: _jss(t).lower(),
+    "trim": lambda t, a: _jss(t).strip(), "repeat": lambda t, a: _jss(t) * max(0, min(_jsint(_jsarg(a, 0)), 4096)),
+    "indexOf": lambda t, a: float(_jss(t).find(_jss(_jsarg(a, 0)))),
+    "fontcolor": _js_html("font", "color"), "fontsize": _js_html("font", "size"), "link": _js_html("a", "href"),
+    "anchor": _js_html("a", "name"), "italics": _js_html("i"), "bold": _js_html("b"), "big": _js_html("big"),
+    "small": _js_html("small"), "sub": _js_html("sub"), "sup": _js_html("sup"), "strike": _js_html("strike"),
+    "fixed": _js_html("tt"), "blink": _js_html("blink"),
+}
+_JSF_ARR_METHODS = {
+    "at": _js_at, "concat": _js_concat, "slice": _js_slice, "join": _js_join, "toString": _js_join,
+    "entries": lambda t, a: _JsObj("[object Array Iterator]", "iterator"),
+    "keys": lambda t, a: _JsObj("[object Array Iterator]", "iterator"),
+    "values": lambda t, a: _JsObj("[object Array Iterator]", "iterator"),
+    "reverse": lambda t, a: t.reverse() or t, "indexOf": lambda t, a: float(t.index(a[0]) if a and a[0] in t else -1),
+}
+_JSF_ARR_NAMES = set(_JSF_ARR_METHODS) | set("flat flatMap filter fill find findIndex findLast findLastIndex map some "
+                                             "every reduce reduceRight forEach includes push pop shift unshift splice "
+                                             "sort copyWithin lastIndexOf toLocaleString".split())
+_JSF_NUM_METHODS = {"toString": _js_tostring, "valueOf": lambda t, a: t,
+                    "toFixed": lambda t, a: "%.*f" % (max(0, min(_jsint(_jsarg(a, 0)), 100)), t)}
+
+
+def _jsf_ctor(name, impl, **props):
+    return _JsFn(name, impl, props)
+
+
+_JSF_STRING = _jsf_ctor("String", lambda t, a: _jss(a[0]) if a else "",
+                        fromCharCode=_JsFn("fromCharCode", lambda t, a: "".join(chr(_jsint(x) & 0xFFFF) for x in a)),
+                        fromCodePoint=_JsFn("fromCodePoint", lambda t, a: "".join(chr(_jsint(x)) for x in a)))
+_JSF_NUMBER = _jsf_ctor("Number", lambda t, a: _jsnum(a[0]) if a else 0.0)
+_JSF_BOOLEAN = _jsf_ctor("Boolean", lambda t, a: _jstruth(a[0]) if a else False)
+_JSF_ARRAY = _jsf_ctor("Array", lambda t, a: list(a) if len(a) != 1 or not isinstance(a[0], float) else
+                       [_JU] * max(0, min(_jsint(a[0]), 4096)))
+_JSF_FUNCTION = _jsf_ctor("Function", _js_function)
+_JSF_REGEXP = _jsf_ctor("RegExp", _js_regexp)
+_JSF_OBJECT = _jsf_ctor("Object", lambda t, a: _JsObj("[object Object]"))
+_JSF_DATE = _jsf_ctor("Date", lambda t, a: _js_date_text(0))
+_JSF_GLOBALS = {
+    "escape": _JsFn("escape", _js_escape), "unescape": _JsFn("unescape", _js_unescape), "Date": _JSF_DATE,
+    "String": _JSF_STRING, "Number": _JSF_NUMBER, "Boolean": _JSF_BOOLEAN, "Array": _JSF_ARRAY, "Object": _JSF_OBJECT,
+    "Function": _JSF_FUNCTION, "RegExp": _JSF_REGEXP, "this": _JsObj("[object global]", "global"),
+    "eval": _JsFn("eval", lambda t, a: _JsProg(_jss(a[0])) if a and isinstance(a[0], str) else _jsarg(a, 0)),
+    "atob": _JsFn("atob", lambda t, a: base64.b64decode(_jss(_jsarg(a, 0))).decode("latin-1")),
+    "btoa": _JsFn("btoa", lambda t, a: base64.b64encode(_jss(_jsarg(a, 0)).encode("latin-1")).decode()),
+    "encodeURI": _JsFn("encodeURI", lambda t, a: urllib.parse.quote(_jss(_jsarg(a, 0)), safe=";,/?:@&=+$-_.!~*'()#")),
+    "decodeURI": _JsFn("decodeURI", lambda t, a: urllib.parse.unquote(_jss(_jsarg(a, 0)))),
+    "{}": _JsObj("[object Object]"),
+}
+_JSF_ESC = re.compile(r"""\\(?:u\{([0-9a-fA-F]{1,6})\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|([0-3][0-7]{0,2}|[4-7][0-7]?)|"""
+                      r"""(\r\n|[\s\S]))""")
+_JSF_SIMPLE_ESC = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "\n": "", "\r\n": "", "\r": "",
+                   "\u2028": "", "\u2029": ""}
+_JSF_LIT = re.compile(r""""(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*'|`(?:[^`\\$]|\\[\s\S]|\$(?!\{))*`""")
+
+
+def _js_unlit(q):
+    """The value of one JS string literal (quotes included): \\n / \\xHH / \\uHHHH / \\u{H} / legacy octal escapes."""
+    def r(m):
+        if m.group(1) or m.group(2) or m.group(3):
+            return chr(int(m.group(1) or m.group(2) or m.group(3), 16))
+        if m.group(4):
+            return chr(int(m.group(4), 8))
+        return _JSF_SIMPLE_ESC.get(m.group(5), m.group(5))
+    return _JSF_ESC.sub(r, q[1:-1])
+
+
+def _jsf_body(body):
+    """Function(body)(): the encoder's fixed `return X` forms evaluated, any other body = the wrapped program."""
+    m = re.fullmatch(r"\s*return(?:\s+|(?=[/\"'{(`\[]))(.*?)[\s;]*", body, re.S)
+    if m:
+        r = m.group(1)
+        if r in _JSF_GLOBALS:
+            return _JSF_GLOBALS[r]
+        mm = re.fullmatch(r"/((?:[^/\\\n]|\\.)*)/([dgimsuy]*)", r)
+        if mm:
+            return _js_regexp_obj(mm.group(1), mm.group(2))
+        mm = re.fullmatch(r"new\s+Date\(\s*(-?\d+)\s*\)", r)
+        if mm:
+            return _JsObj(_js_date_text(int(mm.group(1))), "date")
+        if _JSF_LIT.fullmatch(r):
+            return _js_unlit(r)
+    return _JsProg(body, "program")
+
+
+def _jsf_get(o, k):
+    k = _jss(k)
+    if o is _JU or o is None:
+        raise TypeError("property of undefined")
+    if isinstance(o, (str, list)):
+        if k.isdigit() and (k == "0" or k[0] != "0"):
+            i = int(k)
+            return o[i] if i < len(o) else _JU
+        if k == "length":
+            return float(len(o))
+        if k == "constructor":
+            return _JSF_STRING if isinstance(o, str) else _JSF_ARRAY
+        if isinstance(o, str):
+            return _JsFn(k, _JSF_STR_METHODS[k]) if k in _JSF_STR_METHODS else _JU
+        if k in _JSF_ARR_NAMES:
+            return _JsFn(k, _JSF_ARR_METHODS.get(k))
+        return _JU
+    if isinstance(o, bool):
+        return _JSF_BOOLEAN if k == "constructor" else _JsFn(k, _js_tostring) if k in ("toString", "valueOf") else _JU
+    if isinstance(o, float):
+        return _JSF_NUMBER if k == "constructor" else _JsFn(k, _JSF_NUM_METHODS[k]) if k in _JSF_NUM_METHODS else _JU
+    if isinstance(o, _JsFn):
+        if k == "constructor":
+            return _JSF_FUNCTION
+        if k == "name":
+            return o.name
+        if k == "toString":
+            return _JsFn(k, _js_tostring)
+        if k == "call":
+            return _JsFn("call", lambda t, a: _jsf_call(t, _jsarg(a, 0), list(a[1:])))
+        return o.props.get(k, _JU)
+    if k == "constructor":
+        return {"regexp": _JSF_REGEXP, "date": _JSF_DATE}.get(o.kind, _JSF_OBJECT)
+    if k == "toString":
+        return _JsFn(k, _js_tostring)
+    return o.props.get(k, _JU)
+
+
+def _jsf_call(f, this, args):
+    if not isinstance(f, _JsFn) or f.impl is None:
+        raise TypeError("not callable: " + (f.name if isinstance(f, _JsFn) else type(f).__name__))
+    return f.impl(this, args)
+
+
+class _JsfParser:
+    """Recursive descent over [ ] ( ) ! + evaluating as it goes: expr = unary ('+' unary)*; unary = ('!'|'+') unary |
+    postfix; postfix = primary ('[' expr ']' | '(' [expr] ')')*; primary = '[' [expr] ']' | '(' expr ')'."""
+
+    def __init__(self, s, max_steps=2_000_000):
+        self.s, self.i, self.n, self.steps = s, 0, len(s), max_steps
+
+    def peek(self):
+        return self.s[self.i] if self.i < self.n else ""
+
+    def eat(self, c):
+        if self.peek() != c:
+            raise ValueError(f"expected {c!r} at {self.i}")
+        self.i += 1
+
+    def expr(self):
+        v = self.unary()
+        while self.peek() == "+":
+            self.i += 1
+            v = _jsadd(v, self.unary())
+        return v
+
+    def unary(self):
+        ops = []
+        while self.peek() in ("!", "+") and self.peek():
+            ops.append(self.s[self.i])
+            self.i += 1
+        v = self.postfix()
+        for op in reversed(ops):
+            v = (not _jstruth(v)) if op == "!" else _jsnum(v)
+        return v
+
+    def postfix(self):
+        c = self.peek()
+        if c == "[":
+            self.i += 1
+            if self.peek() == "]":
+                v = []
+            else:
+                v = [self.expr()]
+            self.eat("]")
+        elif c == "(":
+            self.i += 1
+            v = self.expr()
+            self.eat(")")
+        else:
+            raise ValueError(f"unexpected {c!r} at {self.i}")
+        this = _JU
+        while True:
+            self.steps -= 1
+            if self.steps < 0:
+                raise ValueError("step cap")
+            c = self.peek()
+            if c == "[":
+                self.i += 1
+                k = self.expr()
+                self.eat("]")
+                v, this = _jsf_get(v, k), v
+            elif c == "(":
+                self.i += 1
+                args = [] if self.peek() == ")" else [self.expr()]
+                self.eat(")")
+                v, this = _jsf_call(v, this, args), _JU
+            else:
+                return v
+
+
+def jsfuck_eval(t):
+    """Evaluate a JSFuck program -> its final JS value (str / float / list / _JsProg ...); raises when t is not one."""
+    if not isinstance(t, str):
+        raise ValueError("not text")
+    s = "".join(t.split()).rstrip(";")
+    if len(s) < 8 or len(s) > 4_000_000 or not set(s) <= _JSF_CH or "[" not in s or "!" not in s:
+        raise ValueError("not JSFuck")
+    p = _JsfParser(s)
+    v = p.expr()
+    if p.i != p.n:
+        raise ValueError(f"trailing input at {p.i}")
+    return v
+
+
+def _jsf_prog_text(prog):
+    """A wrapped program's answer: its string literal run(s) ("a"+'b' joined) -- the longest -- else the program."""
+    best = None
+    for m in re.finditer(r"(?:%s)(?:\s*\+\s*(?:%s))*" % (_JSF_LIT.pattern, _JSF_LIT.pattern), prog):
+        x = "".join(_js_unlit(q.group(0)) for q in _JSF_LIT.finditer(m.group(0)))
+        if best is None or len(x) > len(best):
+            best = x
+    return best if best is not None else prog.strip()
+
+
+def jsfuck_dec(t):
+    """The text a JSFuck program yields (the string it evaluates to, or the string literal inside the program it
+    evals / Function()s), else None. Pure python: the program is never run by a JS engine."""
+    try:
+        v = jsfuck_eval(t)
+        if isinstance(v, _JsProg):
+            v = _jsf_prog_text(v.text)
+        elif isinstance(v, _JsFn) and v.name == "anonymous":
+            return None
+        return v if isinstance(v, str) and v else None
+    except (ValueError, TypeError, KeyError, IndexError, OverflowError, RecursionError, MemoryError,
+            UnicodeError, binascii.Error):
+        return None
+
+
+def jsfuck_free(p):
+    """Mastery free line: a JSFuck line's yielded text."""
+    x = jsfuck_dec(p)
+    return [x] if x else []
+
+
+# jsfuck.com 0.5.0's encoder ported (MAPPING / replaceMap / replaceStrings / encode), so infer() matches its bytes
+_JSF5_SIMPLE = {"false": "![]", "true": "!![]", "undefined": "[][[]]", "NaN": "+[![]]",
+                "Infinity": "+(+!+[]+(!+[]+[])[!+[]+!+[]+!+[]]+[+!+[]]+[+[]]+[+[]]+[+[]])"}
+_JSF5_CTORS = {"Array": "[]", "Number": "(+[])", "String": "([]+[])", "Boolean": "(![])", "Function": '[]["at"]',
+               "RegExp": 'Function("return/"+false+"/")()'}
+_JSF5_RAW = (
+    ("a", '(false+"")[1]'), ("b", '([]["entries"]()+"")[2]'), ("c", '([]["at"]+"")[3]'), ("d", '(undefined+"")[2]'),
+    ("e", '(true+"")[3]'), ("f", '(false+"")[0]'), ("g", '(false+[0]+String)[20]'),
+    ("h", '(+(101))["to"+String["name"]](21)[1]'), ("i", '([false]+undefined)[10]'), ("j", '([]["entries"]()+"")[3]'),
+    ("k", '(+(20))["to"+String["name"]](21)'), ("l", '(false+"")[2]'), ("m", '(Number+"")[11]'),
+    ("n", '(undefined+"")[1]'), ("o", '(true+[]["at"])[10]'), ("p", '(+(211))["to"+String["name"]](31)[1]'),
+    ("q", '("")["fontcolor"]([0]+false+")[20]'), ("r", '(true+"")[1]'), ("s", '(false+"")[3]'), ("t", '(true+"")[0]'),
+    ("u", '(undefined+"")[0]'), ("v", '(+(31))["to"+String["name"]](32)'), ("w", '(+(32))["to"+String["name"]](33)'),
+    ("x", '(+(101))["to"+String["name"]](34)[1]'), ("y", '(NaN+[Infinity])[10]'),
+    ("z", '(+(35))["to"+String["name"]](36)'),
+    ("A", '(NaN+[]["entries"]())[11]'), ("B", '(+[]+Boolean)[10]'), ("C", 'Function("return escape")()(("")["italics"]())[2]'),
+    ("D", 'Function("return escape")()([]["at"])["at"]("-1")'), ("E", '(RegExp+"")[12]'), ("F", '(+[]+Function)[10]'),
+    ("G", '(false+Function("return Date")()())[30]'), ("H", None), ("I", '(Infinity+"")[0]'), ("J", None), ("K", None),
+    ("L", None), ("M", '(true+Function("return Date")()())[30]'), ("N", '(NaN+"")[0]'), ("O", None), ("P", None),
+    ("Q", None), ("R", '(+[]+RegExp)[10]'), ("S", '(+[]+String)[10]'), ("T", '(NaN+Function("return Date")()())[30]'),
+    ("U", None), ("V", None), ("W", None), ("X", None), ("Y", None), ("Z", None),
+    (" ", '(NaN+[]["at"])[11]'), ("!", None), ('"', '("")["fontcolor"]()[12]'), ("#", None), ("$", None),
+    ("%", 'Function("return escape")()([]["at"])[22]'), ("&", '("")["fontcolor"](")[13]'), ("'", None),
+    ("(", '([]["at"]+"")[11]'), (")", '(""+[]["at"])[12]'), ("*", None),
+    ("+", '(+(+!+[]+(!+[]+[])[!+[]+!+[]+!+[]]+[+!+[]]+[+[]]+[+[]])+[])[2]'), (",", '[[]]["concat"]([[]])+""'),
+    ("-", '(+(.+[0000001])+"")[2]'), (".", '(+(+!+[]+[+!+[]]+(!![]+[])[!+[]+!+[]+!+[]]+[!+[]+!+[]]+[+[]])+[])[+!+[]]'),
+    ("/", '(false+[0])["italics"]()[10]'), (":", '(RegExp()+"")[3]'), (";", '("")["fontcolor"](NaN+")[21]'),
+    ("<", '("")["italics"]()[0]'), ("=", '("")["fontcolor"]()[11]'), (">", '("")["italics"]()[2]'),
+    ("?", '(RegExp()+"")[2]'), ("@", None), ("[", '([]["entries"]()+"")[0]'), ("\\", '(RegExp("/")+"")[1]'),
+    ("]", '([]["entries"]()+"")[22]'), ("^", None), ("_", None), ("`", None), ("{", '([0]+false+[]["at"])[20]'),
+    ("|", None), ("}", '([]["at"]+"")["at"]("-1")'), ("~", None))
+
+
+def _jsf5_num(y, M):
+    head, out = int(y[0]), "+[]"
+    if head > 0:
+        out = "+!" + out
+    for _ in range(1, head):
+        out = "+!+[]" + out
+    if head > 1:
+        out = out[1:]
+    return re.sub(r"(\d)", lambda m: M[m.group(1)], "+".join([out] + list(y[1:])))
+
+
+@functools.lru_cache(maxsize=1)
+def _jsf5_mapping():
+    M = {}
+    for d in range(10):
+        M[str(d)] = "[" + _jsf5_num(str(d), {}) + "]"
+    M.update(_JSF5_RAW)
+    st = [32]   # the JS numberReplacer reuses replaceMap's loop counter `i`: chars re-run (emulated, else bytes differ)
+
+    def num(m):
+        st[0] = max(1, int(m.group(1)[0]))
+        return _jsf5_num(m.group(1), M)
+    for _ in range(20000):
+        i = st[0]
+        if i > 126:
+            break
+        v = M.get(chr(i))
+        if not v:
+            st[0] += 1
+            continue
+        for key, ctor in _JSF5_CTORS.items():
+            v = re.sub(r"\b" + key, lambda m, c=ctor: c + '["constructor"]', v, flags=re.I)
+        for key, simple in _JSF5_SIMPLE.items():
+            v = re.sub(key, lambda m, s=simple: s, v, flags=re.I)
+        v = re.sub(r"(\d\d+)", num, v)
+        v = re.sub(r"\((\d)\)", lambda m: M[m.group(1)], v)
+        v = re.sub(r"\[(\d)\]", lambda m: M[m.group(1)], v)
+        v = re.sub("GLOBAL", 'Function("return this")()', v, flags=re.I)
+        v = re.sub(r'\+""', "+[]", v)
+        v = re.sub('""', "[]+[]", v)
+        M[chr(i)] = v
+        st[0] += 1   # the JS loop's own i++ (after numberReplacer may have reset it)
+    for k, v in M.items():
+        if v:
+            M[k] = re.sub(r'"([^"]+)"', lambda m: "+".join(m.group(1)), v)
+    other = re.compile(r"[^\[\]\(\)\!\+]")
+    for _ in range(127 - 32 + 1):
+        missing = {k: v for k, v in M.items() if v and other.search(v)}
+        if not missing:
+            break
+        for k in missing:
+            v = other.sub(lambda m: m.group(0) if missing.get(m.group(0)) else (M.get(m.group(0)) or "null"), M[k])
+            M[k] = missing[k] = v
+    return M
+
+
+def _jsf5_esc(c):
+    o = ord(c)
+    return "\\" + format(o, "o") if o < 256 else "\\u%04x" % o
+
+
+def jsfuck_enc(s, wrap=False, parent=False):
+    """jsfuck.com 0.5.0 JSFuck.encode(s, wrapWithEval, runInParentScope)."""
+    M = _jsf5_mapping()
+    if not s:
+        return ""
+    unm = re.compile("[^" + re.escape("".join(k for k, v in M.items() if v)) + "]")
+    n = len(unm.findall(s))
+    if n > 1:
+        s = re.sub(r"[^0123456789.adefilnrsuN]", lambda m: _jsf5_esc(m.group(0)).replace("\\", "t", 1), s)
+    elif n:
+        s = unm.sub(lambda m: _jsf5_esc(m.group(0)), re.sub(r'["\\]', lambda m: _jsf5_esc(m.group(0)), s))
+    out = []
+    for m in re.finditer(r"false|true|undefined|NaN|Infinity|.", s):
+        c = m.group(0)
+        out.append("(" + _JSF5_SIMPLE[c] + "+[])" if c in _JSF5_SIMPLE else M[c])
+    out = "+".join(out) + ("+[]" if re.fullmatch(r"\d", s) else "")
+    if n > 1:
+        out = f"({out})[{jsfuck_enc('split')}]({jsfuck_enc('t')})[{jsfuck_enc('join')}]({jsfuck_enc(chr(92))})"
+    if n:
+        out = f'[][{jsfuck_enc("at")}][{jsfuck_enc("constructor")}]({jsfuck_enc(chr(34).join(["return", ""]))}+{out}+{jsfuck_enc(chr(34))})()'
+    if wrap:
+        head = f"[][{jsfuck_enc('at')}][{jsfuck_enc('constructor')}]"
+        out = f"{head}({jsfuck_enc('return eval')})()({out})" if parent else f"{head}({out})()"
+    return out
+
+
+CANDIDATES += [("jsfuck", jsfuck_enc, jsfuck_dec),
+               ("jsfuck-eval-alert", lambda s: jsfuck_enc('alert("%s")' % s.replace("\\", "\\\\").replace('"', '\\"'), True),
+                jsfuck_dec)]
+SPECULATIVE_FREE += (("jsfuck", jsfuck_free),)
+
+
+# ------------------------------------------------------- Chef (recipe-shaped) and Shakespeare (play-shaped) esolangs
+# "Food for Thought" / "All the world's a stage": the sentence is the OUTPUT of a Chef recipe ('Ingredients.' = char
+# codes, 'Method.' = a stack machine over mixing bowls, 'Serves N.' prints the first N baking dishes top first, i.e.
+# REVERSED push order -- the classic 'Hello World Souffle' pushes the sentence back to front) or of a Shakespeare play
+# (noun phrase = +-2^#adjectives, 'You are as <adj> as <expr>!' assigns the listener, 'Speak your mind!' prints chr).
+_CHEF_MEAS = r"(?:heaped\s+|level\s+)?(g|kg|pinch(?:es)?|ml|l|dash(?:es)?|cups?|teaspoons?|tablespoons?)\s+"
+_CHEF_ING = re.compile(r"^\s*(-?\d+)?\s*(?:" + _CHEF_MEAS + r")?(\S.*?)\s*$", re.I)
+_CHEF_BOWL = r"(?:the\s+)?(?:(\d+)(?:st|nd|rd|th)\s+)?mixing\s+bowl"
+_CHEF_DISH = r"(?:the\s+)?(?:(\d+)(?:st|nd|rd|th)\s+)?baking\s+dish"
+_CHEF_OPS = [(k, re.compile(p + r"$", re.I)) for k, p in (
+    ("take", r"Take\s+(.+?)\s+from\s+(?:the\s+)?refrigerator"),
+    ("put", r"Put\s+(.+?)\s+into\s+" + _CHEF_BOWL),
+    ("fold", r"Fold\s+(.+?)\s+into\s+" + _CHEF_BOWL),
+    ("dry", r"Add\s+dry\s+ingredients(?:\s+to\s+" + _CHEF_BOWL + r")?"),
+    ("arith", r"(Add|Remove|Combine|Divide)\s+(.+?)(?:\s+(?:to|into|from)\s+" + _CHEF_BOWL + r")?"),
+    ("liqbowl", r"Liqu[ei]fy\s+(?:the\s+)?contents\s+of\s+" + _CHEF_BOWL),
+    ("liq", r"Liqu[ei]fy\s+(?:the\s+)?(.+?)"),
+    ("stirn", r"Stir(?:\s+" + _CHEF_BOWL + r")?\s+for\s+(\d+)\s+minutes?"),
+    ("stiri", r"Stir\s+(.+?)\s+into\s+" + _CHEF_BOWL),
+    ("mix", r"Mix(?:\s+" + _CHEF_BOWL + r")?\s+well"),
+    ("clean", r"Clean\s+" + _CHEF_BOWL),
+    ("pour", r"Pour\s+contents\s+of\s+" + _CHEF_BOWL + r"\s+into\s+" + _CHEF_DISH),
+    ("aside", r"Set\s+aside"),
+    ("serve", r"Serve\s+with\s+(.+?)"),
+    ("fridge", r"Refrigerate(?:\s+for\s+(\d+)\s+hours?)?"),
+    ("until", r"([A-Za-z]+)(?:\s+(?:the\s+)?(.+?))?\s+until\s+[A-Za-z]+"),
+    ("loop", r"([A-Za-z]+)\s+(?:the\s+)?(.+?)"))]
+
+
+def _chef_recipes(t):
+    """({title_lower: (ingredients [(name, value|None, liquid)], method_text, serves|None)}, main title), else None.
+    A recipe = title line [+ comment paragraph] + 'Ingredients.' + [Cooking time / Pre-heat] + 'Method.' + [Serves]."""
+    paras = [p.strip() for p in re.split(r"\n\s*\n", t.replace("\r\n", "\n").replace("\r", "\n").strip()) if p.strip()]
+    ing_at = [i for i, p in enumerate(paras) if re.match(r"Ingredients\s*\.", p, re.I)]
+    if not ing_at or not any(re.match(r"Method\s*\.", p, re.I) for p in paras):
+        return None
+    kw = re.compile(r"(Method|Serves|Cooking|Pre-heat|Ingredients)\b", re.I)
+    heads = []   # (title paragraph index, ingredients paragraph index)
+    for n, i in enumerate(ing_at):
+        lo = ing_at[n - 1] + 2 if n else 0
+        cand = [j for j in (i - 1, i - 2) if j >= lo and "\n" not in paras[j] and not kw.match(paras[j])]
+        j = cand[-1] if len(cand) == 2 and n else cand[0] if cand else (i if n == 0 else None)
+        if j is None:
+            return None
+        heads.append((j, i))
+    recipes = {}
+    for n, (j, i) in enumerate(heads):
+        end = heads[n + 1][0] if n + 1 < len(heads) else len(paras)
+        title = "" if j == i else paras[j].rstrip(".").strip().lower()
+        ings, method, serves = [], [], None
+        for b in paras[i:end]:
+            if re.match(r"Ingredients\s*\.", b, re.I):
+                for ln in b.split("\n")[1:]:
+                    m = _CHEF_ING.match(ln)
+                    if not m or not ln.strip():
+                        continue
+                    meas = (m.group(2) or "").lower()
+                    ings.append((re.sub(r"\s+", " ", m.group(3)).lower(), None if m.group(1) is None else int(m.group(1)),
+                                 meas in ("ml", "l", "dash", "dashes")))
+            elif re.match(r"Method\s*\.", b, re.I):
+                method.append(re.sub(r"^Method\s*\.", "", b, flags=re.I))
+            elif re.match(r"Serves\s+\d+", b, re.I):
+                serves = int(re.match(r"Serves\s+(\d+)", b, re.I).group(1))
+            elif method and not re.match(r"(Cooking|Pre-heat)\b", b, re.I):
+                method.append(b)
+        if not ings or not method:
+            return None
+        recipes[title] = (ings, " ".join(method), serves)
+    return recipes, (paras[heads[0][0]].rstrip(".").strip().lower() if heads[0][0] != heads[0][1] else "")
+
+
+def _chef_compile(method, names):
+    """Method text -> [(op, args...)] with loop ends linked; raises ValueError on an unknown step."""
+    prog, opened = [], []
+
+    def ing(x):
+        x = re.sub(r"^the\s+", "", re.sub(r"\s+", " ", x.strip()), flags=re.I).lower()
+        if x not in names:
+            raise ValueError("unknown ingredient " + x)
+        return x
+    bn = lambda g: int(g) - 1 if g else 0  # noqa: E731
+    for st in re.split(r"\.(?:\s+|$)", re.sub(r"\s+", " ", method).strip()):
+        st = st.strip().rstrip(".")
+        if not st:
+            continue
+        for k, rx in _CHEF_OPS:
+            m = rx.match(st)
+            if not m:
+                continue
+            g = m.groups()
+            if k in ("take", "liq", "loop"):
+                if k == "loop":
+                    prog.append(("loop", ing(g[1]), None))
+                    opened.append(len(prog) - 1)
+                else:
+                    prog.append((k, ing(g[0])))
+            elif k in ("put", "fold", "stiri"):
+                prog.append((k, ing(g[0]), bn(g[1])))
+            elif k in ("dry", "liqbowl", "mix", "clean"):
+                prog.append((k, bn(g[0])))
+            elif k == "arith":
+                prog.append((g[0].lower(), ing(g[1]), bn(g[2])))
+            elif k == "stirn":
+                prog.append((k, bn(g[0]), int(g[1])))
+            elif k == "pour":
+                prog.append((k, bn(g[0]), bn(g[1])))
+            elif k == "aside":
+                prog.append((k,))
+            elif k == "serve":
+                prog.append((k, g[0].strip().lower()))
+            elif k == "fridge":
+                prog.append((k, int(g[0]) if g[0] else None))
+            elif k == "until":
+                if not opened:
+                    raise ValueError("loop end without start")
+                s = opened.pop()
+                prog.append(("until", ing(g[1]) if g[1] else None, s))
+                prog[s] = ("loop", prog[s][1], len(prog))
+            break
+        else:
+            raise ValueError("unknown step " + st)
+    if opened:
+        raise ValueError("unclosed loop")
+    return prog
+
+
+def _chef_run(recipes, title, bowls, dishes, budget, depth=0):
+    """Run one recipe on (bowls, dishes) [lists of [value, liquid] stacks]; returns the printed text (Refrigerate N /
+    Serves N)."""
+    if depth > 20:
+        raise ValueError("recursion")
+    ings, method, serves = recipes[title]
+    val = {n: [v, liq] for n, v, liq in ings}
+    prog = _chef_compile(method, val)
+    out, pc, loops = [], 0, []
+
+    def bowl(i):
+        while len(bowls) <= i:
+            bowls.append([])
+        return bowls[i]
+
+    def dish(i):
+        while len(dishes) <= i:
+            dishes.append([])
+        return dishes[i]
+
+    def get(n):
+        if val[n][0] is None:
+            raise ValueError("undefined ingredient " + n)
+        return val[n][0]
+
+    def show(n):
+        for d in dishes[:n]:
+            for v, liq in reversed(d):
+                out.append(chr(int(v)) if liq else str(v))
+            d.clear()
+    while pc < len(prog):
+        budget[0] -= 1
+        if budget[0] < 0:
+            raise ValueError("step cap")
+        op = prog[pc]
+        k = op[0]
+        pc += 1
+        if k == "take":
+            val[op[1]][0] = 0
+        elif k == "put":
+            bowl(op[2]).append([get(op[1]), val[op[1]][1]])
+        elif k == "fold":
+            val[op[1]][0] = bowl(op[2]).pop()[0]
+        elif k in ("add", "remove", "combine", "divide"):
+            b, v = bowl(op[2]), get(op[1])
+            if not b:
+                raise ValueError("empty bowl")
+            x = b[-1][0]
+            b[-1][0] = (x + v if k == "add" else x - v if k == "remove" else x * v if k == "combine"
+                        else (x // v if isinstance(x, int) and x % v == 0 else x / v))
+        elif k == "dry":
+            bowl(op[1]).append([sum(v for v, liq in val.values() if v is not None and not liq), False])
+        elif k == "liq":
+            val[op[1]][1] = True
+        elif k == "liqbowl":
+            for e in bowl(op[1]):
+                e[1] = True
+        elif k in ("stirn", "stiri"):
+            b = bowl(op[2] if k == "stiri" else op[1])
+            n = get(op[1]) if k == "stiri" else op[2]
+            if b:
+                e = b.pop()
+                b.insert(max(0, len(b) - int(n)), e)
+        elif k == "clean":
+            bowl(op[1]).clear()
+        elif k == "pour":
+            dish(op[2]).extend([list(e) for e in bowl(op[1])])
+        elif k == "loop":
+            if get(op[1]) == 0:
+                pc = op[2]
+            else:
+                loops.append(op[2])
+        elif k == "until":
+            if op[1]:
+                val[op[1]][0] = get(op[1]) - 1
+            if loops:
+                loops.pop()
+            pc = op[2]
+        elif k == "aside":
+            if loops:
+                pc = loops.pop()
+        elif k == "serve":
+            if op[1] not in recipes:
+                raise ValueError("no auxiliary recipe " + op[1])
+            sub_b = [[list(e) for e in b] for b in bowls]
+            sub_d = [[list(e) for e in d] for d in dishes]
+            out.append(_chef_run(recipes, op[1], sub_b, sub_d, budget, depth + 1))
+            bowl(0).extend(sub_b[0] if sub_b else [])
+        elif k == "fridge":
+            if op[1]:
+                show(op[1])
+            return "".join(out)
+        elif k == "mix":
+            pass   # random shuffle in the spec: a sentence printer never relies on it
+    if serves:
+        show(serves)
+    return "".join(out)
+
+
+def chef_dec(t, max_steps=400_000):
+    """A Chef recipe program -> the text its 'Serves N.' (or Refrigerate) prints; raises ValueError for anything that is
+    not a runnable recipe with printable output (a plain English recipe has no compilable Method)."""
+    if isinstance(t, (bytes, bytearray)):
+        t = t.decode("utf-8", "replace")
+    got = _chef_recipes(t)
+    if not got:
+        raise ValueError("not a Chef recipe")
+    recipes, main = got
+    out = _chef_run(recipes, main, [], [], [max_steps])
+    if not out.strip() or any((ord(ch) < 32 and ch not in "\t\n\r") or 127 <= ord(ch) < 160 for ch in out):
+        raise ValueError("no printable output")
+    return out
+
+
+_CHEF_FOODS = ("haricot beans", "eggs", "lard", "oil", "zucchinis", "water", "red salmon", "dijon mustard", "potatoes",
+               "flour", "sugar", "butter", "milk", "salt", "honey", "cocoa", "vanilla", "yeast", "cream", "cheese",
+               "garlic", "onions", "carrots", "rice", "pepper", "basil", "thyme", "lemons", "apples", "pears", "plums",
+               "raisins", "almonds", "walnuts", "oats", "barley", "ginger", "nutmeg", "cloves", "mint", "dates",
+               "figs", "peas", "leeks", "beets", "kale", "tofu", "corn", "bacon", "ham")
+
+
+def chef_enc(s, title="Hello World Souffle"):
+    """'Hello World Souffle' generator: one ingredient per distinct code point (amount = code), Put them back to front,
+    Liquefy the bowl, Pour it into the baking dish, Serves 1."""
+    names, ings = {}, []
+    for ch in s:
+        if ch not in names:
+            k = len(names)
+            nm = _CHEF_FOODS[k % len(_CHEF_FOODS)] + ("" if k < len(_CHEF_FOODS) else " " + str(k // len(_CHEF_FOODS)))
+            names[ch] = nm
+            ings.append(f"{ord(ch)} g {nm}")
+    steps = [f"Put {names[ch]} into the mixing bowl." for ch in reversed(s)]
+    steps += ["Liquefy contents of the mixing bowl.", "Pour contents of the mixing bowl into the baking dish."]
+    return (f"{title}.\n\nIngredients.\n" + "\n".join(ings) + "\n\nMethod.\n" + "\n".join(steps) + "\n\nServes 1.\n")
+
+
+def chef_free(p):
+    try:
+        x = chef_dec(p.replace("\\n", "\n") if "\n" not in p else p)
+        return [x] if _crib_piece(x) > 0 or SLUG.search(x) else []
+    except (ValueError, IndexError, KeyError, TypeError, ZeroDivisionError, OverflowError, RecursionError):
+        return []
+
+
+_SPL_NEG_NOUNS = set("hell microsoft bastard beggar blister codpiece coward curse death devil draught famine flirt-gill "
+                     "goat hate hog hound leech lie pig plague starvation toad war wolf".split())
+_SPL_NOUNS = _SPL_NEG_NOUNS | set(
+    "heaven king lord angel flower happiness joy plum hero rose kingdom pony animal aunt brother cat chihuahua cousin "
+    "cow daughter door face father fellow granddaughter grandfather grandmother grandson hair hamster horse lamp "
+    "lantern mistletoe moon morning mother nephew niece nose purse road roman sister sky son squirrel thing town tree "
+    "uncle wind".split())
+_SPL_NEG_ADJ = set("bad cowardly cursed damned dirty disgusting distasteful dusty evil fat-kidneyed fatherless fat foul "
+                   "hairy half-witted horrible horrid infected lying miserable misused oozing rotten smelly snotty sorry "
+                   "stinking stuffed stupid vile villainous worried".split())
+_SPL_DET = set("a an the my mine your thy thine his her its their".split())
+_SPL_BIN = {("the", "sum", "of"): "+", ("the", "difference", "between"): "-", ("the", "product", "of"): "*",
+            ("the", "quotient", "between"): "/", ("the", "remainder", "of", "the", "quotient", "between"): "%"}
+_SPL_UN = {("the", "square", "root", "of"): "sqrt", ("the", "square", "of"): "sq", ("the", "cube", "of"): "cube",
+           ("the", "factorial", "of"): "fact", ("twice",): "twice"}
+_ROMAN = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
+
+
+def _roman(r):
+    n, prev = 0, 0
+    for ch in reversed(r.lower()):
+        v = _ROMAN[ch]
+        n, prev = (n - v, prev) if v < prev else (n + v, v)
+    return n
+
+
+def _spl_value(w, i, env):
+    """(value, next index) of the SPL value starting at tokens w[i]."""
+    for pre, op in sorted(_SPL_BIN.items(), key=lambda kv: -len(kv[0])):
+        if tuple(w[i:i + len(pre)]) == pre:
+            a, j = _spl_value(w, i + len(pre), env)
+            if j >= len(w) or w[j] != "and":
+                raise ValueError("binary without and")
+            b, j = _spl_value(w, j + 1, env)
+            if op in "/%" and b == 0:
+                raise ValueError("division by zero")
+            q = int(a / b) if op in "/%" else 0
+            return {"+": a + b, "-": a - b, "*": a * b, "/": q, "%": a - q * b if op == "%" else 0}[op], j
+    for pre, op in _SPL_UN.items():
+        if tuple(w[i:i + len(pre)]) == pre:
+            a, j = _spl_value(w, i + len(pre), env)
+            if op == "fact" and not 0 <= a <= 200:
+                raise ValueError("factorial range")
+            return {"sqrt": math.isqrt(abs(a)) * (1 if a >= 0 else -1), "sq": a * a, "cube": a ** 3,
+                    "fact": math.factorial(a) if op == "fact" else 0, "twice": 2 * a}[op], j + 0
+    x = w[i] if i < len(w) else ""
+    if x in ("nothing", "zero"):
+        return 0, i + 1
+    if x in ("i", "me", "myself"):
+        return env["val"][env["spk"]], i + 1
+    if x in ("you", "thee", "thou", "thyself", "yourself"):
+        return env["val"][env["lis"]()], i + 1
+    if x.startswith("@"):
+        return env["val"][int(x[1:])], i + 1
+    j = i + (x in _SPL_DET)
+    adj = 0
+    while j < len(w):
+        if w[j] == "summer's" and j + 1 < len(w) and w[j + 1] == "day" or w[j] == "stone" and j + 1 < len(w) \
+                and w[j + 1] == "wall":
+            return 2 ** adj, j + 2
+        if w[j] in _SPL_NOUNS:
+            return (-1 if w[j] in _SPL_NEG_NOUNS else 1) * 2 ** adj, j + 1
+        if w[j] == "and" or w[j].startswith("@") or not re.fullmatch(r"[a-z'\-]+", w[j]):
+            break
+        adj += 1
+        j += 1
+    raise ValueError("no noun phrase")
+
+
+def _spl_parse(t):
+    """(characters, events) of a Shakespeare play, else None. events: ('scene', act, scene) | ('enter', [ids]) |
+    ('exit', [ids]) | ('exeunt', [ids]|None) | ('say', id, sentence)."""
+    t = re.sub(r"\s+", " ", t.replace("\r", " ")).strip()
+    a = re.search(r"\bAct\s+[IVXLCDM]+\s*:", t)
+    if not a:
+        return None
+    head = t[:a.start()]
+    m = re.match(r"[^.!]*[.!]", head)
+    if not m:
+        return None
+    chars = [c.strip() for c in re.findall(r"(?:^|[.!?])\s*([A-Z][A-Za-z' -]{0,40}?)\s*,", head[m.end() - 1:])]
+    chars = list(dict.fromkeys(c for c in chars if c))
+    if not chars:
+        return None
+    body = t[a.start():]
+    names = sorted(range(len(chars)), key=lambda k: -len(chars[k]))
+    nrx = "|".join(re.escape(chars[k]) for k in names)
+    cid = {c.lower(): k for k, c in enumerate(chars)}
+    tok = re.compile(r"\bAct\s+([IVXLCDM]+)\s*:[^.!]*[.!]|\bScene\s+([IVXLCDM]+)\s*:[^.!]*[.!]|\[\s*(Enter|Exit|Exeunt)"
+                     r"([^\]]*)\]|\[[^\]]*\]|(?:^|(?<=[.!?\]]))\s*(" + nrx + r")\s*:", re.I)
+
+    def ids(s):
+        return [cid[c.strip().lower()] for c in re.split(r",|\band\b", s) if c.strip()]
+    ev, act, spk, pos = [], 0, None, 0
+    ms = list(tok.finditer(body))
+    for n, m in enumerate(ms):
+        end = ms[n + 1].start() if n + 1 < len(ms) else len(body)
+        if m.group(1):
+            act, spk = _roman(m.group(1)), None
+        elif m.group(2):
+            ev.append(("scene", act, _roman(m.group(2))))
+            spk = None
+        elif m.group(3):
+            k = m.group(3).lower()
+            who = ids(m.group(4)) if m.group(4).strip() else None
+            if k != "exeunt" and not who:
+                return None
+            ev.append((k, who))
+            spk = None
+        elif m.group(5):
+            spk = cid[m.group(5).lower()]
+            for s in re.findall(r"[^.!?]+[.!?]", body[m.end():end]):
+                ev.append(("say", spk, s.strip()))
+    return chars, ev
+
+
+def spl_dec(t, max_steps=400_000):
+    """A Shakespeare (SPL) play -> the text its 'Speak your mind!' / 'Open your heart!' lines print; raises ValueError
+    for anything that is not a play with printable output."""
+    if isinstance(t, (bytes, bytearray)):
+        t = t.decode("utf-8", "replace")
+    got = _spl_parse(t)
+    if not got:
+        raise ValueError("not a Shakespeare play")
+    chars, ev = got
+    labels, act = {}, 0
+    for i, e in enumerate(ev):
+        if e[0] == "scene":
+            labels[(e[1], e[2])] = i
+    val, stk, stage, out = [0] * len(chars), [[] for _ in chars], [], []
+    nrx = re.compile(r"\b(" + "|".join(re.escape(c) for c in sorted(chars, key=len, reverse=True)) + r")\b", re.I)
+    cid = {c.lower(): k for k, c in enumerate(chars)}
+    env = {"val": val, "spk": None}
+
+    def lis():
+        o = [c for c in stage if c != env["spk"]]
+        if len(o) != 1:
+            raise ValueError("ambiguous listener")
+        return o[0]
+    env["lis"] = lis
+    cond, pc, steps, said = None, 0, 0, 0
+    while pc < len(ev):
+        steps += 1
+        if steps > max_steps:
+            raise ValueError("step cap")
+        e = ev[pc]
+        pc += 1
+        k = e[0]
+        if k == "scene":
+            act = e[1]
+        elif k == "enter":
+            stage.extend(c for c in e[1] if c not in stage)
+        elif k == "exit":
+            stage[:] = [c for c in stage if c not in e[1]]
+        elif k == "exeunt":
+            stage[:] = [c for c in stage if e[1] and c not in e[1]]
+        elif k == "say":
+            env["spk"] = e[1]
+            s = nrx.sub(lambda m: "@%d" % cid[m.group(1).lower()], e[2])
+            q = s.endswith("?")
+            s = s.rstrip(".!?").strip().lower()
+            mc = re.match(r"if (so|not)\s*,\s*(.*)$", s)
+            if mc:
+                if cond is None or cond != (mc.group(1) == "so"):
+                    continue
+                s = mc.group(2)
+            w = re.findall(r"@\d+|[a-z][a-z'\-]*", s)
+            if q:
+                mq = re.match(r"(?:am|are|art|be|is) (.+?) (?:(better|bigger|fresher|friendlier|nicer|jollier|punier"
+                              r"|smaller|worse|more [a-z\-]+) than|as [a-z\-]+ as) (.+)$", " ".join(w))
+                if not mq:
+                    raise ValueError("bad question")
+                x, j = _spl_value(mq.group(1).split(), 0, env)
+                y, j = _spl_value(mq.group(3).split(), 0, env)
+                c = mq.group(2)
+                cond = (x == y if c is None else x < y if c in ("punier", "smaller", "worse")
+                        or (c.startswith("more ") and c[5:] in _SPL_NEG_ADJ) else x > y)
+            elif re.match(r"speak (?:your|thy|thine) mind$", s):
+                out.append(chr(val[lis()]))
+                said += 1
+            elif re.match(r"open (?:your|thy|thine) heart$", s):
+                out.append(str(val[lis()]))
+                said += 1
+            elif re.match(r"(?:listen to (?:your|thy|thine) heart|open (?:your|thy|thine) mind)$", s):
+                val[lis()] = -1 if "mind" in s else 0
+            elif re.match(r"(?:let us|we shall|we must) (?:proceed|return) to (scene|act) ([ivxlcdm]+)$", s):
+                mg = re.match(r".* (scene|act) ([ivxlcdm]+)$", s)
+                key = (act, _roman(mg.group(2))) if mg.group(1) == "scene" else \
+                    min((kk for kk in labels if kk[0] == _roman(mg.group(2))), default=None)
+                if key not in labels:
+                    raise ValueError("no such scene")
+                pc = labels[key]
+            elif w[:1] == ["remember"]:
+                stk[lis()].append(_spl_value(w, 1, env)[0])
+            elif w[:1] == ["recall"]:
+                if not stk[lis()]:
+                    raise ValueError("empty stack")
+                val[lis()] = stk[lis()].pop()
+            elif w[:1] in (["you"], ["thou"], ["thee"]):
+                j = 1 + (len(w) > 1 and w[1] in ("am", "are", "art", "be", "is"))
+                if j < len(w) and w[j] == "as":
+                    j += 1 if j + 1 < len(w) and w[j + 1] not in _SPL_NOUNS and j + 2 < len(w) and w[j + 2] != "as" \
+                        else 3 if j + 2 < len(w) and w[j + 2] == "as" else 1
+                val[lis()] = _spl_value(w, j, env)[0]
+    x = "".join(out)
+    if not said or not x.strip() or any((ord(ch) < 32 and ch not in "\t\n\r") or 127 <= ord(ch) < 160 for ch in x):
+        raise ValueError("no printable output")
+    return x
+
+
+def spl_enc(s, a="Romeo", b="Juliet"):
+    """Two-character play: per char, 'You are as lovely as <sum of a [big]*k cat noun phrases>! Speak your mind!'."""
+    def np_(n):
+        return "a " + "big " * n + "cat"
+
+    def expr(v):
+        bits = [k for k in range(v.bit_length()) if v >> k & 1] or [None]
+        e = "nothing" if bits == [None] else np_(bits[-1])
+        for k in reversed(bits[:-1]):
+            e = f"the sum of {np_(k)} and {e}"
+        return e
+    lines = [f"You are as lovely as {expr(ord(ch))}! Speak your mind!" for ch in s]
+    return (f"A Play of Letters.\n\n{a}, a young man.\n{b}, a lady.\n\n Act I: The message.\n\n Scene I: The speech."
+            f"\n\n[Enter {a} and {b}]\n\n{b}:\n " + "\n ".join(lines) + "\n\n[Exeunt]\n")
+
+
+def spl_free(p):
+    try:
+        x = spl_dec(p.replace("\\n", "\n") if "\n" not in p else p)
+        return [x] if _crib_piece(x) > 0 or SLUG.search(x) else []
+    except (ValueError, IndexError, KeyError, TypeError, ZeroDivisionError, OverflowError, RecursionError):
+        return []
+
+
+CANDIDATES += [("chef", chef_enc, chef_dec), ("shakespeare", spl_enc, spl_dec)]
+SPECULATIVE_FREE += (("chef", chef_free), ("shakespeare", spl_free))
+
+
+# ------------------------------------- Toy instruction-set listings ("a very small language" read as a tiny machine)
+# A program whose output is the sentence, SIMULATED (never executed): generic assembly / stack-VM lines (PUSH 78 / OUT,
+# MOV R1, 'N' / PRINT R1, LDA #$4E / JSR $FFD2, mov ah,0eh / mov al,4eh / int 10h, mov dl,.. / mov ah,2 / int 21h),
+# Forth (78 emit, char N emit, ." text"), dc (78P, 16i 4EP, [text]P) and PostScript ((text) show / print / =).
+# Literals: 78, -3, 0x4E, $4E, 4Eh, 0b.., 116o, 'N', #imm. Jumps / LOOP / DJNZ / dc macros run under a step cap; an
+# unknown mnemonic or word rejects the listing, so a decimal char-code list (D5) or prose never reads as a program.
+_VM_STEPS = 200_000
+_VM_PUSH = {"push", "psh", "pushi", "ipush", "bipush", "sipush", "ldc", "const", "lit", "pushc", "pushb"}
+_VM_LOAD = {"load", "ld", "lda", "ldi", "li", "set", "mov", "mvi", "movl", "movb", "movw", "movi", "let", "ldx", "ldy",
+            "store", "assign", "lit8"}
+_VM_ARITH = {"add": lambda a, b: a + b, "addi": lambda a, b: a + b, "plus": lambda a, b: a + b,
+             "sub": lambda a, b: a - b, "subi": lambda a, b: a - b, "minus": lambda a, b: a - b,
+             "mul": lambda a, b: a * b, "mult": lambda a, b: a * b, "imul": lambda a, b: a * b,
+             "times": lambda a, b: a * b, "div": lambda a, b: a // b, "idiv": lambda a, b: a // b,
+             "mod": lambda a, b: a % b, "xor": lambda a, b: a ^ b, "and": lambda a, b: a & b, "or": lambda a, b: a | b,
+             "shl": lambda a, b: a << b, "shr": lambda a, b: a >> b, "adc": lambda a, b: a + b,
+             "sbc": lambda a, b: a - b, "cmp": None}
+_VM_UNARY = {"inc": 1, "incr": 1, "inx": 1, "iny": 1, "dec": -1, "decr": -1, "dex": -1, "dey": -1, "neg": 0}
+_VM_OUT = {"out", "outc", "print", "prn", "prt", "printc", "putc", "putchar", "putch", "emit", "write", "wrt", "chr",
+           "say", "echo", "display", "disp", "outchar", "pchar", "printchar", "printch", "output", "print_char",
+           "wrch", "tx", "send", "prc", "oute"}
+_VM_CALL_OUT = {"putchar", "_putchar", "putc", "chrout", "$ffd2", "0xffd2", "ffd2h", "65490", "printchar",
+                "print_char", "outch", "outchar", "wrch", "oswrch", "$ffee", "0xffee", "emit", "bdos"}
+_VM_HALT = {"hlt", "halt", "end", "stop", "ret", "exit", "quit", "bye", "brk", "done"}
+_VM_NOP = {"nop", "start", "begin", "org", ".org", "section", ".text", ".code", "bits", "use16", "cpu", "global",
+           "main", "clc", "cld", "cli", "sei", "sti"}
+_VM_JMP = {"jmp", "jp", "goto", "br", "bra", "j", "b", "jr"}
+_VM_JCOND = {"jz": "z", "je": "z", "beq": "z", "brz": "z", "jeq": "z", "jnz": "nz", "jne": "nz", "bne": "nz",
+             "brnz": "nz", "jgt": "gt", "jg": "gt", "bgt": "gt", "jlt": "lt", "jl": "lt", "blt": "lt", "jge": "ge",
+             "bge": "ge", "jle": "le", "ble": "le", "jpos": "gt", "jneg": "lt"}
+_VM_ACC = {"acc", "ac", "accumulator", "a"}
+_VM_INT = re.compile(r"""[#]?(?:(-?\d+)|(-?)0x([0-9a-f]+)|(-?)\$([0-9a-f]+)|(-?)(\d[0-9a-f]*)h|0b([01]+)|([01]+)b
+                     |0o([0-7]+)|([0-7]+)[oq]|'(.)'|"(.)")""", re.I | re.X)
+_VM_REG = re.compile(r"[a-z_.%][\w.]*", re.I)
+_VM_LABEL = re.compile(r"^\s*([a-z_.$][\w.$]*):(?!:)", re.I)
+
+
+def _vm_int(tok):
+    """A numeric / char literal -> int, else None."""
+    m = _VM_INT.fullmatch(tok.strip())
+    if not m:
+        return None
+    g = m.groups()
+    if g[0] is not None:
+        return int(g[0])
+    for sign, digits in ((g[1], g[2]), (g[3], g[4]), (g[5], g[6])):
+        if digits is not None:
+            return int(digits, 16) * (-1 if sign else 1)
+    for digits, base in ((g[7], 2), (g[8], 2), (g[9], 8), (g[10], 8)):
+        if digits is not None:
+            return int(digits, base)
+    return ord(g[11] if g[11] is not None else g[12])
+
+
+def _vm_strip(line):
+    """Drop a ; / // / '# ' comment (outside quotes)."""
+    out, q = [], None
+    for i, ch in enumerate(line):
+        if q:
+            q = None if ch == q else q
+        elif ch in "'\"":
+            q = ch
+        elif ch == ";" or line.startswith("//", i) or (ch == "#" and (i + 1 == len(line) or line[i + 1] in " \t#")):
+            break
+        out.append(ch)
+    return "".join(out)
+
+
+def _vm_operands(rest):
+    """'al, 0x4e' / 'R1 78' / '"text"' -> operand tokens (quotes kept)."""
+    return [m.group() for m in re.finditer(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|[^\s,]+', rest)]
+
+
+_VM_ALL = (_VM_PUSH | _VM_LOAD | set(_VM_ARITH) | set(_VM_UNARY) | _VM_OUT | _VM_HALT | _VM_NOP | _VM_JMP
+           | set(_VM_JCOND) | {"pop", "dup", "swap", "drop", "discard", "over", "int", "syscall", "call", "jsr", "bsr",
+                               "loop", "djnz", "dbra", "dbf", "jcxz", "xchg", "nl", "newline", "crlf", "space"})
+
+
+def _vm_parse(lines):
+    """Lines -> ([(mnemonic, operands)], labels) or None (an unknown mnemonic / a bare-number line)."""
+    prog, labels = [], {}
+    for line in lines:
+        line = _vm_strip(line)
+        while True:
+            m = _VM_LABEL.match(line)
+            if not m:
+                break
+            labels[m.group(1).lower()] = len(prog)
+            line = line[m.end():]
+        if not line.strip():
+            continue
+        parts = line.strip().split(None, 1)
+        op = parts[0].lower()
+        if op not in _VM_ALL:
+            return None
+        prog.append((op, _vm_operands(parts[1]) if len(parts) > 1 else []))
+    return (prog, labels) if prog else None
+
+
+_X86 = re.compile(r"[re]?([abcd])x|([abcd])([lh])", re.I)
+
+
+class _VMState:
+    def __init__(self):
+        self.r, self.stack, self.out, self.flag, self.last = {}, [], [], 0, "a"
+
+    def get(self, name):
+        n = name.lower()
+        n = "a" if n in _VM_ACC else n
+        m = _X86.fullmatch(n)
+        if m and m.group(2):
+            v = self.r.get(m.group(2) + "x", 0)
+            return (v >> 8 if m.group(3) == "h" else v) & 0xFF
+        return self.r.get(m.group(1) + "x" if m else n, 0)
+
+    def put(self, name, v):
+        n = name.lower()
+        n = "a" if n in _VM_ACC else n
+        m = _X86.fullmatch(n)
+        if m and m.group(2):
+            k, old = m.group(2) + "x", self.r.get(m.group(2) + "x", 0)
+            v = (old & 0xFF) | (v & 0xFF) << 8 if m.group(3) == "h" else (old & ~0xFF) | (v & 0xFF)
+            n = k
+        elif m:
+            n = m.group(1) + "x"
+        self.r[n] = v
+        self.last = name.lower()
+
+    def val(self, tok):
+        v = _vm_int(tok)
+        if v is not None:
+            return v
+        if _VM_REG.fullmatch(tok):
+            return self.get(tok)
+        raise ValueError("operand")
+
+    def emit(self, v):
+        if isinstance(v, str):
+            self.out.extend(v.encode("utf-8"))
+        elif 0 <= v < 0x110000:
+            self.out.append(v)
+        else:
+            raise ValueError("unprintable")
+
+
+def _vm_run(prog, labels):
+    """Simulate a parsed listing -> the printed code points, or None."""
+    st = _VMState()
+    stacky = any(op in _VM_PUSH or op in ("dup", "swap", "drop", "over") for op, _a in prog)
+    pc = steps = 0
+    while pc < len(prog):
+        steps += 1
+        if steps > _VM_STEPS:
+            return None
+        op, a = prog[pc]
+        pc += 1
+        if op in _VM_PUSH:
+            st.stack.append(st.val(a[0]) if a else st.get("a"))
+        elif op == "pop":
+            v = st.stack.pop() if st.stack else 0
+            if a:
+                st.put(a[0], v)
+        elif op == "dup":
+            st.stack.append(st.stack[-1])
+        elif op == "swap":
+            st.stack[-2:] = st.stack[-2:][::-1]
+        elif op in ("drop", "discard"):
+            st.stack.pop()
+        elif op == "over":
+            st.stack.append(st.stack[-2])
+        elif op in _VM_LOAD:
+            if len(a) >= 2:
+                st.put(a[0], st.val(a[-1]))
+            elif a:
+                v = st.val(a[0])
+                if op == "store" and stacky:
+                    st.put(a[0], st.stack.pop())
+                elif op in ("ldx", "ldy"):
+                    st.put(op[-1], v)
+                elif stacky and op in ("ldc", "load", "ld", "lit8"):
+                    st.stack.append(v)
+                else:
+                    st.put("a", v)
+            else:
+                return None
+        elif op == "xchg" and len(a) == 2:
+            x, y = st.get(a[0]), st.get(a[1])
+            st.put(a[0], y)
+            st.put(a[1], x)
+        elif op in _VM_ARITH:
+            fn = _VM_ARITH[op] or (lambda x, y: x - y)
+            if len(a) >= 2:
+                v = fn(st.get(a[0]), st.val(a[-1]))
+                if op != "cmp":
+                    st.put(a[0], v)
+            elif a and stacky and st.stack:
+                v = fn(st.stack[-1], st.val(a[0]))
+                if op != "cmp":
+                    st.stack[-1] = v
+            elif a:
+                v = fn(st.get("a"), st.val(a[0]))
+                if op != "cmp":
+                    st.put("a", v)
+            elif len(st.stack) >= 2:
+                y, x = st.stack.pop(), st.stack.pop()
+                v = fn(x, y)
+                if op != "cmp":
+                    st.stack.append(v)
+            else:
+                return None
+            st.flag = v
+        elif op in _VM_UNARY:
+            d = _VM_UNARY[op]
+            tgt = a[0] if a else ("xy"[op[-1] == "y"] if op in ("inx", "iny", "dex", "dey") else None)
+            if tgt is None and stacky and st.stack:
+                st.stack[-1] = st.stack[-1] + d if d else -st.stack[-1]
+                st.flag = st.stack[-1]
+            else:
+                tgt = tgt or "a"
+                st.put(tgt, st.get(tgt) + d if d else -st.get(tgt))
+                st.flag = st.get(tgt)
+        elif op in _VM_OUT or op in ("nl", "newline", "crlf", "space"):
+            if op in ("nl", "newline", "crlf", "space"):
+                st.emit(" " if op == "space" else "\n")
+            elif a and a[-1][:1] == '"' and len(a[-1]) > 3:
+                st.emit(a[-1][1:-1].encode().decode("unicode_escape", "strict") if "\\" in a[-1] else a[-1][1:-1])
+            elif a:
+                v = st.val(a[-1])
+                if len(a) == 1 and _vm_int(a[0]) is not None and v < 32 and v not in (9, 10, 13) and "a" in st.r:
+                    v = st.get("a")   # 8080 / Z80 `OUT port` writes A
+                st.emit(v)
+            elif stacky and st.stack:
+                st.emit(st.stack.pop())
+            else:
+                st.emit(st.get("a") if "a" in st.r else st.get(st.last))
+        elif op in ("int", "syscall"):
+            n = _vm_int(a[0]) if a else None
+            ah = st.get("ah")
+            if n == 0x10 and ah == 0x0E:
+                st.emit(st.get("al"))
+            elif n == 0x21 and ah in (2, 6):
+                st.emit(st.get("dl"))
+        elif op in ("call", "jsr", "bsr"):
+            if a and a[0].lower() in _VM_CALL_OUT:
+                if stacky and st.stack:
+                    st.emit(st.stack.pop())
+                else:
+                    st.emit(st.get("a") if "a" in st.r else st.get(st.last))
+            elif a and a[0].lower() in labels:
+                return None   # no subroutine model
+        elif op in _VM_JMP or op in _VM_JCOND or op in ("loop", "djnz", "dbra", "dbf", "jcxz"):
+            if not a or a[-1].lower() not in labels:
+                return None
+            tgt, f = labels[a[-1].lower()], st.flag
+            if op in _VM_JMP:
+                take = True
+            elif op in _VM_JCOND:
+                take = {"z": f == 0, "nz": f != 0, "gt": f > 0, "lt": f < 0, "ge": f >= 0, "le": f <= 0}[_VM_JCOND[op]]
+            elif op == "loop":
+                st.put("cx", st.get("cx") - 1)
+                take = st.get("cx") != 0
+            elif op == "jcxz":
+                take = st.get("cx") == 0
+            else:
+                reg = a[0] if len(a) == 2 else "b"
+                st.put(reg, st.get(reg) - 1)
+                take = st.get(reg) not in (0, -1) if op in ("dbra", "dbf") else st.get(reg) != 0
+            if take:
+                pc = tgt
+        elif op in _VM_HALT:
+            break
+        # _VM_NOP: nothing
+    return st.out
+
+
+_FORTH_ARITH = {"+": lambda a, b: a + b, "-": lambda a, b: a - b, "*": lambda a, b: a * b, "/": lambda a, b: a // b,
+                "mod": lambda a, b: a % b, "and": lambda a, b: a & b, "or": lambda a, b: a | b,
+                "xor": lambda a, b: a ^ b}
+
+
+def _forth_run(t):
+    """Forth: n emit / char X emit / [char] X emit / ." text" / s" text" type / .( text) / cr / bl / space(s)."""
+    out, stack, base, i, n, saw = [], [], 10, 0, len(t), False
+    while i < n:
+        if t[i].isspace():
+            i += 1
+            continue
+        j = i
+        while j < n and not t[j].isspace():
+            j += 1
+        w, wl = t[i:j], t[i:j].lower()
+        i = j
+        if wl in ('."', 's"', ".("):
+            end = t.find(")" if wl == ".(" else '"', i + 1)
+            if end < 0:
+                return None
+            s = t[i + 1:end]
+            i = end + 1
+            if wl == 's"':
+                stack.append(s)
+            else:
+                out.extend(s.encode("utf-8"))
+                saw = True
+            continue
+        if wl == "\\":
+            nl = t.find("\n", i)
+            i = n if nl < 0 else nl + 1
+            continue
+        if wl == "(":
+            end = t.find(")", i)
+            i = n if end < 0 else end + 1
+            continue
+        if wl in ("char", "[char]"):
+            while i < n and t[i].isspace():
+                i += 1
+            if i >= n:
+                return None
+            stack.append(ord(t[i]))
+            while i < n and not t[i].isspace():
+                i += 1
+            continue
+        try:
+            if wl == "emit":
+                v = stack.pop()
+                if isinstance(v, str) or not 0 <= v < 0x110000:
+                    return None
+                out.append(v)
+                saw = True
+            elif wl == "type":
+                v = stack.pop()
+                if isinstance(v, str):
+                    out.extend(v.encode("utf-8"))
+                    saw = True
+                else:
+                    return None
+            elif wl == "cr":
+                out.append(10)
+            elif wl == "space":
+                out.append(32)
+            elif wl == "spaces":
+                out.extend([32] * max(0, min(stack.pop(), 256)))
+            elif wl == "bl":
+                stack.append(32)
+            elif wl in _FORTH_ARITH:
+                b, a = stack.pop(), stack.pop()
+                stack.append(_FORTH_ARITH[wl](a, b))
+            elif wl in ("1+", "1-", "2*", "negate"):
+                stack.append({"1+": lambda v: v + 1, "1-": lambda v: v - 1, "2*": lambda v: v * 2,
+                              "negate": lambda v: -v}[wl](stack.pop()))
+            elif wl == "dup":
+                stack.append(stack[-1])
+            elif wl == "drop":
+                stack.pop()
+            elif wl == "swap":
+                stack[-2:] = stack[-2:][::-1]
+            elif wl == "over":
+                stack.append(stack[-2])
+            elif wl in ("hex", "decimal"):
+                base = 16 if wl == "hex" else 10
+            elif wl == "bye":
+                break
+            else:
+                m = re.fullmatch(r"(-?)(?:\$([0-9a-f]+)|#(\d+)|%([01]+)|'(.)'?|([0-9a-z]+))", wl, re.I)
+                if not m:
+                    return None
+                sign = -1 if m.group(1) else 1
+                if m.group(2):
+                    v = int(m.group(2), 16)
+                elif m.group(3):
+                    v = int(m.group(3))
+                elif m.group(4):
+                    v = int(m.group(4), 2)
+                elif m.group(5):
+                    v = ord(w[len(m.group(1)) + 1])
+                else:
+                    v = int(m.group(6), base)
+                stack.append(sign * v)
+        except (IndexError, ValueError, ZeroDivisionError, TypeError):
+            return None
+        if len(out) > 1 << 16:
+            return None
+    return out if saw else None
+
+
+def _dc_run(t):
+    """GNU dc: numbers (A-F digits, _ sign, i input base), [strings], P (number -> base-256 bytes) n p, + - * / % ^,
+    d r c z, k i o, s/l/x registers + < > = conditionals (macros under the step cap), # comments, q."""
+    stack, regs, out, ibase = [], {}, [], 10
+    work, steps, saw = [(t, 0)], 0, False
+    try:
+        while work:
+            src, i = work.pop()
+            while i < len(src):
+                steps += 1
+                if steps > _VM_STEPS or len(out) > 1 << 16:
+                    return None
+                ch = src[i]
+                i += 1
+                if ch.isspace():
+                    continue
+                if ch == "#":
+                    nl = src.find("\n", i)
+                    i = len(src) if nl < 0 else nl + 1
+                    continue
+                if ch.isdigit() or ch in "ABCDEF_":
+                    neg, v = ch == "_", 0
+                    if neg:
+                        if i >= len(src) or not (src[i].isdigit() or src[i] in "ABCDEF"):
+                            return None
+                    else:
+                        i -= 1
+                    while i < len(src) and (src[i].isdigit() or src[i] in "ABCDEF"):
+                        v = v * ibase + int(src[i], 16)
+                        i += 1
+                    stack.append(-v if neg else v)
+                elif ch == "[":
+                    depth, j = 1, i
+                    while j < len(src) and depth:
+                        depth += {"[": 1, "]": -1}.get(src[j], 0)
+                        j += 1
+                    if depth:
+                        return None
+                    stack.append(src[i:j - 1])
+                    i = j
+                elif ch == "P":
+                    v = stack.pop()
+                    if isinstance(v, str):
+                        out.extend(v.encode("utf-8"))
+                    else:
+                        v = abs(v)
+                        out.extend(v.to_bytes(max(1, (v.bit_length() + 7) // 8), "big"))
+                    saw = True
+                elif ch in "np":
+                    v = stack.pop() if ch == "n" else stack[-1]
+                    out.extend((v if isinstance(v, str) else str(v).replace("-", "_")).encode("utf-8"))
+                    if ch == "p":
+                        out.append(10)
+                elif ch in "+-*/%^":
+                    b, a = stack.pop(), stack.pop()
+                    if isinstance(a, str) or isinstance(b, str) or (ch == "^" and not 0 <= b < 64):
+                        return None
+                    stack.append({"+": a + b, "-": a - b, "*": a * b, "/": int(a / b) if b else None,
+                                  "%": a - b * int(a / b) if b else None, "^": a ** b}[ch])
+                    if stack[-1] is None:
+                        return None
+                elif ch == "d":
+                    stack.append(stack[-1])
+                elif ch == "r":
+                    stack[-2:] = stack[-2:][::-1]
+                elif ch == "c":
+                    stack.clear()
+                elif ch == "z":
+                    stack.append(len(stack))
+                elif ch in "kio":
+                    v = stack.pop()
+                    if ch == "i":
+                        if not 2 <= v <= 16:
+                            return None
+                        ibase = v
+                elif ch in "slSL" and i < len(src):
+                    r = src[i]
+                    i += 1
+                    if ch in "sS":
+                        regs[r] = stack.pop()
+                    else:
+                        stack.append(regs.get(r, 0))
+                elif ch == "x":
+                    v = stack.pop()
+                    if isinstance(v, str):
+                        work.append((src, i))
+                        src, i = v, 0
+                    else:
+                        stack.append(v)
+                elif ch in "<>=!" and i < len(src):
+                    neg = ch == "!"
+                    if neg:
+                        ch = src[i]
+                        i += 1
+                        if ch not in "<>=" or i >= len(src):
+                            return None
+                    r = src[i]
+                    i += 1
+                    a, b = stack.pop(), stack.pop()
+                    take = {"<": a < b, ">": a > b, "=": a == b}[ch] != neg
+                    if take and isinstance(regs.get(r), str):
+                        work.append((src, i))
+                        src, i = regs[r], 0
+                elif ch == "q":
+                    return out if saw else None
+                else:
+                    return None
+    except (IndexError, ValueError, TypeError, OverflowError):
+        return None
+    return out if saw else None
+
+
+_PS_TOK = re.compile(r"%[^\n]*|\((?:[^()\\]|\\.|\((?:[^()\\]|\\.)*\))*\)|<(?!<)[0-9a-fA-F\s]*>|<<|>>|[{}\[\]]"
+                     r"|/?[^\s(){}\[\]<>/%]+", re.S)
+_PS_ESC = {"n": "\n", "r": "\r", "t": "\t", "b": "\b", "f": "\f", "\\": "\\", "(": "(", ")": ")", "\n": ""}
+
+
+def _ps_string(s):
+    return re.sub(r"\\([0-7]{1,3}|.)", lambda m: chr(int(m.group(1), 8)) if m.group(1)[0] in "01234567"
+                  else _PS_ESC.get(m.group(1), m.group(1)), s, flags=re.S)
+
+
+def _ps_run(t):
+    """PostScript: string literals ( ) / < hex >, shown by show / print / = / ashow / widthshow; other words inert."""
+    if not re.search(r"\)\s*(?:show|print|=|ashow|widthshow|awidthshow|kshow)\b|\)\s*=", t):
+        return None
+    out, stack, saw = [], [], False
+    for m in _PS_TOK.finditer(t):
+        w = m.group()
+        if w[0] == "%":
+            continue
+        if w[0] == "(":
+            stack.append(_ps_string(w[1:-1]))
+        elif w[0] == "<" and w != "<<":
+            h = re.sub(r"\s", "", w[1:-1])
+            stack.append(bytes.fromhex(h + "0" * (len(h) % 2)).decode("latin-1"))
+        elif w in ("show", "print", "=", "==", "ashow", "widthshow", "awidthshow", "kshow"):
+            if not stack or not isinstance(stack[-1], str):
+                continue
+            s = stack.pop()
+            out.extend(s.encode("latin-1", "replace") if w != "==" else ("(" + s + ")").encode("latin-1", "replace"))
+            if w in ("=", "=="):
+                out.append(10)
+            saw = True
+        else:
+            v = _vm_int(w) if re.fullmatch(r"-?\d+", w) else None
+            stack.append(v if v is not None else w)
+    if saw and out and out[-1] == 10:
+        out.pop()
+    return out if saw else None
+
+
+def _vm_programs(t):
+    """Line splits worth parsing as an assembly / stack-VM listing: real lines, then ; | ' / ' separated one-liners,
+    then a whitespace stream cut at each known mnemonic."""
+    lines = t.replace("\\n", "\n").splitlines()
+    yield lines
+    body = [x for x in lines if x.strip()]
+    if len(body) <= 2:
+        one = " ".join(body)
+        for sep in (r";", r"\|", r"\s/\s", r"\s*\\\s*"):
+            parts = re.split(sep, one)
+            if len(parts) > 2:
+                yield parts
+        toks = _vm_operands(one)
+        cut, cur = [], []
+        for tok in toks:
+            if tok.lower() in _VM_ALL and cur and cur[0].lower() not in ("call", "jsr", "bsr", "int") or (
+                    tok.lower() in _VM_ALL and cur and len(cur) > 1):
+                cut.append(" ".join(cur))
+                cur = []
+            cur.append(tok)
+        if cur:
+            cut.append(" ".join(cur))
+        if len(cut) > 2:
+            yield cut
+
+
+def vm_reads(t):
+    """Every dialect's printed text for a listing (PostScript, dc, Forth, assembly / stack VM), deduped."""
+    t = (t or "").strip()
+    if not t or len(t) > 1 << 17:
+        return []
+    reads = []
+    for run in (_ps_run, _dc_run, _forth_run):
+        try:
+            vals = run(t)
+        except (ValueError, IndexError, TypeError, OverflowError, RecursionError):
+            vals = None
+        x = _df_text(vals) if vals else None
+        if x and x not in reads:
+            reads.append(x)
+    for lines in _vm_programs(t):
+        try:
+            p = _vm_parse(lines)
+            vals = _vm_run(*p) if p else None
+        except (ValueError, IndexError, TypeError, KeyError, OverflowError, ZeroDivisionError, UnicodeError):
+            vals = None
+        x = _df_text(vals) if vals else None
+        if x and x not in reads:
+            reads.append(x)
+    return reads
+
+
+def vm_dec(t):
+    """Simulate a toy instruction-set listing -> what it prints; raises on a non-program / junk output."""
+    reads = vm_reads(t)
+    for x in reads:
+        if SLUG.search(x) or _crib_piece(x):
+            return x
+    if reads and _texty(reads[0]) >= 0.9:
+        return reads[0]
+    raise ValueError("not a toy instruction listing")
+
+
+def vm_free(p):
+    """Mastery free line: a listing's printed text when it is a crib / slug piece."""
+    try:
+        return [x for x in vm_reads(p) if _crib_piece(x) or SLUG.search(x)][:1]
+    except (ValueError, TypeError, IndexError, KeyError, OverflowError, RecursionError):
+        return []
+
+
+def vm_enc(s, dialect="stack"):
+    """A listing printing s, one char per step: stack (PUSH n / OUT), reg (MOV R1, n / PRINT R1), acc (LDA #$hh /
+    JSR $FFD2), x86 (mov al,..h / int 10h), forth (n emit), dc (nP), ps ((text) show)."""
+    cps = [ord(c) for c in s]
+    if dialect == "stack":
+        return "\n".join(f"PUSH {n}\nOUT" for n in cps) + "\nHALT"
+    if dialect == "reg":
+        return "\n".join(f"MOV R1, {n}\nPRINT R1" for n in cps) + "\nHALT"
+    if dialect == "acc":
+        return "\n".join(f"LDA #${n:02X}\nJSR $FFD2" for n in cps) + "\nBRK"
+    if dialect == "x86":
+        return "mov ah, 0Eh\n" + "\n".join(f"mov al, {n:02X}h\nint 10h" for n in cps) + "\nhlt"
+    if dialect == "forth":
+        return " ".join(f"{n} emit" for n in cps)
+    if dialect == "dc":
+        return "".join(f"{n}P" for n in cps)
+    if dialect == "ps":
+        return "%!PS\n(" + s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)") + ") print"
+    raise ValueError(dialect)
+
+
+CANDIDATES += [(f"vm-{d}", (lambda d: lambda s: vm_enc(s, d))(d), vm_dec)
+               for d in ("stack", "reg", "acc", "x86", "forth", "dc", "ps")]
+SPECULATIVE_FREE += (("vm-listing", vm_free),)
+
+
+# Malbolge: 59049 ten-trit words; the program loads at 0 (whitespace skipped, every char must satisfy (c + i) % 94 in
+# the op set), the rest fills with crazy(m[i-1], m[i-2]); op = (m[c] + c) % 94, then m[c] is re-encrypted by xlat2.
+_MB_X2 = '5z]&gqtyfr$(we4{WP)H-Zn,[%\\3dL+Q;>U!pJS72FhOA1CB6v^=I_0/8|jsb9m<.TVac`uY*MK\'X~xDl}REokN:#?G"i@'
+_MB_OPS = frozenset((4, 5, 23, 39, 40, 62, 68, 81))
+_MB_N = 59049
+_MB_CZ = []
+
+
+def _mb_crazy(a, b):
+    """The tritwise crazy op (a = accumulator, b = memory) via a 3-trit x 3-trit table, mod 3^10."""
+    if not _MB_CZ:
+        t = ((1, 0, 0), (1, 0, 2), (2, 2, 1))
+        _MB_CZ.extend(sum(t[y // 3 ** k % 3][x // 3 ** k % 3] * 3 ** k for k in range(3))
+                      for y in range(27) for x in range(27))
+    r, p = 0, 1
+    for _ in range(4):
+        r += _MB_CZ[b % 27 * 27 + a % 27] * p
+        a, b, p = a // 27, b // 27, p * 27
+    return r % _MB_N
+
+
+def _mb_soup(t):
+    """The program's char codes when every non-space char of `t` is a valid Malbolge op at its index, else None."""
+    c = [ord(ch) for ch in t if not ch.isspace()]
+    if not 8 <= len(c) <= _MB_N or any(not 33 <= x <= 126 or (x + i) % 94 not in _MB_OPS for i, x in enumerate(c)):
+        return None
+    return c
+
+
+def malbolge_run(prog, steps=1_500_000, quiet=300_000):
+    """Run a Malbolge program (list of char codes, no input: 'in' reads EOF = 59048) -> the bytes it printed (a % 256),
+    stopping at 'end', a non-printable instruction, the step cap or `quiet` steps without output."""
+    mem, out, a, c, d, last = list(prog), [], 0, 0, 0, 0
+    for n in range(steps):
+        if max(c, d) >= len(mem):
+            while len(mem) <= max(c, d):
+                mem.append(_mb_crazy(mem[-1], mem[-2]))
+        x = mem[c]
+        if not 33 <= x <= 126:
+            break
+        op = (x + c) % 94
+        if op == 4:
+            c = mem[d]
+            while len(mem) <= c:
+                mem.append(_mb_crazy(mem[-1], mem[-2]))
+        elif op == 5:
+            out.append(a % 256)
+            last = n
+        elif op == 23:
+            a = _MB_N - 1
+        elif op == 39:
+            a = mem[d] = mem[d] % 3 * 19683 + mem[d] // 3
+        elif op == 40:
+            d = mem[d]
+        elif op == 62:
+            a = mem[d] = _mb_crazy(a, mem[d])
+        elif op == 81:
+            break
+        if 33 <= mem[c] <= 126:
+            mem[c] = ord(_MB_X2[mem[c] - 33])
+        c, d = (c + 1) % _MB_N, (d + 1) % _MB_N
+        if n - last > quiet:
+            break
+    return out
+
+
+def malbolge_reads(t, steps=1_500_000):
+    """Printable outputs of `t` (or of a base64 / hex / compression peel of it) run as Malbolge."""
+    out = []
+    for x in _bff_peel(t, 2):
+        prog = _mb_soup(x)
+        if prog:
+            y = _bff_text(malbolge_run(prog, steps))
+            if y and y not in out:
+                out.append(y)
+    return out
+
+
+def malbolge_dec(t):
+    """A Malbolge program -> the sentence it prints; raises unless the output passes the slug / crib gate."""
+    for y in malbolge_reads(t):
+        if _bff_gate(y):
+            return y
+    raise ValueError("not a Malbolge program")
+
+
+def malbolge_free(p):
+    """Mastery free line: the printed text of a Malbolge program when it is a crib piece."""
+    try:
+        return [y for y in malbolge_reads(p, 1_000_000) if _bff_gate(y, True)][:3]
+    except (ValueError, IndexError, KeyError, TypeError, RecursionError, MemoryError):
+        return []
+
+
+def malbolge_enc(s):
+    """Straight-line generator (d == c, so rotr / crazy act on their own source char): per UTF-8 byte the shortest
+    nop / rotr / crazy run (BFS on a) leaving a % 256 == byte, then 'out'; 'end' last."""
+    i, a, prog = 0, 0, []
+    for byte in _u(s):
+        front, hit = [(a, "")], None
+        for depth in range(200):
+            hit = next((f for f in front if f[0] % 256 == byte), None)
+            if hit:
+                break
+            j, nxt, seen = i + depth, [], set()
+            ops = [(op, 33 + (op - j - 33) % 94) for op in (68, 39, 62)]
+            for v, run in front:
+                for op, ch in ops:
+                    w = v if op == 68 else ch % 3 * 19683 + ch // 3 if op == 39 else _mb_crazy(v, ch)
+                    if w not in seen:
+                        seen.add(w)
+                        nxt.append((w, run + chr(ch)))
+            front = nxt
+        if not hit:
+            raise ValueError(f"no Malbolge run for byte {byte}")
+        a, i = hit[0], i + len(hit[1])
+        prog.append(hit[1] + chr(33 + (5 - i - 33) % 94))
+        i += 1
+    return "".join(prog) + chr(33 + (81 - i - 33) % 94)
+
+
+CANDIDATES.append(("malbolge", malbolge_enc, malbolge_dec))
+SPECULATIVE_FREE += (("malbolge", malbolge_free),)
 
 
 def register_speculative():

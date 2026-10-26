@@ -1,0 +1,22 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "go",
+    "message": "runtime error: index out of range [5] with length 3",
+    "kind": "index out of range",
+    "fault_function": "main.pick",
+    "fault_line": "3",
+    "thread": "1",
+    "index": "5",
+    "length": "3",
+    "cwe": "CWE-125"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # go xs[5] of len 3",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_go_index.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

@@ -1,0 +1,19 @@
+
+thread 'main' (2474149) panicked at main.rs:1:45:
+called `Result::unwrap()` on an `Err` value: ParseIntError { kind: InvalidDigit }
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+             at /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/std/src/panicking.rs:689:5
+   1: core::panicking::panic_fmt
+             at /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/panicking.rs:80:14
+   2: core::result::unwrap_failed
+             at /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/result.rs:1867:5
+   3: core::result::Result<T,E>::unwrap
+             at /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/result.rs:1233:23
+   4: main::parse
+             at ./main.rs:1:45
+   5: main::main
+             at ./main.rs:2:62
+   6: core::ops::function::FnOnce::call_once
+             at /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/ops/function.rs:250:5
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.

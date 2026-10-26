@@ -1,0 +1,8 @@
+{
+ "field": "ntfs.mft_cluster_number",
+ "expected": "none",
+ "generator_cmd": "truncate -s 2M ex2.img && mkfs.exfat -q -b 4K -c 4K -L EXLABEL ex2.img (exfatprogs 1.3.2) && head -c 32768 ex2.img (VBR..root dir)",
+ "oracle_cmd": "fsstat ex2.img -> exFAT, Volume Serial Number ebff-7cf3, Volume Label (from root directory) EXLABEL, Cluster Size 4096; dump.exfat ex2.img -> Volume Length 4096, FAT Offset 24, Cluster Heap Offset 32, Cluster Count 508, Root Cluster 5, Serial 0xebff7cf3",
+ "decoy": true,
+ "member": "exfat.img"
+}

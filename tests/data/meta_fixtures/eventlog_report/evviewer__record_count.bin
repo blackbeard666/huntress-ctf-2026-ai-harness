@@ -1,0 +1,6 @@
+﻿Level,Date and Time,Source,Event ID,Task Category
+Information,10/26/2026 9:14:05 PM,Service Control Manager,7036,None,The Print Spooler service entered the running state.
+Warning,10/26/2026 9:02:41 PM,Microsoft-Windows-Time-Service,36,None,"The time service has not synchronized the system time for 86400 seconds,
+because none of the time service providers provided a usable time stamp."
+Information,10/26/2026 8:59:59 AM,EventLog,6005,None,The Event log service was started.
+Information,10/25/2026 11:30:00 PM,EventLog,6006,None,The Event log service was stopped.

@@ -1,0 +1,7 @@
+{
+ "entry": "signing_lineage_scan",
+ "expected": "ANS-3D7A0C59E1B48F26",
+ "oracle_cmd": "apksigner lineage --in rot_v3_past_signer.apk --print-certs | grep -m1 'Signer #1 in lineage certificate DN' | grep -o 'ANS-[0-9A-F]*'  # token only in the ORIGINAL signer (lineage node 1, attr 0x3ba06f8c); current v3 signer = node 2 sha256 fb658ac6...",
+ "note": "v3.0-only APK (no v1/v2/META-INF); the original signer's cert exists only inside the v3 proof-of-rotation lineage",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_signing_lineage.sh tests/data/android_fixtures  # keytool -genkeypair + apksigner rotate (proof-of-rotation lineage) + zip -X + apksigner sign --lineage"
+}

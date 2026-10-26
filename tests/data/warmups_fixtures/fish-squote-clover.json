@@ -1,0 +1,9 @@
+{
+ "codec": "fish*",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-88",
+ "encoded": "'88-regdab-revolc :retsaM emaG eht ot rewsna tcaxe siht timbus ,evlos oT !pumraw siht gnidoced krow eciN'v\n                                                                                                    o;!?l<",
+ "generator_cmd": "perl -e '$t = chr(39) . reverse($ARGV[0]) . chr(39) . \"v\"; print $t, \"\\n\", sprintf(\"%*s\", length($t) - 1, \"o;!?l\"), \"<\"' \"$plain\"",
+ "oracle_cmd": "node tests/data/warmups_fixtures/befunge_oracle.mjs fish",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-88",
+ "expected": "match"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "xml_report.record_ids",
+ "expected": "none",
+ "generator_cmd": "heredoc RSS 2.0 document mentioning 'EventID'",
+ "oracle_cmd": "xmllint/lxml: root <rss>, no events-namespace <Event> elements",
+ "decoy": true,
+ "member": "events.xml"
+}

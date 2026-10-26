@@ -1,0 +1,18 @@
+{
+ "family": "static_stack_unwind",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "data_file": "unwind_pe_x86_decoy.bin",
+ "exe_file": null,
+ "expected_facts": {
+  "cfa_frame_size:leaf": "none",
+  "pe_unwind_codes:leaf": "none",
+  "pe_runtime_function_count": "none",
+  "unwind_frames": "none"
+ },
+ "generator_cmd": "sh unwind_gen.sh   # zig cc -target x86_64-windows-gnu -O0 -fno-omit-frame-pointer / -O2 -fomit-frame-pointer (MinGW PE32+, functions dllexport'ed), x86-windows-gnu PE32 decoy",
+ "oracle_cmd": "file unwind_pe_x86_decoy.bin -> PE32 Intel i386 (no x64 .pdata unwind data); objdump -x shows no Function Table",
+ "decoy": true,
+ "note": "i386 PE with the same exports: x64 UNWIND_INFO fields absent"
+}

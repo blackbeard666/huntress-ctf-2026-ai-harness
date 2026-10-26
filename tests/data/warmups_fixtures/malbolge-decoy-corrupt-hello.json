@@ -1,0 +1,10 @@
+{
+ "codec": "malbolge",
+ "plain": null,
+ "encoded": "(=<`#9]~6ZZ32Vx/4Rs+0No-&Jk)\"Fh}|Bcy?`=*z]Kw%oG4UUS0/@-ejc(:'8dc",
+ "generator_cmd": "python3 -c 'h=<Wikipedia Malbolge hello world>; print(h[:10] + chr(ord(h[10]) + 1) + h[11:])'",
+ "oracle_cmd": "python3 -c 'from malbolge.malbolge import main; main()' prog.mb   # PyPI malbolge 1.0.0 vendored at tools/malbolge-pkg (PYTHONPATH)  -> Invalid character in the source file",
+ "oracle_plain": "Invalid character in the source file",
+ "expected": "none",
+ "decoy": true
+}

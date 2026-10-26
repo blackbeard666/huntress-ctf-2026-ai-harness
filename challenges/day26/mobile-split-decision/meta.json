@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-26-split-decision",
+  "lane": "mobile-android",
+  "name": "📱 Split Decision",
+  "ids": {
+    "single_solve": "mobile-android-day-26-split-decision",
+    "time_trial": "mobile-android-day-26-split-decision/time_trial",
+    "mastery": "mobile-android-day-26-split-decision/mastery"
+  }
+}

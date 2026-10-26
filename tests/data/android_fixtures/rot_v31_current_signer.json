@@ -1,0 +1,7 @@
+{
+ "entry": "signing_lineage_scan",
+ "expected": "ANS-B62E09D4C7F1A385",
+ "oracle_cmd": "apksigner verify -v --print-certs --min-sdk-version 34 rot_v31_current_signer.apk | grep -m1 'minSdkVersion=33.*certificate DN' | sed 's/.*O=\"\\([^\"]*\\)\".*/\\1/' | base64 -d  # SDK-34 current signer (v3.1, sha256 46a07716...); the SDK 24-32 v3.0 signer 04cafb68... holds ANS-0F1E2D3C4B5A6978",
+ "note": "v1+v2+v3.0 by the original key, v3.1 (rotation-min-sdk 33) by the rotated key; sibling .apk.idsig = v4 with a 0x1b93ad61 signing-info block (idsig_facts current_cert)",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_signing_lineage.sh tests/data/android_fixtures  # keytool -genkeypair + apksigner rotate (proof-of-rotation lineage) + zip -X + apksigner sign --lineage"
+}

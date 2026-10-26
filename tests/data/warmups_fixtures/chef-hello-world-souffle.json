@@ -1,0 +1,10 @@
+{
+ "codec": "chef",
+ "plain": "Hello world!",
+ "encoded": "Hello World Souffle.\n\nThis recipe prints the immortal words \"Hello world!\", in a basically brute force way. It also makes a lot of food for one person.\n\nIngredients.\n72 g haricot beans\n101 eggs\n108 g lard\n111 cups oil\n32 zucchinis\n119 ml water\n114 g red salmon\n100 g dijon mustard\n33 potatoes\n\nMethod.\nPut potatoes into the mixing bowl.\nPut dijon mustard into the mixing bowl.\nPut lard into the mixing bowl.\nPut red salmon into the mixing bowl.\nPut oil into the mixing bowl.\nPut water into the mixing bowl.\nPut zucchinis into the mixing bowl.\nPut oil into the mixing bowl.\nPut lard into the mixing bowl.\nPut lard into the mixing bowl.\nPut eggs into the mixing bowl.\nPut haricot beans into the mixing bowl.\nLiquefy contents of the mixing bowl.\nPour contents of the mixing bowl into the baking dish.\n\nServes 1.\n",
+ "generator_cmd": "verbatim 'Hello World Souffle' (David Morgan-Mar, esolangs wiki)",
+ "oracle_cmd": "PYTHONPATH=tools/esolang-oracles python3 -c 'import sys; from chef_lang.interpreter import Chef, RecipeEnd; c=Chef(open(sys.argv[1]).read().rstrip()+chr(10)*2); c.parse_script(); ...; print(c.serve())' prog.chef   # chef-lang 0.1.0 (PyPI)",
+ "oracle_plain": "Hello world!",
+ "oracle_error": "",
+ "expected": "Hello world!"
+}

@@ -1,0 +1,27 @@
+{
+ "expected_plain": "v=3|language=sed|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=SED-050fd535|url=https://sed-050fd535c2.example.invalid/stage|file_path=/tmp/huntress-sed/.050fd535c2d4ef8d.stage",
+ "decoy": false,
+ "language": "sed",
+ "role": "staged-chain",
+ "family": "polyglot-sed",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/as_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "cat tests/data/script_fixtures/polyglot-sed-substraw-nomark.sed | grep '^s/' | sed -E 's#^s/\\^\\.\\*\\$/##; s#/p$##; s#\\\\/#/#g' | tr -d '\\n'",
+ "expected_fields": {
+  "language": "sed",
+  "role": "staged_chain",
+  "verdict": "suspicious",
+  "attack": "T1059",
+  "adapter": "operation_graph",
+  "host_profile": "standalone",
+  "obfuscation_profile": "fragmented_hex",
+  "stage_profile": "cross_language_handoff",
+  "next_language": "vbscript",
+  "stage_count": "3",
+  "steps": "profile_host,decode_configuration,dispatch_language",
+  "campaign_id": "SED-050fd535",
+  "url": "https://sed-050fd535c2.example.invalid/stage",
+  "file_path": "/tmp/huntress-sed/.050fd535c2d4ef8d.stage",
+  "url_host": "sed-050fd535c2.example.invalid",
+  "file_dir": "/tmp/huntress-sed/"
+ }
+}

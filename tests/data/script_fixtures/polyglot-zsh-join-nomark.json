@@ -1,0 +1,27 @@
+{
+ "expected_plain": "v=3|language=zsh|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=ZSH-6c2d6935|url=https://zsh-6c2d693589.example.invalid/stage|file_path=/tmp/huntress-zsh/.6c2d6935895f9913.stage",
+ "decoy": false,
+ "language": "zsh",
+ "role": "launcher",
+ "family": "polyglot-zsh",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/zf_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "cat tests/data/script_fixtures/polyglot-zsh-join-nomark.zsh | sed -n '/^parts=(/,/^)/p' | grep -o '\"[^\"]*\"' | tr -d '\"\\n' | xxd -r -p | base64 -d",
+ "expected_fields": {
+  "language": "zsh",
+  "role": "launcher",
+  "verdict": "suspicious",
+  "attack": "T1059",
+  "adapter": "process_builder",
+  "host_profile": "standalone",
+  "obfuscation_profile": "hex_base64",
+  "stage_profile": "three_stage_decode_write_launch",
+  "next_language": "batch",
+  "stage_count": "3",
+  "steps": "decode_embedded,write_file,dispatch_process",
+  "campaign_id": "ZSH-6c2d6935",
+  "url": "https://zsh-6c2d693589.example.invalid/stage",
+  "file_path": "/tmp/huntress-zsh/.6c2d6935895f9913.stage",
+  "url_host": "zsh-6c2d693589.example.invalid",
+  "file_dir": "/tmp/huntress-zsh/"
+ }
+}

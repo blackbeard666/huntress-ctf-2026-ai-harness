@@ -1,0 +1,10 @@
+{
+ "codec": "ws-lang",
+ "plain": null,
+ "encoded": " \t  \t\t\t \n \t\t \t  \t\n \t\t   \t\t\n \t\t  \t \t\n  \t     \n \t\t\t \t\t\t\n \t\t \t\t\t\t\n \t\t\t  \t \n \t\t \t \t\t\n  \t     \n \t\t  \t  \n \t\t  \t \t\n \t\t   \t\t\n \t\t \t\t\t\t\n \t\t  \t  \n \t\t \t  \t\n \t\t \t\t\t \n \t\t  \t\t\t\n  \t     \n \t\t\t \t  \n \t\t \t   \n \t\t \t  \t\n \t\t\t  \t\t\n  \t     \n \t\t\t \t\t\t\n \t\t    \t\n \t\t\t  \t \n \t\t \t\t \t\n \t\t\t \t \t\n \t\t\t    \n  \t    \t\n  \t     \n \t \t \t  \n \t\t \t\t\t\t\n  \t     \n \t\t\t  \t\t\n \t\t \t\t\t\t\n \t\t \t\t  \n \t\t\t \t\t \n \t\t  \t \t\n  \t \t\t  \n  \t     \n \t\t\t  \t\t\n \t\t\t \t \t\n \t\t   \t \n \t\t \t\t \t\n \t\t \t  \t\n \t\t\t \t  \n  \t     \n \t\t\t \t  \n \t\t \t   \n \t\t \t  \t\n \t\t\t  \t\t\n  \t     \n \t\t  \t \t\n \t\t\t\t   \n \t\t    \t\n \t\t   \t\t\n \t\t\t \t  \n  \t     \n \t\t    \t\n \t\t \t\t\t \n \t\t\t  \t\t\n \t\t\t \t\t\t\n \t\t  \t \t\n \t\t\t  \t \n  \t     \n \t\t\t \t  \n \t\t \t\t\t\t\n  \t     \n \t\t\t \t  \n \t\t \t   \n \t\t  \t \t\n  \t     \n \t   \t\t\t\n \t\t    \t\n \t\t \t\t \t\n \t\t  \t \t\n  \t     \n \t  \t\t \t\n \t\t    \t\n \t\t\t  \t\t\n \t\t\t \t  \n \t\t  \t \t\n \t\t\t  \t \n  \t\t\t \t \n  \t     \n \t\t \t\t \t\n \t\t    \t\n \t\t\t    \n \t\t \t\t  \n \t\t  \t \t\n  \t \t\t \t\n \t\t\t \t\t \n \t\t \t  \t\n \t\t\t    \n \t\t  \t \t\n \t\t\t  \t \n  \t \t\t \t\n  \t\t  \t \n  \t\t   \t\n",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl -CSA -e 'print join(\"\\n\",map{my $b=sprintf(\"%08b\",$_); $b=~tr/01/ \\t/; $b} unpack(\"C*\",$ARGV[0])),\"\\n\"' \"$plain\"",
+ "oracle_cmd": "ruby tests/data/warmups_fixtures/ws_oracle.rb raw <(printf %s \"$encoded\")  # independent Ruby Whitespace interpreter",
+ "oracle_plain": null
+}

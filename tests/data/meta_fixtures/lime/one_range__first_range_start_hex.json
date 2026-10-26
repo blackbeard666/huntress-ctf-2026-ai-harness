@@ -1,0 +1,8 @@
+{
+ "field": "lime.first_range_start_hex",
+ "expected": "0x0000000000001000",
+ "generator_cmd": "python3 -I gen.py OUT  (stdlib struct writer of LiME lime.h records <IIQQQ magic 0x4C694D45 v1 start end(incl) reserved + (end-start+1) data bytes): three_ranges = 0x0-0xfff, 0x100000-0x101fff, 0x7ff00000-0x7ff003ff; one_range = 0x1000-0x11ff; avml_impostor = AVML v2 header (magic 0x4C4D5641) + snappy stream id",
+ "oracle_cmd": ".venv/bin/python -I oracle.py F  (volatility3 2.x layers.lime.LimeLayer over physical.FileLayer: len(_segments), sum(segment lengths), segments as 0x%x-0x%x, maximum_address) -> volatility3 first segment start 0x1000",
+ "decoy": false,
+ "member": "memory.lime"
+}

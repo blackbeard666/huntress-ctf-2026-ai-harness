@@ -1,0 +1,8 @@
+{
+ "what": "Day 23 merge rehearsal: base `auto-mastery-c8d60ca4` (scripting-next-next-finish, sets 1-6) + today's Single as set 7 (evidence.zip -> evidence-07.zip); answers = both GM-verified",
+ "base": "/home/testpwn/huntress-2026/challenges/day22/scripting-next-next-finish/solver/cases/auto-mastery-c8d60ca4",
+ "set": 7,
+ "renamed": {
+  "evidence.zip": "evidence-07.zip"
+ }
+}

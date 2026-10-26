@@ -1,0 +1,18 @@
+{
+ "family": "elf_core",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "core_is_core": "false",
+  "core_signal": "none",
+  "core_pc": "none",
+  "core_fault_address": "none",
+  "core_pc_function": "none"
+ },
+ "companion": "core_decoy_exe_exe.elf",
+ "generator_cmd": "bash core_gen.sh   # DECOY: an ordinary PIE executable posing as the core -> core_is_core 'false', everything else 'none'; x86 cores via gdb -batch -ex run -ex generate-core-file (our fixtures only)",
+ "oracle_cmd": "python3 core_oracle.py core_decoy_exe.bin core_decoy_exe_exe.elf   # gdb/gdb-multiarch (sysroot off) + readelf -n + file + pyelftools",
+ "decoy": true,
+ "note": "lib.binary.elf_core_field(core, key, exe=companion) per expected_facts key; fact names SPECULATIVE (GM label not seen)"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "fat12.volume_label",
+ "expected": "none",
+ "generator_cmd": "printf 'PK\\x03\\x04junk' > notdisk.bin (zip-magic impostor)",
+ "oracle_cmd": "file -b notdisk.bin -> Zip archive data (no 0x55AA boot signature, no MBR/VBR)",
+ "decoy": true,
+ "member": "boot.bin"
+}

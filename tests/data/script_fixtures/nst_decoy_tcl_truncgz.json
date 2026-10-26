@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "note": "nim-swift-tcl-literal-route: decoy truncated gzip",
+ "generator_cmd": "python3 -I -c (stdlib base64/gzip.compress(mtime=0)/bytes.hex; template in the json's note) -> nst_decoy_tcl_truncgz.tcl",
+ "oracle_cmd": "tclsh <(cat tests/data/script_fixtures/nst_decoy_tcl_truncgz.tcl; echo 'zlib gunzip $descriptor_9d6fe075')  # -> error: truncated, no plan"
+}

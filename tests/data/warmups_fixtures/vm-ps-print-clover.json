@@ -1,0 +1,9 @@
+{
+ "codec": "vm-ps",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-88",
+ "encoded": "%!PS\n(Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-88) print\n",
+ "generator_cmd": "perl -e '($s = $ARGV[0]) =~ s/([\\\\()])/\\\\$1/g; print \"%!PS\\n($s) print\\n\"' \"$plain\"",
+ "oracle_cmd": "gs -q -dNODISPLAY -dNOPAUSE -dBATCH -dSAFER -",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: clover-badger-88",
+ "expected": "match"
+}

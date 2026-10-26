@@ -1,0 +1,32 @@
+{
+ "kind": "jvm_niche_facts",
+ "decoy": false,
+ "question": "Kotlin script hello.main.kts: script class, base template and HCFG config?",
+ "encoding": "classfile_cp_base64",
+ "expected_offset": 199,
+ "expected": {
+  "niche_language": "kotlin_script",
+  "niche_classes": "[\"Hello_main.class\"]",
+  "niche_class_count": "1",
+  "niche_primary_classfile": "Hello_main.class",
+  "niche_primary_class": "Hello_main",
+  "niche_source_file": "hello.main.kts",
+  "niche_hcfg_classfile": "Hello_main.class",
+  "niche_hcfg_in_primary": "true",
+  "references_niche_runtime": "true",
+  "jython_module": "none",
+  "jython_code_objects": "none",
+  "jruby_methods": "none",
+  "ceylon_module_class": "none",
+  "ceylon_module": "none",
+  "kotlin_script_class": "Hello_main",
+  "kotlin_script_base": "kotlin/script/templates/standard/ScriptTemplateWithArgs"
+ },
+ "expected_config": {
+  "c2": "https://niche.example/gate",
+  "id": "day27-niche"
+ },
+ "generator_cmd": "bash jvmniche_gen.sh   # javac/jar OpenJDK 21 against stub runtime classes (not packed); SourceFile Utf8 renamed by stdlib; HCFG base64 via coreutils base64 -w0",
+ "oracle_cmd": "python3 jvmniche_oracle.py jvmniche_kts_class.bin --unit hello.main.kts   # unzip -Z1/-p + javap -v -p text (OpenJDK 21); HCFG via stdlib base64+crc32",
+ "note": "BARE Hello_main extends ScriptTemplateWithArgs + @kotlin.Metadata, SourceFile hello.main.kts"
+}

@@ -1,0 +1,23 @@
+# Fixture generator (run offline): PYTHONPATH=tools/pylib_dsstore python3 -P mkdsstore_writer.py.txt OUTDIR
+# Uses the pip `ds_store` 1.3.3 WRITER (Alastair Houghton's buddy-allocator/B-tree implementation, as used by dmgbuild).
+import os, sys
+from ds_store import DSStore
+from ds_store.store import DSStoreEntry, ILocCodec
+out = sys.argv[1]
+# 1) small folder: "." view settings + three children (one "deleted" doc only the DS_Store remembers)
+with DSStore.open(os.path.join(out, "small.DS_Store"), "w+") as d:
+    d["."]["bwsp"] = {"ShowStatusBar": False, "WindowBounds": "{{100, 100}, {640, 480}}"}
+    d["."]["icvp"] = {"iconSize": 64.0, "arrangeBy": "none"}
+    d["."]["vSrn"] = ("long", 1)
+    d["invoice_Q3.pdf"]["Iloc"] = (64, 96)
+    d["payload.exe"]["Iloc"] = (192, 96)
+    d["payload.exe"]["modD"] = ("dutc", 0x0000E2C1A0000000)
+    d["Secret Plans"]["lsvp"] = {"viewOptionsVersion": 1}
+    d["Secret Plans"]["ptbL"] = ("ustr", "Macintosh HD:Users:bob:")
+# 2) many entries -> multi-level B-tree (internal nodes)
+#    (bulk build via initial_entries: the library's incremental leaf split crashes past one page)
+ents = [DSStoreEntry("file_%04d_with_a_longish_name.txt" % i, b"Iloc", b"blob", ILocCodec.encode((i, 2 * i)))
+        for i in range(400)]
+ents.append(DSStoreEntry("file_0007_with_a_longish_name.txt", b"cmmt", b"ustr", "dropped by stage2"))
+with DSStore.open(os.path.join(out, "big.DS_Store"), "w+", initial_entries=ents) as d:
+    pass

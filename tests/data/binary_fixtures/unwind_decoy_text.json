@@ -1,0 +1,18 @@
+{
+ "family": "static_stack_unwind",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "data_file": "unwind_crasher.c",
+ "exe_file": null,
+ "expected_facts": {
+  "unwind_frames": "none",
+  "unwind_frame_count": "none",
+  "cfa_frame_size:leaf": "none",
+  "unwind_method": "none"
+ },
+ "generator_cmd": "sh unwind_gen.sh   # gcc -O0 -fno-omit-frame-pointer -no-pie / gcc -O2 -fomit-frame-pointer (PIE) unwind_crasher.c; core = gdb generate-core-file at the SIGSEGV",
+ "oracle_cmd": "file unwind_crasher.c -> C source, ASCII text (not ELF)",
+ "decoy": true,
+ "note": "not an ELF at all"
+}

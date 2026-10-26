@@ -1,0 +1,30 @@
+{
+ "family": "crash_verdict",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "exploitability": "PROBABLY_NOT_EXPLOITABLE",
+  "exploitable_rule": "SourceAvNearNull",
+  "fault_class": "null_deref",
+  "cwe": "CWE-476",
+  "signal_number": "11",
+  "si_code": "1",
+  "fault_address": "0x18",
+  "fault_address_class": "null_page",
+  "canary": "false",
+  "nx": "true",
+  "pie": "true",
+  "relro": "full",
+  "fortify": "false",
+  "cfg": "false"
+ },
+ "companion": "cverdict_nullr_exe.elf",
+ "oracle_other_tags": [
+  "AccessViolation"
+ ],
+ "generator_cmd": "bash cverdict_gen.sh   # gcc crasher, gdb run -> generate-core-file at the fatal signal",
+ "oracle_cmd": "python3 -I cverdict_oracle.py nullr   # CERT GDB exploitable plugin (tools/exploitable) + gdb $_siginfo / info proc mappings / bt + readelf -lWd --dyn-syms",
+ "decoy": false,
+ "note": "lib.binary.crash_verdict_field(core, key, exe=companion); fact names SPECULATIVE (GM label not seen)"
+}

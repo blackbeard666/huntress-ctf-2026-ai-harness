@@ -1,0 +1,2 @@
+[ 4211.338190] vuln[31337]: segfault at 0 ip 000055d0c4a0113d sp 00007ffd1f2e0a40 error 4 in vuln[55d0c4a01000+1000] likely on CPU 3 (core 3, socket 0)
+[ 4211.338204] Code: 48 89 e5 48 89 7d f8 <8b> 00 5d c3

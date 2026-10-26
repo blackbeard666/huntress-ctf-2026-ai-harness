@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-19-trust-the-webhook",
+  "lane": "web",
+  "name": "🌐 Trust the Webhook",
+  "ids": {
+    "single_solve": "web-exploitation-day-19-trust-the-webhook",
+    "time_trial": "web-exploitation-day-19-trust-the-webhook/time_trial",
+    "mastery": "web-exploitation-day-19-trust-the-webhook/mastery"
+  }
+}

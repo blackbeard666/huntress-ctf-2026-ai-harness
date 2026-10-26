@@ -1,0 +1,11 @@
+{
+ "codec": "shakespeare",
+ "plain": null,
+ "encoded": "The Tragedy of Hamlet, Prince of Denmark.\n\nHamlet, Prince of Denmark.\nHoratio, friend to Hamlet.\n\nAct I: Elsinore.\n\nScene I: A platform before the castle.\n\n[Enter Hamlet and Horatio]\n\nHamlet:\n To be, or not to be, that is the question! Whether 'tis nobler in the mind to suffer the slings and arrows of outrageous fortune.\n\nHoratio:\n My lord, I came to see your father's funeral.\n\n[Exeunt]\n",
+ "generator_cmd": "printf %s '<real Hamlet lines laid out as a play: no assignment/output sentences>'",
+ "oracle_cmd": "PYTHONPATH=tools/esolang-oracles python3 -c 'import sys; from shakespearelang import Shakespeare; Shakespeare(open(sys.argv[1]).read()).run()' prog.spl   # shakespearelang 1.0.0 (PyPI)",
+ "oracle_plain": "",
+ "oracle_error": "ShakespeareParseError: SPL parse error: failed to parse negative_if\n  at line 13\n----- context -----\n\n[Enter Hamlet and Horatio]\n\nHamlet:\n ∨\n T",
+ "decoy": true,
+ "expected": "none"
+}

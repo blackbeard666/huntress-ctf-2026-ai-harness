@@ -1,0 +1,48 @@
+{
+ "corpus": {
+  "polyglot-erlang-staged-chain.escript.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPWVybGFuZ3xyb2xlPXN0YWdlZF9jaGFpbnxuZXh0X2xhbmd1YWdlPXBvd2Vyc2hlbGx8Y2FtcGFpZ25faWQ9RVJMQU5HLTg5Y2ZjYjkwfHVybD1odHRwczovL2VybGFuZy04OWNmY2I5MDM0LmV4YW1wbGUuaW52YWxpZC9zdGFnZXxmYWxsYmFja191cmw9aHR0cHM6Ly9jZG4tMjdjYTU2N2FhMi5leGFtcGxlLmludmFsaWQvMTZhMTUzYTNiOWJmLmJpbg==').decode()\n",
+  "polyglot-powershell-launcher.ps1.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXBvd2Vyc2hlbGx8cm9sZT1sYXVuY2hlcnxuZXh0X2xhbmd1YWdlPW5vbmV8Y2FtcGFpZ25faWQ9UE9XRVJTSEVMTC04OWNmY2I5MHx1cmw9aHR0cHM6Ly9lcmxhbmctODljZmNiOTAzNC5leGFtcGxlLmludmFsaWQvc3RhZ2U=').decode()\n",
+  "python-collection.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXB5dGhvbnxyb2xlPXVwbG9hZGVyfG5leHRfbGFuZ3VhZ2U9bm9uZXxjYW1wYWlnbl9pZD1QWVRIT04tMjdjYTU2N2FhMXx1cmw9aHR0cHM6Ly9jZG4tMjdjYTU2N2FhMS5leGFtcGxlLmludmFsaWQvMTZhMTUzYTNiOWJmLmJpbg==').decode()\n"
+ },
+ "text": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPWVybGFuZ3xyb2xlPXN0YWdlZF9jaGFpbnxuZXh0X2xhbmd1YWdlPXBvd2Vyc2hlbGx8Y2FtcGFpZ25faWQ9RVJMQU5HLTg5Y2ZjYjkwfHVybD1odHRwczovL2VybGFuZy04OWNmY2I5MDM0LmV4YW1wbGUuaW52YWxpZC9zdGFnZXxmYWxsYmFja191cmw9aHR0cHM6Ly9jZG4tMjdjYTU2N2FhMi5leGFtcGxlLmludmFsaWQvMTZhMTUzYTNiOWJmLmJpbg==').decode()\n",
+ "expected_plain": "v=3|language=erlang|role=staged_chain|next_language=powershell|campaign_id=ERLANG-89cfcb90|url=https://erlang-89cfcb9034.example.invalid/stage|fallback_url=https://cdn-27ca567aa2.example.invalid/16a153a3b9bf.bin",
+ "expected_true": [
+  [
+   "polyglot-erlang-staged-chain.escript.py",
+   "url",
+   "https://erlang-89cfcb9034.example.invalid/stage"
+  ],
+  [
+   "polyglot-powershell-launcher.ps1.py",
+   "url",
+   "https://erlang-89cfcb9034.example.invalid/stage"
+  ]
+ ],
+ "expected_decoys": [
+  [
+   "polyglot-erlang-staged-chain.escript.py",
+   "fallback_url",
+   "https://cdn-27ca567aa2.example.invalid/16a153a3b9bf.bin"
+  ]
+ ],
+ "generator_cmd": "python3 tests/data/script_fixtures/ic_gen.py $TMPDIR/icgen  (stdlib base64 writer)",
+ "oracle_cmd": "find . -name '*.py' | sort | while read f; do sed -n \"s/.*b64decode('\\(.*\\)').*/\\1/p\" \"$f\" | { base64 -d; echo; } | tr '|' '\\n' | sed \"s|^|${f#./}\\t|\"; done | awk -F'\\t' '\n{ split($2, kv, \"=\"); k = kv[1]; v = substr($2, length(k) + 2); f = $1; d = f; sub(/\\/[^\\/]*$/, \"\", d); if (d == f) d = \".\";\n  if (k == \"language\") L[f] = v; else if (k == \"next_language\") N[f] = v;\n  else if (k == \"campaign_id\") { n = split(v, p, \"-\"); C[f] = tolower(p[n]) }\n  else if (k ~ /url$/ || k == \"handoff_id\") { cnt++; F[cnt] = f; K[cnt] = k; V[cnt] = v; D[cnt] = d } }\nEND { for (i = 1; i <= cnt; i++) { t = 0;\n    for (j = 1; j <= cnt; j++) if (j != i && D[j] == D[i] && V[j] == V[i] && (N[F[j]] == L[F[i]] || N[F[i]] == L[F[j]])) t = 1;\n    if (t) { print \"TRUE\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i]; continue }\n    h = V[i]; sub(/^[a-z]+:\\/\\//, \"\", h); sub(/[\\/.].*/, \"\", h); n = split(h, hp, \"-\"); tok = tolower(hp[n]);\n    if (K[i] == \"handoff_id\") { c = 0; for (j = 1; j <= cnt; j++) if (D[j] == D[i] && K[j] == \"handoff_id\" && N[F[j]] == L[F[i]]) c = 1;\n      if (c) print \"DECOY\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i]; continue }\n    if (index(tok, C[F[i]]) != 1) print \"DECOY\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i] } }' | sort  # plain: sed -n \"s/.*b64decode('\\(.*\\)').*/\\1/p\" polyglot-erlang-staged-chain.escript.py | base64 -d",
+ "checks": "lib.codec.indicator_collisions(plans of corpus) true/decoys == expected_true/expected_decoys [member, key, value]; indicator_answer(res, member, field)",
+ "expected_answers": [
+  [
+   "polyglot-erlang-staged-chain.escript.py",
+   "decoy-count",
+   "1"
+  ],
+  [
+   "polyglot-erlang-staged-chain.escript.py",
+   "handoff-target",
+   "polyglot-powershell-launcher.ps1.py"
+  ],
+  [
+   "polyglot-powershell-launcher.ps1.py",
+   "true-indicator",
+   "https://erlang-89cfcb9034.example.invalid/stage"
+  ]
+ ]
+}

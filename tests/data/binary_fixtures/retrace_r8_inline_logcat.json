@@ -1,0 +1,22 @@
+{
+  "family": "retrace",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "kind": "java.lang.ArrayIndexOutOfBoundsException",
+    "message": "Index 13 out of bounds for length 2",
+    "fault_function": "org.demo.pay.Codec.fetch",
+    "fault_file": "Codec.java",
+    "fault_line": "9",
+    "outer_function": "org.demo.pay.App.main",
+    "frame_count": "4",
+    "frames": "org.demo.pay.Codec.fetch, org.demo.pay.Codec.decode, org.demo.pay.Ledger.settle, org.demo.pay.App.main",
+    "fault_frame": "org.demo.pay.Codec.fetch(Codec.java:9)"
+  },
+  "generator_cmd": "bash retrace_gen.sh   # javac --release 11 + R8 8.5.35 (tools/r8) obfuscation + run the obfuscated jar + zip/tar",
+  "oracle_cmd": "bash retrace_oracle.sh retrace_r8_inline_logcat.bin   # R8 com.android.tools.r8.retrace.Retrace + sed/awk",
+  "decoy": false,
+  "note": "lib.binary.retrace_field(data, key); fact names SPECULATIVE (off-peak breadth build). one minified frame App.main(SourceFile:4) expands to 4 inlined original frames; logcat-prefixed trace; tar.gz with build/outputs/mapping/release/mapping.txt"
+}

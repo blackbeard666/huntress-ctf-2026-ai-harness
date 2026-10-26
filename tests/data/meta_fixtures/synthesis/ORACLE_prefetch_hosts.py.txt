@@ -1,0 +1,68 @@
+"""Independent oracle for the cross-trace prefetch host fixtures (does NOT import lib.meta): zip members via stdlib
+zipfile; MAM\\x04 payloads via dissect.util lzxpress_huffman; traces via libyal pyscca (executable_filename, first
+volume device_path / serial_number / creation time, last run times); shortcuts via LnkParse3 (LinkInfo VolumeID
+drive_serial_number, TrackerDataBlock machine_identifier). Host key = (serial, device path, volume creation time).
+Usage: .venv/bin/python -I ORACLE_prefetch_hosts.py.txt <set.zip> -> one JSON object {field: GM-spelled value}."""
+import json
+import os
+import re
+import struct
+import sys
+import tempfile
+import zipfile
+
+sys.path.insert(0, os.path.join(os.getcwd(), "tools", "pylib-scca"))
+import pyscca  # noqa: E402
+import LnkParse3  # noqa: E402
+from dissect.util.compression import lzxpress_huffman  # noqa: E402
+
+J = lambda v: json.dumps(v, separators=(",", ":"))  # noqa: E731
+z = zipfile.ZipFile(sys.argv[1])
+names = z.namelist()
+tr, lk = {}, {}
+for n in names:
+    d = z.read(n)
+    if d[:4] == b"MAM\x04":
+        d = lzxpress_huffman.decompress(d[8:])[:struct.unpack_from("<I", d, 4)[0]]
+    if d[4:8] == b"SCCA":
+        with tempfile.NamedTemporaryFile(suffix=".pf", delete=False) as t:
+            t.write(d)
+        f = pyscca.open(t.name)
+        v = f.get_volume_information(0)
+        runs = [f.get_last_run_time_as_integer(i) for i in range(8 if f.format_version >= 26 else 1)]
+        tr[n] = {"exe": f.executable_filename, "key": (v.serial_number, v.device_path.upper(),
+                                                       v.get_creation_time_as_integer()),
+                 "serial": v.serial_number, "last": max(runs)}
+        f.close()
+        os.unlink(t.name)
+        continue
+    try:
+        j = LnkParse3.lnk_file(indata=d).get_json()
+    except Exception:  # noqa: BLE001 - not a shortcut
+        continue
+    ser = (j.get("link_info") or {}).get("location_info", {}).get("drive_serial_number")
+    mid = (j.get("extra") or {}).get("DISTRIBUTED_LINK_TRACKER_BLOCK", {}).get("machine_identifier")
+    if ser is not None:
+        lk[int(str(ser), 16) if isinstance(ser, str) else ser] = mid
+out = {}
+by = {}
+for n, t in tr.items():
+    by.setdefault(t["key"], []).append(n)
+groups = sorted((sorted(g) for g in by.values()), key=lambda g: g[0])
+out["host_groups"] = J(groups) if tr else "none"
+out["host_count"] = str(len(groups))
+for n in tr:
+    mates = sorted(m for m in tr if m != n and tr[m]["key"] == tr[n]["key"])
+    out["same_host_as_" + re.sub(r"[^a-z0-9]+", "_", n.lower())] = J(mates) if mates else "none"
+    out["host_of_" + re.sub(r"[^a-z0-9]+", "_", n.lower())] = lk.get(tr[n]["serial"]) or "none"
+ren = [n for n in names if n in tr and re.sub(r"-[0-9A-F]{8}$", "", n[:-3]).upper() != tr[n]["exe"].upper()]
+out["renamed_traces"] = J(ren) if ren else "none"
+out["last_run_order"] = J(sorted(tr, key=lambda n: (tr[n]["last"], n))) if tr else "none"
+single = [g[0] for g in groups if len(g) == 1]
+if len(single) == 1 and len(groups) >= 2:
+    out["odd_host"] = single[0]
+m = {}
+for n, t in tr.items():
+    m.setdefault(lk.get(t["serial"]) or "0x%08x" % t["serial"], []).append(n)
+out["traces_by_host"] = J({k: sorted(m[k]) for k in sorted(m)}) if tr else "none"
+print(json.dumps(out))

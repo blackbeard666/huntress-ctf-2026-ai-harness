@@ -1,0 +1,8 @@
+{
+ "field": "evt.computer_names",
+ "expected": "[\"DC01\",\"DC02\"]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/evt/gen_evt.py.txt wrapped 3 > w3.evt (stdlib struct writer: ELF_LOGFILE_HEADER + EVENTLOGRECORDs + EOF record, per MS-EVEN/libevt docs)",
+ "oracle_cmd": "python3 -c 'import pyevt; f=pyevt.file(); f.open(\"w3.evt\"); ...' (libevt-python 20260705) -> 5 records (record 6 split across the buffer end) computer_name DC01 x4, DC02 x1",
+ "decoy": false,
+ "member": "SecEvent.Evt"
+}

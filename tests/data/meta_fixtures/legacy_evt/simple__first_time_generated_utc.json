@@ -1,0 +1,8 @@
+{
+ "field": "legacy_evt.first_time_generated_utc",
+ "expected": "2023-11-14T22:13:20Z",
+ "generator_cmd": "python3 tests/data/meta_fixtures/evt/gen_evt.py.txt simple > simple.evt (stdlib struct writer: ELF_LOGFILE_HEADER + EVENTLOGRECORDs + EOF record, per MS-EVEN/libevt docs)",
+ "oracle_cmd": "python3 -c 'import pyevt; f=pyevt.file(); f.open(\"simple.evt\"); ...' (libevt-python 20260705) -> records[0].creation_time 2023-11-14 22:13:20 (UTC)",
+ "decoy": false,
+ "member": "System.evt"
+}

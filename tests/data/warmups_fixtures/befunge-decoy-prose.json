@@ -1,0 +1,10 @@
+{
+ "codec": "befunge*",
+ "plain": null,
+ "encoded": "Meet @ noon, bring 2 coffees; no sugar. Ok?",
+ "generator_cmd": "printf %s 'Meet @ noon, bring 2 coffees; no sugar. Ok?'",
+ "oracle_cmd": "node tests/data/warmups_fixtures/befunge_oracle.mjs b93 / fish   # -> exits 1: prose with @ , ; o halts with no output / is fishy",
+ "oracle_plain": "",
+ "decoy": true,
+ "expected": "none"
+}

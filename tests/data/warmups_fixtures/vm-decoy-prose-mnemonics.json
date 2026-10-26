@@ -1,0 +1,10 @@
+{
+ "codec": "vm-*",
+ "plain": null,
+ "encoded": "Push the button, then print the page and halt the press before you add more ink.",
+ "generator_cmd": "printf %s 'Push the button, then print the page and halt the press before you add more ink.'",
+ "oracle_cmd": "tools/node/bin/node tests/data/warmups_fixtures/vmlisting_oracle.mjs   # -> exits 1: English words that start with mnemonics are not instructions",
+ "oracle_plain": null,
+ "decoy": true,
+ "expected": "none"
+}

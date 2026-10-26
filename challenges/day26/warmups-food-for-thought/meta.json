@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-26",
+  "lane": "warmups",
+  "name": "👶 Food for Thought",
+  "ids": {
+    "single_solve": "warmups-day-26",
+    "time_trial": "warmups-day-26/time_trial",
+    "mastery": "warmups-day-26/mastery"
+  }
+}

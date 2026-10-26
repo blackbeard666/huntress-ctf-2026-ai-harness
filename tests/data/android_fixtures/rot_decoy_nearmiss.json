@@ -1,0 +1,8 @@
+{
+ "entry": "signing_lineage_scan",
+ "expected": null,
+ "decoy": true,
+ "oracle_cmd": "apksigner lineage --in rot_decoy_nearmiss.apk --print-certs | grep 'DN:'  # both signers carry 15-hex near-miss tokens",
+ "note": "same v3.1 rotation layout, no valid token",
+ "generator_cmd": "sh tests/data/android_fixtures/gen_signing_lineage.sh tests/data/android_fixtures  # keytool -genkeypair + apksigner rotate (proof-of-rotation lineage) + zip -X + apksigner sign --lineage"
+}

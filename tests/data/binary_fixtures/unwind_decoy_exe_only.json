@@ -1,0 +1,19 @@
+{
+ "family": "static_stack_unwind",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "data_file": "unwind_o2_exe.bin",
+ "exe_file": null,
+ "expected_facts": {
+  "unwind_frames": "none",
+  "unwind_frame_count": "none",
+  "unwind_functions": "none",
+  "cfa_frame_size:leaf": "64",
+  "cfa_frame_size:process": "224"
+ },
+ "generator_cmd": "sh unwind_gen.sh   # gcc -O0 -fno-omit-frame-pointer -no-pie / gcc -O2 -fomit-frame-pointer (PIE) unwind_crasher.c; core = gdb generate-core-file at the SIGSEGV",
+ "oracle_cmd": "readelf --debug-dump=frames-interp unwind_o2_exe.bin (max CFA offset per FDE); no core -> no frames",
+ "decoy": true,
+ "note": "executable handed in as the 'core': frame fields none, CFA sizes still answerable"
+}

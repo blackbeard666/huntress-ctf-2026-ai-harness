@@ -1,0 +1,22 @@
+{
+ "family": "jvm_callgraph",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "jcg_found": "true",
+  "jcg_fault_method": "none",
+  "jcg_fault_exception": "none",
+  "jcg_throw_line": "none",
+  "jcg_call_chain": "none",
+  "jcg_call_depth": "none",
+  "jcg_catch_method": "none",
+  "jcg_catch_type": "none",
+  "jcg_caught": "none",
+  "jcg_callees_of:main": "[\"twice\"]"
+ },
+ "generator_cmd": "sh jcg_gen.sh  # javac --release 11 jcg_src/*.java + jar cfe",
+ "oracle_cmd": "python3 jcg_oracle.py jcg_decoy_nothrow.bin   # unzip + javap -p -c -l -v text",
+ "decoy": true,
+ "note": "lib.binary.jvm_callgraph_field(data, key); decoy: jar with a try/catch but no athrow -> fault facts none"
+}

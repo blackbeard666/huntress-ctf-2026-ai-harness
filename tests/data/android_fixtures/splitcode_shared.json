@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-4649B988A16CBC40",
+ "decoy": false,
+ "_why": "non-isolated feature split with its own classes.dex: base Release.code(ctx) -> SplitCompat.install + getInstalledModules().contains(\"arena_feature\"), plain static invoke FeatureMix.mix(h) into the split dex (which calls the base Util; the split's duplicate Util is shadowed), then ctx.getClassLoader().loadClass(\"..feature.Tail\").getDeclaredMethod(\"tail\", long, int).invoke(null, h, 7)",
+ "generator_cmd": "python3 tests/data/android_fixtures/splitcode_src/gen_splitcode.py shared tests/data/android_fixtures/splitcode_shared.apks && mv tests/data/android_fixtures/splitcode_shared.apks tests/data/android_fixtures/splitcode_shared.zip  # javac --release 8 (base + feature classes + android.* / Play Core stubs; the split's duplicate Util compiled alone) + dex2jar d2j-jar2dex (one classes.dex per APK) + apktool aapt2 link (base / split=\"arena_feature\" isFeatureSplit hasCode=true manifests) + zipfile + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml <member>` for split= / isolatedSplits, each member's classes.dex back through dex2jar d2j-dex2jar.sh to a jar, then java -cp <stubs>:<base.jar>:<split.jar> (shared loader, base first: base Util wins over the split's duplicate) com.huntress.arena.splitcode1.Probe runs Release.code(new Context()) on the host JVM's real class loaders -> ANS-4649B988A16CBC40"
+}

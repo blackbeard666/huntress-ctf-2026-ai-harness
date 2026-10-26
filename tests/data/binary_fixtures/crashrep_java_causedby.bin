@@ -1,0 +1,9 @@
+Exception in thread "main" java.lang.IllegalStateException: bad config value
+	at demo.app.App.load(App.java:5)
+	at demo.app.App.main(App.java:7)
+Caused by: java.lang.NumberFormatException: For input string: "x1"
+	at java.base/java.lang.NumberFormatException.forInputString(NumberFormatException.java:67)
+	at java.base/java.lang.Integer.parseInt(Integer.java:565)
+	at java.base/java.lang.Integer.parseInt(Integer.java:662)
+	at demo.app.App.parse(App.java:3)
+	... 2 more

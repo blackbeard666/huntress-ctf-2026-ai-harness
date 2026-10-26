@@ -1,0 +1,26 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "asan",
+    "kind": "heap-buffer-overflow",
+    "fault_addr": "0x6c977a7e001c",
+    "pc": "0x654b7c340228",
+    "access": "READ of size 4",
+    "access_type": "READ",
+    "access_size": "4",
+    "fault_function": "victim",
+    "fault_line": "2",
+    "region_size": "12",
+    "cwe": "CWE-125",
+    "cwe_specific": "CWE-122",
+    "bug_class": "out_of_bounds_read"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # gcc -fsanitize=address heap OOB read p[3] of int[3]",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_asan_hbo_read.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

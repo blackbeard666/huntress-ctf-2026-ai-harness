@@ -1,0 +1,32 @@
+{
+ "family": "elf_core",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "core_is_core": "true",
+  "core_signal": "SIGABRT",
+  "core_signal_number": "6",
+  "core_si_signo": "6",
+  "core_si_code": "-6",
+  "core_pc": "0x7ffff7ca61ac",
+  "core_sp": "0x7fffffffdc10",
+  "core_reg_rax": "0x0",
+  "core_pc_function": "none",
+  "core_pc_function_offset": "none",
+  "core_stack_top": "0x0",
+  "core_entry": "0x555555555080",
+  "core_execfn": "/home/testpwn/huntress-2026/.run/tmp/prebuild-ad725461/core_gen/core_x64_smash.exe",
+  "core_pc_module": "/usr/lib/x86_64-linux-gnu/libc.so.6",
+  "core_pc_module_offset": "0xa61ac",
+  "core_mapped_file_count": "15",
+  "core_exe_build_id": "bc53f18319f9977e4c3b814794ef2d51ddecb58c",
+  "core_fname": "core_x64_smash.e",
+  "core_psargs": "/home/testpwn/huntress-2026/.run/tmp/prebuild-ad725461/core_gen/core_x64_smash.e"
+ },
+ "companion": "core_x64_smash_exe.elf",
+ "generator_cmd": "bash core_gen.sh   # gcc -O0 -fstack-protector-all; strcpy overflow -> __stack_chk_fail -> abort -> SIGABRT SI_TKILL, pc in libc.so.6 (no si_addr; function 'none': libc is not a member); x86 cores via gdb -batch -ex run -ex generate-core-file (our fixtures only)",
+ "oracle_cmd": "python3 core_oracle.py core_x64_smash.bin core_x64_smash_exe.elf   # gdb/gdb-multiarch (sysroot off) + readelf -n + file + pyelftools",
+ "decoy": false,
+ "note": "lib.binary.elf_core_field(core, key, exe=companion) per expected_facts key; fact names SPECULATIVE (GM label not seen)"
+}

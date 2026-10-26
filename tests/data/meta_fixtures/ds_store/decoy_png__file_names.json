@@ -1,0 +1,8 @@
+{
+ "field": "ds_store.file_names",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"from PIL import Image; Image.new('RGB',(4,4)).save('x.png')\"  (PNG renamed .DS_Store -- impostor)",
+ "oracle_cmd": "file decoy_png__file_names.bin -> PNG image data, 4 x 4 (no 00000001 Bud1 magic)",
+ "decoy": true,
+ "member": "Photos/.DS_Store"
+}

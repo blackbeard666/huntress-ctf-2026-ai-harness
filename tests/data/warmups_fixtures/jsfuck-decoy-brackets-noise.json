@@ -1,0 +1,9 @@
+{
+ "codec": "jsfuck*",
+ "plain": null,
+ "encoded": "[]+[]+(![])[+!+[]]+[]((!![])",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "literal: unbalanced []()!+ soup (not a program)",
+ "oracle_cmd": "printf %s \"$encoded\" | tools/node/bin/node tests/data/warmups_fixtures/jsfuck_oracle.js  # throws (exit 1): not a JSFuck program"
+}

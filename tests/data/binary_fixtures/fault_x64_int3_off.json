@@ -1,0 +1,25 @@
+{
+ "family": "fault_insn",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "input": "fault_x64_int3_off.bin",
+ "args": {
+  "question": "The program traps at file offset 0x112e; find the faulting instruction."
+ },
+ "expected_facts": {
+  "fault_va": "0x112e",
+  "fault_insn": "int3",
+  "fault_mnemonic": "int3",
+  "fault_insn_size": "1",
+  "fault_function": "trap_me",
+  "fault_function_offset": "0x5",
+  "fault_symbol": "trap_me+0x5",
+  "fault_class": "int3_trap",
+  "fault_file_offset": "0x112e"
+ },
+ "generator_cmd": "bash fault_gen.sh   # gcc / aarch64-linux-gnu-gcc crashers, strip -s, gdb generate-core-file; fault_core_* reuse core_gen.sh cores",
+ "oracle_cmd": "python3 fault_oracle.py --write   # objdump -M intel / aarch64 objdump, readelf -sW / --debug-dump=frames, gdb (pc, $_siginfo, bt, info auxv)",
+ "decoy": false,
+ "note": "lib.binary.fault_insn_field(input, key, **args) per expected_facts key; null expected = None (cannot locate). Field names SPECULATIVE (GM label not seen)"
+}

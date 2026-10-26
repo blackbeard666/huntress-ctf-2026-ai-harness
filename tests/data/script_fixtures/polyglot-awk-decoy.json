@@ -1,0 +1,10 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "language": "awk",
+ "role": "decoy",
+ "family": "polyglot-awk",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/as_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' tests/data/script_fixtures/polyglot-awk-decoy.awk | head -n1 | sed -E 's/^HUNTRESS_ANALYSIS_V1:B64-//' | base64 -d",
+ "oracle_stdout": "status=ok;inert-analysis-fixture;no plan here"
+}

@@ -1,0 +1,11 @@
+{
+ "codec": "chef",
+ "plain": null,
+ "encoded": "Tomato Soup.\n\nIngredients.\n6 tomatoes\n1 onions\n500 ml stock\n\nMethod.\nChop the onions finely. Simmer the tomatoes with the stock for twenty minutes. Blend until smooth and season to taste.\n\nServes 2.\n",
+ "generator_cmd": "printf %s '<English recipe whose Method is ordinary cooking prose>'",
+ "oracle_cmd": "PYTHONPATH=tools/esolang-oracles python3 -c 'import sys; from chef_lang.interpreter import Chef, RecipeEnd; c=Chef(open(sys.argv[1]).read().rstrip()+chr(10)*2); c.parse_script(); ...; print(c.serve())' prog.chef   # chef-lang 0.1.0 (PyPI)",
+ "oracle_plain": "",
+ "oracle_error": "ValueError: No baking dishes found",
+ "decoy": true,
+ "expected": "none"
+}

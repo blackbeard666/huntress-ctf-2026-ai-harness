@@ -1,0 +1,11 @@
+{
+ "codec": "chef",
+ "plain": null,
+ "encoded": "Simple Pancakes.\n\nIngredients.\n200 g flour\n2 eggs\n300 ml milk\n1 pinch salt\n\nWhisk the flour, eggs and milk until smooth. Rest the batter for 30 minutes, then fry thin pancakes in a hot buttered pan.\n\nServes 4.\n",
+ "generator_cmd": "printf %s '<plain English recipe: Ingredients, no Method>'",
+ "oracle_cmd": "PYTHONPATH=tools/esolang-oracles python3 -c 'import sys; from chef_lang.interpreter import Chef, RecipeEnd; c=Chef(open(sys.argv[1]).read().rstrip()+chr(10)*2); c.parse_script(); ...; print(c.serve())' prog.chef   # chef-lang 0.1.0 (PyPI)",
+ "oracle_plain": "",
+ "oracle_error": "ValueError: Invalid script format, please provide a valid recipe (no method)",
+ "decoy": true,
+ "expected": "none"
+}

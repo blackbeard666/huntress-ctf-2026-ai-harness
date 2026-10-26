@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-23877514B9D23525",
+ "decoy": false,
+ "_why": "v2-reflection-api-breadth: SEED (static_values) and K (<clinit>) via getDeclaredField(x(..)) + setAccessible + getLong(null); last stage an instance mixer via getDeclaredConstructor().newInstance() + getDeclaredMethod(\"apply\", Long.TYPE).invoke(obj, v) on a ctor-set field; Util.tweak via getDeclaredMethod(x, Integer.TYPE) (an Integer.class overload is the decoy); Stage.getSimpleName().hashCode() + getName().length() mixed in",
+ "generator_cmd": "python3 tests/data/android_fixtures/rflx_src/gen_rflx.py fieldctor tests/data/android_fixtures/rflx_fieldctor.apk  # javac --release 8 (app + android.content.Context stub) -> dex2jar d2j-jar2dex.sh -> zipfile (+ assets/huntress_puzzle.json codec: analysis, no data)",
+ "oracle_cmd": "same generator: the host JVM (java -cp <javac out> <pkg>.Oracle) runs Release.code(null) and prints 'oracle=ANS-23877514B9D23525'"
+}

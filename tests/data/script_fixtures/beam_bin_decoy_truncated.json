@@ -1,0 +1,9 @@
+{
+ "text": "FOR1\u0000\u0000\u0004\u00a4BEAMAtU8\u0000\u0000\u0000S\u0000\u0000\u0000\b\bhx_stage\u0013descriptor_7a1c09e2\u0004main\u0002io\u0006format\u000bmodule_info\u0006erlang\u000fget_module_info\u0000Code\u0000\u0000\u0000f\u0000\u0000\u0000\u0010\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u00ab\u0000\u0000\u0000\t\u0000\u0000\u0000\u0004\u0001\u0010\u0099\u0010\u0002\u0012\"\u0000\u0001 @G\u0000\u0003\u0013\u00010\u0099 \u0002\u00122\u0010\u0001@\f\u0000\u0000@G\u0010\u0013@G \u0003\u0007 \u0000@G0\u0003\u0012\u0000\u0013\u0001P\u0099\u0000\u0002\u0012b\u0000\u0001`@\u0012\u0003N\u0010\u0010\u0001p\u0099\u0000\u0002\u0012b\u0010\u0001\u0080@\u0003\u0013@\u0012\u0003N  \u0003\u0000\u0000StrT\u0000\u0000\u0000\u0000ImpT\u0000\u0000\u0000(\u0000\u0000\u0000\u0003\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u0005\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0007\u0000\u0000\u0000\b\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0007\u0000\u0000\u0000\b\u0000\u0000\u0000\u0002ExpT\u0000\u0000\u00004\u0000\u0000\u0000\u0004\u0000\u0000\u0000\u0006\u0000\u0000\u0000\u0001\u0000\u0000\u0000\b\u0000\u0000\u0000\u0006",
+ "text_encoding": "latin-1 bytes of beam_bin_decoy_truncated.beam (binary carrier: the sibling would be read utf-8 'replace', which destroys the zlib LitT)",
+ "expected_plain": null,
+ "decoy": true,
+ "target": "erlang-beam-chunk-literals",
+ "generator_cmd": "bash tests/data/script_fixtures/beam_bin_gen.sh  (head -c 300 of the hx_stage beam: LitT chunk cut off)",
+ "oracle_cmd": "file tests/data/script_fixtures/beam_bin_decoy_truncated.beam; PATH=tools/erlang-dl/root/usr/lib/erlang/bin:$PATH erl -noshell -eval \"[F,M,Fn]=init:get_plain_arguments(),{ok,B}=file:read_file(F),{module,Mod}=code:load_binary(list_to_atom(M),F,B),io:put_chars(Mod:(list_to_atom(Fn))()),halt().\" -extra tests/data/script_fixtures/beam_bin_decoy_truncated.beam hx_stage descriptor_7a1c09e2  # -> badarg/load error: truncated module, no plan"
+}

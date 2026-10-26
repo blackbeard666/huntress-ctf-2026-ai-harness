@@ -1,0 +1,8 @@
+{
+ "field": "fat.volume_serial_number_u32_hex",
+ "expected": "0xdeadbeef",
+ "generator_cmd": "truncate -s 40M fat32.img && mkfs.fat -F 32 -i DEADBEEF -n DATA32 fat32.img (dosfstools 4.2) && head -c 512 fat32.img",
+ "oracle_cmd": "fsstat fat32.img -> FAT32, Volume ID 0xdeadbeef, Volume Label (Boot Sector) DATA32, Total Range 0-81919, Root Directory at sector 1292 = first data sector (cluster 2); file -> sectors/FAT 630",
+ "decoy": false,
+ "member": "boot.bin"
+}

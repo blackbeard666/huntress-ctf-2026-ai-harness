@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "actor-message-flow-model",
+ "note": "same actor shape, status text only ('v=3 is not a plan' must not read as a plan)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mf_gen.py  (stdlib base64/hex split of the plan over Erlang `Pid ! {Tag, N, Chunk}` / Go `ch <- part` messages)",
+ "oracle_cmd": "PATH=tools/erlang-dl/root/usr/lib/erlang/bin:$PATH escript tests/data/script_fixtures/mf_erl_decoy_status.erl  (prints `bye`: no plan crosses any message)"
+}

@@ -1,0 +1,1 @@
+The program traps at file offset 0x112e; find the faulting instruction.

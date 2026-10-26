@@ -1,0 +1,8 @@
+{
+ "field": "evt.event_ids",
+ "expected": "[6005,7036,1027]",
+ "generator_cmd": "python3 tests/data/meta_fixtures/evt/gen_evt.py.txt simple > simple.evt (stdlib struct writer: ELF_LOGFILE_HEADER + EVENTLOGRECORDs + EOF record, per MS-EVEN/libevt docs)",
+ "oracle_cmd": "python3 -c 'import pyevt; f=pyevt.file(); f.open(\"simple.evt\"); ...' (libevt-python 20260705) -> 3 records, [r.event_identifier & 0xFFFF] = 6005, 7036 (raw 0x40001B7C), 1027 (raw 0xC0000403)",
+ "decoy": false,
+ "member": "System.evt"
+}

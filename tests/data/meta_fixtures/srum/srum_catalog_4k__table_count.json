@@ -1,0 +1,8 @@
+{
+ "field": "srum.table_count",
+ "expected": "5",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/ese/GENERATOR_ese_catalog.py.txt <outdir>  (stdlib struct ESE writer: DBFILEHDR + PGHDR/PGHDR2 + TAG array + RECHDR fixed/variable/tagged records + MSysObjects catalog at page 4; decoy = stdlib sqlite3 database renamed)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/ese/ORACLE_ese_catalog_dissect.py.txt tests/data/meta_fixtures/srum/srum_catalog_4k__table_count.bin table_count  (dissect.esedb 3.18 EseDB.tables()/columns/records() -- independent full ESE reader)",
+ "decoy": false,
+ "member": "SRUDB.dat"
+}

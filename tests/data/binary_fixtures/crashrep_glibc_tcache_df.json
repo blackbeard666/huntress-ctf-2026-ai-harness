@@ -1,0 +1,17 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "glibc",
+    "kind": "free(): double free detected in tcache 2",
+    "cwe": "CWE-415",
+    "bug_class": "double_free"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # glibc free(p); free(p)",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_glibc_tcache_df.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

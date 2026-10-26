@@ -1,0 +1,7 @@
+{
+ "entry": "extract_answer",
+ "expected": "ANS-e8b3471d0c9f2a65",
+ "_why": "reverse polyglot (row 62): a dex appended after the EOCD (inert, never loaded) holds decoy ANS-0c5e8a17f3d29b46; the zip view's classes.dex literal is what runs",
+ "generator_cmd": "python3 tests/data/android_fixtures/janus_src/gen_janus.py appended_inert tests/data/android_fixtures/janus_appended_inert.apk  # javac --release 8 + dex2jar d2j-jar2dex; Info-ZIP zip -X base APK (minSdk 23, v1-only); cat base.apk inert.dex",
+ "oracle_cmd": "unzip -tq janus_appended_inert.apk; unzip -p janus_appended_inert.apk classes.dex | strings | grep ANS-  # runtime (zip) view; python3 -I -c \"import sys,struct,base64,re; from androguard.core.dex import DEX; b=open(sys.argv[1],'rb').read(); o=0 if b[:4]==b'dex\\n' else b.rfind(b'dex\\n0'); d=b[o:]; d=d[:struct.unpack_from('<I',d,0x20)[0]]; ss=list(DEX(d).get_strings()); print(o,[s for s in ss if 'ANS' in s],[base64.b64decode(s) for s in ss if re.fullmatch(r'[A-Za-z0-9+/]{20,}={0,2}',s)])\" janus_appended_inert.apk"
+}

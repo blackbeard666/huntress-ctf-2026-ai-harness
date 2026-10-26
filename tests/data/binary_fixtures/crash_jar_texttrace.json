@@ -1,0 +1,24 @@
+{
+ "family": "crash_sidecar",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "crash_found": "true",
+  "crash_schema": "none",
+  "crash_kind": "IllegalStateException",
+  "crash_fault_method": "stageThree",
+  "crash_fault_frame": "at Crash.stageThree(Crash.java:3)",
+  "crash_outer_method": "main",
+  "crash_frame_count": "4",
+  "crash_frames": "[\"stageThree\",\"stageTwo\",\"stageOne\",\"main\"]",
+  "crash_trace_entry": "crash/stack.txt",
+  "crash_frames_match_methods": "true",
+  "crash_fault_in_primary": "true",
+  "crash_frames_call_chain": "true"
+ },
+ "generator_cmd": "bash crash_gen.sh   # crash/stack.txt Java text stack trace (at ...), kind from the exception header",
+ "oracle_cmd": "python3 crash_oracle.py crash_jar_texttrace.bin   # unzip -Z1/-p, javap -p -c -v, readelf -SW/-h, objcopy --only-section, nm -S, objdump -d, iconv",
+ "decoy": false,
+ "note": "lib.binary.crash_sidecar_field(data, key); javac + zip: crash/stack.txt Java text stack trace (at ...), kind from the exception header; fact names beyond crash_fault_method/crash_frames_match_methods SPECULATIVE"
+}

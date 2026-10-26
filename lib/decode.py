@@ -312,6 +312,14 @@ def decode_chunk(p, _nested=False):
             cands.append((_wc.uplus_dec(t), 0))
         except (ValueError, OverflowError):
             pass
+    if _max_day() >= 26 and "+" in t and "." in t and re.fullmatch(r"[+\-<>\[\].,\s]+", t):
+        # BRAINFUCK (warmups Day 26 "Food for Thought": '+++...+.+++.------.' = one cell, +/- delta per byte then '.'),
+        # the whole fragment must be a program
+        from lib import warmups_codecs as _wc
+        try:
+            cands.append((_ascii(_wc.bf_dec(t).encode()), 0))
+        except (ValueError, IndexError, UnicodeDecodeError):
+            pass
     if _B32S.match(t) and len(t) % 8 == 0:
         try:
             cands.append((_ascii(base64.b32decode(t)), 5))

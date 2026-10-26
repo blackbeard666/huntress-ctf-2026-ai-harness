@@ -1,0 +1,92 @@
+"""Stdlib struct writer for the logfile/indx prebuilt fixtures (independent of lib/meta/prebuilt/logfile.py).
+usage: python3 -I GENERATOR_ntfs_logfile_indx.py.txt <a.img (mkntfs + ntfscp, 11 user files)> <b.img (fresh mkntfs)> <outdir>
+logfile_rstr_rcrd.bin : 2 RSTR pages (v1.1, page 4096) + 2 RCRD pages, update-sequence fixups applied
+logfile_fresh_ff.bin  : first 16 KiB of b.img's $LogFile (mkntfs fills it with 0xFF -> no RSTR) [decoy]
+indx_root.bin         : the root $I30 INDX block carved from a.img (written by ntfs-3g ntfscp)
+indx_slack.bin        : indx_root with its two collation-last entries deleted the way NTFS does it (end entry moved
+                        left, index length shrunk, stale entries left in slack), fixups re-applied
+indx_decoy_file.bin   : a FILE record ($MFT record 0 of a.img) [decoy]"""
+import struct
+import sys
+
+a, b, out = sys.argv[1], sys.argv[2], sys.argv[3]
+
+
+def protect(buf, usa_off, usn=0x0007):
+    buf = bytearray(buf)
+    n = len(buf) // 512
+    struct.pack_into("<HH", buf, 4, usa_off, n + 1)
+    struct.pack_into("<H", buf, usa_off, usn)
+    for i in range(n):
+        end = (i + 1) * 512 - 2
+        buf[usa_off + 2 + 2 * i:usa_off + 4 + 2 * i] = buf[end:end + 2]
+        struct.pack_into("<H", buf, end, usn)
+    return bytes(buf)
+
+
+def unprotect(buf):
+    buf = bytearray(buf)
+    off, cnt = struct.unpack_from("<HH", buf, 4)
+    for i in range(1, cnt):
+        buf[i * 512 - 2:i * 512] = buf[off + 2 * i:off + 2 * i + 2]
+    return buf
+
+
+def rstr(cur_lsn, chkdsk_lsn):
+    p = bytearray(4096)
+    p[0:4] = b"RSTR"
+    struct.pack_into("<QIIHhh", p, 8, chkdsk_lsn, 4096, 4096, 0x30, 1, 1)
+    ra = 0x30
+    # current LSN, clients, free list, in-use list, flags, seq bits, area len, client array off, file size,
+    # last lsn data len, record header len, page data offset, revision
+    struct.pack_into("<QHHHHIHHQIHHI", p, ra, cur_lsn, 1, 0xFFFF, 0, 0, 0x2C, 0xD0, 0x40, 0x400000, 0, 0x30, 0x40, 0)
+    cr = ra + 0x40
+    struct.pack_into("<QQHHH", p, cr, cur_lsn - 0x20, cur_lsn - 0x10, 0xFFFF, 0xFFFF, 1)
+    struct.pack_into("<I", p, cr + 0x1C, 8)
+    p[cr + 0x20:cr + 0x28] = "NTFS".encode("utf-16-le")
+    return protect(p, 0x1E)
+
+
+def rcrd(last_lsn, pos, next_off, last_end):
+    p = bytearray(4096)
+    p[0:4] = b"RCRD"
+    struct.pack_into("<QIHHH", p, 8, last_lsn, 1, 1, pos, next_off)
+    struct.pack_into("<Q", p, 32, last_end)
+    for o in range(0x40, next_off, 8):
+        p[o:o + 8] = b"\x5a" * 8
+    return protect(p, 0x28)
+
+
+log = rstr(0x2A3F51, 0) + rstr(0x2A4010, 0) + rcrd(0x2A3FE8, 1, 0x1A8, 0x2A3FE8) + rcrd(0x2A4010, 1, 0x0F0, 0x2A4010)
+open(out + "/logfile_rstr_rcrd.bin", "wb").write(log)
+
+img_b = open(b, "rb").read()
+img_a = open(a, "rb").read()
+import subprocess  # icat from sleuthkit extracts the real $LogFile / $MFT bytes
+lf = subprocess.run(["icat", b, "2"], capture_output=True).stdout
+open(out + "/logfile_fresh_ff.bin", "wb").write(lf[:16384])
+mft0 = subprocess.run(["icat", a, "0"], capture_output=True).stdout[:1024]
+open(out + "/indx_decoy_file.bin", "wb").write(mft0)
+
+off = img_a.find(b"INDX")
+while off % 4096:
+    off = img_a.find(b"INDX", off + 4)
+blk = img_a[off:off + 4096]
+open(out + "/indx_root.bin", "wb").write(blk)
+
+u = unprotect(blk)
+eo, ilen = struct.unpack_from("<II", u, 24)
+pos, ents = 24 + eo, []
+while pos < 24 + ilen:
+    ln, fl = struct.unpack_from("<H", u, pos + 8)[0], struct.unpack_from("<H", u, pos + 12)[0]
+    ents.append((pos, ln, fl))
+    if fl & 2:
+        break
+    pos += ln
+endpos, endln, _ = ents[-1]
+end_entry = bytes(u[endpos:endpos + endln])
+new_end = ents[-3][0]                      # drop the last two real entries
+u[new_end:new_end + endln] = end_entry     # the end entry moves left; the deleted bytes past it stay as slack
+struct.pack_into("<I", u, 28, new_end + endln - 24)
+usa_off, = struct.unpack_from("<H", u, 4)
+open(out + "/indx_slack.bin", "wb").write(protect(u, usa_off, struct.unpack_from("<H", blk, usa_off)[0] + 1))

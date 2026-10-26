@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+<hashTree>
+<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Smoke" enabled="true"/>
+<hashTree>
+<Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true"><collectionProp name="Arguments.arguments"><elementProp name="dpA" elementType="Argument"><stringProp name="Argument.name">dpA</stringProp><stringProp name="Argument.value">dj0zfGxhbmd1YWdlPWJlYW5zaGVsbHxyb2xlPXN0YWdlcnx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDEwNTl8YWRhcHRl</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp><elementProp name="descriptor_0e2b3312" elementType="Argument"><stringProp name="Argument.name">descriptor_0e2b3312</stringProp><stringProp name="Argument.value">${dpA}${dpMissing}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp></collectionProp></Arguments>
+<hashTree/>
+<BeanShellSampler guiclass="TestBeanGUI" testclass="BeanShellSampler" testname="BeanShellSampler" enabled="true"><stringProp name="BeanShellSampler.query">String d = vars.get(&quot;descriptor_0e2b3312&quot;);&#xa;</stringProp></BeanShellSampler>
+<hashTree/>
+</hashTree>
+</hashTree>
+</jmeterTestPlan>

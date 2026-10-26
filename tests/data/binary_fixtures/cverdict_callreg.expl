@@ -1,0 +1,52 @@
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGSEGV, Segmentation fault.
+0x00007f0000c0de00 in ?? ()
+Saved corefile cv_callreg.core
+#0  0x00007f0000c0de00 in ?? ()
+#1  0x0000555555555133 in go ()
+#2  0x000055555555514f in main ()
+SIGINFO signo=11 code=1
+SIADDR 0x7f0000c0de00
+REGS pc=0x7f0000c0de00 sp=0x7fffffffdf58
+RETWORD 0x555555555133
+=> 0x7f0000c0de00:	process 2611872
+Mapped address spaces:
+
+Start Addr         End Addr           Size               Offset             Perms File 
+0x0000555555554000 0x0000555555555000 0x1000             0x0                r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_callreg.exe 
+0x0000555555555000 0x0000555555556000 0x1000             0x1000             r-xp  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_callreg.exe 
+0x0000555555556000 0x0000555555557000 0x1000             0x2000             r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_callreg.exe 
+0x0000555555557000 0x0000555555558000 0x1000             0x2000             r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_callreg.exe 
+0x0000555555558000 0x0000555555559000 0x1000             0x3000             rw-p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_callreg.exe 
+0x00007ffff7c00000 0x00007ffff7c28000 0x28000            0x0                r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7c28000 0x00007ffff7dc0000 0x198000           0x28000            r-xp  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7dc0000 0x00007ffff7e0e000 0x4e000            0x1c0000           r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e0e000 0x00007ffff7e12000 0x4000             0x20e000           r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e12000 0x00007ffff7e14000 0x2000             0x212000           rw-p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e14000 0x00007ffff7e21000 0xd000             0x0                rw-p   
+0x00007ffff7fa3000 0x00007ffff7fa6000 0x3000             0x0                rw-p   
+0x00007ffff7fb6000 0x00007ffff7fb8000 0x2000             0x0                rw-p   
+0x00007ffff7fb8000 0x00007ffff7fbc000 0x4000             0x0                r--p  [vvar] 
+0x00007ffff7fbc000 0x00007ffff7fbe000 0x2000             0x0                r--p  [vvar_vclock] 
+0x00007ffff7fbe000 0x00007ffff7fc0000 0x2000             0x0                r-xp  [vdso] 
+0x00007ffff7fc0000 0x00007ffff7fc1000 0x1000             0x0                r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7fc1000 0x00007ffff7ff0000 0x2f000            0x1000             r-xp  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ff0000 0x00007ffff7ffb000 0xb000             0x30000            r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffb000 0x00007ffff7ffd000 0x2000             0x3b000            r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffd000 0x00007ffff7ffe000 0x1000             0x3d000            rw-p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffe000 0x00007ffff7fff000 0x1000             0x0                rw-p   
+0x00007ffffffde000 0x00007ffffffff000 0x21000            0x0                rw-p  [stack] 
+Description: Segmentation fault on program counter
+Short description: SegFaultOnPc (3/22)
+Hash: 2bb86f24870433b4a14339da8d5d896b.2bb86f24870433b4a14339da8d5d896b
+Exploitability Classification: EXPLOITABLE
+Explanation: The target tried to access data at an address that matches the program counter. This is likely due to the execution of a branch instruction (ex: 'call') with a bad argument, but it could also be due to execution continuing past the end of a memory region or another cause. Regardless this likely indicates that the program counter contents are tainted and can be controlled by an attacker.
+Other tags: AccessViolation (21/22)

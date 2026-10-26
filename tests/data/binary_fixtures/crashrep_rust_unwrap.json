@@ -1,0 +1,23 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "rust",
+    "kind": "panic",
+    "message": "called `Result::unwrap()` on an `Err` value: ParseIntError { kind: InvalidDigit }",
+    "thread": "main",
+    "fault_file": "main.rs",
+    "fault_line": "1",
+    "fault_function": "main::parse",
+    "top_frame": "__rustc::rust_begin_unwind",
+    "error_type": "ParseIntError",
+    "cwe": "CWE-248"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # rustc RUST_BACKTRACE=1 \"nope\".parse::<u32>().unwrap()",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_rust_unwrap.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

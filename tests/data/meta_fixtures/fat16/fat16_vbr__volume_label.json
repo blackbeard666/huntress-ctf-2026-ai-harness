@@ -1,0 +1,8 @@
+{
+ "field": "fat16.volume_label",
+ "expected": "EVIDENCE",
+ "generator_cmd": "truncate -s 16M fat16.img && mkfs.fat -F 16 -i 1234ABCD -n EVIDENCE fat16.img (dosfstools 4.2) && head -c 512 fat16.img",
+ "oracle_cmd": "fsstat fat16.img -> FAT16, OEM mkfs.fat, Volume ID 0x1234abcd, Volume Label (Boot Sector) EVIDENCE, Total Range 0-32767; file -> sectors/cluster 4, reserved 4, root entries 512, sectors/FAT 32",
+ "decoy": false,
+ "member": "boot.bin"
+}

@@ -1,0 +1,20 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "go",
+    "fault_addr": "0x0",
+    "pc": "0x4844e0",
+    "signal": "SIGSEGV",
+    "fault_function": "main.(*T).get",
+    "cwe": "CWE-476",
+    "bug_class": "null_pointer_dereference"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # go method on nil *T",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_go_nil.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

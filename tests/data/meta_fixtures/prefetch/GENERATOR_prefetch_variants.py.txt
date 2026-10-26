@@ -1,0 +1,180 @@
+"""Stdlib writer for the Prefetch CARRIED-family variant fixtures (D26 single MAM\\x04, timed plain SCCA v30 -> the kit
+flips wrappers/versions): v30 variant 2 (212-B file info) raw, v31 (Win11 24H2, both layouts), an unknown version 99,
+a MAM\\x84 (Xpress-Huffman + CRC32 @8 over the header with the CRC zeroed + payload), a MAM\\x02 LZNT1 (MS-XCA 2.5)
+and a MAM\\x03 plain LZ77 Xpress (MS-XCA 2.4) wrapper, a 29-char mixed-case name, a 30-char NUL-less name field, a
+non-ASCII lower-case name, a header file size that lies, and decoys. SCCA layout + the MS-XCA 2.2 Huffman compressor
+are reused from GENERATOR_prefetch.py.txt; the LZNT1 / Xpress compressors below are written from MS-XCA 2.3/2.5 and
+are self-checked against dissect.util's decompressors. Values are oracled by ORACLE_prefetch_variants.py.txt (libyal
+pyscca + dissect.util + struct), NOT by lib.meta. Usage: python3 -I GENERATOR_prefetch_variants.py.txt <outdir>"""
+import os
+import runpy
+import struct
+import sys
+import zlib
+
+G = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "GENERATOR_prefetch.py.txt"),
+                   run_name="pf_gen")
+scca, FT, xpress_huffman = G["scca"], G["FT"], G["xpress_huffman"]
+
+
+def _matches(data, lo, hi, maxoff, maxlen=lambda p: 4000, minlen=3):
+    """Greedy longest match at each position of data[lo:hi] (offset <= maxoff(pos), source >= lo)."""
+    idx = {}
+    i = lo
+    while i < hi:
+        best = (0, 0)
+        key = data[i:i + 3]
+        if len(key) == 3:
+            for j in reversed(idx.get(key, [])[-64:]):
+                off = i - j
+                if off > maxoff(i - lo):
+                    break
+                n = 0
+                while i + n < hi and data[j + n] == data[i + n] and n < maxlen(i - lo):
+                    n += 1
+                if n > best[0]:
+                    best = (n, off)
+        if best[0] >= minlen:
+            yield ("m", best[0], best[1])
+            for k in range(i, i + best[0]):
+                idx.setdefault(data[k:k + 3], []).append(k)
+            i += best[0]
+        else:
+            yield ("l", data[i])
+            idx.setdefault(key, []).append(i)
+            i += 1
+
+
+def lznt1(data):
+    """MS-XCA 2.5 LZNT1 compressor: 4 KiB chunks, displacement width from the in-chunk position."""
+    out = bytearray()
+    for c in range(0, len(data), 4096):
+        chunk = data[c:c + 4096]
+
+        def maxoff(p):
+            s, q = 0, p - 1
+            while q >= 0x10:
+                q >>= 1
+                s += 1
+            return 1 << (4 + s)
+        def maxlen(p):
+            s, q = 0, p - 1
+            while q >= 0x10:
+                q >>= 1
+                s += 1
+            return (0x0FFF >> s) + 3
+        body, toks = bytearray(), list(_matches(chunk, 0, len(chunk), lambda p: maxoff(p) if p else 0, maxlen))
+        pos = 0
+        for g in range(0, len(toks), 8):
+            flag, grp = 0, bytearray()
+            for b, t in enumerate(toks[g:g + 8]):
+                if t[0] == "l":
+                    grp.append(t[1])
+                    pos += 1
+                    continue
+                s, q = 0, pos - 1
+                while q >= 0x10:
+                    q >>= 1
+                    s += 1
+                n, off = t[1], t[2]
+                n = min(n, (0x0FFF >> s) + 3)
+                assert n == t[1], "match too long for the split (shorten in _matches)"
+                grp += struct.pack("<H", ((off - 1) << (12 - s)) | (n - 3))
+                flag |= 1 << b
+                pos += n
+            body += bytes([flag]) + grp
+        if len(body) < len(chunk):
+            out += struct.pack("<H", 0xB000 | (len(body) - 1)) + body
+        else:
+            out += struct.pack("<H", 0x3000 | (len(chunk) - 1)) + chunk
+    return bytes(out + b"\0\0")
+
+
+def xpress(data):
+    """MS-XCA 2.3 plain LZ77 Xpress compressor (u32 flags MSB-first, u16 matches, shared length half-bytes)."""
+    out = bytearray(4)
+    fpos, flags, nf, half = 0, 0, 0, None
+    for t in _matches(data, 0, len(data), lambda p: 8192):
+        if t[0] == "l":
+            out.append(t[1])
+            flags <<= 1
+        else:
+            ml, mo = t[1] - 3, t[2] - 1
+            if ml < 7:
+                out += struct.pack("<H", (mo << 3) | ml)
+            else:
+                out += struct.pack("<H", (mo << 3) | 7)
+                ml -= 7
+                if half is None:
+                    half = len(out)
+                    out.append(min(ml, 15))
+                else:
+                    out[half] |= min(ml, 15) << 4
+                    half = None
+                if ml >= 15:
+                    ml -= 15
+                    if ml < 255:
+                        out.append(ml)
+                    else:
+                        out.append(255)
+                        ml += 22
+                        out += struct.pack("<H", ml) if ml < 65536 else struct.pack("<HI", 0, ml)
+            flags = (flags << 1) | 1
+        nf += 1
+        if nf == 32:
+            struct.pack_into("<I", out, fpos, flags & 0xFFFFFFFF)
+            fpos, flags, nf = len(out), 0, 0
+            out += b"\0\0\0\0"
+    flags = ((flags << (32 - nf)) | ((1 << (32 - nf)) - 1)) & 0xFFFFFFFF
+    struct.pack_into("<I", out, fpos, flags)
+    return bytes(out)
+
+
+def mam(raw, kind, crc=False):
+    payload = {2: lznt1, 3: xpress, 4: xpress_huffman}[kind](raw)
+    hdr = b"MAM" + bytes([kind | (0x80 if crc else 0)]) + struct.pack("<I", len(raw))
+    if not crc:
+        return hdr + payload
+    c = zlib.crc32(hdr + b"\0\0\0\0" + payload)
+    return hdr + struct.pack("<I", c) + payload
+
+
+def main(outdir):
+    os.makedirs(outdir, exist_ok=True)
+    W = lambda n, b: open(os.path.join(outdir, n), "wb").write(b)  # noqa: E731
+    vol = [("\\VOLUME{01db0123456789ab-4c3b2a19}", 0x4C3B2A19, FT(2025, 3, 4, 5, 6, 7), ["\\WINDOWS"])]
+    files = ["\\VOLUME{01db0123456789ab-4c3b2a19}\\WINDOWS\\SYSTEM32\\NTDLL.DLL",
+             "\\VOLUME{01db0123456789ab-4c3b2a19}\\USERS\\BOB\\APPDATA\\LOCAL\\TEMP\\STAGE2.EXE"]
+    runs = [FT(2026, 10, 20, 13, 14, 15), FT(2026, 10, 19, 1, 2, 3)]
+    # v30 variant 2 (212-B file information, metrics @0x128, run count @0xC8), plain SCCA
+    W("v30_variant2_raw.bin", scca(30, "WMIC.EXE", 0x1F8D9A3C, 17, runs, vol, files, fi_size=212))
+    # v31 = v30 layout with the version patched; both file-information sizes
+    for tag, fis, name, h, rc in (("v31_raw", 220, "CERTUTIL.EXE", 0x5E1F33A0, 5),
+                                  ("v31_variant2_raw", 212, "MSHTA.EXE", 0x0BADF00D, 61)):
+        W(tag + ".bin", struct.pack("<I", 31) + scca(30, name, h, rc, runs, vol, files, fi_size=fis)[4:])
+    # unknown version 99: fixed header only
+    W("unknown_v99.bin", struct.pack("<I", 99) + scca(30, "BITSADMIN.EXE", 0x77AA0102, 9, runs, vol, files)[4:])
+    # wrappers around one v30 (padded so LZNT1 spans several 4 KiB chunks)
+    raw = scca(30, "REGSVR32.EXE", 0x8C2A5D11, 23, runs, vol, files, pad_files=40)
+    W("mam_crc_xpress_huffman.bin", mam(raw, 4, crc=True))
+    W("mam_lznt1.bin", mam(raw, 2))
+    W("mam_xpress.bin", mam(raw, 3))
+    W("mam_lznt1_crc.bin", mam(raw, 2, crc=True))
+    # name edge cases (field = 60 bytes @16)
+    n29 = "MiXeD-CaSe_Loader_v2_Beta.exe"
+    assert len(n29) == 29
+    W("name29_mixedcase.bin", scca(30, n29, 0x00000029, 2, runs, vol, files))
+    b = bytearray(scca(30, "X", 0x00000030, 2, runs, vol, files))
+    n30 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123"
+    b[16:76] = n30.encode("utf-16-le")
+    W("name30_no_nul.bin", bytes(b))
+    W("name_non_ascii.bin", scca(30, "übersetzer_ñ.exe", 0x0000C3BC, 4, runs, vol, files))
+    # header file size u32 @12 lies (trailing slack after the volumes block)
+    W("size_mismatch.bin", scca(30, "CMD.EXE", 0x4A81B6B7, 8, runs, vol, files) + b"\0" * 24)
+    # decoys: unknown MAM type nibble 5, a GIF named .pf
+    W("decoy_mam_type5.bin", b"MAM\x05" + struct.pack("<I", len(raw)) + xpress_huffman(raw))
+    W("decoy_gif_renamed.bin", b"GIF89a\x01\0\x01\0\x80\0\0" + b"\0" * 80)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])

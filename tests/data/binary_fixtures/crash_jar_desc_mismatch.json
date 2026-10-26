@@ -1,0 +1,24 @@
+{
+ "family": "crash_sidecar",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "crash_found": "true",
+  "crash_schema": "huntress.synthetic_crash.v1",
+  "crash_kind": "ArithmeticException",
+  "crash_fault_method": "stageTwo",
+  "crash_fault_frame": "stageTwo()V",
+  "crash_outer_method": "main",
+  "crash_frame_count": "3",
+  "crash_frames": "[\"stageTwo\",\"helperValue\",\"main\"]",
+  "crash_trace_entry": "crash/trace.json",
+  "crash_frames_match_methods": "false",
+  "crash_fault_in_primary": "true",
+  "crash_frames_call_chain": "false"
+ },
+ "generator_cmd": "bash crash_gen.sh   # JVM descriptor frames, helperValue is a FIELD not a method -> match false, chain false",
+ "oracle_cmd": "python3 crash_oracle.py crash_jar_desc_mismatch.bin   # unzip -Z1/-p, javap -p -c -v, readelf -SW/-h, objcopy --only-section, nm -S, objdump -d, iconv",
+ "decoy": false,
+ "note": "lib.binary.crash_sidecar_field(data, key); javac + zip: JVM descriptor frames, helperValue is a FIELD not a method -> match false, chain false; fact names beyond crash_fault_method/crash_frames_match_methods SPECULATIVE"
+}

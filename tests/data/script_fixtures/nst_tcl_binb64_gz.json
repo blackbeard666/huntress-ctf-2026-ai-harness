@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=tcl|role=stager|verdict=malicious|attack=T1059|adapter=exec|stage_count=2|steps=fetch_stage,run_stage|campaign_id=TCL-5f2bac31|url=https://tcl-5f2bac31.example.invalid/s2",
+ "decoy": false,
+ "note": "nim-swift-tcl-literal-route: gzip",
+ "generator_cmd": "python3 -I -c (stdlib base64/gzip.compress(mtime=0)/bytes.hex; template in the json's note) -> nst_tcl_binb64_gz.tcl",
+ "oracle_cmd": "tclsh <(sed '/exec/d' tests/data/script_fixtures/nst_tcl_binb64_gz.tcl; echo 'fconfigure stdout -translation binary; puts -nonewline [zlib gunzip $descriptor_5f2bac31]')"
+}

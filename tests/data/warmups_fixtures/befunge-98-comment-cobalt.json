@@ -1,0 +1,9 @@
+{
+ "codec": "befunge*",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": ";perl befunge-98 writer;0\"71-noreh-tlaboc :retsaM emaG eht ot rewsna tcaxe siht timbus ,evlos oT !pumraw siht gnidoced krow eciN\">:#,_@",
+ "generator_cmd": "perl -e 'print \";perl befunge-98 writer;\", \"0\", chr(34), scalar reverse($ARGV[0]), chr(34), \">:#,_\\@\"' \"$plain\"",
+ "oracle_cmd": "node tests/data/warmups_fixtures/befunge_oracle.mjs b98",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

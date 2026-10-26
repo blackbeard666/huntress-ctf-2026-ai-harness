@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "bundle-container-formats (rows 58, 62): DECOY: toc_opaque layout, toc-selected x86_64 fragment is 5 hex (15-hex token) and the arm64 decoy fragment non-hex",
+ "generator_cmd": "python3 tests/data/android_fixtures/bundle_src/gen_bundle.py toc_decoy tests/data/android_fixtures/bundle_toc_decoy.zip  # google.protobuf dynamic-message toc.pb writer (bundletool field numbers) + apktool-bundled aapt2 link [--proto-format] manifests + python zipfile layouts",
+ "oracle_cmd": "same script, oracle stage: google.protobuf BuildApksResult.FromString(toc.pb) split ids / zipfile reads of the .obb / nested .aab, install set from the script's device table (x86_64, xxhdpi, en), fragments into the puzzle slots -> prints ANS-895dfbfda35a1fb (15 hex: no valid token)"
+}

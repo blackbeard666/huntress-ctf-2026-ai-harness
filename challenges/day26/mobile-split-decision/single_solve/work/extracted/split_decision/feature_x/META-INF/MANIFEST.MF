@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+
+Name: AndroidManifest.xml
+SHA-256-Digest: EaYqDEp1xRo8TFPtV4KGzWxVvLUVPJiKYNUfFeb+i9c=
+
+Name: assets/huntress_feature.json
+SHA-256-Digest: ZXnbaYkefq0REXyYNGsLcQ5Obs842fGGqblDhOlCKLk=
+

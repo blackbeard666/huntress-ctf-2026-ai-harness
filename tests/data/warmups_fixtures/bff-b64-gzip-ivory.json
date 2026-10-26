@@ -1,0 +1,10 @@
+{
+ "codec": "bf-full",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-moose-51",
+ "encoded": "H4sIAAAAAAACA5WUURLDIAhE/7mK03eCjhfp9P7XaGO1AoJJmKklCptdwJQy7FW/y/j5xazRv7idMy915U5w5A5fsoO7/h7IPjx3JsfyeNe/jSzsDi26qNO+pYB0UmgzvSc1nPk8pBEQddBUzB428FikTlhO4AKaKGk/yQQVCS0Dl4XstKXsM7L4noyB7KcZkxaB1WXxkZsKOiUUK6Y0394BtghlXyOCEq1zieFJONkXuo0OI9iVs+KwgdRZUrkQF7zE+x2IPIVrsykRce7PRBVMuzNmBScHPyHi3qW6vpadjXpJByhVw9oaDml/8tsvaXR9Oyr4u+aZN17znn8A1gxa7QIHAAA=",
+ "generator_cmd": "perl -e '@b=unpack \"C*\", $ARGV[0]; %s=map {$_=>1} @b; @d=sort {$a<=>$b} keys %s; %i=(); $o=\"+\" x 10 . \"[\"; for $k (0..$#d) { $i{$d[$k]}=$k+1; $v{$d[$k]}=int($d[$k]/10)*10; $o.=\">\" . \"+\" x int($d[$k]/10) } $o.=\"<\" x @d . \"-]\"; $p=0; for $c (@b) { $q=$i{$c}; $o.= $q>$p ? \">\" x ($q-$p) : \"<\" x ($p-$q); $p=$q; $e=$c-$v{$c}; $o.= $e>0 ? \"+\" x $e : \"-\" x -$e; $v{$c}=$c; $o.=\".\" } $o=~s/(.{72})/$1\\n/g; print $o' \"$plain\" | gzip -9n -c | base64 -w0",
+ "oracle_cmd": "node tests/data/warmups_fixtures/bff_oracle.mjs peel=b64gz",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-moose-51",
+ "decoy": false,
+ "expected": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-moose-51"
+}

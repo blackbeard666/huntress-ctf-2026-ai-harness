@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-14940DA09DE9BCF5",
+ "decoy": false,
+ "_why": "isolatedSplits=true: createContextForSplit(\"arena_feature\").getClassLoader() -> Class.forName(\"..feature.FeatureMix\", true, cl).getDeclaredMethod(\"mix\", long).invoke(null, h), cl.loadClass(\"..feature.Tail\")...; split code calls back into the base Util (parent-first)",
+ "generator_cmd": "python3 tests/data/android_fixtures/splitcode_src/gen_splitcode.py isolated tests/data/android_fixtures/splitcode_isolated.apks && mv tests/data/android_fixtures/splitcode_isolated.apks tests/data/android_fixtures/splitcode_isolated.zip  # javac --release 8 (base + feature classes + android.* / Play Core stubs; the split's duplicate Util compiled alone) + dex2jar d2j-jar2dex (one classes.dex per APK) + apktool aapt2 link (base / split=\"arena_feature\" isFeatureSplit hasCode=true manifests, base isolatedSplits=\"true\") + zipfile + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml <member>` for split= / isolatedSplits, each member's classes.dex back through dex2jar d2j-dex2jar.sh to a jar, then java -cp <stubs>:<base.jar> with the split jar behind a URLClassLoader(parent = base loader) returned by createContextForSplit(\"arena_feature\").getClassLoader() com.huntress.arena.splitcode2.Probe runs Release.code(new Context()) on the host JVM's real class loaders -> ANS-14940DA09DE9BCF5"
+}

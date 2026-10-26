@@ -27,7 +27,17 @@
     "agent.runtime.Entry",
     "audit.agent.ApplicationEE",
     "tools.Bootstrap",
-    "client.Main"
+    "client.Main",
+    "service.juniper.Launcher",
+    "runtime.sync.Startup",
+    "util.Dispatcher",
+    "audit.server.ConsoleLNV",
+    "client.Loader",
+    "core.agent.Daemon",
+    "audit.runtime.service.Application",
+    "core.service.Main",
+    "server.audit.Dispatcher",
+    "server.server.batch.Entry"
   ],
   "-control": [
     "direct",
@@ -126,7 +136,17 @@
     "agent.runtime.Entry",
     "audit.agent.ApplicationEE",
     "tools.Bootstrap",
-    "client.Main"
+    "client.Main",
+    "service.juniper.Launcher",
+    "runtime.sync.Startup",
+    "util.Dispatcher",
+    "audit.server.ConsoleLNV",
+    "client.Loader",
+    "core.agent.Daemon",
+    "audit.runtime.service.Application",
+    "core.service.Main",
+    "server.audit.Dispatcher",
+    "server.server.batch.Entry"
   ],
   "control": [
     "direct",

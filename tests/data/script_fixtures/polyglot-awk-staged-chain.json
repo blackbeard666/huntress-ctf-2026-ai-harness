@@ -1,0 +1,27 @@
+{
+ "expected_plain": "v=3|language=awk|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=AWK-fdc25830|url=https://awk-fdc25830bf.example.invalid/stage|file_path=/tmp/huntress-awk/.fdc25830bf00572f.stage",
+ "decoy": false,
+ "language": "awk",
+ "role": "staged-chain",
+ "family": "polyglot-awk",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/as_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' tests/data/script_fixtures/polyglot-awk-staged-chain.awk | head -n1 | sed -E 's/^HUNTRESS_ANALYSIS_V1:FRAG-//' | tr -d . | xxd -r -p",
+ "expected_fields": {
+  "language": "awk",
+  "role": "staged_chain",
+  "verdict": "suspicious",
+  "attack": "T1059",
+  "adapter": "operation_graph",
+  "host_profile": "standalone",
+  "obfuscation_profile": "fragmented_hex",
+  "stage_profile": "cross_language_handoff",
+  "next_language": "vbscript",
+  "stage_count": "3",
+  "steps": "profile_host,decode_configuration,dispatch_language",
+  "campaign_id": "AWK-fdc25830",
+  "url": "https://awk-fdc25830bf.example.invalid/stage",
+  "file_path": "/tmp/huntress-awk/.fdc25830bf00572f.stage",
+  "url_host": "awk-fdc25830bf.example.invalid",
+  "file_dir": "/tmp/huntress-awk/"
+ }
+}

@@ -1,0 +1,3 @@
+INFO 2026-10-26 worker started
+WARN retrying after Exception in handler (see docs)
+Traceback logging disabled; panic: none

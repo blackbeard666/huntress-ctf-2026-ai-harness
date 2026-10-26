@@ -1,0 +1,9 @@
+#TYPE System.Diagnostics.Eventing.Reader.EventLogRecord
+"Message","Id","Version","Qualifiers","Level","Task","Opcode","Keywords","RecordId","ProviderName","ProviderId","LogName","ProcessId","ThreadId","MachineName","UserId","TimeCreated"
+"An account was successfully logged on.
+
+Subject:
+	Security ID:		S-1-5-18, ""SYSTEM""","4624","2","","0","12544","0","-9214364837600034816","105","Microsoft-Windows-Security-Auditing","54849625-5478-4994-a5ba-3e3b0328c30d","Security","712","4120","FS02.corp.local","","10/26/2026 7:45:10 PM"
+"An account was logged off.","4634","0","","0","12545","0","-9214364837600034816","104","Microsoft-Windows-Security-Auditing","54849625-5478-4994-a5ba-3e3b0328c30d","Security","712","4120","FS02.corp.local","","10/26/2026 7:44:58 PM"
+"Special privileges assigned to new logon.","4672","0","","0","12548","0","-9214364837600034816","102","Microsoft-Windows-Security-Auditing","54849625-5478-4994-a5ba-3e3b0328c30d","Security","712","4120","FS02.corp.local","","10/26/2026 7:40:00 PM"
+"The audit log was cleared.","1102","0","","4","104","0","4620693217682128896","101","Microsoft-Windows-Eventlog","fc65ddd8-d6ef-4962-83d5-6e5cfe9ce148","Security","1016","2244","FS02.corp.local","S-1-5-21-1-2-3-500","10/26/2026 7:39:12 PM"

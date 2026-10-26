@@ -1,0 +1,8 @@
+{
+ "field": "fat.filesystem_type",
+ "expected": "FAT12",
+ "generator_cmd": "truncate -s 4M gpt.img && sgdisk -a 1 -U 4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709 -n 1:34:2081 -t 1:ef00 -c 1:'EFI System' -n 2:2082:6000 -t 2:0700 -c 2:'Basic data' gpt.img && mkfs.fat -F 12 --offset 34 -i CAFE0042 -n ESP gpt.img 1024 && head -c 17920 gpt.img",
+ "oracle_cmd": "sgdisk -p/-i gpt.img -> Disk identifier 4F68BCE3-E8CD-4DB1-96E7-FBCAF984B709, 128 entries from sector 2, usable 34-8158, p1 'EFI System' C12A7328-F81F-11D2-BA4B-00A0C93EC93B 34-2081, p2 'Basic data' EBD0A0A2-B9E5-4433-87C0-68B6B72699C7 2082-6000; mmls -> GPT; fsstat -o 34 -> FAT12 Volume ID 0xcafe0042 label ESP",
+ "decoy": false,
+ "member": "gpt.img"
+}

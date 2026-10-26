@@ -1,0 +1,10 @@
+{
+ "codec": "befunge*",
+ "plain": null,
+ "encoded": "  ___  ___  _\n / _ \\| __|| |   \"@,\n| (_) | _| | |__  ;o\n \\___/|___||____|",
+ "generator_cmd": "printf %s '  ___  ___  _\n / _ \\| __|| |   \"@,\n| (_) | _| | |__  ;o\n \\___/|___||____|'",
+ "oracle_cmd": "node tests/data/warmups_fixtures/befunge_oracle.mjs b93 / b98 / fish   # -> exits 1: a figlet-style banner never halts with text / is fishy",
+ "oracle_plain": "",
+ "decoy": true,
+ "expected": "none"
+}

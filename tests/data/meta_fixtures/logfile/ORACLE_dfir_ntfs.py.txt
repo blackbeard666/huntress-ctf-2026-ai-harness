@@ -1,0 +1,49 @@
+"""Oracle: dfir_ntfs 1.1.20 (msuhanov, pip install --target tools/pylib-dfirntfs git+https://github.com/msuhanov/dfir_ntfs)
+usage: PYTHONPATH=tools/pylib-dfirntfs python3 -P ORACLE_dfir_ntfs.py.txt logfile|indx <file>"""
+import json
+import sys
+
+from dfir_ntfs import Attributes, LogFile, MFT
+
+kind, path = sys.argv[1], sys.argv[2]
+d = open(path, "rb").read()
+if kind == "logfile":
+    best = None
+    for o in (0, 4096):
+        try:
+            rp = LogFile.RestartPage(d[o:o + 4096])
+        except Exception as e:
+            print("restart page @%d:" % o, type(e).__name__, e)
+            continue
+        ra = rp.get_restart_area()
+        print("RSTR @%d chkdsk=%d sys=%d log=%d ver=%d.%d current_lsn=%d clients=%d file_size=%d" % (
+            o, rp.get_chkdsk_lsn(), rp.get_system_page_size(), rp.get_log_page_size(), rp.get_major_version(),
+            rp.get_minor_version(), ra.get_current_lsn(), ra.get_log_clients(), ra.get_file_size()))
+    for o in range(8192, len(d), 4096):
+        try:
+            p = LogFile.LogRecordPage(d[o:o + 4096], o // 4096, 0x40)
+        except Exception as e:
+            print("page @%d:" % o, type(e).__name__, e)
+            continue
+        print("RCRD @%d last_lsn=%d flags=%d page_count=%d pos=%d next=%d last_end_lsn=%d" % (
+            o, p.get_last_lsn(), p.get_flags(), p.get_page_count(), p.get_page_position(),
+            p.get_next_record_offset(), p.get_last_end_lsn()))
+else:
+    buf, _ = LogFile.UnprotectSectors(bytearray(d))   # same USA rules for INDX blocks
+    if bytes(buf[:4]) != b"INDX":
+        sys.exit("not INDX: %r" % bytes(buf[:4]))
+    ib = Attributes.IndexBuffer(bytes(buf))
+    h = ib.get_index_header()
+    print("vcn=%d first=%d free=%d alloc=%d flags=%d" % (ib.get_this_block(), h.get_first_index_entry(),
+                                                         h.get_first_free_byte(), h.get_bytes_available(), h.get_flags()))
+    live = []
+    for e in ib.index_entries():
+        a = e.get_attribute()
+        if a:
+            fn = Attributes.FileName(a)
+            live.append(fn.get_file_name())
+            print("  %s ns=%d ref=%#x" % (fn.get_file_name(), fn.get_flags(), e.get_file_reference()),
+                  fn.get_ctime(), fn.get_mtime())
+    print("entry_names", json.dumps(sorted(live)), len(live))
+    carved = [f.get_file_name() for f in MFT.SlackSpace(ib.get_slack()).carve() if hasattr(f, "get_file_name")]
+    print("slack carved", json.dumps(sorted(set(carved))))

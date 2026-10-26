@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=go|role=collector|verdict=suspicious|attack=T1105|adapter=channel_fanin|host_profile=standalone|obfuscation_profile=hex|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,write_file|campaign_id=GO-7d21e0aa|url=https://go-7d21e0aa91.example.invalid/stage|file_path=/tmp/huntress-go/.7d21e0aa91c4b3e2.stage",
+ "decoy": false,
+ "target": "actor-message-flow-model",
+ "note": "producer(out) ranges a []string literal into `out <- part`; `go producer(ch)` aliases out->ch; main drains `range ch`",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mf_gen.py  (stdlib base64/hex split of the plan over Erlang `Pid ! {Tag, N, Chunk}` / Go `ch <- part` messages)",
+ "oracle_cmd": "cp tests/data/script_fixtures/mf_go_chan_range.go $TMPDIR/main.go && GO111MODULE=off go run $TMPDIR/main.go  (real Go runtime drains the channel and hex-decodes)"
+}

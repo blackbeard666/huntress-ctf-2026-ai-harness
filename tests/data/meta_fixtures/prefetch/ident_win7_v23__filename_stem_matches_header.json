@@ -1,0 +1,8 @@
+{
+ "field": "prefetch.filename_stem_matches_header",
+ "expected": "true",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/prefetch/GENERATOR_prefetch_identity.py.txt <outdir>  (stdlib struct SCCA writer + MS-XCA LZXpress-Huffman compressor, reusing GENERATOR_prefetch.py.txt -> ident_win7_v23.bin)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/prefetch/ORACLE_prefetch_identity.py.txt tests/data/meta_fixtures/prefetch/ident_win7_v23__filename_stem_matches_header.bin CMD.EXE-4A81B364.pf  (libyal pyscca 20260527 in tools/pylib-scca + windowsprefetch 4.0.3 in tools/pylib-windowsprefetch + dissect.util lzxpress_huffman; libscca 'Prefetch hash' algorithm transcribed verbatim)",
+ "decoy": false,
+ "member": "CMD.EXE-4A81B364.pf"
+}

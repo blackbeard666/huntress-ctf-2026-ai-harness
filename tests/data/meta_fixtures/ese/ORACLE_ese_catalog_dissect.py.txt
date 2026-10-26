@@ -1,0 +1,40 @@
+"""Independent oracle: dissect.esedb 3.18 full reader (EseDB.tables / Table.columns / Table.records / Record.get).
+Usage: .venv/bin/python -I ORACLE_ese_catalog_dissect.py.txt <db> <field>   -> GM-spelled expected value."""
+import json
+import sys
+sys.path.insert(0, 'tools/dissect_esedb')
+from dissect.esedb import EseDB
+
+path, field = sys.argv[1], sys.argv[2]
+d = open(path, 'rb').read()
+if d[4:8] != bytes.fromhex('efcdab89'):
+    print('none'); sys.exit()
+db = EseDB(open(path, 'rb'))
+tables = {t.name: t for t in db.tables()}
+user = sorted(n for n in tables if not n.startswith('MSys'))
+J = lambda v: json.dumps(v, separators=(',', ':'), ensure_ascii=False)
+SRUM = {'{D10CA2FE-6FCF-4F6D-848E-B2E99266FA89}': 'App Resource Usage',
+        '{973F5D5C-1D90-4944-BE8E-24B94231A174}': 'Network Usage',
+        '{DD6636C4-8929-4683-974E-22C046A43763}': 'Network Connectivity',
+        '{5C8CF1C7-7257-4F13-B223-970EF5939312}': 'App Timeline'}
+if field == 'table_names':
+    print(J(user))
+elif field == 'table_count':
+    print(len(user))
+elif field.startswith('column_names_'):
+    want = field[len('column_names_'):].replace('_', '').lower()
+    t = [t for n, t in tables.items() if n.lower() == want]
+    print(J([c.name for c in t[0].columns]) if t else 'none')
+elif field.startswith('table_record_count_'):
+    want = field[len('table_record_count_'):].replace('_', '').lower()
+    t = [t for n, t in tables.items() if n.lower() == want or SRUM.get(n, '').replace(' ', '').lower() == want]
+    print(len(list(t[0].records())) if t else 'none')
+elif field == 'srum_tables_present':
+    print(J(sorted(SRUM[n] for n in tables if n in SRUM)) if any(n in SRUM for n in tables) else 'none')
+elif field == 'srum_app_names':
+    t = tables.get('SruDbIdMapTable')
+    print(J(sorted({r.get('IdBlob').decode('utf-16-le') for r in t.records() if r.get('IdType') != 3})) if t else 'none')
+elif field in ('webcache_container_names', 'container_directories'):
+    t = tables.get('Containers')
+    col = 'Name' if 'names' in field else 'Directory'
+    print(J([r.get(col) for r in t.records() if r.get(col) is not None]) if t else 'none')

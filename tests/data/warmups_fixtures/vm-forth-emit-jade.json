@@ -1,0 +1,9 @@
+{
+ "codec": "vm-forth",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-72",
+ "encoded": "78 emit 105 emit 99 emit 101 emit 32 emit 119 emit 111 emit 114 emit 107 emit 32 emit 100 emit 101 emit 99 emit 111 emit 100 emit 105 emit 110 emit 103 emit 32 emit 116 emit 104 emit 105 emit 115 emit 32 emit 119 emit 97 emit 114 emit 109 emit 117 emit 112 emit 33 emit 32 emit 84 emit 111 emit 32 emit 115 emit 111 emit 108 emit 118 emit 101 emit 44 emit 32 emit 115 emit 117 emit 98 emit 109 emit 105 emit 116 emit 32 emit 116 emit 104 emit 105 emit 115 emit 32 emit 101 emit 120 emit 97 emit 99 emit 116 emit 32 emit 97 emit 110 emit 115 emit 119 emit 101 emit 114 emit 32 emit 116 emit 111 emit 32 emit 116 emit 104 emit 101 emit 32 emit 71 emit 97 emit 109 emit 101 emit 32 emit 77 emit 97 emit 115 emit 116 emit 101 emit 114 emit 58 emit 32 emit 106 emit 97 emit 100 emit 101 emit 45 emit 108 emit 121 emit 110 emit 120 emit 45 emit 55 emit 50 emit",
+ "generator_cmd": "perl -e '@c = unpack \"U*\", $ARGV[0]; print join(\" \", map { \"$_ emit\" } @c)' \"$plain\"",
+ "oracle_cmd": "LD_LIBRARY_PATH=tools/vmlangs/usr/lib/x86_64-linux-gnu tools/vmlangs/usr/bin/gforth-0.7.3 -i tools/vmlangs/usr/lib/x86_64-linux-gnu/gforth/0.7.3/gforth.fi -p tools/vmlangs/usr/share/gforth/0.7.3 /dev/stdin -e bye",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jade-lynx-72",
+ "expected": "match"
+}

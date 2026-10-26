@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: zip-in-zip impostor -- app.aab is the first half of bundle_zip_aab's aab (truncated, no central directory)",
+ "generator_cmd": "python3 -c \"import zipfile;i=zipfile.ZipFile('bundle_zip_aab.zip').read('app.aab');z=zipfile.ZipFile('bundle_impostor_aab.zip','w');z.writestr('README.txt','release build\\n');z.writestr('app.aab',i[:len(i)//2])\"",
+ "oracle_cmd": "unzip -p bundle_impostor_aab.zip app.aab > a.aab; unzip -l a.aab  # -> 'End-of-central-directory signature not found': not a readable bundle, no token"
+}

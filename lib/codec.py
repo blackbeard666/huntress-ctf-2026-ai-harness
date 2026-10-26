@@ -663,6 +663,8 @@ def decode(material, rep, transform, key=None):
         return _pkg_decode(material, transform, key)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("webshell", "webshellmodel", "webshellprimitives"):   # webshell-request-primitive-model
         return _ws_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("configchain", "configdiff", "configsurvival", "stageconfig"):   # stage-config-survival-diff
+        return _cfgchain_decode(material, transform, key)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -1343,6 +1345,10 @@ def _find_codecs_uncached(src, _depth=0):
     if _depth < 2 and not any(c.get("plain") for c in out) and (_GD_CUE.search((src or "")[:1 << 16]) or
                                                                   (src or "")[-4:] == "GDPC"):
         out = out + _godot_codecs(src, raw, _depth)  # Godot .tscn/.tres script/source, .pck members, .gdc tokens
+    if _depth < 2 and not any(c.get("plain") for c in out) and \
+            ((raw or (src or "")[:12].encode("latin-1", "replace"))[:4] in (b"FOR1", b"PK\x03\x04") or
+             (src or "")[:2] == "#!" and re.search(r"(?m)^(?:PK\x03\x04|FOR1)", (src or "")[:1 << 14])):
+        out = out + _beam_bin_codecs(src, raw)            # compiled .beam / escript archive literals
     if _depth < 2 and not any(c.get("plain") for c in out):
         out = out + _carrier_codecs(src, raw, _depth)
     if _depth < 2 and not any(c.get("plain") for c in out):
@@ -1382,6 +1388,13 @@ def _find_codecs_uncached(src, _depth=0):
         have = [c.get("plain") for c in out if c.get("plain")]
         x = [c for c in _json_carrier_codecs(src, raw, _depth) if not have or
              any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and _JMX_CUE.search(src[:1 << 16]):
+        # JMeter `.jmx` User Defined Variable / header pair `descriptor_x` = `${a}${b}`: a gap, or the full plan ahead
+        # of a piece reading it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _jmx_codecs(src, _depth) if c["plain"] not in have and (not have or any(
+            c["plain"] != p and c["plain"].startswith(p) for p in have))]
         out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out) and _MH_CUE.search((src or "")[:1 << 20]):
         out = out + _managed_host_codecs(src, raw, _depth)  # .NET-hosted inner C# / VB / JScript (Add-Type, ASP, csc)
@@ -1461,6 +1474,13 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _cl_codecs(src, extend_only=bool(have)) if not have or
              any(c["plain"] != p and c["plain"].startswith(p) and c["plain"][len(p):].isprintable() for p in have)]
         out = x + out
+    if _depth < 2 and isinstance(src, str) and _NST_CUE.search(src[:1 << 20]):
+        # Tcl `append` / `[binary decode ..]` / `$var`, Swift `String(decoding: [UInt8])`, Nim `cast[string](@[..])`
+        # (_nst_codecs): a gap, or the full plan ahead of a first-piece reading it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _nst_codecs(src) if c["plain"] not in have and (not have or any(
+            c["plain"] != p and c["plain"].startswith(p) for p in have))]
+        out = x + out
     if _depth < 2 and isinstance(src, str) and _GM_DESC.search(src[:1 << 20]):
         # game-script verbatim `@".."`, Pawn `descriptor_x[] =` / escapes, mcfunction `set value` (_gm_literals)
         have = [c.get("plain") for c in out if c.get("plain")]
@@ -1475,6 +1495,22 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _beam_codecs(src) if c["plain"] not in have and (not have or any(
             c["plain"] != p and c["plain"].startswith(p) for p in have))]
         out = x + out
+    if _depth < 2 and isinstance(src, str) and _SHFN_CUE.search(src[:1 << 20]) and _SHFN_PR.search(src[:1 << 20]) \
+            and (not any(c.get("plain") for c in out) or _SHFN_NAMED.search(src[:1 << 20])):
+        # zsh / bash / fish function-return descriptor `build_plan_x() { print -r -- ".." }` / `function x; echo ..; end`:
+        # a gap, or the full plan ahead of a first-piece reading it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _shfn_codecs(src) if c["plain"] not in have and (not have or any(
+            c["plain"] != p and c["plain"].startswith(p) for p in have))]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and _AWKSED_CUE.search(src[:1 << 16]):
+        # awk `descriptor_x = "ab" "cd"` / `function build_plan_x() { return ".." }`, sed `s/^.*$/<data>/` (`\/`
+        # escapes) and `1i\` / `a\` / `c\` text commands: a gap, or the full plan ahead of a first-piece reading it
+        # extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _awksed_codecs(src) if c["plain"] not in have and (not have or any(
+            c["plain"] != p and c["plain"].startswith(p) for p in have))]
+        out = x + out
     if _depth < 2 and isinstance(src, str) and _TFH_CUE.search(src[:1 << 18]) and \
             re.search(r"(?i)descriptor", src[:1 << 20]):
         # Terraform descriptor folded over locals / var defaults / heredocs / join / format / base64decode: a gap, the
@@ -1483,6 +1519,14 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _tfh_codecs(src) if c["plain"] not in have]
         ext = [c for c in x if not have or any(c["plain"] != p and p in c["plain"] for p in have)]
         out = ext + out + [c for c in x if c not in ext]
+    if _depth < 2 and isinstance(src, str) and _MF_CUE.search(src[:1 << 20]) and \
+            (_MF_ERL.search(src[:1 << 20]) or re.search(r"(?m)GenServer\.|postMessage\(|^package\s", src[:1 << 20])):
+        # actor / message-passing source: a plan split over `Pid ! {chunk, N, ".."}` / `send` / `postMessage` / `ch <-`
+        # messages (_mf_codecs): a gap, or the full plan ahead of a first-piece reading it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _mf_codecs(src) if c["plain"] not in have and (not have or any(
+            c["plain"] != p and c["plain"].startswith(p) for p in have))]
+        out = x + out
     if _depth < 1 and isinstance(src, str) and (_JSP_CUE.search(src[:1 << 16]) or (
             "\\u" in src and "String" in src and _JAVA_CUE.search(src[:1 << 16]))):
         # JSP / JSPX / .tag / Java / .war: a gap, or -- when unicode escapes, includes or constant concatenations can
@@ -2149,6 +2193,271 @@ def _cl_codecs(src, extend_only=False, budget=0.5):
         for ident, lit, ext in _cl_literals(src):
             if time.time() > end or (extend_only and not ext):
                 continue
+            plain = _peel_ext([(ident, lit)], am.group("tag") if am else "", budget=max(0.05, end - time.time()))[1]
+            if plain:
+                out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "", "material": lit,
+                            "plain": plain})
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# Nim / Swift / Tcl descriptor values the literal readings above miss (target nim-swift-tcl-literal-route): Tcl
+# `append descriptor_x ..` accumulation and `[binary decode base64|hex ..]` / `[join $l ""]` / `[string reverse ..]` /
+# `$var` substitution (a `#` comment counts only at command start); Swift `String(decoding: [UInt8], as: UTF8.self)` /
+# `String(bytes:encoding:)` / `Data(base64Encoded: "..")`; Nim `cast[string](@[byte 0x41, ..])` / `decode("..")`.
+# Read only as a gap after every earlier reading (or a longer plan extending one), so existing results are unchanged.
+_NST_CUE = re.compile(r"(?i)(?:^|[;\[])[ \t]*(?:set|append|lappend)[ \t]+descriptor[_-]|descriptor[_-][\w-]*\*?[ \t]*"
+                      r"(?::[^=\r\n]{1,40})?=[ \t]*(?:String|cast|Data|decode|\[|@\[)", re.M)
+_NST_TCL_ESC = {"n": "\n", "t": "\t", "r": "\r", "a": "\a", "b": "\b", "f": "\f", "v": "\v"}
+
+
+def _nst_tcl_bs(src, j):
+    """(text, end) of the Tcl backslash sequence at src[j] == '\\'."""
+    c = src[j + 1:j + 2]
+    m = re.match(r"x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})", src[j + 1:j + 10])
+    if m:
+        v = int(m.group(1) or m.group(2) or m.group(3) or "0", 16) if not m.group(4) else int(m.group(4), 8)
+        return (chr(v) if v < 0x110000 else ""), j + 1 + m.end()
+    if c == "\n":
+        k = j + 2
+        while k < len(src) and src[k] in " \t":
+            k += 1
+        return " ", k
+    return _NST_TCL_ESC.get(c, c), j + 2
+
+
+def _nst_tcl_word(src, i, env, depth):
+    """(value, end) of one Tcl word at src[i] (quotes, braces, `[cmd]`, `$var`, bare), or (None, i)."""
+    if depth > 6 or i >= len(src):
+        return None, i
+    if src[i] == "{":
+        lv, j = 0, i
+        while j < len(src) and j < i + (1 << 16):
+            if src[j] == "\\":
+                j += 2
+                continue
+            lv += {"{": 1, "}": -1}.get(src[j], 0)
+            if lv == 0:
+                return src[i + 1:j], j + 1
+            j += 1
+        return None, i
+    quoted = src[i] == '"'
+    j, buf = i + 1 if quoted else i, []
+    while j < len(src) and j < i + (1 << 16):
+        c = src[j]
+        if quoted and c == '"':
+            return "".join(buf), j + 1
+        if not quoted and (c in " \t\r\n;]"):
+            break
+        if c == "\\":
+            t, j = _nst_tcl_bs(src, j)
+            buf.append(t)
+        elif c == "[":
+            v, j2 = _nst_tcl_cmd(src, j + 1, env, depth + 1)
+            if v is None:
+                return None, i
+            buf.append(v if isinstance(v, str) else " ".join(v))
+            j = j2
+        elif c == "$":
+            m = re.match(r"\{([^}]+)\}|((?:::)?[A-Za-z_][\w:]*)", src[j + 1:j + 80])
+            if not m or (m.group(1) or m.group(2)) not in env:
+                return None, i
+            v = env[m.group(1) or m.group(2)]
+            buf.append(v if isinstance(v, str) else " ".join(v))
+            j += 1 + m.end()
+        else:
+            buf.append(c)
+            j += 1
+    return (None, i) if quoted else ("".join(buf), j)
+
+
+def _nst_tcl_list(v):
+    if isinstance(v, list):
+        return v
+    out, i = [], 0
+    while i < len(v):
+        while i < len(v) and v[i] in " \t\r\n":
+            i += 1
+        if i >= len(v):
+            break
+        w, e = _nst_tcl_word(v, i, {}, 5)
+        if w is None or e <= i:
+            return v.split()
+        out.append(w)
+        i = e
+    return out
+
+
+def _nst_bytes_text(b):
+    """Decoded bytes as descriptor text: printable UTF-8 verbatim, else base64 (so the peel sees a binary layer)."""
+    try:
+        t = b.decode("utf-8")
+        if t.strip() and all(ch.isprintable() or ch in "\r\n\t" for ch in t):
+            return t
+    except UnicodeDecodeError:
+        pass
+    return base64.b64encode(b).decode("ascii")
+
+
+def _nst_tcl_cmd(src, i, env, depth):
+    """(value, end after `]`) of the Tcl command substitution starting at src[i] (just past `[`), or (None, i)."""
+    words, j = [], i
+    while j < len(src) and len(words) < 512:
+        while j < len(src) and src[j] in " \t\r\n" or src.startswith("\\\n", j):
+            j += 2 if src[j] == "\\" else 1
+        if j >= len(src):
+            return None, i
+        if src[j] == "]":
+            break
+        w, e = _nst_tcl_word(src, j, env, depth)
+        if w is None or e <= j:
+            return None, i
+        words.append(w)
+        j = e
+    else:
+        return None, i
+    j += 1
+    if not words:
+        return None, i
+    w0, args = words[0], words[1:]
+    try:
+        if w0 == "binary" and len(args) >= 3 and args[0] == "decode":
+            data = args[-1]
+            if args[1] == "base64":
+                return _nst_bytes_text(base64.b64decode(re.sub(r"\s+", "", data) + "==="[:(-len(re.sub(r"\s+", "", data))) % 4])), j
+            if args[1] == "hex":
+                return _nst_bytes_text(bytes.fromhex(re.sub(r"[^0-9a-fA-F]", "", data))), j
+            return None, i
+        if w0 == "binary" and len(args) == 3 and args[0] == "format" and args[1] in ("H*", "a*", "A*"):
+            return (_nst_bytes_text(bytes.fromhex(args[2])) if args[1] == "H*" else args[2]), j
+        if w0 == "list":
+            return list(args), j
+        if w0 == "join" and 1 <= len(args) <= 2:
+            return (args[1] if len(args) == 2 else " ").join(_nst_tcl_list(args[0])), j
+        if w0 == "string" and len(args) == 2 and args[0] == "reverse":
+            return args[1][::-1], j
+        if w0 == "encoding" and args and args[0] == "convertfrom":
+            return args[-1], j
+        if w0 == "set" and len(args) == 1 and args[0] in env:
+            return env[args[0]], j
+        if w0 == "concat":
+            return " ".join(a.strip() for a in args if a.strip()), j
+    except (ValueError, binascii.Error, TypeError):
+        pass
+    return None, i
+
+
+_NST_TCL_STMT = re.compile(r"(?m)(?:^|;)[ \t]*(?P<cmd>set|append|lappend)[ \t]+(?P<name>(?:::)?[A-Za-z_][\w:-]*)[ \t]+")
+
+
+def _nst_tcl_literals(src):
+    """(id, value) of Tcl descriptor variables built with `append` / `lappend` or a `[..]` command substitution."""
+    env, special, out = {}, set(), []
+    for m in _NST_TCL_STMT.finditer(src[:1 << 20]):
+        name, cmd, j, vals = m.group("name"), m.group("cmd"), m.end(), []
+        while j < len(src) and src[j] not in "\r\n;]" and len(vals) < 256:
+            w, e = _nst_tcl_word(src, j, env, 0)
+            if w is None or e <= j:
+                vals = None
+                break
+            vals.append(w)
+            j = e
+            while j < len(src) and src[j] in " \t" or src.startswith("\\\n", j):
+                j += 2 if src[j] == "\\" else 1
+        if not vals:
+            continue
+        if cmd == "set":
+            if len(vals) == 1:
+                env[name] = vals[0]
+                if "[" in src[m.end():j] or "$" in src[m.end():j]:
+                    special.add(name)
+            continue
+        if cmd == "append":
+            env[name] = (env.get(name, "") if isinstance(env.get(name, ""), str) else "") + "".join(
+                v if isinstance(v, str) else " ".join(v) for v in vals)
+        else:
+            env[name] = _nst_tcl_list(env.get(name, [])) + list(vals)
+        special.add(name)
+    for name in special:
+        dm = re.match(r"(?i)(?:::)?descriptor[_-]([\w-]+)$", name)
+        v = env.get(name)
+        if dm and v:
+            out.append((dm.group(1), v if isinstance(v, str) else "".join(v)))
+    return out
+
+
+_NST_BYTE_ARR = r"(?:\[UInt8\][ \t]*\(|cast\[string\][ \t]*\(|@)?[ \t]*\[(?:[ \t]*byte\b)?(?P<arr>[^\]\[]{1,1048576}?)\]"
+_NST_BYTE_EL = re.compile(r"(?:0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|\d+)(?:'?[uU]8)?$")
+
+
+def _nst_byte_list(body):
+    out = bytearray()
+    for el in body.replace("\n", " ").split(","):
+        el = el.strip()
+        if not el:
+            continue
+        if not _NST_BYTE_EL.match(el):
+            return None
+        el = re.sub(r"'?[uU]8$", "", el).replace("_", "")
+        v = int(el, 0) if not re.match(r"0\d", el) else int(el)
+        if v > 255:
+            return None
+        out.append(v)
+    return bytes(out) if out else None
+
+
+_NST_SWIFT_RHS = re.compile(r"""(?:String[ \t]*\([ \t]*(?:decoding|bytes|cString)[ \t]*:|cast\[string\][ \t]*\(|"""
+                            r"""String[ \t]*\([ \t]*data[ \t]*:[ \t]*|Data[ \t]*\([ \t]*base64Encoded[ \t]*:|"""
+                            r"""(?:base64\.)?decode[ \t]*\(|(?=@?\[))[ \t]*""")
+
+
+def _nst_call_literals(src, limit=16):
+    """(id, value) of Swift / Nim descriptors bound to a byte array, a String(decoding:..) / cast[string] of one, or a
+    Data(base64Encoded:) / decode() call wrapping a single string literal."""
+    out = []
+    for m in _CL_DESC.finditer(src[:1 << 20]):
+        if len(out) >= limit:
+            break
+        r = _NST_SWIFT_RHS.match(src, m.end())
+        if not r:
+            continue
+        k = r.end()
+        if src.startswith("Data", k):                                 # String(data: Data(base64Encoded: "..")!, ..)
+            r2 = re.match(r"Data[ \t]*\([ \t]*base64Encoded[ \t]*:[ \t]*", src[k:k + 40])
+            if not r2:
+                continue
+            k += r2.end()
+        if src[k:k + 1] in "\"'":
+            lit, _ = _read_literal(src, k, None)
+            if lit:
+                out.append((m.group("id"), lit))
+            continue
+        a = re.compile(_NST_BYTE_ARR).match(src, k)
+        if not a:
+            n = re.match(r"([A-Za-z_]\w*)\b", src[k:k + 80])
+            if not n:
+                continue
+            a = re.compile(r"(?:let|var|const)[ \t]+" + re.escape(n.group(1)) + r"[ \t]*(?::[ \t]*[^=\r\n]{1,40})?=[ \t]*"
+                           + _NST_BYTE_ARR).search(src)
+            if not a:
+                continue
+        b = _nst_byte_list(a.group("arr"))
+        if b:
+            out.append((m.group("id"), _nst_bytes_text(b)))
+    return out
+
+
+def _nst_codecs(src, budget=0.5):
+    """Plan codecs of the Nim / Swift / Tcl descriptor values above; [] when none reads to a plan."""
+    try:
+        end, out = time.time() + budget, []
+        am = _ANALYSIS_RE.search(src or "")
+        lits = (_nst_tcl_literals(src) if re.search(r"(?m)(?:^|;)[ \t]*(?:set|append|lappend)[ \t]", src) else []) + \
+            _nst_call_literals(src)
+        for ident, lit in lits:
+            if time.time() > end:
+                break
             plain = _peel_ext([(ident, lit)], am.group("tag") if am else "", budget=max(0.05, end - time.time()))[1]
             if plain:
                 out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "", "material": lit,
@@ -3656,6 +3965,963 @@ def _beam_codecs(src, budget=0.5):
     except Exception:
         return []
 
+# ------------------------------------------------------------------- actor / message-passing flow (static edge list)
+# actor-message-flow-model: who sends what to whom, read from the source only (never run erl / elixir / node / go).
+# Erlang `Pid ! {Tag, V}`, `gen_server:call/cast`, Elixir `send(pid, msg)` / `GenServer.call/cast`, JS
+# `w.postMessage(m)` (`new Worker('x.js')`), Go `ch <- v` (only in a `package` + `chan` source: R also writes `x <- ".."`).
+# Receivers resolve through `X = spawn(..f..)` / `register(name, X)` / `Task.async` / `start_link` / `new Worker`, and
+# a spawned function's parameters through the spawn's arguments (`self()` = the spawner). message_flow(src) ->
+# [{seq, sender, receiver, tag, payload, index, kind, final}] in source order (a loop over a literal list expands);
+# `final` is the last process a forwarded payload reaches (`receive {tag, X} -> Next ! {tag2, X}`). _mf_codecs joins
+# each (receiver, tag) group's string payloads (by their integer sequence element when every message has one) and
+# peels the result to a plan.
+_MF_CUE = re.compile(r"""(?:[\w)'?]\s*!\s*[{\[<"'\w])|gen_server:(?:call|cast)\(|GenServer\.(?:call|cast)\(|"""
+                     r"""(?<![\w.])send\(\s*[\w:]+|\.postMessage\(|(?<![\w.])postMessage\(|\bchan\b""")
+_MF_ERL = re.compile(r"(?m)^-module\(|\breceive\b|(?<![\w.:])spawn(?:_link|_monitor)?\(|escript")
+_MF_GO = re.compile(r"(?m)^package\s+\w+")
+_MF_HEADS = (re.compile(r"(?m)^(?P<n>[a-z]\w*)\((?P<a>[^()\n]*(?:\([^()\n]*\)[^()\n]*)*)\)\s*(?:when\b[^\n]*)?->"),  # Erlang
+             re.compile(r"(?m)^[ \t]*defp?\s+(?P<n>\w+[?!]?)(?:\((?P<a>[^\n]*?)\))?(?:\s+when\b[^\n]*?)?(?:\s*,\s*do:|\s+do\b)"),
+             re.compile(r"(?m)^[ \t]*(?:export\s+)?(?:async\s+)?function\s*\*?\s*(?P<n>\w+)\s*\((?P<a>[^)]*)\)|"
+                        r"^[ \t]*(?:const|let|var)\s+(?P<n2>\w+)\s*=\s*(?:async\s+)?(?:function\b[^(]*\((?P<a2>[^)]*)\)|"
+                        r"\(?(?P<a3>[\w\s,]*)\)?\s*=>)"),
+             re.compile(r"(?m)^func\s+(?:\([^)]*\)\s*)?(?P<n>\w+)\s*\((?P<a>[^)]*)\)"))
+_MF_KW = {"return", "if", "while", "and", "or", "not", "case", "of", "when", "andalso", "orelse", "else", "do", "end"}
+_MF_ESC = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "e": "\x1b", "s": " ", "d": "\x7f", "b": "\b", "f": "\f",
+           "v": "\v", "\\": "\\", '"': '"', "'": "'", "`": "`", "$": "$"}
+
+
+def _mf_unescape(s):
+    def rep(m):
+        e = m.group(1)
+        if e[0] in "xX" and len(e) > 1:
+            return chr(int(e[1:].strip("{}"), 16))
+        if e[0] in "uU" and len(e) > 1:
+            return chr(int(e[1:].strip("{}"), 16))
+        if e[0] in "01234567" and len(e) > 1:
+            return chr(int(e, 8))
+        return _MF_ESC.get(e, e)
+    try:
+        return re.sub(r"\\(x\{[0-9a-fA-F]{1,6}\}|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|u[0-9a-fA-F]{4}|[0-7]{1,3}|.)",
+                      rep, s, flags=re.S)
+    except (ValueError, OverflowError):
+        return s
+
+
+def _mf_close(s, i):
+    """Index past the bracket/quote group opening at s[i] (or len(s))."""
+    pairs, stack, j, n = {"(": ")", "[": "]", "{": "}"}, [], i, len(s)
+    while j < n:
+        c = s[j]
+        if c in "\"'`":
+            k = j + 1
+            while k < n and s[k] != c:
+                k += 2 if s[k] == "\\" else 1
+            j = k + 1
+            if not stack:
+                return j
+            continue
+        if c == "%" and s[j - 1:j] != "\\" and _MF_ERL_MODE[0]:
+            k = s.find("\n", j)
+            j = n if k < 0 else k
+            continue
+        if c in pairs:
+            stack.append(pairs[c])
+        elif stack and c == stack[-1]:
+            stack.pop()
+            if not stack:
+                return j + 1
+        elif c in ")]}":
+            return j
+        j += 1
+    return n
+
+
+_MF_ERL_MODE = [False]
+
+
+def _mf_split(s, seps=","):
+    """Top-level split of an expression list (brackets and quotes respected)."""
+    out, j, start, n = [], 0, 0, len(s)
+    while j < n:
+        c = s[j]
+        if c in "\"'`([{":
+            if c == "'" and _MF_ERL_MODE[0] is None:
+                j += 1
+                continue
+            j = _mf_close(s, j)
+            continue
+        if c in seps:
+            out.append(s[start:j])
+            start = j + 1
+        j += 1
+    out.append(s[start:])
+    return [x.strip() for x in out]
+
+
+def _mf_expr(s, i):
+    """The expression starting at s[i]: up to a top-level `,` `;` newline `)` `]` `}` or Erlang end-dot."""
+    n, j = len(s), i
+    while j < n and s[j] in " \t":
+        j += 1
+    k = j
+    while k < n:
+        c = s[k]
+        if c in "\"'`([{":
+            k = _mf_close(s, k)
+            continue
+        if c in ",;\n)]}" or (c == "." and (k + 1 >= n or s[k + 1] in " \t\r\n")):
+            break
+        if s.startswith("end", k) and not re.match(r"\w", s[k + 3:k + 4] or " ") and not re.match(r"\w", s[k - 1:k] or " "):
+            break
+        k += 1
+    return s[j:k].strip(), k
+
+
+def _mf_value(e, env, depth=0):
+    """Literal value of an expression: str, int, list, ('atom', name) or ('tuple', [..]); None when unresolved."""
+    e = (e or "").strip()
+    if not e or depth > 6:
+        return None
+    if e[0] == "{" and e[-1] == "}":
+        return ("tuple", [_mf_value(x, env, depth + 1) if x else None for x in _mf_split(e[1:-1])])
+    parts = [p for p in _mf_split(e, "+") if p] if re.search(r"\+\+|<>|\+", e) else [e]
+    if len(parts) > 1:
+        parts = [p.strip(" +<>") for p in re.split(r"""(\+\+|<>|\+)(?=(?:[^"'`]*["'`][^"'`]*["'`])*[^"'`]*$)""", e)
+                 if p.strip() and p.strip() not in ("++", "<>", "+")]
+        vals = [_mf_value(p, env, depth + 1) for p in parts]
+        if all(isinstance(v, str) for v in vals):
+            return "".join(vals)
+        if all(isinstance(v, int) for v in vals):
+            return sum(vals)
+        return None
+    m = re.fullmatch(r'''(?s)(?:~c)?("(?:[^"\\]|\\.)*"\s*)+''', e)
+    if m:
+        return "".join(_mf_unescape(x) for x in re.findall(r'"((?:[^"\\]|\\.)*)"', e))
+    m = re.fullmatch(r"(?s)`([^`]*)`", e)
+    if m:
+        return m.group(1)
+    m = re.fullmatch(r"(?s)'((?:[^'\\]|\\.)*)'", e)
+    if m:
+        return ("atom", m.group(1)) if _MF_ERL_MODE[0] and env.get("__erl_atoms__") else _mf_unescape(m.group(1))
+    m = re.fullmatch(r"(?s)<<\s*(.*?)\s*>>", e)
+    if m:
+        vals = [_mf_value(x, env, depth + 1) for x in _mf_split(m.group(1))] if m.group(1) else []
+        if all(isinstance(v, (str, int)) for v in vals):
+            try:
+                return "".join(v if isinstance(v, str) else chr(v & 0xFF) for v in vals)
+            except ValueError:
+                return None
+        return None
+    m = re.fullmatch(r"(?s)(?:\[\]\s*(?:string|byte|int|interface\{\}|any)\s*\{(.*)\}|\[(.*)\])", e)
+    if m:
+        body = m.group(1) if m.group(1) is not None else m.group(2)
+        vals = [_mf_value(x, env, depth + 1) for x in _mf_split(body)] if body.strip() else []
+        if vals and all(isinstance(v, int) and 0 <= v < 0x110000 for v in vals) and m.group(2) is not None and \
+                _MF_ERL_MODE[0]:
+            return "".join(map(chr, vals))                      # Erlang char list
+        return vals
+    m = re.fullmatch(r"-?(?:0[xX][0-9a-fA-F]+|\d+)", e)
+    if m:
+        return int(e, 0) if not re.fullmatch(r"-?0\d+", e) else int(e)
+    m = re.fullmatch(r"\$(.)", e)                               # Erlang $c
+    if m and _MF_ERL_MODE[0]:
+        return ord(m.group(1))
+    m = re.fullmatch(r":(\w+[?!]?)|:\"([^\"]*)\"", e)            # Elixir atom
+    if m:
+        return ("atom", m.group(1) or m.group(2))
+    m = re.fullmatch(r"(?:list_to_binary|iolist_to_binary|binary_to_list|unicode:characters_to_binary|"
+                     r"lists:flatten|to_string|String\.from|base64:decode|Base\.decode64!?)\((.*)\)", e, re.S)
+    if m:
+        v = _mf_value(m.group(1), env, depth + 1)
+        if isinstance(v, list) and all(isinstance(x, str) for x in v):
+            v = "".join(v)
+        if isinstance(v, str) and "decode" in e:
+            try:
+                return base64.b64decode(v).decode("latin-1")
+            except (binascii.Error, ValueError):
+                return None
+        return v if isinstance(v, str) else None
+    if re.fullmatch(r"[A-Za-z_][\w.]*", e):
+        if e in env:
+            return env[e]
+        if _MF_ERL_MODE[0] and e[0].islower():
+            return ("atom", e)
+    return None
+
+
+def _mf_heads(src):
+    """[(pos, name, [params])] of every function head, any of the four syntaxes."""
+    out = []
+    for rx in _MF_HEADS:
+        for m in rx.finditer(src):
+            name = m.group("n") or m.groupdict().get("n2")
+            args = next((m.group(g) for g in ("a", "a2", "a3") if g in rx.groupindex and m.group(g) is not None), "")
+            if name and name not in _MF_KW:
+                params = [re.sub(r"\s.*|[^\w]", "", p.strip().split(" ")[0]) if not re.match(r"[\w]+\s+\w", p.strip())
+                          else p.strip().split()[0] for p in _mf_split(args)] if args and args.strip() else []
+                out.append((m.start(), name, params))
+    out.sort()
+    return out
+
+
+def _mf_owner(heads, pos):
+    best = None
+    for h in heads:
+        if h[0] > pos:
+            break
+        best = h
+    return best
+
+
+def _mf_spawn_target(e):
+    """Function name a spawn-like expression starts (or a Worker script), else None."""
+    m = re.search(r"""(?:spawn(?:_link|_monitor|_opt)?|Task\.(?:async|start(?:_link)?)|proc_lib:spawn(?:_link)?)\s*\(\s*"""
+                  r"""(?:(?:fun\s*\(\s*\)\s*->|fn\s*(?:\(\s*\))?\s*->)\s*(?:[\w:.?]+[:.])?(?P<f>[a-z_]\w*[?!]?)\s*\((?P<a>[^\n]*?)\)\s*end|"""
+                  r"""fun\s+(?P<g>[a-z]\w*)/\d+|&(?:__MODULE__\.)?(?P<h>\w+)/\d+|"""
+                  r"""(?:\?MODULE|__MODULE__|[\w.:']+)\s*,\s*:?'?(?P<k>[a-z_]\w*)'?\s*,\s*\[(?P<ka>[^\]]*)\])""", e)
+    if m:
+        f = m.group("f") or m.group("g") or m.group("h") or m.group("k")
+        return f, (m.group("a") if m.group("f") else m.group("ka")) or ""
+    m = re.search(r"""new\s+Worker\s*\(\s*(?:new\s+URL\(\s*)?["'`]([^"'`]+)["'`]""", e)
+    if m:
+        return m.group(1), ""
+    m = re.search(r"(?:gen_server|GenServer|gen_statem|GenStage)[:.]start(?:_link)?\s*\(\s*(?:\{\s*(?:local|global)\s*,\s*\w+\s*\}\s*,\s*)?"
+                  r"(\?MODULE|__MODULE__|[\w.]+)", e)
+    if m:
+        return "gen_server:" + m.group(1), ""
+    return None
+
+
+def message_flow(src, budget=0.4):
+    """Static send edges of an actor / message-passing source (see the block comment). Never raises; [] when none."""
+    try:
+        return _message_flow(src if isinstance(src, str) else (src or b"").decode("utf-8", "replace"), budget)
+    except Exception:
+        return []
+
+
+def _message_flow(src, budget):
+    src = src[:1 << 20]
+    if not _MF_CUE.search(src):
+        return []
+    end = time.time() + budget
+    erl = bool(_MF_ERL.search(src)) and not re.search(r"(?m)^\s*(?:defmodule|import|const|func|package)\b", src)
+    ex = bool(re.search(r"(?m)^\s*defmodule\s", src))
+    go = bool(_MF_GO.search(src)) and "chan" in src
+    _MF_ERL_MODE[0] = erl
+    mod = re.search(r"-module\(\s*'?(\w+)", src) or re.search(r"defmodule\s+([\w.]+)", src)
+    mod = mod.group(1) if mod else "?MODULE"
+    heads = _mf_heads(src)
+    env, procs, ownerbind = {"__erl_atoms__": erl}, {}, {}
+    # bindings: literals (lists too) and process handles
+    for m in re.finditer(r"(?m)(?:^|[\s,;(])(?:(?:const|let|var)\s+)?(?P<v>[A-Za-z_]\w*)\s*(?::=|=(?![=>~]))\s*", src):
+        if time.time() > end:
+            break
+        e, _ = _mf_expr(src, m.end())
+        if not e:
+            continue
+        st = _mf_spawn_target(e)
+        if st:
+            procs[m.group("v")] = st[0]
+            ownerbind[m.group("v")] = (m.start(), st)
+            continue
+        if re.fullmatch(r"self\(\)", e):
+            o = _mf_owner(heads, m.start())
+            procs[m.group("v")] = o[1] if o else "main"
+            continue
+        v = _mf_value(e, env)
+        if v is not None and m.group("v") not in env:
+            env[m.group("v")] = v
+    for m in re.finditer(r"\{\s*(?:ok|:ok)\s*,\s*(?P<v>[A-Za-z_]\w*)\s*\}\s*=\s*", src):
+        e, _ = _mf_expr(src, m.end())
+        st = _mf_spawn_target(e)
+        if st:
+            procs[m.group("v")] = st[0]
+    for m in re.finditer(r"(?:register|Process\.register)\(\s*(?P<a>:?'?\w+'?)\s*,\s*(?P<b>:?'?\w+'?)\s*\)", src):
+        a, b = m.group("a").strip(":'"), m.group("b").strip(":'")
+        if m.group(0).startswith("Process"):
+            a, b = b, a
+        if b in procs:
+            procs[a] = procs[b]
+    for m in re.finditer(r"start(?:_link)?\s*\(\s*\{\s*(?:local|global)\s*,\s*(\w+)\s*\}\s*,\s*(\?MODULE|\w+)", src):
+        procs[m.group(1)] = "gen_server:" + m.group(2)
+    for m in re.finditer(r"start(?:_link)?\s*\(\s*(__MODULE__|[\w.]+)[^)\n]*name:\s*:?(\w+)", src):
+        procs[m.group(2)] = "gen_server:" + m.group(1)
+    # spawned functions' parameters bound from the spawn arguments
+    params = {}
+    for v, (pos, (f, args)) in ownerbind.items():
+        h = next((x for x in heads if x[1] == f), None)
+        if not h or not args:
+            continue
+        o = _mf_owner(heads, pos)
+        for p, a in zip(h[2], _mf_split(args)):
+            if a == "self()" or a == "self":
+                params[(f, p)] = o[1] if o else "main"
+            elif a in procs:
+                params[(f, p)] = procs[a]
+    srv = {}                                   # handle_call/handle_cast/handle_info module -> process name
+    if re.search(r"\bhandle_(?:call|cast|info)\b", src):
+        srv[mod] = srv["?MODULE"] = srv["__MODULE__"] = mod
+
+    def proc_name(t, owner):
+        t = (t or "").strip()
+        t = re.sub(r"^(?:whereis|Process\.whereis)\(\s*:?'?(\w+)'?\s*\)$", r"\1", t).strip(":'")
+        if owner and (owner, t) in params:
+            return params[(owner, t)]
+        if t in procs:
+            r = procs[t]
+        elif t in ("self()", "self"):
+            r = owner or "main"
+        else:
+            r = t
+        if r.startswith("gen_server:"):
+            r = r.split(":", 1)[1]
+            r = mod if r in ("?MODULE", "__MODULE__") else r
+        if r in ("?MODULE", "__MODULE__"):
+            r = mod
+        return r
+
+    sends = []
+    if erl:
+        for m in re.finditer(r"(?:(?<![\w?'])(?P<w>whereis\(\s*'?\w+'?\s*\))|(?P<t>\??[A-Za-z_][\w@]*|'[^'\n]+'))\s*!(?!=)\s*", src):
+            if (m.group("t") or "") in _MF_KW:
+                continue
+            e, _ = _mf_expr(src, m.end())
+            sends.append((m.start(), m.group("w") or m.group("t"), e, "erlang_send"))
+    for m in re.finditer(r"(?<![\w.:])(?P<k>gen_server:(?:call|cast)|GenServer\.(?:call|cast)|send|Process\.send|"
+                         r"(?P<o>[\w.]+)\.postMessage|postMessage)\s*\(", src):
+        k = m.group("k")
+        if k == "send" and not ex and not erl:
+            continue
+        j = _mf_close(src, m.end() - 1)
+        args = _mf_split(src[m.end():j - 1])
+        if "postMessage" in k:
+            o = m.group("o") or "self"
+            tgt = "parent" if o in ("self", "parentPort", "port", "window.parent", "parent", "postMessage") or \
+                k == "postMessage" else o
+            if args and args[0]:
+                sends.append((m.start(), tgt, args[0], "post_message"))
+        elif len(args) >= 2:
+            sends.append((m.start(), args[0], args[1], k.replace(".", ":").lower().replace("process:send", "send")))
+    if go:
+        chans = {}
+        for m in re.finditer(r"(?:<-\s*(\w+)|\brange\s+(\w+))", src):
+            if src[max(0, m.start() - 4):m.start()] == "chan" or m.group(1) == "chan":    # `chan<- T` / `<-chan T`
+                continue
+            c = m.group(1) or m.group(2)
+            o = _mf_owner(heads, m.start())
+            chans.setdefault(c, []).append(o[1] if o else "main")
+        alias = {}                                     # `go f(ch)` / `f(ch)`: f's channel parameter is ch
+        for m in re.finditer(r"(?<![\w.])(?P<f>\w+)\s*\((?P<a>[^()\n]*)\)", src):
+            h = next((x for x in heads if x[1] == m.group("f")), None)
+            if h and h[0] != m.start() and not src[max(0, m.start() - 5):m.start()].endswith("func "):
+                for p, a in zip(h[2], _mf_split(m.group("a"))):
+                    if re.fullmatch(r"\w+", a) and a in chans:
+                        alias[(h[1], p)] = a
+        for m in re.finditer(r"(?m)(?:^|[;{])[ \t]*(?P<c>\w+)\s*<-\s*", src):
+            e, _ = _mf_expr(src, m.end())
+            o = _mf_owner(heads, m.start())
+            c = alias.get((o[1] if o else "main", m.group("c")), m.group("c"))
+            sends.append((m.start(), "chan:" + c, e, "go_chan"))
+    sends.sort()
+    edges = []
+    for pos, tgt, e, kind in sends:
+        if time.time() > end or len(edges) > 4096:
+            break
+        o = _mf_owner(heads, pos)
+        owner = o[1] if o else "main"
+        if kind == "go_chan":
+            c = tgt[5:]
+            rx = [f for f in chans.get(c, []) if f != owner] if go else []
+            recv = rx[0] if rx else ("main" if c in chans else "chan:" + c)
+        elif kind == "post_message" and tgt != "parent":
+            recv = procs.get(tgt, tgt)
+        else:
+            recv = proc_name(tgt, owner)
+        for val in _mf_expand(src, pos, e, env):
+            tag, payload, idx = "", val, None
+            if isinstance(val, tuple) and val[0] == "tuple":
+                els = val[1]
+                if els and isinstance(els[0], tuple) and els[0][0] == "atom":
+                    tag, els = els[0][1], els[1:]
+                if tag in ("$gen_call", "$gen_cast") and els:
+                    els = els[-1:]
+                ints = [x for x in els if isinstance(x, int)]
+                strs = [x for x in els if isinstance(x, str)]
+                idx = ints[0] if ints else None
+                payload = strs[-1] if strs else (els[0] if len(els) == 1 else None)
+            elif isinstance(val, tuple) and val[0] == "atom":
+                tag, payload = val[1], None
+            edges.append({"seq": len(edges), "sender": owner, "receiver": recv, "tag": tag,
+                          "payload": payload if payload is None or isinstance(payload, (str, int)) else str(payload),
+                          "index": idx, "kind": kind, "expr": e[:200]})
+    _mf_finals(src, heads, edges)
+    return edges
+
+
+def _mf_expand(src, pos, e, env):
+    """The message value(s): one, or one per element when a free variable is bound by a loop over a literal list."""
+    v = _mf_value(e, env)
+    if v is not None and not _mf_unresolved(v):
+        return [v]
+    names = [n for n in re.findall(r"(?<![\w:'\"$])([A-Za-z_]\w*)(?![\w(:])", e) if n not in env and n not in _MF_KW
+             and not (_MF_ERL_MODE[0] and n[0].islower())]
+    win = src[max(0, pos - 4000):pos + 400]
+    p0 = min(pos, 4000)
+    for n in names:
+        q = re.escape(n)
+        hits = sorted(((abs(m.start() - p0), m.start(), rx, m) for rx in (
+            rf"\b{q}\s*<-\s*", rf"fun\s*\(\s*{q}\s*\)\s*->", rf"fn\s+\(?\s*{q}\s*\)?\s*->",
+            rf"(?:const|let|var)\s+{q}\s+of\s+", rf"\.forEach\s*\(\s*(?:function\s*)?\(?\s*{q}\s*\)?\s*(?:=>|\{{)",
+            rf"for\s+(?:_\s*,\s*)?{q}\s*:=\s*range\s+") for m in re.finditer(rx, win)), key=lambda x: x[:2])
+        for _d, _p, rx, m in hits[:8]:
+            if True:
+                lst = None
+                mm = re.match(r"\[\]\s*\w+\s*\{", win[m.end():]) if "range" in rx else None
+                if mm:                                          # Go `range []string{..} {`: the literal only
+                    lst = _mf_value(win[m.end():_mf_close(win, m.end() + mm.end() - 1)], env)
+                elif "<-" in rx or " of" in rx or "range" in rx:
+                    le, _ = _mf_expr(win, m.end())
+                    le = re.sub(r"\s*(?:\)\s*)?\{?\s*$", "", le) if "range" in rx or " of" in rx else le
+                    le = re.sub(r"\)\s*$", "", le) if " of" in rx else le
+                    lst = _mf_value(le, env)
+                elif "fun" in rx:                               # lists:foreach(fun(X) -> .. end, List)
+                    k = win.find("end", m.end())
+                    while k >= 0 and k < len(win):
+                        mm = re.match(r"end\s*,\s*", win[k:])
+                        if mm:
+                            lst = _mf_value(_mf_expr(win, k + mm.end())[0], env)
+                            break
+                        k = win.find("end", k + 3)
+                else:                                           # Enum.each(List, fn x -> ..) / List.forEach(x => ..)
+                    head = win[max(0, m.start() - 400):m.start()]
+                    mm = re.search(r"(?:Enum\.(?:each|map)\(\s*(?P<a>[^\n]*?)\s*,\s*$)|(?P<b>\[[^\[\]]*\]|[A-Za-z_]\w*)\s*$", head)
+                    if mm:
+                        lst = _mf_value(mm.group("a") or mm.group("b"), env)
+                if isinstance(lst, list) and lst:
+                    out = []
+                    for item in lst[:256]:
+                        v = _mf_value(e, dict(env, **{n: item}))
+                        if v is not None:
+                            out.append(v)
+                    if out:
+                        return out
+    return [v] if v is not None else [e]
+
+
+def _mf_unresolved(v):
+    return v is None or (isinstance(v, tuple) and v[0] == "tuple" and any(_mf_unresolved(x) for x in v[1]))
+
+
+def _mf_finals(src, heads, edges):
+    """edge['final']: follow `receive {Tag, X} -> .. Next ! {Tag2, X}` forwards (same receiving function)."""
+    spans = {}
+    for i, h in enumerate(heads):
+        stop = next((x[0] for x in heads[i + 1:] if x[1] != h[1]), len(src))
+        s0 = spans.get(h[1], (h[0], stop))
+        spans[h[1]] = (min(s0[0], h[0]), max(s0[1], stop))
+    fwd = {}
+    for e in edges:
+        f = spans.get(e["sender"])
+        if not f:
+            continue
+        body = src[f[0]:f[1]]
+        for m in re.finditer(r"\{\s*(?::|')?(\w+)'?\s*,([^{}\n]*)\}", body):
+            vars_ = re.findall(r"(?<![\w:'\"])([A-Z_a-z]\w*)", m.group(2))
+            if m.group(1) and any(re.search(rf"(?<![\w:'\"]){re.escape(v)}(?!\w)", e["expr"]) for v in vars_) and \
+                    m.group(0) not in e["expr"]:
+                fwd.setdefault((e["sender"], m.group(1)), e)
+    for e in edges:
+        cur, seen = e, set()
+        while (cur["receiver"], cur["tag"]) in fwd and (cur["receiver"], cur["tag"]) not in seen and len(seen) < 16:
+            seen.add((cur["receiver"], cur["tag"]))
+            cur = fwd[(cur["receiver"], cur["tag"])]
+        e["final"] = cur["receiver"]
+
+
+def message_tuples(src):
+    """[(sender, receiver, tag, payload)] in source order."""
+    return [(e["sender"], e["receiver"], e["tag"], e["payload"]) for e in message_flow(src)]
+
+
+def message_final_consumers(src):
+    """{payload: final consuming process} for every string payload (first edge carrying it wins)."""
+    out = {}
+    for e in message_flow(src):
+        if isinstance(e["payload"], str) and e["payload"] not in out:
+            out[e["payload"]] = e["final"]
+    return out
+
+
+def _mf_codecs(src, budget=0.4):
+    """Plans carried over messages: each (receiver, tag) group's string payloads joined (index order when every message
+    carries an integer index, else source order), and each payload alone, peeled to a plan."""
+    try:
+        edges = message_flow(src, budget=min(0.3, budget))
+        if not edges:
+            return []
+        end = time.time() + budget
+        am = _ANALYSIS_RE.search(src)
+        groups, out, seen = {}, [], set()
+        for e in edges:
+            if isinstance(e["payload"], str) and e["payload"]:
+                groups.setdefault((e["final"], e["tag"]), []).append(e)
+        cands = []
+        for (recv, tag), es in groups.items():
+            if all(x["index"] is not None for x in es) and len({x["index"] for x in es}) == len(es):
+                es = sorted(es, key=lambda x: x["index"])
+            cands.append((f"flow:{recv}:{tag}", "".join(x["payload"] for x in es)))
+            cands += [(f"flow:{recv}:{tag}:{x['seq']}", x["payload"]) for x in es if len(es) > 1]
+        joined = set()
+        for ident, mat in cands:
+            if time.time() > end or mat in seen or ident.count(":") > 2 and ident.rsplit(":", 1)[0] in joined:
+                continue
+            seen.add(mat)
+            plain = peel_plan(mat, am.group("tag") if am else "", budget=min(0.2, max(0.05, end - time.time())))
+            if plain and (plain.lstrip()[:1] == "{" or len(plan_kv(plain)) >= 3) and \
+                    plain not in {c["plain"] for c in out}:     # a lone `v=3 ..` status line is not a plan
+                joined.add(ident)
+                out.append({"id": ident, "rep": "message_flow", "transform": "identity", "key": "", "material": mat,
+                            "plain": plain})
+        return out
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------------- compiled BEAM / escript archives
+# Target erlang-beam-chunk-literals: the Erlang carrier ships compiled -- a `.beam` (IFF `FOR1 <len> BEAM`, 4-aligned
+# chunks: AtU8/Atom atoms, StrT bs_put_string pool, LitT `<<UncompSize:32, zlib>>` (0 = stored) -> `<<N:32, [<<Sz:32,
+# ETF>>]>>`, Dbgi/Attr/CInf `term_to_binary`) or an escript whose body after its `#!` / `%%` / `%%!` header lines is a
+# zip archive of beams or a bare beam. The compiler folds `++` / list_to_binary / binary_to_list of constants, so the
+# descriptor usually sits whole in one LitT literal. _etf_read() is a hand-rolled External Term Format reader (no erlang
+# on the box); every string / binary / charlist / atom / flattened iolist is peeled (marker TAG as the layer hint).
+# Reached from find_codecs(bytes | latin-1 text) and v3_plan(bytes). Stdlib only, bounded, never raises.
+_ETF_NODES = 200000
+
+
+class _EtfFail(Exception):
+    pass
+
+
+def _etf_read(b, i, st, depth=0):
+    """(term, next offset) of one ETF term at b[i:] (no 131 version byte). Atoms -> ('atom', str), binaries and
+    STRING_EXT -> bytes, lists -> list, tuples -> tuple, maps -> list of pairs; raises _EtfFail when unreadable."""
+    st[0] += 1
+    if st[0] > _ETF_NODES or depth > 400 or i >= len(b):
+        raise _EtfFail
+    import struct
+    t = b[i]
+    i += 1
+
+    def need(n):
+        if i + n > len(b):
+            raise _EtfFail
+    if t == 97:
+        need(1)
+        return b[i], i + 1
+    if t == 98:
+        need(4)
+        return struct.unpack(">i", b[i:i + 4])[0], i + 4
+    if t == 70:
+        need(8)
+        return struct.unpack(">d", b[i:i + 8])[0], i + 8
+    if t == 99:
+        need(31)
+        return b[i:i + 31].split(b"\0")[0].decode("latin-1"), i + 31
+    if t in (100, 118, 115, 119):                       # ATOM / ATOM_UTF8 (2-byte len), SMALL_ATOM(_UTF8) (1-byte)
+        w = 2 if t in (100, 118) else 1
+        need(w)
+        n = int.from_bytes(b[i:i + w], "big")
+        need(w + n)
+        return ("atom", b[i + w:i + w + n].decode("utf-8" if t in (118, 119) else "latin-1", "replace")), i + w + n
+    if t in (104, 105):
+        w = 1 if t == 104 else 4
+        need(w)
+        n, i = int.from_bytes(b[i:i + w], "big"), i + w
+        out = []
+        for _ in range(n):
+            v, i = _etf_read(b, i, st, depth + 1)
+            out.append(v)
+        return tuple(out), i
+    if t == 106:
+        return [], i
+    if t == 107:
+        need(2)
+        n = int.from_bytes(b[i:i + 2], "big")
+        need(2 + n)
+        return bytes(b[i + 2:i + 2 + n]), i + 2 + n
+    if t == 108:
+        need(4)
+        n, i = int.from_bytes(b[i:i + 4], "big"), i + 4
+        if n > len(b):
+            raise _EtfFail
+        out = []
+        for _ in range(n + 1):                          # elements, then the tail (NIL for a proper list)
+            v, i = _etf_read(b, i, st, depth + 1)
+            out.append(v)
+        tail = out.pop()
+        return out + ([tail] if tail != [] else []), i
+    if t in (109, 77):
+        need(4)
+        n, i = int.from_bytes(b[i:i + 4], "big"), i + 4 + (t == 77)
+        need(n)
+        return bytes(b[i:i + n]), i + n
+    if t in (110, 111):
+        w = 1 if t == 110 else 4
+        need(w + 1)
+        n = int.from_bytes(b[i:i + w], "big")
+        need(w + 1 + n)
+        v = int.from_bytes(b[i + w + 1:i + w + 1 + n], "little")
+        return (-v if b[i + w] else v), i + w + 1 + n
+    if t == 116:
+        need(4)
+        n, i = int.from_bytes(b[i:i + 4], "big"), i + 4
+        if n > len(b):
+            raise _EtfFail
+        out = []
+        for _ in range(n):
+            k, i = _etf_read(b, i, st, depth + 1)
+            v, i = _etf_read(b, i, st, depth + 1)
+            out.append((k, v))
+        return out, i
+    if t == 113:                                        # EXPORT_EXT fun M:F/A
+        out = []
+        for _ in range(3):
+            v, i = _etf_read(b, i, st, depth + 1)
+            out.append(v)
+        return tuple(out), i
+    if t == 80:                                         # compressed term
+        import zlib
+        need(4)
+        try:
+            inner = zlib.decompressobj().decompress(b[i + 4:], 1 << 24)
+        except zlib.error:
+            raise _EtfFail
+        return _etf_read(inner, 0, st, depth + 1)[0], len(b)
+    raise _EtfFail
+
+
+def _etf_term(b):
+    """The term of a `term_to_binary` blob (131 version byte), else None."""
+    try:
+        if b[:1] != b"\x83":
+            return None
+        return _etf_read(b, 1, [0])[0]
+    except (_EtfFail, ValueError, IndexError, RecursionError):
+        return None
+
+
+def _etf_iolist(v, acc, n=0):
+    """Flatten an iolist (bytes / 0..255 ints / nested lists) into acc; False when it is not one."""
+    if isinstance(v, bytes):
+        acc += v
+        return True
+    if isinstance(v, bool) or n > 64:
+        return False
+    if isinstance(v, int):
+        if 0 <= v < 256:
+            acc.append(v)
+            return True
+        return False
+    if isinstance(v, list):
+        return all(_etf_iolist(x, acc, n + 1) for x in v)
+    return False
+
+
+def _etf_strings(v, out, n=0):
+    """Every string-shaped value of a term (pre-order): binaries, charlists (unicode ints too), atoms, iolists."""
+    if len(out) > 4096 or n > 400:
+        return
+    if isinstance(v, bytes):
+        out.append(v.decode("utf-8") if _utf8_ok(v) else v.decode("latin-1"))
+    elif isinstance(v, tuple):
+        if len(v) == 2 and v[0] == "atom":
+            out.append(v[1])
+            return
+        for x in v:
+            _etf_strings(x, out, n + 1)
+    elif isinstance(v, list):
+        if v and all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x < 0x110000 for x in v):
+            try:
+                out.append("".join(map(chr, v)))
+            except ValueError:
+                pass
+            return
+        acc = bytearray()
+        if len(v) > 1 and _etf_iolist(v, acc) and acc:
+            out.append(acc.decode("utf-8") if _utf8_ok(acc) else acc.decode("latin-1"))
+        for x in v:
+            _etf_strings(x, out, n + 1)
+
+
+def _utf8_ok(b):
+    try:
+        bytes(b).decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+def beam_chunks(b):
+    """{chunk id: bytes} of a `FOR1 <len> BEAM` module (first of each id), else {}. Never raises."""
+    import struct
+    out = {}
+    try:
+        if b[:4] != b"FOR1" or b[8:12] != b"BEAM":
+            return {}
+        end = min(len(b), 8 + struct.unpack(">I", b[4:8])[0])
+        i = 12
+        while i + 8 <= end and len(out) < 64:
+            cid, n = b[i:i + 4], struct.unpack(">I", b[i + 4:i + 8])[0]
+            if not re.match(rb"[A-Za-z0-9]{4}$", cid):
+                break
+            out.setdefault(cid.decode("ascii"), bytes(b[i + 8:min(i + 8 + n, len(b))]))
+            i += 8 + ((n + 3) & ~3)
+    except Exception:  # noqa: BLE001
+        return out
+    return out
+
+
+def beam_strings(b):
+    """[(chunk, string)] recovered statically from a compiled BEAM: LitT literals, StrT pool, atoms, Dbgi / Attr /
+    CInf terms. Never raises."""
+    import struct
+    import zlib
+    ch, out = beam_chunks(b), []
+    try:
+        lit = ch.get("LitT", b"")
+        if len(lit) >= 4:
+            size = struct.unpack(">I", lit[:4])[0]
+            try:
+                tab = zlib.decompressobj().decompress(lit[4:], 1 << 24) if size else lit[4:]
+            except zlib.error:
+                tab = b""
+            if len(tab) >= 4:
+                j, cnt = 4, struct.unpack(">I", tab[:4])[0]
+                for _ in range(min(cnt, 1 << 16)):
+                    if j + 4 > len(tab):
+                        break
+                    sz = struct.unpack(">I", tab[j:j + 4])[0]
+                    term = _etf_term(tab[j + 4:j + 4 + sz])
+                    j += 4 + sz
+                    s = []
+                    _etf_strings(term, s)
+                    out.extend(("LitT", x) for x in s)
+        strt = ch.get("StrT", b"")
+        if strt:
+            out.append(("StrT", strt.decode("utf-8") if _utf8_ok(strt) else strt.decode("latin-1")))
+        at = ch.get("AtU8") or ch.get("Atom") or b""
+        if len(at) >= 4:
+            cnt, j = struct.unpack(">i", at[:4])[0], 4
+            compact = cnt < 0                           # OTP 28 compact-term atom lengths
+            for _ in range(min(abs(cnt), 1 << 16)):
+                if j >= len(at):
+                    break
+                n = at[j]
+                if compact:
+                    if n & 0x08:
+                        if j + 1 >= len(at):
+                            break
+                        n, j = ((n >> 5) << 8) | at[j + 1], j + 2
+                    else:
+                        n, j = n >> 4, j + 1
+                else:
+                    j += 1
+                out.append(("Atom", at[j:j + n].decode("utf-8" if "AtU8" in ch else "latin-1", "replace")))
+                j += n
+        for cid in ("Dbgi", "Abst", "Attr", "CInf"):
+            if ch.get(cid):
+                s = []
+                _etf_strings(_etf_term(ch[cid]), s)
+                out.extend((cid, x) for x in s)
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _escript_payload(raw):
+    """The archive / beam body of an escript (`#!` + up to 3 header lines), else None."""
+    if raw[:2] != b"#!":
+        return None
+    i = 0
+    for _ in range(4):
+        if raw[i:i + 4] in (b"PK\x03\x04", b"FOR1"):
+            return raw[i:]
+        j = raw.find(b"\n", i, i + 4096)
+        if j < 0:
+            return None
+        i = j + 1
+    return None
+
+
+def _beam_bin_units(raw):
+    """[(name, beam bytes | text)] of a beam / escript / zip-of-beams carrier."""
+    import io
+    import zipfile
+    body = _escript_payload(raw) if raw[:2] == b"#!" else raw
+    if not body:
+        return []
+    if body[:4] == b"FOR1":
+        return [("beam", body)]
+    units = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(body)) as z:
+            for zi in z.infolist()[:256]:
+                if zi.file_size > (8 << 20) or zi.is_dir():
+                    continue
+                d = z.read(zi)
+                units.append((zi.filename, d if d[:4] == b"FOR1" else d.decode("utf-8", "replace")))
+    except Exception:  # noqa: BLE001 - truncated / impostor archive: what was read so far
+        pass
+    return units
+
+
+def _is_beam_carrier(raw):
+    return bool(raw) and (raw[:4] == b"FOR1" and raw[8:12] == b"BEAM" or
+                          raw[:2] == b"#!" and _escript_payload(raw[:1 << 14]) is not None or
+                          raw[:4] == b"PK\x03\x04" and b".beam" in raw[:1 << 20])
+
+
+def _beam_bin_codecs(src, raw=None, budget=0.8):
+    """Codec entries for a compiled BEAM / escript archive whose recovered strings peel to a plan. Never raises."""
+    try:
+        if raw is None:
+            if not src:
+                return []
+            raw = src.encode("latin-1") if max(src[:1 << 16]) < "Ā" and max(src) < "Ā" else \
+                src.encode("utf-8", "surrogateescape")
+        if not _is_beam_carrier(raw):
+            return []
+        end, out, seen = time.time() + budget, [], set()
+        for name, unit in _beam_bin_units(raw):
+            if time.time() > end:
+                break
+            if isinstance(unit, str):                   # escript archive text member (.erl / .app / .config)
+                for c in _find_codecs_text(unit) + (_beam_codecs(unit) if "descriptor" in unit else []):
+                    if c.get("plain"):
+                        return [dict(c, id=f"{c['id']}@{name}")]
+                continue
+            strs = beam_strings(unit)
+            texts = [s for _, s in strs]
+            am = next((m for m in (_ANALYSIS_RE.search(t) for t in texts) if m), None)
+            tag = am.group("tag") if am else ""
+            dids = sorted({m.group(1) for t in texts for m in [re.match(r"descriptor_?(\w+)$", t)] if m})
+            ident = (dids[0] if len(dids) == 1 else "beam") + "@" + name
+            cands = [(c, s) for c, s in strs if c != "Atom" and len(s) >= 8] + \
+                    ([("AM", am.group("mat"))] if am else []) + [(c, s) for c, s in strs if c == "Atom" and len(s) >= 16]
+            for cid, s in cands:
+                if s in seen or time.time() > end:
+                    continue
+                seen.add(s)
+                plain = s.lstrip("﻿ \r\n\t") if looks_like_plan(s.encode("utf-8", "replace")) else \
+                    peel_plan(s, tag, budget=min(0.15, max(0.02, end - time.time())))
+                if plain:
+                    return [{"id": ident, "rep": "beam", "transform": "identity", "key": "",
+                             "material": s, "plain": plain, "chunk": cid}]
+            for c in _find_codecs_text("\n".join(t for t in texts if len(t) < (1 << 16))):
+                if c.get("plain"):
+                    return [dict(c, id=f"{c['id']}@{name}")]
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# ---------------------------------------------------------------------------------- shell function-return descriptors
+# Target zsh-fish-minimal-v3-fixtures: the descriptor as a shell function's output -- zsh/bash `build_plan_x() { print
+# -r -- ".." }` / `function descriptor_x { echo ".." }`, fish `function build_plan_x; echo ".."; end` (newline or `;`
+# separated). The body's print / echo / printf '%s' literals (joined in order) and each literal alone are peeled with the
+# marker TAG as the layer hint. Static (never runs a shell); gated on a function header + print/echo cue. Never raises.
+_SHFN_CUE = re.compile(r"(?m)^[ \t]*(?:function[ \t]+[A-Za-z_][\w-]*|[A-Za-z_][\w-]*[ \t]*\([ \t]*\)[ \t]*\{)")
+_SHFN_PR = re.compile(r"\b(?:print|echo|printf)[ \t]+[-'\"\w]")
+_SHFN_NAMED = re.compile(r"(?mi)^[ \t]*(?:function[ \t]+)?(?:build_plan|descriptor)\w*")
+_SHFN_HEAD = re.compile(r"(?m)(?:^|(?<=[;{]))[ \t]*(?:function[ \t]+(?P<a>[A-Za-z_][\w-]*)(?:[ \t]*\(\s*\))?|"
+                        r"(?P<b>[A-Za-z_][\w-]*)[ \t]*\(\s*\))")
+_SHFN_LIT = re.compile(r"""\b(?:print|echo|printf)\b(?:[ \t]+(?:-[A-Za-z]+|--|'%s'|"%s"))*[ \t]+"""
+                       r"""(?:"(?P<d>(?:[^"\\$`]|\\.)*)"|'(?P<s>[^']*)'|(?P<w>[A-Za-z0-9+/=._:-]{16,}))""")
+
+
+def _shfn_codecs(src, budget=0.4):
+    """Codec entries for shell functions whose printed literal peels to a plan (marker TAG as the layer hint)."""
+    try:
+        end, out, seen = time.time() + budget, [], set()
+        am = _ANALYSIS_RE.search(src)
+        tag = am.group("tag") if am else ""
+        heads = list(_SHFN_HEAD.finditer(src[:1 << 20]))[:64]
+        for k, m in enumerate(heads):
+            if time.time() > end:
+                break
+            name = m.group("a") or m.group("b")
+            stop = heads[k + 1].start() if k + 1 < len(heads) else len(src)
+            e = re.compile(r"(?m)^[ \t]*(?:end\b|\})|;[ \t]*(?:end\b|\})").search(src, m.end(), stop)
+            body = src[m.end():e.end() if e else min(stop, m.end() + (1 << 16))]
+            lits = [x.group("d") if x.group("d") is not None else x.group("s") if x.group("s") is not None
+                    else x.group("w") for x in _SHFN_LIT.finditer(body)][:32]
+            lits = [re.sub(r"\\(.)", r"\1", x) if "\\" in x else x for x in lits]
+            for cand in ([("".join(lits))] if len(lits) > 1 else []) + lits:
+                if len(cand) < 16 or cand in seen or time.time() > end:
+                    continue
+                seen.add(cand)
+                plain = peel_plan(cand, tag, budget=min(0.3, max(0.05, end - time.time())))
+                if plain:
+                    out.append({"id": re.sub(r"(?i)^(?:descriptor|build_plan)_?", "", name) or name,
+                                "rep": "descriptor", "transform": "identity", "key": "", "material": cand,
+                                "plain": plain})
+                    break
+        return out
+    except Exception:
+        return []
+
+
+# ------------------------------------------------------------------------------------------ awk / sed descriptors
+# Target awk-sed-minimal-v3-fixtures: awk `BEGIN { descriptor_x = ".." }` / `function build_plan_x() { return ".." }`
+# with juxtaposition concat `"ab" "cd"` (awk escapes `\" \\ \/`), sed `s/^.*$/<data>/p` (any delimiter, `\<delim>`
+# unescaped) and `1i\` / `$a\` / `c\` text commands (continuation lines ending in `\`, GNU one-line `1i text`); `y///`
+# is noise. Each candidate is peeled with the marker TAG as the layer hint. Static (never runs awk / sed); gated on an
+# awk / sed shebang, a `#n` first line or awk BEGIN / function cues. Never raises.
+_AWKSED_CUE = re.compile(r"(?m)\A(?:#![^\n]*\b(?:[gnm]?awk|g?sed)\b|#n[ \t]*\r?\n)|^[ \t]*(?:BEGIN[ \t]*\{|"
+                         r"function[ \t]+[A-Za-z_]\w*[ \t]*\([^)\n]*\)[ \t]*\{|\d*\$?[aic]\\\r?$|s/\^\.\*\$/)")
+_AWK_STR = r'"(?:[^"\\\n]|\\.)*"'
+_AWK_EXPR = re.compile(r"(?m)(?:\breturn\b[ \t(]*|\b[A-Za-z_]\w*[ \t]*=(?!=)[ \t]*)((?:%s)(?:(?:[ \t]|\\\r?\n)*%s)*)"
+                       % (_AWK_STR, _AWK_STR))
+_AWK_ESC = {"n": "\n", "t": "\t", "r": "\r", "/": "/", '"': '"', "\\": "\\"}
+_SED_SUB = re.compile(r"(?m)^[ \t]*(?:[\d$]+[ \t]*|/[^/\n]*/[ \t]*)?s([^\w\s\\])\^?\.\*\$?\1((?:[^\\\n]|\\.)*?)\1[gpI\d]*"
+                      r"[ \t]*(?:;|$)")
+_SED_TXT = re.compile(r"(?m)^[ \t]*(?:[\d$]+[ \t]*|/[^/\n]*/[ \t]*)?[aic][ \t]*(?:\\\r?\n((?:[^\n]*\\\r?\n)*[^\n]*)|"
+                      r"(?![ \t]*\\)[ \t]*([^\n]+))")
+
+
+def _awksed_codecs(src, budget=0.4):
+    """Codec entries for awk string assignments / returns and sed s///-replacement / text-command data."""
+    try:
+        end, out, seen = time.time() + budget, [], set()
+        am = _ANALYSIS_RE.search(src)
+        tag = am.group("tag") if am else ""
+        body = "\n".join(ln for ln in src[:1 << 20].splitlines() if "HUNTRESS_ANALYSIS" not in ln)
+        cands = []
+        for m in list(_AWK_EXPR.finditer(body))[:64]:
+            lits = re.findall(_AWK_STR, m.group(1))
+            cands.append("".join(re.sub(r"\\(.)", lambda e: _AWK_ESC.get(e.group(1), "\\" + e.group(1)), x[1:-1])
+                                 for x in lits))
+        for m in list(_SED_SUB.finditer(body))[:64]:
+            d = re.escape(m.group(1))
+            cands.append(re.sub(r"\\(%s|\\)" % d, r"\1", m.group(2)))
+        for m in list(_SED_TXT.finditer(body))[:64]:
+            t = m.group(1) if m.group(1) is not None else m.group(2)
+            t = re.sub(r"\\\r?\n", "\n", t)
+            cands.append(re.sub(r"\\(.)", r"\1", t))
+        for cand in cands:
+            cand = cand.strip()
+            if len(cand) < 16 or cand in seen or time.time() > end:
+                continue
+            seen.add(cand)
+            plain = peel_plan(cand, tag, budget=min(0.3, max(0.05, end - time.time())))
+            if plain:
+                out.append({"id": "awk_sed", "rep": "descriptor", "transform": "identity", "key": "",
+                            "material": cand, "plain": plain})
+        return out
+    except Exception:
+        return []
+
 
 # ------------------------------------------------------------------------------------------- JSP / JSPX carrier twists
 # Target jsp-jspx-unicode-carrier: javac reads `\uXXXX` escapes before it lexes, so `\u002f\u002f String DESCRIPTOR_X =
@@ -3902,6 +5168,10 @@ def v3_plan(src):
                         return c["plain"]
             u = _utf16(b[:1 << 22]) if (b[:2] in (b"\xff\xfe", b"\xfe\xff") or b[1:64:2].count(0) > 20
                                          or b[0:64:2].count(0) > 20) else None
+            if _is_beam_carrier(b[:1 << 20]):
+                for c in _beam_bin_codecs(None, b):     # compiled .beam / escript archive: the bytes, not utf-8
+                    if c["plain"].lstrip().startswith("v=3"):
+                        return c["plain"]
             src = (u or b).decode("utf-8", "ignore").lstrip("﻿")
         for c in find_codecs(src or ""):
             p = c.get("plain")
@@ -5961,6 +7231,63 @@ def _jc_variants(d):
             if f != b:
                 vs.append(f)
     return list(dict.fromkeys(vs))
+
+
+# JMeter test plan (.jmx, jvm-pair-host-profiles): the descriptor rides as a User Defined Variable / header / HTTP
+# argument -- an `<elementProp>` whose `*.name` stringProp (or name= attribute) is `descriptor_x` and whose `*.value`
+# stringProp holds the XML-escaped literal, `${var}` references resolved from the plan's other pairs (JMeter variable
+# expansion) -- while the BeanShell / JSR223 sampler only reads it back with `vars.get("descriptor_x")`. Regex +
+# html.unescape over the text (no DTD / entity resolution), bounded, never raises.
+_JMX_CUE = re.compile(r"<jmeterTestPlan\b|<stringProp\s+name=[\"'](?:Argument|Header|HTTPArgument)\.(?:name|value)[\"']")
+_JMX_ELEM = re.compile(r"<elementProp\b([^>]*?)/?>|</elementProp\s*>")
+_JMX_PROP = re.compile(r"""<stringProp\s+name=(["'])(?P<n>[^"'<>]*)\1\s*(?:/>|>(?P<v>[^<]*)</stringProp\s*>)""")
+_JMX_NAME = re.compile(r"""\bname=(["'])([^"'<>]*)\1""")
+_JMX_VAR = re.compile(r"\$\{([A-Za-z_][\w.-]*)\}")
+
+
+def _jmx_codecs(src, depth=0, budget=0.4):
+    """find_codecs readings of the `descriptor_x` name/value pairs a JMeter test plan carries (`@jmx`)."""
+    import html
+    try:
+        end = time.time() + budget
+        s = src[:1 << 20]
+        env, descs = {}, []
+        ms = list(_JMX_ELEM.finditer(s))
+        for k, m in enumerate(ms):
+            if m.group(0).startswith("</") or m.group(0).endswith("/>"):
+                continue
+            body = s[m.end():ms[k + 1].start() if k + 1 < len(ms) else len(s)]
+            props = {}
+            for p in _JMX_PROP.finditer(body):
+                props.setdefault(p.group("n").rsplit(".", 1)[-1].lower(), html.unescape(p.group("v") or ""))
+            if "value" not in props:
+                continue
+            na = _JMX_NAME.search(m.group(1) or "")
+            name = (props.get("name") or (html.unescape(na.group(2)) if na else "")).strip()
+            if name and name not in env:
+                env[name] = props["value"]
+                if re.fullmatch(r"(?i)descriptor[_-][\w-]+", name):
+                    descs.append(name)
+        if not descs:
+            return []
+        lines = [m.group(0) for m in _CODEC_RE.finditer(html.unescape(s))][:8]
+        for name in descs[:8]:
+            v = env[name]
+            for _ in range(4):                                       # ${a}${b} -> nested User Defined Variables
+                w = _JMX_VAR.sub(lambda r: env.get(r.group(1), r.group(0)) if r.group(1) != name else r.group(0), v)
+                if w == v or len(w) > (1 << 20):
+                    break
+                v = w
+            v = v.strip()
+            if v and time.time() < end:
+                lines.append('String %s = "%s";' % (re.sub(r"\W", "_", name), v.replace("\\", "\\\\").replace('"', '\\"')))
+        out = []
+        for c in find_codecs("\n".join(lines) + "\n", depth + 1):
+            if c.get("plain") and c["plain"] not in {o["plain"] for o in out}:
+                out.append(dict(c, id=f"{c['id']}@jmx"))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _json_carrier_codecs(src, raw=None, depth=0, name="", budget=0.6):
@@ -22327,3 +23654,636 @@ def _ws_decode(material, transform=None, key=None):
     else:
         return None
     return ",".join(str(v) for v in vals) if vals else "none"
+
+
+# Target cross-language-collision-decoys (D26 prompt "separate the true cross-language indicators from deterministic
+# collision decoys planted to look like old friends"): index every url / host / campaign / file_path / next_stage /
+# handoff_id-shaped plan value of ONE set (members grouped by container prefix, so `evidence-01.zip/..` never meets
+# `evidence-02.zip/..`). TRUE = a value shared EXACTLY by a producer and the member its next_language / next_stage
+# points at, whose token / `<lang>-` host prefix agrees with one side of that link. DECOY = a value that differs from
+# another member's indicator by one or two characters (an "old friend" near miss), a `<lang>-` host whose language is
+# not the member's (nor its link partner's), or a hex token unrelated to the member's own campaign token while it
+# mimics another member's indicator shape. Values only a member's own plan carries and that agree with it stay `local`.
+_IC_KEYS = ("url", "host", "domain", "c2", "campaign_id", "campaign", "file_path", "next_stage", "handoff_id",
+            "host_id", "mutex", "wallet", "beacon", "callback", "fallback_url", "mirror", "stage_url")
+_IC_HEX = re.compile(r"[0-9A-Fa-f]{6,}")
+_IC_URLHOST = re.compile(r"(?i)^[a-z][a-z0-9+.-]*://([^/:?#\s]+)")
+_IC_HOSTPFX = re.compile(r"(?i)^([a-z][a-z0-9_]*?)-[0-9a-f]{6,}\.")
+_IC_SHAPE = re.compile(r"[0-9A-Fa-f]{6,}")
+
+
+def _ic_lang_of(name, plan):
+    lang = str(plan.get("language", "")).strip().lower()
+    if lang:
+        return lang
+    leaf = _cl_split(name)[1].lower()
+    m = re.match(r"polyglot-([a-z_]+?)-", leaf)
+    if m:
+        return m.group(1)
+    for lg, exts in _CL_LANG_EXT.items():
+        if leaf.endswith(exts):
+            return lg
+    return ""
+
+
+def _ic_is_ind(key, val):
+    k = key.lower()
+    if k in _IC_KEYS or re.search(r"(?:_url|_host|_domain|_id|_path|_stage)$", k):
+        return k not in ("v", "language", "next_language", "stage_count", "attack", "verdict", "role")
+    return bool(_IC_URLHOST.match(val))
+
+
+def _ic_near(a, b):
+    """True when a and b are the same shape and differ in 1..2 characters (a planted look-alike)."""
+    if a == b or len(a) != len(b) or _IC_SHAPE.sub("#", a) != _IC_SHAPE.sub("#", b):
+        return False
+    return 0 < sum(x != y for x, y in zip(a, b)) <= 2
+
+
+_IC_ALIAS = {"node": "javascript", "nodejs": "javascript", "js": "javascript", "jscript": "javascript",
+             "mjs": "javascript", "ps": "powershell", "pwsh": "powershell", "ps1": "powershell", "py": "python",
+             "vbs": "vbscript", "vb": "vbscript", "sh": "bash", "shell": "bash", "cmd": "batch", "bat": "batch",
+             "ahk": "auto_hotkey", "autohotkey": "auto_hotkey", "au3": "autoit", "erl": "erlang", "escript": "erlang",
+             "exs": "elixir", "ts": "typescript", "csx": "csharp_script", "gs": "google_apps_script", "rb": "ruby",
+             "pl": "perl"}
+_IC_HOSTLIKE = re.compile(r"(?i)^[a-z0-9-]+(?:\.[a-z0-9-]+)+$")
+
+
+def _ic_alias(lang):
+    n = re.sub(r"[^a-z0-9_]", "", str(lang or "").lower()).strip("_")
+    return _IC_ALIAS.get(n, _IC_ALIAS.get(n.replace("_", ""), n))
+
+
+def _ic_lang_eq(a, b):
+    return bool(a) and bool(b) and _ic_alias(a) == _ic_alias(b)
+
+
+def indicator_collisions(plans_by_member, members=None):
+    """True cross-language indicators vs collision decoys of ONE corpus (sets resolved by container prefix).
+    plans_by_member: {name: decoded plan text|dict}; members: optional {name: source text} (only used to read a plan
+    when plans_by_member lacks one). -> {"true": [...], "decoys": [...], "local": [...]}, each entry a dict
+    {member, key, value, reason, peer} (peer = the producer/consumer for a true link, the impersonated member for a
+    decoy, None otherwise). Never raises; an empty corpus gives three empty lists."""
+    out = {"true": [], "decoys": [], "local": []}
+    try:
+        members = {str(k): (v.decode("utf-8", "replace") if isinstance(v, (bytes, bytearray)) else str(v or ""))
+                   for k, v in (members or {}).items()}
+        pl = _cl_plans(members, plans_by_member or None) if members else \
+            {str(n): _cl_plan(p) for n, p in (plans_by_member or {}).items()}
+        pl = {n: {str(k).strip().lower(): str(v).strip() for k, v in p.items()} for n, p in pl.items() if p}
+        sets = {}
+        for n in pl:
+            sets.setdefault(_cl_split(n)[0], []).append(n)
+        for names in sets.values():
+            info = {}
+            for n in names:
+                p = pl[n]
+                camp = p.get("campaign_id") or p.get("campaign") or ""
+                ct = _IC_HEX.findall(camp)
+                info[n] = dict(lang=_ic_alias(_ic_lang_of(n, p)), tok=(ct[-1].lower() if ct else ""),
+                               inds=[(k, v) for k, v in p.items() if v and _ic_is_ind(k, v)][:64])
+            links = set()  # (producer, consumer)
+            for a in names:
+                pa = pl[a]
+                nl, ns = pa.get("next_language", ""), pa.get("next_stage", "")
+                nleaf = re.split(r"[\\/]", ns)[-1].lower() if ns else ""
+                for b in names:
+                    if a == b:
+                        continue
+                    if (nl.lower() not in ("", "none", "null") and _ic_lang_eq(nl, info[b]["lang"])) or \
+                            (nleaf and _cl_split(b)[1].lower() == nleaf):
+                        links.add((a, b))
+            index = {}
+            for n in names:
+                for k, v in info[n]["inds"]:
+                    index.setdefault(v, []).append((n, k))
+
+            def own(n, v, peer=None):
+                toks = [t.lower() for t in _IC_HEX.findall(v)]
+                mine = [x for x in (info[n]["tok"], info[peer]["tok"] if peer else "") if x]
+                if not toks or not mine:
+                    return None
+                return any(t.startswith(m) or m.startswith(t) for t in toks for m in mine)
+
+            def pfx_lang(v):
+                h = _IC_URLHOST.match(v)
+                host = h.group(1) if h else (v if k_host.match(v) else "")
+                m = _IC_HOSTPFX.match(host)
+                return _ic_alias(m.group(1)) if m else ""
+
+            k_host = _IC_HOSTLIKE
+            known = {info[n]["lang"] for n in names if info[n]["lang"]} | {_ic_alias(x) for x in _CL_LANG_EXT}
+            for n in names:
+                for k, v in info[n]["inds"]:
+                    rec = dict(member=n, key=k, value=v, reason="", peer=None)
+                    pref = pfx_lang(v)
+                    sharers = [m for m, _ in index.get(v, []) if m != n]
+                    linked = [m for m in sharers if (m, n) in links or (n, m) in links]
+                    if linked:
+                        peer = linked[0]
+                        pl_ok = not pref or pref not in known or pref in (info[n]["lang"], info[peer]["lang"])
+                        if pl_ok and (k in ("handoff_id", "next_stage") or own(n, v, peer) is not False):
+                            rec.update(peer=peer, reason=("consumer_of:" if (peer, n) in links else "producer_for:")
+                                       + peer)
+                            out["true"].append(rec)
+                            continue
+                    near = [(m, v2) for v2, hs in index.items() if _ic_near(v, v2) for m, _ in hs if m != n]
+                    if pref and pref in known and pref != info[n]["lang"] and \
+                            not any(pref == info[m]["lang"] for m in linked):
+                        rec.update(reason="host_prefix_lang:%s!=%s" % (pref, info[n]["lang"] or "?"),
+                                   peer=next((m for m in names if info[m]["lang"] == pref and m != n), None))
+                    elif near and own(n, v) is not True:
+                        rec.update(reason="near_miss_of:%s=%s" % near[0], peer=near[0][0])
+                    elif k == "handoff_id" and any((m, n) in links and pl[m].get(k, v) != v for m in names):
+                        peer = next(m for m in names if (m, n) in links and pl[m].get(k, v) != v)
+                        rec.update(reason="handoff_mismatch:%s=%s" % (peer, pl[peer][k]), peer=peer)
+                    elif sharers and own(n, v) is False:
+                        rec.update(reason="unlinked_copy_of:" + sharers[0], peer=sharers[0])
+                    elif own(n, v) is False and k not in ("handoff_id", "next_stage"):
+                        rec.update(reason="token_mismatch:%s" % info[n]["tok"])
+                    else:
+                        rec["reason"] = "own_plan"
+                        out["local"].append(rec)
+                        continue
+                    out["decoys"].append(rec)
+        return out
+    except Exception:  # noqa: BLE001
+        return {"true": [], "decoys": [], "local": []}
+
+
+def indicator_answer(res, member, field):
+    """Answer `<fam>-true-indicator` / `-decoy-count` / `-decoy-indicator` / `-handoff-target` for one member from
+    indicator_collisions() output. member matches the full name or a unique leaf. None = cannot answer."""
+    try:
+        def mine(lst):
+            return [r for r in lst if r["member"] == member or _cl_split(r["member"])[1] == member]
+        f = _cl_norm(field)
+        if f.endswith("decoycount"):
+            return str(len(mine(res.get("decoys", []))))
+        if f.endswith("decoyindicator") or f.endswith("decoy"):
+            d = mine(res.get("decoys", []))
+            return d[0]["value"] if d else "none"
+        t = mine(res.get("true", []))
+        if f.endswith("handofftarget"):
+            c = [r for r in t if r["reason"].startswith("producer_for:")]
+            return _cl_split(c[0]["peer"])[1] if c else "none"
+        if f.endswith("trueindicator") or f.endswith("crosslanguageindicator"):
+            return t[0]["value"] if t else "none"
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# --- stage-config-survival-diff -------------------------------------------------------------------------------------
+# D25 prompt: "Configuration starts out in Elixir source and has changed shape by the time an inert Phoenix-hosted stage
+# picks it up ... find the setting that didn't survive." config_chain(members) -> ordered [(member, format, {key: value})]
+# over Elixir `config :app, Mod, k: v` keyword lists / `%{}` maps / runtime.exs `System.get_env("X", "default")`,
+# Erlang `sys.config` terms `[{app, [{k, v}]}].`, `vm.args` `-k v`, `.env` `K=V`, JSON / YAML / TOML and v=3 plans
+# (`k=v|..`). Hand-rolled readers (no tomllib / ast); nested keyword lists flatten to their leaf keys (first wins).
+# config_diff(chain) -> per consecutive stage pair dropped / added / renamed (same value, new key) / changed keys, and
+# `lost`: keys that left the chain for good, each with its verbatim key, last value, the member it vanished at and the
+# member last seen in; v=3 plans of the same campaign_id are the reference (keys the plan names that the final stage
+# lacks). Keys compare normalised (snake / camel / UPPER, `:atom`, `"str"`, `-`/`.`). decode(material=JSON {member:
+# text}, rep='config_chain', transform='lost_key'|'lost_value'|'vanished_at'|'last_seen'|'formats'|'renamed'|'json').
+_CFG_META = frozenset(("v", "campaign_id", "campaign", "stage", "stage_count", "version"))
+
+
+def _cfg_norm(k):
+    k = str(k).strip().strip(":").strip("\"'")
+    k = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", k)
+    return re.sub(r"[^a-z0-9]+", "_", k.lower()).strip("_")
+
+
+def _cfg_scalar(s):
+    s = s.strip().rstrip(",").strip()
+    m = re.fullmatch(r'"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\'|<<"((?:[^"\\]|\\.)*)">>|~[sSc][\("\[{]([^)"\]}]*)[\)"\]}]', s)
+    if m:
+        v = next(g for g in m.groups() if g is not None)
+        return re.sub(r'\\(["\'\\])', r"\1", v)
+    if s.startswith(":") and re.fullmatch(r':"?[\w@.?!]+"?', s):
+        return s[1:].strip('"')
+    return s
+
+
+class _ExTerm:
+    """Tiny Elixir / Erlang term reader: lists, tuples, keyword pairs, maps, strings, binaries, atoms, numbers,
+    `System.get_env("X", "d")` / `System.get_env("X") || "d"` (-> d). Bounded; raises ValueError on garbage."""
+
+    def __init__(self, s, erl=False):
+        self.s, self.i, self.erl, self.n = s, 0, erl, 0
+
+    def ws(self):
+        s = self.s
+        while self.i < len(s):
+            c = s[self.i]
+            if c in " \t\r\n":
+                self.i += 1
+            elif c == ("%" if self.erl else "#") and not (not self.erl and s[self.i:self.i + 2] == "#{"):
+                j = s.find("\n", self.i)
+                self.i = len(s) if j < 0 else j + 1
+            else:
+                break
+
+    def peek(self, t):
+        self.ws()
+        return self.s.startswith(t, self.i)
+
+    def eat(self, t):
+        if self.peek(t):
+            self.i += len(t)
+            return True
+        return False
+
+    def string(self, q):
+        s, j, out = self.s, self.i + 1, []
+        while j < len(s) and s[j] != q:
+            if s[j] == "\\" and j + 1 < len(s):
+                out.append({"n": "\n", "t": "\t"}.get(s[j + 1], s[j + 1]))
+                j += 2
+                continue
+            out.append(s[j])
+            j += 1
+        if j >= len(s):
+            raise ValueError("eof")
+        self.i = j + 1
+        return "".join(out)
+
+    def seq(self, close):
+        items = []
+        while not self.eat(close):
+            items.append(self.value())
+            if not self.eat(","):
+                if not self.eat(close):
+                    raise ValueError("sep")
+                break
+        return items
+
+    def value(self):
+        self.n += 1
+        if self.n > 20000:
+            raise ValueError("budget")
+        self.ws()
+        s, i = self.s, self.i
+        if i >= len(s):
+            raise ValueError("eof")
+        v = self._value()
+        if not self.erl and self.peek("||"):            # `System.get_env("X") || "default"`
+            self.i += 2
+            alt = self.value()
+            v = alt if v is None else v
+        return v
+
+    def _value(self):
+        s, i = self.s, self.i
+        c = s[i]
+        if not self.erl:
+            m = re.match(r'([A-Za-z_][\w?!]*|"[^"]*"):(?=\s)', s[i:])
+            if m and not s.startswith("::", i + m.end() - 1):        # keyword pair `key: value`
+                self.i += m.end()
+                return ("__kw__", m.group(1).strip('"'), self.value())
+        if c == "[":
+            self.i += 1
+            return self.seq("]")
+        if c == "{":
+            self.i += 1
+            return ("__tuple__",) + tuple(self.seq("}"))
+        if s.startswith("%{", i) or s.startswith("#{", i):
+            self.i += 2
+            out = []
+            while not self.eat("}"):
+                k = self.value()
+                if isinstance(k, tuple) and k and k[0] == "__kw__":
+                    out.append(k)
+                else:
+                    if not self.eat("=>"):
+                        raise ValueError("map")
+                    out.append(("__kw__", k, self.value()))
+                if not self.eat(","):
+                    if not self.eat("}"):
+                        raise ValueError("map")
+                    break
+            return out
+        if s.startswith("<<", i):
+            self.i += 2
+            parts = self.seq(">>")
+            return "".join(str(p) for p in parts if p is not None)
+        if c == '"':
+            return self.string('"')
+        if c == "'":
+            v = self.string("'")
+            return v
+        if c == ":" and not self.erl:
+            if i + 1 < len(s) and s[i + 1] == '"':
+                self.i += 1
+                return self.string('"')
+            m = re.match(r":([\w@?!]+)", s[i:])
+            if m:
+                self.i += m.end()
+                return m.group(1)
+        if c == "~" and not self.erl:
+            m = re.match(r'~[sScC]([\("\[{|/])', s[i:])
+            if m:
+                close = {"(": ")", "[": "]", "{": "}"}.get(m.group(1), m.group(1))
+                j = s.find(close, i + 3)
+                if j < 0:
+                    raise ValueError("sigil")
+                self.i = j + 1
+                return s[i + 3:j]
+        m = re.match(r"System\.get_env\(\s*", s[i:]) if not self.erl else None
+        if m:
+            self.i += m.end()
+            args = self.seq(")")
+            return args[1] if len(args) > 1 else None
+        m = re.match(r"-?\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?", s[i:])
+        if m:
+            self.i += m.end()
+            return m.group(0).replace("_", "")
+        m = re.match(r"[A-Za-z_][\w@.?!]*", s[i:])
+        if m:
+            self.i += m.end()
+            w = m.group(0)
+            if self.peek("("):                          # a call we do not evaluate: a 1-arg cast passes its arg
+                self.i += 1
+                a = self.seq(")")
+                return a[0] if len(a) == 1 and w.split(".")[0] in ("String", "Integer", "List", "erlang", "list_to_binary",
+                                                                    "binary_to_list", "list_to_atom") else None
+            return {"nil": None, "undefined": None}.get(w, w) if w not in ("true", "false") else w
+        raise ValueError("token %r" % c)
+
+
+def _cfg_flat(v, out, depth=0):
+    """Leaf keys of keyword lists / maps / 2-tuples {atom, value} (first wins)."""
+    if depth > 12:
+        return
+    if isinstance(v, tuple) and v and v[0] == "__kw__":
+        k, val = v[1], v[2]
+        if isinstance(val, list) and val and all(_cfg_is_pair(x) for x in val):
+            _cfg_flat(val, out, depth + 1)
+        elif isinstance(k, str):
+            out.setdefault(k, _cfg_leaf(val))
+    elif isinstance(v, tuple) and v and v[0] == "__tuple__":
+        if len(v) == 3 and isinstance(v[1], str):
+            _cfg_flat(("__kw__", v[1], v[2]), out, depth + 1)
+    elif isinstance(v, list):
+        for x in v:
+            _cfg_flat(x, out, depth + 1)
+
+
+def _cfg_is_pair(x):
+    return isinstance(x, tuple) and x and (x[0] == "__kw__" or (x[0] == "__tuple__" and len(x) == 3))
+
+
+def _cfg_leaf(v):
+    if v is None:
+        return "nil"
+    if isinstance(v, list):
+        if v and all(isinstance(x, str) and x.isdigit() for x in v):          # Erlang charlist [104,105]
+            try:
+                return "".join(chr(int(x)) for x in v)
+            except ValueError:
+                pass
+        return ",".join(_cfg_leaf(x) for x in v)
+    if isinstance(v, tuple):
+        return ",".join(_cfg_leaf(x) for x in v[1:])
+    return str(v)
+
+
+def _cfg_elixir(text):
+    out = {}
+    for m in re.finditer(r"(?m)^[ \t]*config\s*\(?\s*:([\w]+)\s*,", text):
+        p = _ExTerm(text)
+        p.i = m.end()
+        args = []
+        try:
+            # `config :app, Mod, [k: v]` / `config :app, k: v, k2: v2` (trailing keyword list without brackets)
+            while len(args) < 512:
+                args.append(p.value())
+                if not p.eat(",") or (len(args) >= 2 and not _cfg_is_pair(args[-1])):
+                    break
+        except ValueError:
+            pass
+        for a in args:
+            if isinstance(a, list) or _cfg_is_pair(a):
+                _cfg_flat(a, out)
+    return out
+
+
+def _cfg_erlang(text):
+    out = {}
+    p = _ExTerm(text, erl=True)
+    try:
+        v = p.value()
+    except ValueError:
+        return out
+    _cfg_flat(v, out)
+    return out
+
+
+def _cfg_lines(text, pat):
+    out = {}
+    for line in text.splitlines():
+        m = re.match(pat, line)
+        if m:
+            out.setdefault(m.group(1), _cfg_scalar(re.split(r"\s+#", m.group(2))[0] if m.group(2)[:1] not in "\"'"
+                                                   else m.group(2)))
+    return out
+
+
+def _cfg_toml(text):
+    out = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line[0] in "#[":
+            continue
+        m = re.match(r'("[^"]+"|[\w.-]+)\s*=\s*(.+)$', line)
+        if m:
+            v = m.group(2).strip()
+            if v[:1] not in "\"'":
+                v = v.split("#")[0].strip()
+            elif re.match(r'"((?:[^"\\]|\\.)*)"', v):
+                v = re.match(r'"((?:[^"\\]|\\.)*)"', v).group(0)
+            out.setdefault(m.group(1).strip('"').split(".")[-1], _cfg_scalar(v))
+    return out
+
+
+def _cfg_yaml(text):
+    out = {}
+    for line in text.splitlines():
+        if line.lstrip().startswith("#") or line.strip() in ("---", "..."):
+            continue
+        m = re.match(r'\s*(?:-\s+)?("[^"]+"|\'[^\']+\'|[\w.-]+)\s*:(?:\s+(.*))?$', line)
+        if m and (m.group(2) or "").strip() not in ("", "|", ">", "|-", ">-"):
+            v = m.group(2).strip()
+            if v[:1] not in "\"'":
+                v = re.split(r"\s+#", v)[0]
+            out.setdefault(m.group(1).strip("\"'"), _cfg_scalar(v))
+    return out
+
+
+def _cfg_json(text):
+    import json
+    try:
+        v = json.loads(text)
+    except ValueError:
+        return None
+    out = {}
+
+    def walk(x, d=0):
+        if d > 12:
+            return
+        if isinstance(x, dict):
+            for k, val in x.items():
+                if isinstance(val, (dict, list)) and val and not (isinstance(val, list) and
+                                                                  all(not isinstance(y, (dict, list)) for y in val)):
+                    walk(val, d + 1)
+                else:
+                    out.setdefault(str(k), ",".join(map(str, val)) if isinstance(val, list) else
+                                   ("nil" if val is None else str(val).lower() if isinstance(val, bool) else str(val)))
+        elif isinstance(x, list):
+            for y in x:
+                walk(y, d + 1)
+    walk(v)
+    return out if isinstance(v, (dict, list)) else None
+
+
+def _cfg_read(name, text):
+    """(format, {key: value}) of one member, or None (not a config)."""
+    n = name.lower().rsplit("/", 1)[-1]
+    t = text.lstrip("\ufeff")
+    st = t.strip()
+    plans = [ln.strip() for ln in t.splitlines() if re.match(r"\s*v=\d+\|", ln)]
+    if plans and not re.search(r"(?m)^\s*config\s+:", t):
+        return "plan", plan_kv(plans[0])
+    if n.endswith((".exs", ".ex")) or re.search(r"(?m)^\s*(?:import\s+Config|use\s+Mix\.Config|config\s+:\w+\s*,)", t):
+        d = _cfg_elixir(t)
+        return ("elixir", d) if d else None
+    if n.endswith(("sys.config", ".config", ".app.src", ".erl")) or re.match(r"\[\s*\{\s*'?\w", st) and st.endswith("."):
+        d = _cfg_erlang(t)
+        return ("sys.config", d) if d else None
+    if n == "vm.args" or n.endswith(".args"):
+        d = _cfg_lines(t, r"\s*[-+]+([A-Za-z][\w.-]*)\s+(.+?)\s*$")
+        return ("vm.args", d) if d else None
+    if n.endswith(".json") or st[:1] in "{[" and n.rsplit(".", 1)[-1] not in ("toml", "yml", "yaml"):
+        d = _cfg_json(st)
+        if d:
+            return "json", d
+    if n.endswith(".toml"):
+        d = _cfg_toml(t)
+        return ("toml", d) if d else None
+    if n.endswith((".yml", ".yaml")):
+        d = _cfg_yaml(t)
+        return ("yaml", d) if d else None
+    if n.startswith(".env") or n.endswith(".env") or n == "env":
+        d = _cfg_lines(t, r"\s*(?:export\s+)?([A-Za-z_]\w*)\s*=\s*(.*?)\s*$")
+        return ("env", d) if d else None
+    return None
+
+
+def config_chain(members):
+    """[(member, format, {key: value})] in member order; members = {name: text|bytes} or [(name, text)]."""
+    try:
+        items = list(members.items()) if isinstance(members, dict) else list(members or ())
+        out = []
+        for name, text in items[:64]:
+            if isinstance(text, (bytes, bytearray)):
+                text = bytes(text).decode("utf-8", "replace")
+            if not isinstance(text, str) or len(text) > 1 << 20:
+                continue
+            try:
+                r = _cfg_read(str(name), text)
+            except (ValueError, RecursionError, IndexError):
+                r = None
+            if r and r[1]:
+                out.append((str(name), r[0], r[1]))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def config_diff(chain, plans=()):
+    """{steps: [{from, to, dropped, added, renamed, changed}], lost: [{key, value, vanished_at, last_seen, norm}],
+    plan_missing: [...]}. chain = config_chain() output; plan rows in it (and `plans`) are the campaign reference."""
+    try:
+        stages = [(m, f, d) for m, f, d in chain if f != "plan"]
+        refs = [d for m, f, d in chain if f == "plan"] + [plan_kv(p) if isinstance(p, str) else dict(p) for p in plans]
+        nm = [{_cfg_norm(k): (k, v) for k, v in reversed(list(d.items()))} for _, _, d in stages]
+        steps, lost = [], []
+        for i in range(1, len(stages)):
+            a, b = nm[i - 1], nm[i]
+            drop = [k for k in a if k not in b]
+            add = [k for k in b if k not in a]
+            ren = []
+            for k in drop:
+                hit = [n for n in add if b[n][1] == a[k][1]]
+                if len(hit) == 1 and sum(1 for x in drop if a[x][1] == a[k][1]) == 1:
+                    ren.append((a[k][0], b[hit[0]][0]))
+            rn = {_cfg_norm(o) for o, _ in ren}
+            steps.append({"from": stages[i - 1][0], "to": stages[i][0],
+                          "dropped": [a[k][0] for k in drop if k not in rn],
+                          "added": [b[k][0] for k in add if _cfg_norm(b[k][0]) not in {_cfg_norm(n) for _, n in ren}],
+                          "renamed": ren,
+                          "changed": [(b[k][0], a[k][1], b[k][1]) for k in a if k in b and a[k][1] != b[k][1]]})
+        # follow renames forward: a key is lost when it (or its renamed successor) drops out and never comes back
+        for i, st in enumerate(steps):
+            for k in st["dropped"]:
+                n = _cfg_norm(k)
+                if any(n in nm[j] for j in range(i + 2, len(nm))):
+                    continue
+                lost.append({"key": k, "value": nm[i][n][1], "vanished_at": st["to"], "last_seen": st["from"],
+                             "norm": n})
+        # rank: keys the origin stage declared first, then keys the campaign plan names, then chain order
+        pn = {_cfg_norm(k) for r in refs for k in r}
+        lost.sort(key=lambda x: (not nm or x["norm"] not in nm[0], x["norm"] not in pn))
+        missing = []
+        if stages:
+            cid = next((d.get(k) for _, _, d in stages for k in d if _cfg_norm(k) in ("campaign_id", "campaign")), None)
+            fin = nm[-1]
+            vals = {v for _, v in fin.values()}
+            for r in refs:
+                rc = r.get("campaign_id") or r.get("campaign")
+                if cid and rc and rc != cid:
+                    continue
+                for k, v in r.items():
+                    n = _cfg_norm(k)
+                    if n in _CFG_META or n in fin or any(n == x["norm"] for x in lost):
+                        continue
+                    if any(n in x for x in nm) or v not in vals:
+                        missing.append({"key": k, "value": v, "norm": n})
+        return {"steps": steps, "lost": lost, "plan_missing": missing}
+    except Exception:  # noqa: BLE001
+        return {"steps": [], "lost": [], "plan_missing": []}
+
+
+def _cfgchain_decode(material, transform=None, key=None):
+    """decode() hook for rep 'config_chain': material = JSON {member: text}; transform picks the answer."""
+    import json
+    if isinstance(material, (bytes, bytearray)):
+        material = bytes(material).decode("utf-8", "ignore")
+    try:
+        mem = json.loads(material) if isinstance(material, str) else material
+    except ValueError:
+        return None
+    if not isinstance(mem, (dict, list)):
+        return None
+    chain = config_chain(mem)
+    if len([c for c in chain if c[1] != "plan"]) < 2:
+        return None
+    res = config_diff(chain)
+    t = _cfg_norm(transform or "lost_key")
+    if t in ("json", "rows", "identity", "none"):
+        return json.dumps(res, sort_keys=True, separators=(",", ":"))
+    if t in ("formats", "chain", "shapes"):
+        return ",".join(f for _, f, _ in chain if f != "plan")
+    if t in ("renamed", "renames"):
+        return ",".join("%s>%s" % r for s in res["steps"] for r in s["renamed"]) or "none"
+    if t in ("changed", "value_changed"):
+        return ",".join(c[0] for s in res["steps"] for c in s["changed"]) or "none"
+    rows = res["lost"] or res["plan_missing"]
+    if not rows:
+        return None                                  # every setting survived: nothing to answer
+    r = rows[0]
+    f = {"lost_key": "key", "dropped_key": "key", "key": "key", "lost_value": "value", "last_value": "value",
+         "value": "value", "vanished_at": "vanished_at", "member": "vanished_at", "last_seen": "last_seen"}.get(t)
+    if f is None:
+        return None
+    return str(r.get(f, "none"))

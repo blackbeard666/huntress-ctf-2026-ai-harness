@@ -1,0 +1,9 @@
+{
+ "codec": "vm-ps",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-moose-51",
+ "encoded": "%!PS\n/Courier findfont 5 scalefont setfont\n10 700 moveto\n(Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-moose-51) show\nshowpage\n",
+ "generator_cmd": "perl -e '($s = $ARGV[0]) =~ s/([\\\\()])/\\\\$1/g; print \"%!PS\\n/Courier findfont 5 scalefont setfont\\n10 700 moveto\\n($s) show\\nshowpage\\n\"' \"$plain\"",
+ "oracle_cmd": "gs -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=txtwrite -sOutputFile=- - | sed 's/^ *//; s/\\r$//' | tr -d '\\n'",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: ivory-moose-51",
+ "expected": "match"
+}

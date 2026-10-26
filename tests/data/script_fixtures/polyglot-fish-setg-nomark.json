@@ -1,0 +1,27 @@
+{
+ "expected_plain": "v=3|language=fish|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=FISH-a9d7269f|url=https://fish-a9d7269fa1.example.invalid/stage|file_path=/tmp/huntress-fish/.a9d7269fa116cb8c.stage",
+ "decoy": false,
+ "language": "fish",
+ "role": "staged-chain",
+ "family": "polyglot-fish",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/zf_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "cat tests/data/script_fixtures/polyglot-fish-setg-nomark.fish | grep -o 'set -g descriptor_[0-9a-f]* \"[^\"]*\"' | sed -E 's/^[^\"]*\"//; s/\"$//' | tr -d . | xxd -r -p",
+ "expected_fields": {
+  "language": "fish",
+  "role": "staged_chain",
+  "verdict": "suspicious",
+  "attack": "T1059",
+  "adapter": "operation_graph",
+  "host_profile": "standalone",
+  "obfuscation_profile": "fragmented_hex",
+  "stage_profile": "cross_language_handoff",
+  "next_language": "vbscript",
+  "stage_count": "3",
+  "steps": "profile_host,decode_configuration,dispatch_language",
+  "campaign_id": "FISH-a9d7269f",
+  "url": "https://fish-a9d7269fa1.example.invalid/stage",
+  "file_path": "/tmp/huntress-fish/.a9d7269fa116cb8c.stage",
+  "url_host": "fish-a9d7269fa1.example.invalid",
+  "file_dir": "/tmp/huntress-fish/"
+ }
+}

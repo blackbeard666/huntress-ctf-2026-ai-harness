@@ -1,0 +1,25 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "java",
+    "kind": "java.lang.IllegalStateException",
+    "message": "bad config value",
+    "thread": "main",
+    "fault_function": "demo.app.App.load",
+    "fault_line": "5",
+    "outer_function": "demo.app.App.main",
+    "frame_count": "2",
+    "root_cause": "java.lang.NumberFormatException",
+    "root_cause_function": "demo.app.App.parse",
+    "index": "none",
+    "cwe": "CWE-248"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # javac+java IllegalStateException wrapping NumberFormatException",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_java_causedby.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

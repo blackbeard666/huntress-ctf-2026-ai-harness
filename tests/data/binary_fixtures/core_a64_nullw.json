@@ -1,0 +1,27 @@
+{
+ "family": "elf_core",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "core_is_core": "true",
+  "core_signal": "SIGSEGV",
+  "core_signal_number": "11",
+  "core_pc": "0x400744",
+  "core_sp": "0x76f3363fdf50",
+  "core_reg_x0": "0x20",
+  "core_pc_function": "arm_crash",
+  "core_pc_function_offset": "0x4",
+  "core_stack_top": "0x76f3363fdf60",
+  "core_entry": "0x4005c0",
+  "core_execfn": "/home/testpwn/huntress-2026/.run/tmp/prebuild-ad725461/core_gen/core_a64_nullw.exe",
+  "core_exe_build_id": "5dc277dff97b2443637bca9d440761f0c3266f3f",
+  "core_fname": "core_a64_nullw.e",
+  "core_psargs": "./core_a64_nullw.exe"
+ },
+ "companion": "core_a64_nullw_exe.elf",
+ "generator_cmd": "bash core_gen.sh   # aarch64-linux-gnu-gcc -static; qemu-aarch64 user-mode core (no NT_SIGINFO / NT_FILE), stack PT_LOAD shrunk to its top 64 KB by a struct rewriter; x86 cores via gdb -batch -ex run -ex generate-core-file (our fixtures only)",
+ "oracle_cmd": "python3 core_oracle.py core_a64_nullw.bin core_a64_nullw_exe.elf   # gdb/gdb-multiarch (sysroot off) + readelf -n + file + pyelftools",
+ "decoy": false,
+ "note": "lib.binary.elf_core_field(core, key, exe=companion) per expected_facts key; fact names SPECULATIVE (GM label not seen)"
+}

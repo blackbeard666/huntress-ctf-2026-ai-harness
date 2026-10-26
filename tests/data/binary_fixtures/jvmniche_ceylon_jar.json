@@ -1,0 +1,32 @@
+{
+ "kind": "jvm_niche_facts",
+ "decoy": false,
+ "question": "Ceylon unit run.ceylon: primary classfile, module descriptor class and HCFG carrier?",
+ "encoding": "classfile_cp_base64",
+ "expected_offset": null,
+ "expected": {
+  "niche_language": "ceylon",
+  "niche_classes": "[\"acme/relay/$module_.class\",\"acme/relay/run_.class\"]",
+  "niche_class_count": "2",
+  "niche_primary_classfile": "acme/relay/run_.class",
+  "niche_primary_class": "acme/relay/run_",
+  "niche_source_file": "run.ceylon",
+  "niche_hcfg_classfile": "acme/relay/run_.class",
+  "niche_hcfg_in_primary": "true",
+  "references_niche_runtime": "true",
+  "jython_module": "none",
+  "jython_code_objects": "none",
+  "jruby_methods": "none",
+  "ceylon_module_class": "acme/relay/$module_.class",
+  "ceylon_module": "acme.relay",
+  "kotlin_script_class": "none",
+  "kotlin_script_base": "none"
+ },
+ "expected_config": {
+  "c2": "https://niche.example/gate",
+  "id": "day27-niche"
+ },
+ "generator_cmd": "bash jvmniche_gen.sh   # javac/jar OpenJDK 21 against stub runtime classes (not packed); SourceFile Utf8 renamed by stdlib; HCFG base64 via coreutils base64 -w0",
+ "oracle_cmd": "python3 jvmniche_oracle.py jvmniche_ceylon_jar.bin --unit run.ceylon   # unzip -Z1/-p + javap -v -p text (OpenJDK 21); HCFG via stdlib base64+crc32",
+ "note": "acme/relay/$module_ (@Module) + run_ (@Ceylon), SourceFile run.ceylon"
+}

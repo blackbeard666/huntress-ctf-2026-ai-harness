@@ -1,0 +1,5 @@
+{
+ "a/config.exs": "import Config\nconfig :quiet, Quiet.Mod, region: \"eu\", tier: 2\n",
+ "b/sys.config": "[{quiet, [{'Elixir.Quiet.Mod', [{region, <<\"eu\">>}, {tier, 2}]}]}].\n",
+ "c/.env": "REGION=eu\nTIER=2\n"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "befunge-line",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "encoded": "\"24-noclaf-rebma :retsaM emaG eht ot rewsna tcaxe siht timbus ,evlos oT !pumraw siht gnidoced krow eciN\">:#,_@",
+ "generator_cmd": "perl -e 'print chr(34), scalar reverse($ARGV[0]), chr(34), \">:#,_@\"' \"$plain\"",
+ "oracle_cmd": "node tests/data/warmups_fixtures/befunge_oracle.mjs b93",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: amber-falcon-42",
+ "expected": "match"
+}

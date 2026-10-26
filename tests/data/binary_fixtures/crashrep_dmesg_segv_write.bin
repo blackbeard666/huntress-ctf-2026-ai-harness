@@ -1,0 +1,1 @@
+[ 9.000001] writer[77]: segfault at 7f00deadbeef ip 0000000000401146 sp 00007ffc00001000 error 6 in writer[401000+1000]

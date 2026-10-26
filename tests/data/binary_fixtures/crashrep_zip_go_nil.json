@@ -1,0 +1,18 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "go",
+    "source": "crash/panic.txt",
+    "fault_function": "main.(*T).get",
+    "fault_addr": "0x0",
+    "cwe": "CWE-476"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # zip -X of crash/panic.txt (= crashrep_go_nil.bin) + assets/readme.txt",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_zip_go_nil.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

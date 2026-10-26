@@ -1,0 +1,11 @@
+{
+ "decoy": true,
+ "material": "{\n \"a/config.exs\": \"import Config\\nconfig :quiet, Quiet.Mod, region: \\\"eu\\\", tier: 2\\n\",\n \"b/sys.config\": \"[{quiet, [{'Elixir.Quiet.Mod', [{region, <<\\\"eu\\\">>}, {tier, 2}]}]}].\\n\",\n \"c/.env\": \"REGION=eu\\nTIER=2\\n\"\n}\n",
+ "rep": "config_chain",
+ "transform": "lost_key",
+ "key": null,
+ "expected": null,
+ "note": "stage-config-survival-diff: lib.codec.config_chain/config_diff over a synthetic stage tree {member: text}; decoy: every key survives every reshape -> 'none' (no setting lost)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cfgchain_gen.py tests/data/script_fixtures  (stdlib json; literal config.exs / runtime.exs / sys.config / vm.args / .env / TOML / YAML / JSON members)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/cfgchain_oracle.py tests/data/script_fixtures/cfgchain_decoy_same.tree lost_key  (real Elixir 1.18 Config.Reader + :file.consult via cfgchain_oracle.exs, tomllib, PyYAML safe_load, json, shlex)"
+}

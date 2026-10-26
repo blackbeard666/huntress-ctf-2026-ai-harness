@@ -372,7 +372,10 @@ def jar_jvm_facts(data, member=None, question=None):
         cf = classfile_facts(b)
         hf = classfile_hcfg(b)
         hf["hcfg_classfile"] = cf["this_class"] + ".class" if hf["hcfg_found"] == "true" else "none"
-        return {**cf, "container_format": "class", **_jvm_bare_unit(cf, unit and unit.group(1)), **hf} if cf else None
+        if not cf:
+            return None
+        out = {**cf, "container_format": "class", **_jvm_bare_unit(cf, unit and unit.group(1)), **hf}
+        return _jvm_niche_merge(out, b, question)
     try:
         z = zipfile.ZipFile(io.BytesIO(b))
         names = z.namelist()
@@ -414,6 +417,7 @@ def jar_jvm_facts(data, member=None, question=None):
             out = {**cf, **out, "jvm_member": ent, "jvm_language": cf["jvm_language"]}
     # HCFG carrier (D7 rule): the target / unit-primary class's constant pool first, then every application class
     app = [n for n in names if n.endswith(".class") and not n.startswith("META-INF/") and not JVM_LIBRARY.search(n)]
+    app.sort(key=lambda n: bool(_NICHE_RT.match(n)))   # bundled jython/jruby/ceylon/... runtime classes last
     for ent in [out["jvm_member"], out.get("primary_classfile")] + app[:512]:
         try:
             hf = classfile_hcfg(z.read(ent)) if ent in names else {}
@@ -432,6 +436,25 @@ def jar_jvm_facts(data, member=None, question=None):
         for k, v in (groovy_facts(b, question) or {}).items():
             out.setdefault(k, v)
             out.setdefault("groovy_" + k, v)
+    return _jvm_niche_merge(out, b, question)
+
+
+def _jvm_niche_merge(out, b, question):
+    """jvm_niche_facts keys (setdefault) + niche_-stripped aliases; a niche cue relabels a plain "java"/"none"
+    jvm_language / jar_language, and a named niche unit (X.py, X.rb, x.main.kts, ...) owns primary_classfile."""
+    nf = jvm_niche_facts(b, question) or {}
+    for k, v in nf.items():
+        out.setdefault(k, v)
+    lang = nf.get("niche_language", "none")
+    if lang == "none":
+        return out
+    for k in ("jvm_language", "jar_language"):
+        if out.get(k) in ("java", "none", None):
+            out[k] = lang
+    for k in ("primary_classfile", "primary_class", "primary_class_dotted", "primary_super_class", "unit"):
+        v = nf.get("niche_" + k)
+        if v is not None and v != "none" and (out.get(k) in (None, "none") or _NICHE_UNIT.search(question or "")):
+            out[k] = v
     return out
 
 
@@ -986,6 +1009,176 @@ def _groovy_facts(z, names, mf, ents, question):
 def groovy_field(data, field, question=None):
     """One groovy_facts field as an answer string ("none" absent, None not a jar/class). Never raises."""
     f = groovy_facts(data, question)
+    return None if f is None else f.get(field, "none")
+
+
+# --- Niche JVM languages (D22-D26 "new language on an old runtime": F#, VB.NET, Scala, Clojure, Groovy -> next?) ----
+# Identity cues (javap -v of each compiler's output; runtime jars usually NOT bundled, as the GM's Scala/Clojure jars):
+#   kotlin_script  super kotlin/script/templates/standard/ScriptTemplate* or org/jetbrains/kotlin/mainKts/MainKtsScript
+#                  (foo.main.kts -> class Foo_main, SourceFile foo.main.kts)
+#   jython         foo.py -> foo$py.class extends org/python/core/PyFunctionTable implements PyRunnable; code objects
+#                  are methods name$N (f$0 = module body); literals via PyString.fromInterned(ldc "...")
+#   jruby          jrubyc AOT: org/jruby/ refs (AbstractScript super), methods RUBY$script / RUBY$method$<name>$N
+#   ceylon         com/redhat/ceylon (1.x) or org/eclipse/ceylon (1.3.3+) refs; module descriptor class <pkg>/$module_
+#   eta / frege    eta/runtime/ refs; frege/runtime/ or frege/run{7,8}/ refs (@frege.runtime.Meta$FregePackage)
+#   beanshell      bsh/ refs (generated classes implement bsh/GeneratedClass)
+#   xtend          plain Java + org/eclipse/xtext/xbase/lib/ (InputOutput, Conversions, @Pure) or org/eclipse/xtend/lib/
+# HCFG: constant-pool base64 >= 80 chars (classfile_hcfg) in WHICHEVER class holds it: primary first, then every class.
+_NICHE_UNIT = re.compile(r"(?<![\w$/.-])([\w$/-]+(?:\.main)?\.(?:rb|py|ceylon|fr|eta|hs|xtend|bsh|java\.bsh|kts))\b")
+_NICHE_RT = re.compile(r"^(org/jruby/|org/python/|com/redhat/ceylon/|org/eclipse/ceylon/|ceylon/language/|frege/run|"
+                       r"eta/runtime/|org/eclipse/xtext/|org/eclipse/xtend2?/|bsh/|kotlin/script/|org/jetbrains/)")
+_NICHE_LANGS = (   # (language, class-ref prefixes, runtime entry prefixes, unit extensions)
+    ("kotlin_script", ("kotlin/script/templates/", "kotlin/script/experimental/", "org/jetbrains/kotlin/mainKts/",
+                       "org/jetbrains/kotlin/script/"), ("kotlin/script/",), ("kts",)),
+    ("jython", ("org/python/core/", "org/python/compiler/"), ("org/python/",), ("py",)),
+    ("jruby", ("org/jruby/",), ("org/jruby/",), ("rb",)),
+    ("ceylon", ("com/redhat/ceylon/", "org/eclipse/ceylon/", "ceylon/language/"),
+     ("com/redhat/ceylon/", "org/eclipse/ceylon/", "ceylon/language/"), ("ceylon",)),
+    ("eta", ("eta/runtime/",), ("eta/runtime/",), ("eta", "hs")),
+    ("frege", ("frege/runtime/", "frege/run7/", "frege/run8/", "frege/run/"), ("frege/run",), ("fr",)),
+    ("beanshell", ("bsh/",), ("bsh/",), ("bsh",)),
+    ("xtend", ("org/eclipse/xtext/xbase/lib/", "org/eclipse/xtend/lib/", "org/eclipse/xtend2/lib/"),
+     ("org/eclipse/xtext/", "org/eclipse/xtend"), ("xtend",)),
+)
+_NICHE_CUES = (b"org/jruby/", b"RUBY$", b"org/python/", b"ceylon/", b"eta/runtime/", b"frege/run", b"bsh/",
+               b"org/eclipse/xt", b"kotlin/script/", b"org/jetbrains/kotlin/")
+_NICHE_KEYS = ("niche_language", "niche_classes", "niche_class_count", "niche_primary_classfile", "niche_primary_class",
+               "niche_primary_class_dotted", "niche_primary_super_class", "niche_source_file", "niche_unit",
+               "niche_hcfg_classfile", "niche_hcfg_in_primary", "references_niche_runtime", "has_niche_runtime",
+               "jython_module", "jython_code_objects", "jruby_methods", "jruby_script_method", "ceylon_module_class",
+               "ceylon_module", "kotlin_script_class", "kotlin_script_base")
+
+
+def _niche_lang_of(p):
+    """Niche JVM language of one parsed class (None when none): super/interfaces/class refs/descriptors/annotations."""
+    refs = {p["super"] or ""} | set(p["interfaces"])
+    lits = {e[1] for e in p["cp"] if e and e[0] == 8}   # String literals are data, not references
+    for i, e in enumerate(p["cp"]):
+        if e and e[0] == 1 and i not in lits and isinstance(e[1], str) and "/" in e[1] and len(e[1]) < 512:
+            refs.add(e[1])
+    if p["super"] and p["super"].startswith("kotlin/script/") or \
+            any(r.startswith(("org/jetbrains/kotlin/mainKts/", "kotlin/script/templates/")) for r in refs):
+        return "kotlin_script"
+    if any(m["name"] and m["name"].startswith("RUBY$") for m in p["methods"]):
+        return "jruby"
+    for lang, pre, _, _ in _NICHE_LANGS[1:]:
+        lpre = tuple("L" + x for x in pre)
+        if any(r.startswith(pre) or any(lp in r for lp in lpre) for r in refs):
+            return lang
+    return None
+
+
+def jvm_niche_facts(data, question=None):
+    """{field: answer string} for a jar / bare .class built by a niche JVM language (header cues): niche_language
+    (kotlin_script|jython|jruby|ceylon|eta|frege|beanshell|xtend|none), niche_classes (cue-bearing app classfiles),
+    niche_primary_classfile (the class the `X.py`/`X.rb`/`X.main.kts`/... unit in `question` names -- SourceFile or
+    compiler naming foo$py / Foo_main --, else Main-Class, else the language root: $py module, RUBY$script class),
+    niche_hcfg_classfile (class whose constant pool holds the base64 HCFG: primary first, then every class) +
+    jython_module/jython_code_objects, jruby_methods, ceylon_module_class, kotlin_script_class. "none" fields when no
+    cue; None when not a jar/class. Never raises."""
+    import zipfile
+    b = bytes(data)
+    try:
+        if b[:4] == b"\xca\xfe\xba\xbe":
+            p = classfile_parse(b)
+            if not p:
+                return None
+            ents, names, mf = {(p["this"] or "x") + ".class": (p, b)}, [(p["this"] or "x") + ".class"], ""
+        else:
+            z = zipfile.ZipFile(io.BytesIO(b))
+            names = z.namelist()
+            mf = z.read("META-INF/MANIFEST.MF").decode("utf-8", "replace") if "META-INF/MANIFEST.MF" in names else ""
+            ents, raw = {}, 0
+            for n in names:
+                if (n.endswith(".class") and not n.startswith("META-INF/") and not _NICHE_RT.match(n)
+                        and not JVM_LIBRARY.search(n) and len(ents) < 512 and raw < (32 << 20)):
+                    c = z.read(n)
+                    raw += len(c)
+                    ents[n] = (classfile_parse(c) if any(k in c for k in _NICHE_CUES) else None, c)
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        return _niche_facts(names, mf, ents, question)
+    except Exception:  # noqa: BLE001
+        return {k: "none" for k in _NICHE_KEYS}
+
+
+def _niche_facts(names, mf, ents, question):
+    out = {k: "none" for k in _NICHE_KEYS}
+    langs = {n: _niche_lang_of(p) if p else None for n, (p, _) in ents.items()}
+    hit = [n for n, lg in langs.items() if lg]
+    bundled = [lg for lg, _, rt, _ in _NICHE_LANGS if any(n.startswith(rt) for n in names)]
+    out.update(references_niche_runtime=_jv(bool(hit)), has_niche_runtime=_jv(bool(bundled)))
+    if not hit:
+        return out
+    count = {}
+    for n in hit:
+        count[langs[n]] = count.get(langs[n], 0) + 1
+    lang = max(count, key=lambda k: (count[k], -[x[0] for x in _NICHE_LANGS].index(k)))
+    mine = [n for n in hit if langs[n] == lang]
+
+    def sf(p):
+        a = dict(p["attributes"]).get("SourceFile")
+        return (p["_u"](int.from_bytes(a[:2], "big")) or "none") if a and len(a) >= 2 else "none"
+
+    def base(n):
+        return n[:-6].rsplit("/", 1)[-1]
+
+    unit = _NICHE_UNIT.search(question or "")
+    main = dict(re.findall(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$", re.sub(r"\r?\n ", "", mf), re.M)).get("Main-Class")
+    prim = None
+    if unit:
+        fn = unit.group(1).rsplit("/", 1)[-1]
+        stem = fn.rsplit(".", 1)[0]
+        want = {stem.replace(".", "_") + "$py", stem, stem + "_", (stem[:1].upper() + stem[1:]).replace(".", "_"),
+                stem.replace(".", "_")}
+        srcs = [n for n in mine if sf(ents[n][0]) == fn]
+        prim = next((n for n in srcs if base(n) in want), None) or \
+            next((n for n in srcs if "$" not in base(n) or base(n).endswith("$py")), None) or \
+            next((n for n in mine if base(n) in want), None) or (srcs or [None])[0]
+        out["niche_unit"] = fn
+    if prim is None and not unit:
+        m_ent = main.replace(".", "/") + ".class" if main else None
+        root = {"jython": lambda n: base(n).endswith("$py"),
+                "jruby": lambda n: ents[n][0]["super"] == "org/jruby/ast/executable/AbstractScript" or
+                any(m["name"] == "RUBY$script" for m in ents[n][0]["methods"]),
+                "ceylon": lambda n: base(n) != "$module_" and "$" not in base(n)}.get(lang, lambda n: "$" not in base(n))
+        prim = m_ent if m_ent in mine else next((n for n in mine if root(n)), mine[0])
+    out.update(niche_language=lang, niche_classes=_jv(mine), niche_class_count=str(len(mine)))
+    order = ([prim] if prim else []) + [n for n in mine if n != prim] + [n for n in ents if n not in mine]
+    for n in order:
+        if classfile_hcfg(ents[n][1]).get("hcfg_found") == "true":
+            out.update(niche_hcfg_classfile=n, niche_hcfg_in_primary=_jv(n == prim))
+            break
+    mod = next((n for n in mine if base(n) == "$module_"), None)
+    if mod:
+        out.update(ceylon_module_class=mod, ceylon_module=mod[:-len("/$module_.class")].replace("/", ".")
+                   if "/" in mod else "default")
+    if not prim:
+        return out
+    p = ents[prim][0]
+    this = p["this"] or prim[:-6]
+    out.update(niche_primary_classfile=prim, niche_primary_class=this, niche_primary_class_dotted=this.replace("/", "."),
+               niche_primary_super_class=p["super"] or "none", niche_source_file=sf(p))
+    if out["niche_unit"] == "none" and out["niche_source_file"] != "none":
+        out["niche_unit"] = out["niche_source_file"]
+    ms = [m["name"] or "" for m in p["methods"]]
+    if lang == "jython":
+        code = sorted(((int(m.group(2)), m.group(1)) for m in map(re.compile(r"^(.+)\$(\d+)$").match, ms) if m))
+        out.update(jython_module=this.rsplit("/", 1)[-1][:-3] if this.endswith("$py") else "none",
+                   jython_code_objects=_jv([f"{s}${i}" for i, s in code]))
+    elif lang == "jruby":
+        rm = [m.group(1) for m in map(re.compile(r"^RUBY\$method\$(.+?)\$\d+$").match, ms) if m]
+        out.update(jruby_methods=_jv(list(dict.fromkeys(rm))),
+                   jruby_script_method="RUBY$script" if "RUBY$script" in ms else "none")
+    elif lang == "kotlin_script":
+        out.update(kotlin_script_class=this, kotlin_script_base=p["super"] or "none")
+    return out
+
+
+def jvm_niche_field(data, field, question=None):
+    """One jvm_niche_facts field as an answer string ("none" absent, None not a jar/class). Never raises."""
+    f = jvm_niche_facts(data, question)
     return None if f is None else f.get(field, "none")
 
 
@@ -19743,6 +19936,12 @@ def _jvm_lang(names, read):
                          ("groovy", b"groovy/lang/GroovyObject"), ("clojure", b"clojure/lang/")):
             if cue in b:
                 return tok, [f"{n}: {cue.decode()}"]
+    for n in cls[:64]:   # niche JVM languages (jvm_niche_facts cues), only where plain "java" would be reported
+        c = b"" if _NICHE_RT.match(n) else read(n)
+        p = classfile_parse(c) if any(k in c for k in _NICHE_CUES) else None
+        tok = _niche_lang_of(p) if p else None
+        if tok:
+            return tok, [f"{n}: niche JVM language cue ({tok})"]
     return "java", [f"{len(cls)} .class entries, no kotlin/scala/groovy/clojure marker"]
 
 
@@ -29574,3 +29773,3258 @@ def binary_patch_field(base, patch, field):
 
 
 _BP_MEMO = [None, None, None]
+
+
+# --- Crash / trace SIDECAR (D26 binary-crash-course generalised) ------------------------------------------------------
+# D26 jar carried crash/trace.json = {"schema": "huntress.synthetic_crash.v1", "kind": ..., "frames": [innermost..]};
+# GM accepted crash_fault_method = frames[0] and crash_frames_match_methods = every frame in the primary classfile's
+# method_info names. crash_sidecar finds such a record in a zip/jar entry, any JSON object with a frames/stack/
+# backtrace list in the raw bytes (ELF section/note, PE resource, overlay; UTF-8 or UTF-16LE) or a text trace (Java
+# "at a.B.m(F.java:1)", gdb "#0 0x.. in f () at x.c:3", "mod!f+0x1a", "f+0x1a/0x40", raw 0x addresses -> ELF FUNC).
+# Fixtures: tests/data/binary_fixtures/crash_* (crash_check.py). Fact names beyond the two D26 ones are SPECULATIVE.
+
+_CRASH_KEYS = ("frames", "stack", "backtrace", "stacktrace", "stack_trace", "callstack", "call_stack")
+_CRASH_NAME = re.compile(r"(?i)(?:^|/)(?:[^/]*trace\.json|crash[^/]*\.json|[^/]*\.trace|[^/]*(?:crash|stack|backtrace|trace)[^/]*\.(?:json|txt|log))$")
+_CRASH_JKEY = re.compile(rb'"(?:frames|stack|backtrace|stacktrace|stack_trace|callstack|call_stack)"\s*:\s*\[', re.I)
+_CRASH_TXT = re.compile(r"(?m)^[ \t]*(?:at[ \t]+[\w$.<>/]+\((?:[\w$.\- ]*(?::\d+)?)\)|#\d+[ \t]+(?:0x[0-9a-fA-F]+[ \t]+in[ \t]+)?[A-Za-z_][\w$.:<>~]*[ \t]*\(|[A-Za-z_][\w.\-]*![A-Za-z_][\w$.:<>~@?]*\+0x[0-9a-fA-F]+)[^\n]{0,200}$")
+_CRASH_FKEYS = ("method", "function", "func", "name", "symbol", "frame", "fn")
+
+
+def crash_frame_name(fr, funcs=()):
+    """A frame (str or {method|function|name|symbol: ..}) -> bare method/function name: strips 'at ', gdb '#0 0x.. in',
+    'module!', '+0x1a[/0x40]', '(File.java:12)' / JVM descriptors '(I)V', ' at file:line', 'pkg.Class.' / 'Ns::'.
+    A raw '0x401136' resolves through `funcs` = [(value, size, name)] (ELF FUNC symbols), else stays as is."""
+    if isinstance(fr, dict):
+        fr = next((fr[k] for k in _CRASH_FKEYS if isinstance(fr.get(k), str) and fr[k].strip()), None)
+    if not isinstance(fr, str):
+        return None
+    s = fr.strip()
+    s = re.sub(r"^at\s+", "", s)
+    m = re.match(r"^#\d+\s+(?:0x[0-9a-fA-F]+\s+in\s+)?(\S+)", s)
+    if m:
+        s = m.group(1)
+    if re.fullmatch(r"0x[0-9a-fA-F]+", s):
+        a = int(s, 16)
+        for v, sz, nm in funcs:
+            if v <= a < v + max(sz, 1):
+                return nm
+        return s
+    s = s.split("!", 1)[1] if "!" in s.split("(")[0] else s
+    s = re.split(r"[\s(]", s, 1)[0]
+    s = re.sub(r"\+0x[0-9a-fA-F]+(?:/0x[0-9a-fA-F]+)?$|\+\d+$", "", s)
+    s = re.sub(r"@@?[\w.]+$", "", s)
+    if "::" in s:
+        s = s.rsplit("::", 1)[1]
+    if "." in s and not s.startswith("."):
+        s = s.rsplit(".", 1)[1] or s
+    return s or None
+
+
+def _crash_obj(o):
+    """A decoded JSON value -> (record dict, frames list) when it (or a nested dict) carries a frames-like list."""
+    stack = [o]
+    while stack:
+        v = stack.pop()
+        if isinstance(v, dict):
+            for k in _CRASH_KEYS:
+                fl = next((v[x] for x in v if isinstance(x, str) and x.lower() == k), None)
+                if isinstance(fl, list) and fl and all(isinstance(x, (str, dict)) for x in fl):
+                    return v, fl
+            stack.extend(x for x in v.values() if isinstance(x, (dict, list)))
+        elif isinstance(v, list):
+            stack.extend(x for x in v[:64] if isinstance(x, (dict, list)))
+    return None
+
+
+def _crash_json_scan(b, cap=64):
+    """First JSON object in bytes `b` holding a frames/stack/backtrace list (raw_decode from the nearest '{'s before
+    each key hit)."""
+    dec = json.JSONDecoder()
+    for m in itertools.islice(_CRASH_JKEY.finditer(b), cap):
+        lo = max(0, m.start() - 65536)
+        p, tries = m.start(), 0
+        while tries < 16:
+            p = b.rfind(b"{", lo, p)
+            if p < 0:
+                break
+            tries += 1
+            end = b.find(b"\0", m.end())
+            seg = b[p:end if end >= 0 else len(b)][:1 << 20]
+            try:
+                o, _ = dec.raw_decode(seg.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                continue
+            r = _crash_obj(o)
+            if r:
+                return r
+    return None
+
+
+def _crash_text(t):
+    """Text trace -> (record, frames) when >= 2 trace-shaped lines (or 1 + an exception header) are found."""
+    lines = [m.group(0).strip() for m in _CRASH_TXT.finditer(t)]
+    if not lines:
+        return None
+    first = t[:_CRASH_TXT.search(t).start()].strip().splitlines()
+    head = first[-1].strip() if first else ""
+    km = re.match(r"^(?:Exception in thread \"[^\"]*\"\s+)?([\w$.]+(?:Exception|Error|Fault|Panic)|SIG[A-Z]+)\b", head)
+    if len(lines) < 2 and not km:
+        return None
+    return {"kind": km.group(1).rsplit(".", 1)[-1] if km else None}, lines
+
+
+def _crash_find(b, name=""):
+    """(record, frames, source) from one blob: JSON first (UTF-8, then UTF-16LE), then a text trace."""
+    r = _crash_json_scan(b)
+    if r:
+        return (*r, "json")
+    if b"\0" in b[:4096] or b.count(b"\0") > len(b) // 8:
+        for enc in ("utf-16-le", "utf-16-be"):
+            for k in _CRASH_KEYS[:3]:
+                q = ('"' + k + '"').encode(enc)
+                p = b.find(q)
+                if p < 0:
+                    continue
+                lo = p - min(p, 65536) // 2 * 2   # keep the code-unit parity of the hit
+                try:
+                    r = _crash_json_scan(b[lo:p + (1 << 21)].decode(enc, "ignore").encode("utf-8"))
+                except Exception:   # noqa: BLE001
+                    r = None
+                if r:
+                    return (*r, enc)
+    if name.lower().endswith((".trace", ".txt", ".log")) or not name and any(
+            k in b for k in (b"#0 ", b"\tat ", b" at ", b"+0x")):
+        t = b[:1 << 22].decode("utf-8", "replace") if name else _crash_ascii(b)
+        r = _crash_text(t)
+        if r:
+            return (*r, "text")
+    return None
+
+
+def _crash_ascii(b, cap=1 << 24):
+    """Printable runs (>= 6 chars, newline-preserving) of a binary blob, joined by newlines."""
+    return "\n".join(m.group(0).decode("latin-1") for m in re.finditer(rb"[\t\n\r\x20-\x7e]{6,}", b[:cap]))
+
+
+def crash_sidecar(member_bytes):
+    """Locate a crash/trace sidecar in a member -> {schema, kind, frames (normalised names, innermost first),
+    frame_count, fault_method (= normalised frames[0]), fault_frame (= frames[0] verbatim), outer_method, raw (the
+    verbatim frame list), source (zip entry name / 'raw'), encoding}; None when there is none / input is junk."""
+    try:
+        return _crash_sidecar(bytes(member_bytes))
+    except Exception:   # noqa: BLE001 -- hostile/truncated input
+        return None
+
+
+def _crash_sidecar(b):
+    hit, src = None, "raw"
+    if b[:2] == b"PK":
+        try:
+            z = zipfile.ZipFile(io.BytesIO(b))
+            infos = [i for i in z.infolist() if not i.is_dir() and i.file_size < 1 << 22]
+        except (zipfile.BadZipFile, OSError, ValueError, KeyError):
+            infos = []
+        named = [i for i in infos if _CRASH_NAME.search(i.filename)]
+        rest = [i for i in infos if i not in named and not i.filename.endswith(".class")
+                and i.filename.lower().endswith((".json", ".txt", ".log", ".trace", ".dat", ".bin", ""))]
+        for i in named + rest[:256]:
+            try:
+                d = z.read(i)
+            except Exception:   # noqa: BLE001
+                continue
+            hit = _crash_find(d, i.filename if i in named or i.filename.lower().endswith((".trace", ".txt", ".log")) else "x.json")
+            if hit:
+                src = i.filename
+                break
+    if hit is None:
+        hit = _crash_find(b)
+    if hit is None:
+        return None
+    rec, raw, enc = hit
+    order = str(rec.get("order") or rec.get("frame_order") or "").lower()
+    if "outer" in order.split("-")[0] or order.startswith(("caller", "root", "bottom")):
+        raw = raw[::-1]
+    funcs = _elf_funcs(b) if b[:4] == b"\x7fELF" and any(
+        isinstance(x, str) and re.search(r"0x[0-9a-fA-F]{4,}\s*$", x.strip()) for x in raw) else ()
+    frames = [crash_frame_name(x, funcs) for x in raw]
+    frames = [x for x in frames if x]
+    if not frames:
+        return None
+    verb = [x if isinstance(x, str) else json.dumps(x, separators=(",", ":")) for x in raw]
+    sch = rec.get("schema") or rec.get("$schema") or rec.get("format")
+    kind = rec.get("kind") or rec.get("exception") or rec.get("type") or rec.get("signal") or rec.get("error")
+    return {"schema": sch if isinstance(sch, str) else None, "kind": kind if isinstance(kind, str) else None,
+            "frames": frames, "frame_count": len(frames), "fault_method": frames[0], "fault_frame": verb[0],
+            "outer_method": frames[-1], "raw": verb, "source": src, "encoding": enc}
+
+
+def _crash_jvm_methods(b, question=None):
+    """(primary class method names, {name: callee names}) for a jar (Main-Class, else the class a frame-less question
+    names via jvm_member_from_question, else the largest non-$ class) or a bare .class; None when neither."""
+    cls = None
+    if b[:4] == b"\xca\xfe\xba\xbe":
+        cls = b
+    elif b[:2] == b"PK":
+        z = zipfile.ZipFile(io.BytesIO(b))
+        names = z.namelist()
+        ent = jvm_member_from_question(question, names) if question else None
+        if not ent and "META-INF/MANIFEST.MF" in names:
+            mf = re.sub(r"\r?\n ", "", z.read("META-INF/MANIFEST.MF").decode("utf-8", "replace"))
+            mc = dict(re.findall(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$", mf, re.M)).get("Main-Class")
+            ent = mc.replace(".", "/") + ".class" if mc and mc.replace(".", "/") + ".class" in names else None
+        if not ent:
+            cs = [i for i in z.infolist() if i.filename.endswith(".class") and "$" not in i.filename.rsplit("/", 1)[-1]
+                  and not i.filename.startswith("META-INF/")]
+            ent = max(cs, key=lambda i: i.file_size).filename if cs else None
+        cls = z.read(ent) if ent else None
+    p = classfile_parse(cls) if cls else None
+    if not p:
+        return None
+    cp, u = p["cp"], p["_u"]
+
+    def ref_name(i):
+        e = cp[i] if 0 < i < len(cp) else None
+        if not e:
+            return None
+        if e[0] in (9, 10, 11, 18):
+            nt = cp[e[1][1]] if isinstance(e[1], tuple) and 0 < e[1][1] < len(cp) else None
+            return u(nt[1][0]) if nt and nt[0] == 12 else None
+        return None
+
+    bsm = {}
+    for an, raw in p["attributes"]:
+        if an == "BootstrapMethods" and len(raw) >= 2:
+            o = 2
+            for k in range(struct.unpack_from(">H", raw, 0)[0]):
+                _, na = struct.unpack_from(">HH", raw, o)
+                args = struct.unpack_from(f">{na}H", raw, o + 4)
+                bsm[k] = [u(cp[a][1]) for a in args if 0 < a < len(cp) and cp[a] and cp[a][0] == 8]
+                o += 4 + 2 * na
+    calls = {}
+    for m in p["methods"]:
+        code = next((r for an, r in m["attributes"] if an == "Code"), None)
+        out = calls.setdefault(m["name"], set())
+        if not code or len(code) < 8:
+            continue
+        ln = struct.unpack_from(">I", code, 4)[0]
+        try:
+            ins = jvm_code_decode(code[8:8 + ln])
+        except (ValueError, struct.error, IndexError):
+            continue
+        for _, op, arg in ins:
+            if op in (0xb6, 0xb7, 0xb8, 0xb9, 0xba):
+                n = ref_name(arg[0])
+                if n:
+                    out.add(n)
+                if op == 0xba:
+                    e = cp[arg[0]]
+                    out.update(x for x in bsm.get(e[1][0] if isinstance(e[1], tuple) else -1, []) if x)
+    return [m["name"] for m in p["methods"]], calls
+
+
+def _crash_native_methods(b):
+    """(function names, {name: callee names}) for an ELF (FUNC symbols; x86 E8 rel32 calls between them) or a PE
+    (.NET MethodDef names via dnfile, else export names); None when neither."""
+    if b[:4] == b"\x7fELF":
+        fn = _elf_funcs(b)
+        if not fn:
+            return None
+        segs = []
+        try:
+            from elftools.elf.elffile import ELFFile
+            ef = ELFFile(io.BytesIO(b))
+            segs = [(s["p_vaddr"], s["p_offset"], s["p_filesz"]) for s in ef.iter_segments() if s["p_type"] == "PT_LOAD"]
+        except Exception:   # noqa: BLE001
+            pass
+        x86 = struct.unpack_from("<H", b, 18)[0] in (3, 62)
+        start = {}
+        for v, _, nm in fn:
+            start.setdefault(v, nm)
+        calls = {}
+        for v, sz, nm in fn:
+            out = calls.setdefault(nm, set())
+            off = next((o + v - va for va, o, fs in segs if va <= v < va + fs), None)
+            if not x86 or off is None or not 0 < sz < 1 << 20:
+                continue
+            body = b[off:off + sz]
+            for k in range(len(body) - 4):
+                if body[k] == 0xE8:
+                    t = (v + k + 5 + struct.unpack_from("<i", body, k + 1)[0]) & ((1 << 64) - 1)
+                    if t in start:
+                        out.add(start[t])
+        return [nm for _, _, nm in fn], calls
+    if b[:2] == b"MZ":
+        try:
+            import dnfile
+            pe = dnfile.dnPE(data=b, fast_load=False)
+            md = getattr(getattr(pe.net, "mdtables", None), "MethodDef", None) if pe.net else None
+            if md:
+                return [str(r.Name) for r in md], {}
+            pe.parse_data_directories()
+            ex = getattr(pe, "DIRECTORY_ENTRY_EXPORT", None)
+            if ex:
+                return [s.name.decode("latin-1") for s in ex.symbols if s.name], {}
+        except Exception:   # noqa: BLE001
+            return None
+    return None
+
+
+def crash_sidecar_facts(member_bytes, question=None):
+    """{field: answer string}: crash_found, crash_schema, crash_kind, crash_fault_method (normalised frames[0]),
+    crash_fault_frame (verbatim), crash_outer_method, crash_frame_count, crash_frames (JSON list), crash_trace_entry,
+    crash_frames_match_methods (every frame in the primary unit's method set: JVM primary class method_info names /
+    ELF FUNC symbols / .NET MethodDef / PE exports), crash_fault_in_primary (frames[0] in that set),
+    crash_frames_call_chain (frames[i+1] statically calls frames[i] for every i: JVM invoke*/Groovy indy bootstrap
+    names; ELF x86 E8 rel32). No sidecar -> every value "none", the predicates "false"."""
+    b = bytes(member_bytes)
+    cs = crash_sidecar(b)
+    if not cs:
+        return {"crash_found": "false", "crash_schema": "none", "crash_kind": "none", "crash_fault_method": "none",
+                "crash_fault_frame": "none", "crash_outer_method": "none", "crash_frame_count": "0",
+                "crash_frames": "none", "crash_trace_entry": "none", "crash_frames_match_methods": "false",
+                "crash_fault_in_primary": "false", "crash_frames_call_chain": "false"}
+    try:
+        ms = _crash_jvm_methods(b, question) or _crash_native_methods(b)
+    except Exception:   # noqa: BLE001
+        ms = None
+    fr = cs["frames"]
+    names, calls = (set(ms[0]), ms[1]) if ms else (set(), {})
+    chain = bool(ms) and len(fr) >= 1 and all(fr[k] in calls.get(fr[k + 1], ()) for k in range(len(fr) - 1))
+    tf = lambda x: "true" if x else "false"   # noqa: E731
+    return {"crash_found": "true", "crash_schema": cs["schema"] or "none", "crash_kind": cs["kind"] or "none",
+            "crash_fault_method": cs["fault_method"], "crash_fault_frame": cs["fault_frame"],
+            "crash_outer_method": cs["outer_method"], "crash_frame_count": str(cs["frame_count"]),
+            "crash_frames": _jv(fr), "crash_trace_entry": cs["source"],
+            "crash_frames_match_methods": tf(names and all(x in names for x in fr)),
+            "crash_fault_in_primary": tf(fr[0] in names),
+            "crash_frames_call_chain": tf(chain and all(x in names for x in fr))}
+
+
+def crash_sidecar_field(member_bytes, field, question=None):
+    """One crash_sidecar_facts value (bare names like 'fault_method' get the crash_ prefix); "none" when unknown."""
+    k = field.strip()
+    k = k if k.startswith("crash_") else "crash_" + k
+    if _CS_MEMO[:2] != [member_bytes, question]:
+        _CS_MEMO[:] = [member_bytes, question, crash_sidecar_facts(member_bytes, question)]
+    return _CS_MEMO[2].get(k, "none")
+
+
+_CS_MEMO = [None, None, None]
+
+
+# --- JVM static call chain + throw sites (D26 binary-crash-course, bytecode side) -------------------------------------
+# From Code attributes alone: per method its callees (invoke{static,virtual,special,interface}; invokedynamic = Groovy
+# indy bootstrap name args / LambdaMetafactory impl handle; groovyc legacy $createCallSiteArray_1 slots), creation
+# throw sites (`new X` / `ldc X.class` + Groovy indy <init> ... athrow; a bare `aload; athrow` is a rethrow), exception
+# tables, LineNumberTable lines and the Exceptions attribute. The unit is the primary class (question / Main-Class /
+# largest non-$ class) plus its nested `Primary$...` classes (Scala `Foo$` module, Kotlin/Groovy inner, Clojure
+# `ns$fn` with invokeStatic/invoke named by the class segment). Fixtures: tests/data/binary_fixtures/jcg_* (jcg_check.py).
+# GM fact names are SPECULATIVE beyond D26's crash_fault_method / call-chain predicate.
+
+_JCG_SUPER = {"Throwable": None, "Exception": "Throwable", "Error": "Throwable", "RuntimeException": "Exception",
+              "IllegalStateException": "RuntimeException", "IllegalArgumentException": "RuntimeException",
+              "NumberFormatException": "IllegalArgumentException", "NullPointerException": "RuntimeException",
+              "ArithmeticException": "RuntimeException", "IndexOutOfBoundsException": "RuntimeException",
+              "ArrayIndexOutOfBoundsException": "IndexOutOfBoundsException", "ClassCastException": "RuntimeException",
+              "StringIndexOutOfBoundsException": "IndexOutOfBoundsException",
+              "UnsupportedOperationException": "RuntimeException", "SecurityException": "RuntimeException",
+              "ConcurrentModificationException": "RuntimeException", "NoSuchElementException": "RuntimeException",
+              "IOException": "Exception", "FileNotFoundException": "IOException", "UncheckedIOException":
+              "RuntimeException", "InterruptedException": "Exception", "ReflectiveOperationException": "Exception",
+              "ClassNotFoundException": "ReflectiveOperationException", "AssertionError": "Error",
+              "StackOverflowError": "Error", "OutOfMemoryError": "Error", "TimeoutException": "Exception",
+              "GeneralSecurityException": "Exception"}
+
+
+def _jcg_is_a(exc, catch, supers=None):
+    """True when exception class `exc` (internal name) is caught by `catch` (internal name; None = any/finally)."""
+    if catch is None:
+        return True
+    s, seen = exc, set()
+    while s and s not in seen:
+        if s == catch or s.rsplit("/", 1)[-1] == catch.rsplit("/", 1)[-1] and s.startswith("java/") == catch.startswith("java/"):
+            return True
+        seen.add(s)
+        nxt = (supers or {}).get(s)
+        if nxt is None:
+            nxt = _JCG_SUPER.get(s.rsplit("/", 1)[-1])
+            nxt = "java/lang/" + nxt if nxt else None
+            if nxt is None and s.rsplit("/", 1)[-1].endswith("Exception") and catch in ("java/lang/Exception",
+                                                                                      "java/lang/Throwable"):
+                return True
+        s = nxt
+    return False
+
+
+def _jcg_code(raw):
+    """Code attribute -> (instructions, [(start, end, handler, catch cp index)], [(start_pc, line)]) or None."""
+    if len(raw) < 12:
+        return None
+    ln = struct.unpack_from(">I", raw, 4)[0]
+    ins = jvm_code_decode(raw[8:8 + ln])
+    o = 8 + ln
+    n = struct.unpack_from(">H", raw, o)[0]
+    exc = [struct.unpack_from(">HHHH", raw, o + 2 + 8 * k) for k in range(n)]
+    o += 2 + 8 * n
+    lines = []
+    for _ in range(struct.unpack_from(">H", raw, o)[0]):
+        ni, al = struct.unpack_from(">HI", raw, o + 2)
+        body = raw[o + 8:o + 8 + al]
+        o += 6 + al
+        if ni and len(body) >= 2:
+            lines.append((ni, body))
+    return ins, exc, lines
+
+
+def _jcg_unit(b, question=None):
+    """[(entry name, classfile bytes)] of the primary unit (primary class first); [] when b is not a jar/.class."""
+    if b[:4] == b"\xca\xfe\xba\xbe":
+        return [("", b)]
+    if b[:2] != b"PK":
+        return []
+    z = zipfile.ZipFile(io.BytesIO(b))
+    names = z.namelist()
+    ent = jvm_member_from_question(question, names) if question else None
+    if not ent and "META-INF/MANIFEST.MF" in names:
+        mf = re.sub(r"\r?\n ", "", z.read("META-INF/MANIFEST.MF").decode("utf-8", "replace"))
+        mc = dict(re.findall(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$", mf, re.M)).get("Main-Class")
+        ent = mc.replace(".", "/") + ".class" if mc and mc.replace(".", "/") + ".class" in names else None
+    if not ent:
+        cs = [i for i in z.infolist() if i.filename.endswith(".class") and "$" not in i.filename.rsplit("/", 1)[-1]
+              and not i.filename.startswith("META-INF/") and not i.filename.endswith("__init.class")]
+        ent = max(cs, key=lambda i: i.file_size).filename if cs else None
+    if not ent:
+        return []
+    stem = ent[:-6]
+    stem = stem[:-6] if stem.endswith("__init") else stem
+    rest = sorted(n for n in names if n != ent and n.endswith(".class") and n.startswith(stem + "$"))[:200]
+    return [(n, z.read(n)) for n in [ent] + rest]
+
+
+def jvm_callgraph_facts(member_bytes, question=None):
+    """{field: answer string} for a jar / .class: jcg_found, jcg_primary_class, jcg_methods, jcg_callees /
+    jcg_callers (JSON {node: sorted unit method names}), jcg_external_calls (JSON {m: ["owner.name"]}, owner "?" for
+    a Groovy indy call site that names no unit method), jcg_throw_methods (creation throw sites), jcg_throw_sites (JSON {m:
+    [[exception class, construction line]]}), jcg_rethrow_methods,
+    jcg_fault_method (the only creation-throw method; ties broken by the trace kind of a crash sidecar / the question),
+    jcg_fault_exception (simple) / jcg_fault_exception_class (dotted), jcg_throw_line (LineNumberTable line of the
+    exception's construction = the trace line) / jcg_athrow_line, jcg_entry_method, jcg_call_chain (entry..fault JSON),
+    jcg_trace_frames (fault..entry JSON), jcg_call_depth (edges entry->fault), jcg_frame_count, jcg_catch_method /
+    jcg_catch_type / jcg_caught (nearest chain frame whose exception_table covers the faulting call),
+    jcg_declared_throws, jcg_exception_tables (JSON), jcg_frames_are_call_chain (sidecar / question frames, innermost
+    first: frames[i+1] calls frames[i]). Junk input -> jcg_found "false" and every other value "none"."""
+    try:
+        return _jvm_callgraph_facts(bytes(member_bytes), question)
+    except Exception:   # noqa: BLE001 -- hostile/truncated input
+        return dict(_JCG_NONE)
+
+
+_JCG_KEYS = ("jcg_primary_class", "jcg_methods", "jcg_callees", "jcg_external_calls", "jcg_callers", "jcg_throw_methods",
+             "jcg_throw_sites", "jcg_rethrow_methods", "jcg_fault_method", "jcg_fault_exception", "jcg_fault_exception_class",
+             "jcg_throw_line", "jcg_athrow_line", "jcg_entry_method", "jcg_call_chain", "jcg_trace_frames",
+             "jcg_call_depth", "jcg_frame_count", "jcg_catch_method", "jcg_catch_type", "jcg_caught",
+             "jcg_declared_throws", "jcg_exception_tables", "jcg_frames_are_call_chain")
+_JCG_NONE = {"jcg_found": "false", **{k: "none" for k in _JCG_KEYS}}
+
+
+def _jvm_callgraph_facts(b, question):
+    unit = _jcg_unit(b, question)
+    ps = [(n, classfile_parse(c)) for n, c in unit]
+    ps = [(n, p) for n, p in ps if p]
+    if not ps or ps[0][0] != unit[0][0]:
+        return dict(_JCG_NONE)
+    prim = ps[0][1]
+    ucls = {p["this"] for _, p in ps}
+
+    def node(cls, name):
+        if name in ("invokeStatic", "invoke", "doInvoke", "invokePrim") and "$" in cls and cls in ucls:
+            return cls.rsplit("$", 1)[1]   # Clojure fn class ns$stage_two
+        return name
+
+    calls, lines_of, throws, rethrows, decl, xtab, sites, order = {}, {}, {}, set(), {}, {}, {}, []
+    for _, p in ps:
+        cp, u, cn = p["cp"], p["_u"], p["_cname"]
+        bsm = {}
+        raw = dict(p["attributes"]).get("BootstrapMethods")
+        if raw and len(raw) >= 2:
+            o = 2
+            for k in range(struct.unpack_from(">H", raw, 0)[0]):
+                ref, na = struct.unpack_from(">HH", raw, o)
+                args = struct.unpack_from(f">{na}H", raw, o + 4)
+                o += 4 + 2 * na
+                out = []
+                for a in args:
+                    e = cp[a] if 0 < a < len(cp) else None
+                    if e and e[0] == 8:
+                        out.append(u(e[1]))
+                    elif e and e[0] == 15 and 0 < e[1][1] < len(cp) and cp[e[1][1]]:   # lambda impl handle
+                        r = cp[e[1][1]]
+                        nt = cp[r[1][1]] if isinstance(r[1], tuple) and 0 < r[1][1] < len(cp) else None
+                        if nt and nt[0] == 12 and k not in bsm:
+                            out.append(("@", cn(r[1][0]), u(nt[1][0])))
+                bsm[k] = out
+
+        def ref(i):
+            e = cp[i] if 0 < i < len(cp) else None
+            if not e or e[0] not in (9, 10, 11, 18) or not isinstance(e[1], tuple):
+                return None, None
+            nt = cp[e[1][1]] if 0 < e[1][1] < len(cp) else None
+            if not nt or nt[0] != 12:
+                return None, None
+            return (cn(e[1][0]) if e[0] != 18 else None), u(nt[1][0])
+
+        gcs = _groovy_callsites(p) if any(m["name"] == "$createCallSiteArray_1" for m in p["methods"]) else []
+        for m in p["methods"]:
+            me = node(p["this"], m["name"])
+            if me not in calls:
+                order.append(me)
+            out = calls.setdefault(me, set())
+            ex = dict(m["attributes"]).get("Exceptions")
+            if ex and len(ex) >= 2:
+                decl.setdefault(me, set()).update(
+                    cn(x) for x in struct.unpack_from(f">{struct.unpack_from('>H', ex)[0]}H", ex, 2) if cn(x))
+            code = dict(m["attributes"]).get("Code")
+            if not code:
+                continue
+            try:
+                ins, exc, at = _jcg_code(code)
+            except (ValueError, struct.error, IndexError, TypeError):
+                continue
+            lnt = []
+            for ni, r in at:
+                if u(ni) == "LineNumberTable":
+                    lnt += [struct.unpack_from(">HH", r, 2 + 4 * k) for k in range(struct.unpack_from(">H", r)[0])]
+            lnt.sort()
+
+            def line(pc):
+                ls = [ln for s, ln in lnt if s <= pc]
+                return ls[-1] if ls else None
+            if exc:
+                xtab.setdefault(me, []).extend((s, e, h, cn(t) if t else None) for s, e, h, t in exc)
+            pend, idx = None, None   # pending `new X` / ldc X.class: (class, pc)
+            for k, (pc, op, a) in enumerate(ins):
+                tgt = []
+                if op in (0xb6, 0xb7, 0xb8, 0xb9):
+                    c, n = ref(a[0])
+                    if n == "<init>" and pend and c == pend[0]:
+                        pend = (c, pend[1], pc)
+                    if c in ucls and c != p["this"] and node(c, n) == me and n != "<init>":
+                        pass   # Scala/Kotlin static forwarder Foo.m -> Foo$.MODULE$.m is not recursion
+                    elif n:
+                        tgt.append(node(c, n) if c in ucls else (c or "?").replace("/", ".") + "." + n)
+                elif op == 0xba:
+                    _, n = ref(a[0])
+                    e = cp[a[0]]
+                    bs = bsm.get(e[1][0], [])
+                    for x in bs:
+                        if isinstance(x, tuple):
+                            tgt.append(node(x[1], x[2]) if x[1] in ucls else (x[1] or "?").replace("/", ".") + "." + x[2])
+                        elif x == "<init>":
+                            if pend:   # Groovy indy constructor: ldc X.class ... invokedynamic init
+                                pend = (pend[0], pend[1], pc)
+                        elif re.fullmatch(r"[A-Za-z_$][\w$]*", x or "") and n in ("invoke", "call", "callStatic",
+                                                                                  "callCurrent", "callConstructor"):
+                            tgt.append(x)
+                    if not bs and n:
+                        tgt.append("?." + n)
+                elif op == 0xbb:
+                    pend = (cn(a[0]), pc, None)
+                elif op in (0x12, 0x13):
+                    e = cp[a[0]] if 0 < a[0] < len(cp) else None
+                    if e and e[0] == 7:
+                        pend = (u(e[1]), pc, None)
+                    idx = None
+                elif 0x02 <= op <= 0x08:
+                    idx = op - 0x03
+                elif op in (0x10, 0x11):
+                    idx = a[0]
+                elif op == 0x32 and idx is not None and gcs and 0 <= idx < len(gcs):
+                    tgt.append(gcs[idx])   # legacy groovyc CallSite slot
+                elif op == 0xbf:
+                    if pend and pend[2] is not None and pend[0]:
+                        throws.setdefault(me, []).append((pend[0], line(pend[2]), line(pc), pc))
+                    else:
+                        rethrows.add(me)
+                    pend = None
+                for t in tgt:
+                    out.add(t)
+                    sites.setdefault((me, t), []).append(pc)
+    names = set(order)
+    ext = {m: sorted(t for t in cs if t not in names) for m, cs in calls.items()}
+    calls = {m: {t for t in cs if t in names} for m, cs in calls.items()}
+    callers = {}
+    for a, cs in calls.items():
+        for t in cs:
+            if t in names:
+                callers.setdefault(t, set()).add(a)
+    kind = None
+    try:
+        cs_ = crash_sidecar(b)
+    except Exception:   # noqa: BLE001
+        cs_ = None
+    kind = (cs_ or {}).get("kind")
+    tm = [m for m in order if m in throws]
+    fault = tm[0] if len(tm) == 1 else None
+    if fault is None and tm:
+        ks = [kind] if kind else re.findall(r"\b([A-Z]\w*(?:Exception|Error))\b", question or "")
+        hit = [m for m in tm if any(c.rsplit("/", 1)[-1] in ks for c, *_ in throws[m])]
+        fault = hit[0] if len(hit) == 1 else None
+    f = {"jcg_found": "true", **{k: "none" for k in _JCG_KEYS}}
+    f["jcg_primary_class"] = prim["this"].replace("/", ".")
+    f["jcg_methods"] = _jv(order)
+    f["jcg_callees"] = _jv({m: sorted(calls[m]) for m in order})
+    f["jcg_external_calls"] = _jv({m: ext[m] for m in order if ext.get(m)})
+    f["jcg_callers"] = _jv({m: sorted(callers[m]) for m in order if m in callers})
+    f["jcg_throw_methods"] = _jv(tm)
+    f["jcg_throw_sites"] = _jv({m: [[c.replace("/", "."), tl] for c, tl, _, _ in throws[m]] for m in tm})
+    f["jcg_rethrow_methods"] = _jv([m for m in order if m in rethrows])
+    f["jcg_declared_throws"] = _jv({m: sorted(x.replace("/", ".") for x in decl[m]) for m in order if decl.get(m)})
+    f["jcg_exception_tables"] = _jv({m: [[s, e, h, t.replace("/", ".") if t else "any"] for s, e, h, t in xtab[m]]
+                                     for m in order if m in xtab})
+    entry = "main" if "main" in names else next((m for m in order if m not in callers and calls[m] & names), None)
+    f["jcg_entry_method"] = entry or "none"
+    if fault:
+        exc, tl, al, apc = throws[fault][0]
+        f["jcg_fault_method"] = fault
+        f["jcg_fault_exception"] = exc.rsplit("/", 1)[-1]
+        f["jcg_fault_exception_class"] = exc.replace("/", ".")
+        f["jcg_throw_line"] = str(tl) if tl is not None else "none"
+        f["jcg_athrow_line"] = str(al) if al is not None else "none"
+        chain = None
+        if entry:
+            prev, q = {entry: None}, [entry]
+            while q and fault not in prev:
+                x = q.pop(0)
+                for t in sorted(calls.get(x, ())):
+                    if t in names and t not in prev:
+                        prev[t] = x
+                        q.append(t)
+            if fault in prev:
+                chain, x = [], fault
+                while x is not None:
+                    chain.append(x)
+                    x = prev[x]
+                chain.reverse()
+        if chain:
+            f["jcg_call_chain"] = _jv(chain)
+            f["jcg_trace_frames"] = _jv(chain[::-1])
+            f["jcg_call_depth"] = str(len(chain) - 1)
+            f["jcg_frame_count"] = str(len(chain))
+            f["jcg_caught"] = "false"
+            for i in range(len(chain) - 1, -1, -1):   # innermost frame first
+                m = chain[i]
+                pcs = [apc] if i == len(chain) - 1 else sites.get((m, chain[i + 1]), [])
+                h = next(((t or "any") for s, e, _, t in xtab.get(m, ())
+                          for pc in pcs if s <= pc < e and _jcg_is_a(exc, t)), None)
+                if h:
+                    f["jcg_catch_method"], f["jcg_caught"] = m, "true"
+                    f["jcg_catch_type"] = h.rsplit("/", 1)[-1]
+                    break
+    fr = (cs_ or {}).get("frames") or []
+    if not fr and question:
+        fr = [w for w in re.findall(r"[A-Za-z_$][\w$]*", question) if w in names]
+    if len(fr) >= 2:
+        inner = all(fr[k] in calls.get(fr[k + 1], ()) for k in range(len(fr) - 1))
+        outer = all(fr[k + 1] in calls.get(fr[k], ()) for k in range(len(fr) - 1))
+        f["jcg_frames_are_call_chain"] = "true" if all(x in names for x in fr) and (inner or not cs_ and outer) \
+            else "false"
+    return f
+
+
+def jvm_callgraph_field(member_bytes, field, question=None):
+    """One jvm_callgraph_facts value (bare names get the jcg_ prefix). Parameterised: 'caller_of:<m>' /
+    'callees_of:<m>' (JSON sorted list), 'throw_line_of:<m>', 'throws_of:<m>' (JSON simple names); "none" if unknown."""
+    k = field.strip()
+    arg = None
+    if ":" in k:
+        k, arg = (x.strip() for x in k.split(":", 1))
+    k = k if k.startswith("jcg_") else "jcg_" + k
+    if _JCG_MEMO[:2] != [member_bytes, question]:
+        _JCG_MEMO[:] = [member_bytes, question, jvm_callgraph_facts(member_bytes, question)]
+    f = _JCG_MEMO[2]
+    if arg is None:
+        return f.get(k, "none")
+    try:
+        if k == "jcg_caller_of":
+            v = json.loads(f["jcg_callers"]).get(arg)
+            return v[0] if v and len(v) == 1 else (_jv(v) if v else "none")
+        if k == "jcg_callees_of":
+            v = json.loads(f["jcg_callees"]).get(arg)
+            return _jv(v) if v is not None else "none"
+        if k in ("jcg_throw_line_of", "jcg_throws_of"):
+            v = json.loads(f["jcg_throw_sites"]).get(arg)
+            if not v:
+                return "none"
+            if k == "jcg_throws_of":
+                return _jv(sorted({c.rsplit(".", 1)[-1] for c, _ in v}))
+            return str(v[0][1]) if v[0][1] is not None else "none"
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return "none"
+    return "none"
+
+
+_JCG_MEMO = [None, None, None]
+
+
+# --- ELF core dumps (ET_CORE): signal, faulting PC, registers, mapped files, fault address --------------------------
+# Native sequel to D26's crash sidecar: a core file beside its executable. PT_NOTE (owner CORE/LINUX) gives
+# NT_PRSTATUS (pr_cursig, pr_pid, user_regs), NT_PRPSINFO (pr_fname, pr_psargs), NT_SIGINFO (si_signo/errno/code,
+# si_addr), NT_AUXV (AT_ENTRY/AT_PHDR/AT_EXECFN), NT_FILE (start/end/file_ofs*page_size + names; gdb writes page_size
+# 1, the kernel 4096), NT_FPREGSET; PT_LOAD = memory (stack word, AT_EXECFN string, in-core ELF header -> build-id).
+# PC -> (module, file offset) via NT_FILE, -> function via the companion executable's FUNC symbols (load bias =
+# AT_ENTRY - e_entry, or module file offset -> companion PT_LOAD vaddr). x86-64 / i386 / AArch64 (gdb or qemu cores).
+# Fixtures: tests/data/binary_fixtures/core_* (core_check.py). Fact names / label spellings are SPECULATIVE.
+
+_CORE_SIG = {1: "SIGHUP", 2: "SIGINT", 3: "SIGQUIT", 4: "SIGILL", 5: "SIGTRAP", 6: "SIGABRT", 7: "SIGBUS", 8: "SIGFPE",
+             9: "SIGKILL", 10: "SIGUSR1", 11: "SIGSEGV", 12: "SIGUSR2", 13: "SIGPIPE", 14: "SIGALRM", 15: "SIGTERM",
+             16: "SIGSTKFLT", 17: "SIGCHLD", 18: "SIGCONT", 19: "SIGSTOP", 20: "SIGTSTP", 21: "SIGTTIN", 22: "SIGTTOU",
+             23: "SIGURG", 24: "SIGXCPU", 25: "SIGXFSZ", 26: "SIGVTALRM", 27: "SIGPROF", 28: "SIGWINCH", 29: "SIGIO",
+             30: "SIGPWR", 31: "SIGSYS"}
+_CORE_SICODE = {11: ("SEGV_MAPERR", "SEGV_ACCERR", "SEGV_BNDERR", "SEGV_PKUERR", "SEGV_ACCADI", "SEGV_ADIDERR",
+                     "SEGV_ADIPERR", "SEGV_MTEAERR", "SEGV_MTESERR"),
+                8: ("FPE_INTDIV", "FPE_INTOVF", "FPE_FLTDIV", "FPE_FLTOVF", "FPE_FLTUND", "FPE_FLTRES", "FPE_FLTINV",
+                    "FPE_FLTSUB"),
+                4: ("ILL_ILLOPC", "ILL_ILLOPN", "ILL_ILLADR", "ILL_ILLTRP", "ILL_PRVOPC", "ILL_PRVREG", "ILL_COPROC",
+                    "ILL_BADSTK"),
+                7: ("BUS_ADRALN", "BUS_ADRERR", "BUS_OBJERR", "BUS_MCEERR_AR", "BUS_MCEERR_AO"),
+                5: ("TRAP_BRKPT", "TRAP_TRACE", "TRAP_BRANCH", "TRAP_HWBKPT", "TRAP_UNK")}
+_CORE_SIGEN = {0: "SI_USER", 0x80: "SI_KERNEL", -1: "SI_QUEUE", -2: "SI_TIMER", -3: "SI_MESGQ", -4: "SI_ASYNCIO",
+               -5: "SI_SIGIO", -6: "SI_TKILL", -7: "SI_DETHREAD", -60: "SI_ASYNCNL"}
+_CORE_REGS = {   # e_machine -> (word, register names in user_regs order, pc, sp)
+    62: (8, "r15 r14 r13 r12 rbp rbx r11 r10 r9 r8 rax rcx rdx rsi rdi orig_rax rip cs eflags rsp ss fs_base gs_base "
+            "ds es fs gs".split(), "rip", "rsp"),
+    3: (4, "ebx ecx edx esi edi ebp eax ds es fs gs orig_eax eip cs eflags esp ss".split(), "eip", "esp"),
+    183: (8, [f"x{k}" for k in range(31)] + ["sp", "pc", "pstate"], "pc", "sp"),
+    40: (4, [f"r{k}" for k in range(13)] + ["sp", "lr", "pc", "cpsr", "orig_r0"], "pc", "sp"),
+}
+_CORE_ARCH = {62: "x86_64", 3: "i386", 183: "aarch64", 40: "arm", 243: "riscv64", 8: "mips", 21: "ppc64"}
+_CORE_NT = {1: "NT_PRSTATUS", 2: "NT_FPREGSET", 3: "NT_PRPSINFO", 4: "NT_TASKSTRUCT", 6: "NT_AUXV",
+            0x53494749: "NT_SIGINFO", 0x46494c45: "NT_FILE", 0x46e62b7f: "NT_PRXFPREG", 0x202: "NT_X86_XSTATE",
+            0x200: "NT_386_TLS", 0x400: "NT_ARM_VFP", 0x401: "NT_ARM_TLS", 0x402: "NT_ARM_HW_BREAK",
+            0x403: "NT_ARM_HW_WATCH", 0x404: "NT_ARM_SYSTEM_CALL", 0x405: "NT_ARM_SVE", 0x406: "NT_ARM_PAC_MASK"}
+_CORE_AT = {3: "AT_PHDR", 4: "AT_PHENT", 5: "AT_PHNUM", 6: "AT_PAGESZ", 7: "AT_BASE", 9: "AT_ENTRY", 11: "AT_UID",
+            15: "AT_PLATFORM", 16: "AT_HWCAP", 25: "AT_RANDOM", 31: "AT_EXECFN", 33: "AT_SYSINFO_EHDR"}
+
+
+def _core_hdr(d):
+    """(endian, is64, e_type, e_machine, e_entry, [(p_type, off, vaddr, filesz, memsz)]) of an ELF; None otherwise."""
+    if len(d) < 52 or d[:4] != b"\x7fELF" or d[4] not in (1, 2) or d[5] not in (1, 2):
+        return None
+    e, b64 = "<" if d[5] == 1 else ">", d[4] == 2
+    if b64 and len(d) < 64:
+        return None
+    et, em = struct.unpack_from(e + "HH", d, 16)
+    entry, phoff = struct.unpack_from(e + ("QQ" if b64 else "II"), d, 24)
+    phes, phn = struct.unpack_from(e + "HH", d, 54 if b64 else 42)
+    pf = e + ("I4xQQ8xQQ" if b64 else "IIIxxxxII")
+    ph = []
+    if phes >= struct.calcsize(pf):
+        for k in range(min(phn, 65535)):
+            o = phoff + k * phes
+            if o + phes > len(d):
+                break
+            ph.append(struct.unpack_from(pf, d, o))
+    return e, b64, et, em, entry, ph
+
+
+def _core_read(loads, d, addr, n):
+    """n bytes of process memory at addr from the core's PT_LOADs (file-backed part only); None when not dumped."""
+    for _, off, va, fs, _ in loads:
+        if va <= addr and addr + n <= va + fs and off + (addr - va) + n <= len(d):
+            return bytes(d[off + addr - va:off + addr - va + n])
+    return None
+
+
+def _core_cstr(loads, d, addr, cap=4096):
+    for _, off, va, fs, _ in loads:
+        if va <= addr < va + fs:
+            p = off + addr - va
+            s = bytes(d[p:min(p + cap, off + fs, len(d))])
+            return s.split(b"\0")[0].decode("utf-8", "replace") if b"\0" in s else None
+    return None
+
+
+def _core_build_id_mem(loads, d, e, base):
+    """GNU build-id (hex) of the ELF image whose header is dumped at `base` in the core, else None."""
+    hdr = _core_read(loads, d, base, 64)
+    h = _core_hdr(hdr + b"\0" * 64) if hdr else None
+    if not h:
+        return None
+    _, b64, et, _, _, _ = h
+    phoff = struct.unpack_from(h[0] + ("Q" if b64 else "I"), hdr, 32 if b64 else 28)[0]
+    phes, phn = struct.unpack_from(h[0] + "HH", hdr, 54 if b64 else 42)
+    raw = _core_read(loads, d, base + phoff, phes * min(phn, 256)) if phes else None
+    if not raw:
+        return None
+    pf = h[0] + ("I4xQQ8xQQ" if b64 else "IIIxxxxII")
+    ph = [struct.unpack_from(pf, raw, k * phes) for k in range(min(phn, 256)) if (k + 1) * phes <= len(raw)]
+    first = min((p[2] for p in ph if p[0] == 1), default=0) & ~0xFFF
+    for t, _, va, fs, _ in ph:
+        if t == 4 and 0 < fs < 1 << 16:
+            blob = _core_read(loads, d, base + va - first if et == 3 or base != first else va, fs)
+            bid = _core_gnu_build_id(blob, h[0]) if blob else None
+            if bid:
+                return bid
+    return None
+
+
+def _core_gnu_build_id(blob, e):
+    out = []
+    _note_walk(blob, e, 0, len(blob), 4, "none", out)
+    for nt in out:
+        if nt["owner"] == "GNU" and nt["type"] == 3 and nt["desc_size"]:
+            return blob[nt["desc_offset"]:nt["desc_offset"] + nt["desc_size"]].hex()
+    return None
+
+
+def _core_exe_info(x):
+    """(e_entry, build-id hex | None, [(vaddr, off, filesz)], funcs) of a companion executable; None when not ELF."""
+    h = _core_hdr(x)
+    if not h or h[2] not in (2, 3):
+        return None
+    e = h[0]
+    bid = None
+    for t, off, _, fs, _ in h[5]:
+        if t == 4 and not bid:
+            bid = _core_gnu_build_id(bytes(x[off:off + fs]), e)
+    try:
+        funcs = _elf_funcs(x) if x[5] == 1 else []
+    except Exception:   # noqa: BLE001
+        funcs = []
+    return h[4], bid, [(va, off, fs) for t, off, va, fs, _ in h[5] if t == 1], funcs
+
+
+def _core_func(funcs, va):
+    best = None
+    for v, sz, nm in funcs:
+        if v <= va and (va < v + sz or not sz) and (best is None or v > best[0]):
+            best = (v, sz, nm)
+    return best
+
+
+def elf_core_facts(data, exe=None):
+    """{field: answer string} of an ELF core file (`exe` = optional companion executable bytes); None when `data` is
+    not an ELF at all. Fields (absent -> "none"): core_is_core, core_arch, core_class, core_signal (SIGSEGV),
+    core_signal_number, core_pid, core_ppid, core_thread_count, core_fname, core_psargs, core_execfn, core_platform,
+    core_entry, core_phdr, core_si_signo, core_si_errno, core_si_code, core_si_code_name, core_fault_address
+    (si_addr for SEGV/BUS/FPE/ILL/TRAP with si_code > 0), core_pc, core_sp, core_reg_<name> (hex, 0x lowercase),
+    core_stack_top (word at sp), core_note_types (JSON), core_has_fpregset, core_mapped_files (JSON unique names),
+    core_mapped_file_count (NT_FILE entries), core_page_size, core_pc_module, core_pc_module_name,
+    core_pc_module_offset, core_pc_function, core_pc_function_offset, core_pc_symbol (fn+0xN), core_build_id
+    (main executable's, from its dumped header), core_exe_build_id, core_build_id_match, core_load_segments."""
+    try:
+        return _elf_core_facts(bytes(data), bytes(exe) if exe else None)
+    except Exception:   # noqa: BLE001 -- hostile/truncated input
+        return None
+
+
+def _elf_core_facts(d, exe):
+    h = _core_hdr(d)
+    if not h:
+        return None
+    e, b64, et, em, _, ph = h
+    out = {"core_is_core": "true" if et == 4 else "false"}
+    if et != 4:
+        return out
+    W = 8 if b64 else 4
+    wf = e + ("Q" if b64 else "I")
+    hx = lambda v: "none" if v is None else hex(v)   # noqa: E731
+    out.update(core_arch=_CORE_ARCH.get(em, f"em_{em}"), core_class="ELF64" if b64 else "ELF32")
+    loads = [p for p in ph if p[0] == 1]
+    out["core_load_segments"] = str(len(loads))
+    notes = []
+    for t, off, _, fs, _ in ph:
+        if t == 4:
+            _note_walk(d, e, off, fs, 4, "none", notes)
+    desc = lambda nt: d[nt["desc_offset"]:nt["desc_offset"] + nt["desc_size"]]   # noqa: E731
+    core = [nt for nt in notes if nt["owner"] in ("CORE", "LINUX")]
+    out["core_note_types"] = _jv([_CORE_NT.get(nt["type"], hex(nt["type"])) for nt in core]) if core else "none"
+    out["core_has_fpregset"] = "true" if any(nt["type"] in (2, 0x46e62b7f) for nt in core) else "false"
+    prs = [desc(nt) for nt in core if nt["type"] == 1]
+    out["core_thread_count"] = str(len(prs))
+    regs = {}
+    if prs:
+        p = prs[0]
+        signo, code, errno_, cursig = struct.unpack_from(e + "iiiH", p, 0)
+        po = 32 if b64 else 24
+        pid, ppid = struct.unpack_from(e + "ii", p, po)
+        out.update(core_signal_number=str(cursig), core_signal=_CORE_SIG.get(cursig, f"SIG{cursig}"),
+                   core_pid=str(pid), core_ppid=str(ppid))
+        ro = po + 16 + 4 * 2 * W
+        spec = _CORE_REGS.get(em)
+        if spec and spec[0] == W:
+            names = spec[1]
+            n = min(len(names), (len(p) - ro) // W)
+            vals = struct.unpack_from(e + ("Q" if b64 else "I") * n, p, ro)
+            regs = dict(zip(names, vals))
+            for k, v in regs.items():
+                out["core_reg_" + k] = hex(v)
+            out["core_pc"], out["core_sp"] = hx(regs.get(spec[2])), hx(regs.get(spec[3]))
+    ps = next((desc(nt) for nt in core if nt["type"] == 3), None)
+    if ps:
+        fo = 40 if b64 else 28
+        fname = ps[fo:fo + 16].split(b"\0")[0].decode("utf-8", "replace")
+        args = ps[fo + 16:fo + 96].split(b"\0")[0].decode("utf-8", "replace").rstrip()
+        out.update(core_fname=fname or "none", core_psargs=args or "none")
+    si = next((desc(nt) for nt in core if nt["type"] == 0x53494749), None)
+    if si and len(si) >= 12 + 2 * W:
+        signo, errno_, code = struct.unpack_from(e + "iii", si, 0)
+        out.update(core_si_signo=str(signo), core_si_errno=str(errno_), core_si_code=str(code))
+        nm = _CORE_SICODE.get(signo, ())
+        out["core_si_code_name"] = nm[code - 1] if 0 < code <= len(nm) else _CORE_SIGEN.get(code, "none")
+        if signo in _CORE_SICODE and code > 0:
+            out["core_fault_address"] = hex(struct.unpack_from(wf, si, 16 if b64 else 12)[0])
+        if "core_signal" not in out:
+            out.update(core_signal_number=str(signo), core_signal=_CORE_SIG.get(signo, f"SIG{signo}"))
+    aux = {}
+    av = next((desc(nt) for nt in core if nt["type"] == 6), None)
+    if av:
+        for k in range(len(av) // (2 * W)):
+            a, v = struct.unpack_from(e + ("QQ" if b64 else "II"), av, k * 2 * W)
+            if a == 0:
+                break
+            aux.setdefault(a, v)
+        out["core_entry"], out["core_phdr"] = hx(aux.get(9)), hx(aux.get(3))
+        for a, key in ((31, "core_execfn"), (15, "core_platform")):
+            s = _core_cstr(loads, d, aux[a]) if a in aux else None
+            out[key] = s or "none"
+    maps = []
+    fl = next((desc(nt) for nt in core if nt["type"] == 0x46494c45), None)
+    if fl and len(fl) >= 2 * W:
+        cnt, pg = struct.unpack_from(e + ("QQ" if b64 else "II"), fl, 0)
+        if cnt <= (len(fl) - 2 * W) // (3 * W):
+            names = fl[2 * W + 3 * W * cnt:].split(b"\0")
+            for k in range(cnt):
+                s, en, o = struct.unpack_from(e + ("QQQ" if b64 else "III"), fl, 2 * W + 3 * W * k)
+                maps.append((s, en, o * pg, names[k].decode("utf-8", "replace") if k < len(names) else ""))
+            out.update(core_mapped_file_count=str(cnt), core_page_size=str(pg),
+                       core_mapped_files=_jv(list(dict.fromkeys(m[3] for m in maps))))
+    pc, sp = regs.get(_CORE_REGS.get(em, (0, 0, "", ""))[2]), regs.get(_CORE_REGS.get(em, (0, 0, "", ""))[3])
+    if sp is not None:
+        w = _core_read(loads, d, sp, W)
+        out["core_stack_top"] = hex(struct.unpack(wf, w)[0]) if w else "none"
+    # main executable mapping: the NT_FILE entry holding AT_PHDR (else AT_ENTRY); its offset-0 entry is the base
+    anchor = aux.get(3, aux.get(9))
+    main = next((m[3] for m in maps if anchor is not None and m[0] <= anchor < m[1]), None)
+    base = min((m[0] for m in maps if m[3] == main and m[2] == 0), default=None)
+    if base is None and anchor is not None and 3 in aux:
+        base = aux[3] & ~0xFFF   # no NT_FILE (qemu): the program headers' page
+    bid = _core_build_id_mem(loads, d, e, base) if base is not None else None
+    out["core_build_id"] = bid or "none"
+    mod = next((m for m in maps if pc is not None and m[0] <= pc < m[1]), None)
+    if mod:
+        out.update(core_pc_module=mod[3] or "none", core_pc_module_name=mod[3].rsplit("/", 1)[-1] or "none",
+                   core_pc_module_offset=hex(pc - mod[0] + mod[2]))
+    xi = _core_exe_info(exe) if exe else None
+    if xi:
+        out["core_exe_build_id"] = xi[1] or "none"
+        out["core_build_id_match"] = "none" if not (bid and xi[1]) else "true" if bid == xi[1] else "false"
+    if xi and pc is not None and out.get("core_build_id_match") != "false":
+        va = None
+        if mod and mod[3] == main:
+            fo = pc - mod[0] + mod[2]
+            va = next((v + fo - o for v, o, fs in xi[2] if o <= fo < o + fs), None)
+        elif not mod and 9 in aux:
+            va = pc - (aux[9] - xi[0])   # load bias = AT_ENTRY - e_entry
+            fo = next((o + va - v for v, o, fs in xi[2] if v <= va < v + fs), None)
+            if fo is not None:
+                out["core_pc_module_offset"] = hex(fo)
+                out["core_pc_module"] = out.get("core_execfn", "none")
+                out["core_pc_module_name"] = out["core_pc_module"].rsplit("/", 1)[-1]
+        f = _core_func(xi[3], va) if va is not None else None
+        if f:
+            out.update(core_pc_function=f[2], core_pc_function_offset=hex(va - f[0]),
+                       core_pc_symbol=f"{f[2]}+{hex(va - f[0])}")
+    return out
+
+
+_CORE_ALIAS = {"signal_name": "signal", "signo": "si_signo", "sig": "signal_number", "fault_addr": "fault_address",
+               "si_addr": "fault_address", "rip": "pc", "eip": "pc", "faulting_rip": "pc", "faulting_pc": "pc",
+               "rsp": "sp", "esp": "sp", "module": "pc_module_name", "function": "pc_function",
+               "faulting_function": "pc_function", "process_name": "fname", "command_line": "psargs",
+               "build_id": "build_id"}
+
+
+def elf_core_field(data, field, exe=None):
+    """One elf_core_facts value; bare names get the core_ prefix ('signal', 'reg_rax', aliases rip/eip -> pc);
+    "none" when absent / not a core (core_is_core "false"); None when `data` is not an ELF."""
+    if _CORE_MEMO[:2] != [data, exe]:
+        _CORE_MEMO[:] = [data, exe, elf_core_facts(data, exe)]
+    f = _CORE_MEMO[2]
+    if f is None:
+        return None
+    k = field.strip().lower()
+    k = k[5:] if k.startswith("core_") else k
+    k = _CORE_ALIAS.get(k, k)
+    if k in ("rip", "eip") or k == "pc":
+        k = "pc"
+    return f.get("core_" + k, f.get("core_reg_" + k, "false" if k == "is_core" else "none"))
+
+
+_CORE_MEMO = [None, None, None]
+
+
+# ---- Windows minidump (MDMP): header / streams / exception / faulting context / module list -> module+RVA -> function ----
+_MDMP_STREAMS = {0: "UnusedStream", 3: "ThreadListStream", 4: "ModuleListStream", 5: "MemoryListStream",
+                 6: "ExceptionStream", 7: "SystemInfoStream", 8: "ThreadExListStream", 9: "Memory64ListStream",
+                 10: "CommentStreamA", 11: "CommentStreamW", 12: "HandleDataStream", 13: "FunctionTableStream",
+                 14: "UnloadedModuleListStream", 15: "MiscInfoStream", 16: "MemoryInfoListStream",
+                 17: "ThreadInfoListStream", 18: "HandleOperationListStream", 19: "TokenStream",
+                 21: "SystemMemoryInfoStream", 22: "ProcessVmCountersStream"}
+_MDMP_EXC = {0xC0000005: "EXCEPTION_ACCESS_VIOLATION", 0xC0000094: "EXCEPTION_INT_DIVIDE_BY_ZERO",
+             0xC0000409: "STATUS_STACK_BUFFER_OVERRUN", 0x80000003: "EXCEPTION_BREAKPOINT",
+             0xC000001D: "EXCEPTION_ILLEGAL_INSTRUCTION", 0xE06D7363: "CPP_EH_EXCEPTION", 0xE0434352: "CLR_EXCEPTION",
+             0x80000004: "EXCEPTION_SINGLE_STEP", 0xC00000FD: "EXCEPTION_STACK_OVERFLOW",
+             0xC0000006: "EXCEPTION_IN_PAGE_ERROR", 0xC0000008: "EXCEPTION_INVALID_HANDLE",
+             0xC000008C: "EXCEPTION_ARRAY_BOUNDS_EXCEEDED", 0xC000008E: "EXCEPTION_FLT_DIVIDE_BY_ZERO",
+             0xC0000095: "EXCEPTION_INT_OVERFLOW", 0xC0000096: "EXCEPTION_PRIV_INSTRUCTION",
+             0x80000002: "EXCEPTION_DATATYPE_MISALIGNMENT", 0xC0000025: "EXCEPTION_NONCONTINUABLE_EXCEPTION",
+             0xC0000026: "EXCEPTION_INVALID_DISPOSITION", 0xC0000374: "STATUS_HEAP_CORRUPTION",
+             0xC0000417: "STATUS_INVALID_CRUNTIME_PARAMETER", 0x40010005: "DBG_CONTROL_C",
+             0x4000001F: "STATUS_WX86_BREAKPOINT", 0xC0000602: "STATUS_FAIL_FAST_EXCEPTION"}
+_MDMP_ACCESS = {0: "read", 1: "write", 8: "execute"}
+_MDMP_ARCH = {0: "x86", 5: "ARM", 6: "IA64", 9: "AMD64", 12: "ARM64", 0xFFFF: "unknown"}
+_MDMP_AMD64 = dict(zip(("rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13",
+                        "r14", "r15", "rip"), range(0x78, 0x100, 8)))
+_MDMP_X86 = dict(zip(("edi", "esi", "ebx", "edx", "ecx", "eax", "ebp", "eip"), range(0x9C, 0xBC, 4)), esp=0xC4)
+_MDMP_ARM64 = {**{f"x{k}": 8 + 8 * k for k in range(29)}, "fp": 0xF0, "lr": 0xF8, "sp": 0x100, "pc": 0x108}
+
+
+def _mdmp_str(d, rva):
+    if not rva or rva + 4 > len(d):
+        return None
+    n = struct.unpack_from("<I", d, rva)[0]
+    return d[rva + 4:rva + 4 + min(n, 4096)].decode("utf-16-le", "replace").rstrip("\0") if n % 2 == 0 else None
+
+
+def _mdmp_ctx(c, arch):
+    """{reg: value} of a CONTEXT record; layout by SystemInfo arch, else by record size (AMD64 0x4d0, x86 0x2cc)."""
+    if arch is None:
+        arch = 9 if len(c) >= 0x4D0 else 12 if len(c) >= 0x390 else 0 if len(c) >= 0x2CC else None
+    spec = {9: (_MDMP_AMD64, "Q", "rip", "rsp", "rbp"), 0: (_MDMP_X86, "I", "eip", "esp", "ebp"),
+            12: (_MDMP_ARM64, "Q", "pc", "sp", "fp")}.get(arch)
+    if not spec:
+        return {}, None
+    n = struct.calcsize(spec[1])
+    regs = {k: struct.unpack_from("<" + spec[1], c, o)[0] for k, o in spec[0].items() if o + n <= len(c)}
+    if arch in (9, 0) and len(c) >= (0x48 if arch == 9 else 0xC4):
+        regs["eflags"] = struct.unpack_from("<I", c, 0x44 if arch == 9 else 0xC0)[0]
+    return regs, spec[2:]
+
+
+def _mdmp_pe_funcs(pe):
+    """(TimeDateStamp, SizeOfImage, name, [(rva_start, rva_end_or_0, name)]) of a PE: exports + .pdata + COFF symbols."""
+    import pefile
+    p = pefile.PE(data=pe, fast_load=True)
+    oh = p.OPTIONAL_HEADER
+    p.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"],
+                                          pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXCEPTION"]])
+    names = {}
+    ex = getattr(p, "DIRECTORY_ENTRY_EXPORT", None)
+    if ex:
+        for s in ex.symbols:
+            if s.address and not s.forwarder:
+                names.setdefault(s.address, s.name.decode("latin-1") if s.name else f"ord{s.ordinal}")
+    fh = p.FILE_HEADER
+    if fh.PointerToSymbolTable and fh.NumberOfSymbols and fh.NumberOfSymbols < 200000:
+        st, ns = fh.PointerToSymbolTable, fh.NumberOfSymbols
+        strtab = st + 18 * ns
+        k = 0
+        while k < ns and st + 18 * (k + 1) <= len(pe):
+            raw, val, sec, typ, cls, aux = struct.unpack_from("<8sIhHBB", pe, st + 18 * k)
+            if cls in (2, 3) and sec > 0 and (typ & 0x30) == 0x20 and sec <= len(p.sections):
+                if raw[:4] == b"\0\0\0\0":
+                    o = strtab + struct.unpack_from("<I", raw, 4)[0]
+                    nm = pe[o:pe.find(b"\0", o, o + 512)]
+                else:
+                    nm = raw.rstrip(b"\0")
+                names.setdefault(p.sections[sec - 1].VirtualAddress + val, nm.decode("latin-1"))
+            k += 1 + aux
+    funcs = {}
+    for r in getattr(p, "DIRECTORY_ENTRY_EXCEPTION", None) or []:
+        s = r.struct
+        b, e = getattr(s, "BeginAddress", None), getattr(s, "EndAddress", 0)
+        if b is not None:
+            funcs.setdefault(b, (b, e or 0, names.get(b, f"sub_{oh.ImageBase + b:x}")))
+    for v, nm in names.items():
+        funcs.setdefault(v, (v, 0, nm))
+    return fh.TimeDateStamp, oh.SizeOfImage, sorted(funcs.values())
+
+
+def minidump_facts(data, pe=None):
+    """{field: answer string} of a Windows minidump (`pe` = optional companion PE bytes to name the faulting function);
+    None when `data` is not an MDMP (wrong magic / directory out of the file). Fields (absent -> "none"):
+    mdmp_is_minidump, mdmp_version (0xa793), mdmp_implementation_version, mdmp_stream_count, mdmp_stream_types (JSON),
+    mdmp_timestamp (unix), mdmp_flags; exception: mdmp_exception_thread_id, mdmp_exception_code (0xc0000005),
+    mdmp_exception_name (EXCEPTION_ACCESS_VIOLATION), mdmp_exception_flags, mdmp_exception_address,
+    mdmp_exception_parameter_count, mdmp_exception_info_<i>, mdmp_access_type (read/write/execute for an AV / in-page
+    error), mdmp_access_address; faulting context: mdmp_arch, mdmp_pc, mdmp_sp, mdmp_fp, mdmp_reg_<name>,
+    mdmp_stack_top (word at sp from the memory list), mdmp_fault_instruction (capstone at pc); threads:
+    mdmp_thread_count, mdmp_thread_ids (JSON); modules: mdmp_module_count, mdmp_modules (JSON basenames),
+    mdmp_module_paths (JSON), mdmp_main_module, mdmp_fault_module (basename), mdmp_fault_module_path,
+    mdmp_fault_module_base, mdmp_fault_rva, mdmp_fault_symbol (mod+0xrva), with the companion PE (matched by
+    TimeDateStamp or SizeOfImage): mdmp_pe_match, mdmp_fault_function, mdmp_fault_function_offset,
+    mdmp_fault_function_symbol (fn+0xN); system: mdmp_processor_architecture, mdmp_os_version (10.0.19045),
+    mdmp_os_build, mdmp_cpu_count; misc: mdmp_process_id, mdmp_process_create_time; mdmp_memory_range_count."""
+    try:
+        return _minidump_facts(bytes(data), bytes(pe) if pe else None)
+    except Exception:   # noqa: BLE001 -- hostile/truncated input
+        return None
+
+
+def _minidump_facts(d, pe):
+    if len(d) < 32 or d[:4] != b"MDMP":
+        return None
+    ver, ns, dr, _, ts, flags = struct.unpack_from("<IIIIIQ", d, 4)
+    if (ver & 0xFFFF) != 0xA793 or ns > 4096 or dr + 12 * ns > len(d):
+        return None
+    hx = hex
+    out = {"mdmp_is_minidump": "true", "mdmp_version": hx(ver & 0xFFFF), "mdmp_implementation_version": hx(ver >> 16),
+           "mdmp_stream_count": str(ns), "mdmp_timestamp": str(ts), "mdmp_flags": hx(flags)}
+    streams = {}
+    for k in range(ns):
+        t, sz, rva = struct.unpack_from("<III", d, dr + 12 * k)
+        if t and rva + sz <= len(d):
+            streams.setdefault(t, d[rva:rva + sz])
+    tys = [struct.unpack_from("<I", d, dr + 12 * k)[0] for k in range(ns)]
+    out["mdmp_stream_types"] = _jv([_MDMP_STREAMS.get(t, hx(t)) for t in tys if t])
+    arch = None
+    si = streams.get(7)
+    if si and len(si) >= 24:
+        pa, _, _, ncpu, _, maj, mnr, bld = struct.unpack_from("<HHHBBIII", si, 0)
+        arch = pa
+        out.update(mdmp_processor_architecture=_MDMP_ARCH.get(pa, hx(pa)), mdmp_cpu_count=str(ncpu),
+                   mdmp_os_version=f"{maj}.{mnr}.{bld}", mdmp_os_build=str(bld))
+    mi = streams.get(15)
+    if mi and len(mi) >= 24:
+        _, f1, pid, ct = struct.unpack_from("<IIII", mi, 0)
+        if f1 & 1:
+            out["mdmp_process_id"] = str(pid)
+        if f1 & 2:
+            out["mdmp_process_create_time"] = str(ct)
+    ranges = []   # (start, size, file offset)
+    ml = streams.get(5)
+    if ml and len(ml) >= 4:
+        n = struct.unpack_from("<I", ml, 0)[0]
+        for k in range(min(n, (len(ml) - 4) // 16)):
+            s, sz, rva = struct.unpack_from("<QII", ml, 4 + 16 * k)
+            ranges.append((s, sz, rva))
+    m64 = streams.get(9)
+    if m64 and len(m64) >= 16:
+        n, base = struct.unpack_from("<QQ", m64, 0)
+        for k in range(min(n, (len(m64) - 16) // 16)):
+            s, sz = struct.unpack_from("<QQ", m64, 16 + 16 * k)
+            ranges.append((s, sz, base))
+            base += sz
+    if ml or m64:
+        out["mdmp_memory_range_count"] = str(len(ranges))
+
+    def mem(a, n):
+        for s, sz, o in ranges:
+            if s <= a and a + n <= s + sz and o + (a - s) + n <= len(d):
+                return d[o + a - s:o + a - s + n]
+        return None
+
+    tl = streams.get(3)
+    threads = {}
+    if tl and len(tl) >= 4:
+        n = struct.unpack_from("<I", tl, 0)[0]
+        for k in range(min(n, (len(tl) - 4) // 48)):
+            tid = struct.unpack_from("<I", tl, 4 + 48 * k)[0]
+            csz, crva = struct.unpack_from("<II", tl, 4 + 48 * k + 40)
+            threads.setdefault(tid, (csz, crva))
+        out.update(mdmp_thread_count=str(len(threads)), mdmp_thread_ids=_jv([str(t) for t in threads]))
+    mods = []
+    mlst = streams.get(4)
+    if mlst and len(mlst) >= 4:
+        n = struct.unpack_from("<I", mlst, 0)[0]
+        for k in range(min(n, (len(mlst) - 4) // 108)):
+            b, sz, ck, mts, nrva = struct.unpack_from("<QIIII", mlst, 4 + 108 * k)
+            path = _mdmp_str(d, nrva) or ""
+            mods.append((b, sz, mts, path, re.split(r"[\\/]", path)[-1]))
+        out.update(mdmp_module_count=str(len(mods)), mdmp_modules=_jv([m[4] for m in mods]),
+                   mdmp_module_paths=_jv([m[3] for m in mods]))
+        if mods:
+            out["mdmp_main_module"] = mods[0][4] or "none"
+    ex = streams.get(6)
+    regs, spec, fault = {}, None, None
+    if ex and len(ex) >= 168:
+        tid, _, code, eflags, _, addr, npar = struct.unpack_from("<IIIIQQI", ex, 0)
+        info = struct.unpack_from("<15Q", ex, 40)[:min(npar, 15)]
+        csz, crva = struct.unpack_from("<II", ex, 160)
+        fault = addr
+        out.update(mdmp_exception_thread_id=str(tid), mdmp_exception_code=hx(code),
+                   mdmp_exception_name=_MDMP_EXC.get(code, "none"), mdmp_exception_flags=hx(eflags),
+                   mdmp_exception_address=hx(addr), mdmp_exception_parameter_count=str(npar))
+        for k, v in enumerate(info):
+            out[f"mdmp_exception_info_{k}"] = hx(v)
+        if code in (0xC0000005, 0xC0000006) and len(info) >= 2:
+            out.update(mdmp_access_type=_MDMP_ACCESS.get(info[0], str(info[0])), mdmp_access_address=hx(info[1]))
+        if not (csz and crva + csz <= len(d)) and tid in threads:
+            csz, crva = threads[tid]
+        if csz and crva + csz <= len(d):
+            regs, spec = _mdmp_ctx(d[crva:crva + csz], arch)
+    if spec:
+        out["mdmp_arch"] = {"rip": "AMD64", "eip": "x86", "pc": "ARM64"}[spec[0]]
+        for k, v in regs.items():
+            out["mdmp_reg_" + k] = hx(v)
+        pc, sp, fp = (regs.get(r) for r in spec)
+        out.update(mdmp_pc=hx(pc) if pc is not None else "none", mdmp_sp=hx(sp) if sp is not None else "none",
+                   mdmp_fp=hx(fp) if fp is not None else "none")
+        W = 4 if spec[0] == "eip" else 8
+        w = mem(sp, W) if sp is not None else None
+        if w:
+            out["mdmp_stack_top"] = hx(struct.unpack("<" + ("I" if W == 4 else "Q"), w)[0])
+        code_b = None
+        if pc is not None:
+            for n in (16, 8, 4):
+                code_b = mem(pc, n)
+                if code_b:
+                    break
+        if code_b:
+            try:
+                import capstone
+                md = capstone.Cs(*{"rip": (capstone.CS_ARCH_X86, capstone.CS_MODE_64),
+                                   "eip": (capstone.CS_ARCH_X86, capstone.CS_MODE_32),
+                                   "pc": (capstone.CS_ARCH_ARM64, capstone.CS_MODE_ARM)}[spec[0]])
+                i = next(md.disasm(code_b, pc), None)
+                if i:
+                    out["mdmp_fault_instruction"] = f"{i.mnemonic} {i.op_str}".strip()
+            except Exception:   # noqa: BLE001
+                pass
+        if fault is None:
+            fault = pc
+    mod = next((m for m in mods if fault is not None and m[0] <= fault < m[0] + m[1]), None)
+    if mod:
+        rva = fault - mod[0]
+        out.update(mdmp_fault_module=mod[4] or "none", mdmp_fault_module_path=mod[3] or "none",
+                   mdmp_fault_module_base=hx(mod[0]), mdmp_fault_rva=hx(rva), mdmp_fault_symbol=f"{mod[4]}+{hx(rva)}")
+        if pe:
+            try:
+                pts, psz, funcs = _mdmp_pe_funcs(pe)
+            except Exception:   # noqa: BLE001
+                funcs = None
+            if funcs is not None:
+                ok = pts == mod[2] or psz == mod[1]
+                out["mdmp_pe_match"] = "true" if ok else "false"
+                best = None
+                for v, e, nm in funcs if ok else ():
+                    if v <= rva and (not e or rva < e) and (best is None or v >= best[0]):
+                        best = (v, e, nm)
+                if best:
+                    out.update(mdmp_fault_function=best[2], mdmp_fault_function_offset=hx(rva - best[0]),
+                               mdmp_fault_function_symbol=f"{best[2]}+{hx(rva - best[0])}")
+    return out
+
+
+_MDMP_ALIAS = {"exception": "exception_name", "exception_code_name": "exception_name", "code": "exception_code",
+               "address": "exception_address", "crash_address": "exception_address", "thread_id": "exception_thread_id",
+               "faulting_thread": "exception_thread_id", "faulting_thread_id": "exception_thread_id",
+               "rip": "pc", "eip": "pc", "instruction_pointer": "pc", "rsp": "sp", "esp": "sp", "stack_pointer": "sp",
+               "rbp": "fp", "ebp": "fp", "frame_pointer": "fp", "module": "fault_module", "faulting_module": "fault_module",
+               "rva": "fault_rva", "fault_offset": "fault_rva", "function": "fault_function",
+               "faulting_function": "fault_function", "symbol": "fault_function_symbol", "access": "access_type",
+               "operation": "access_type", "target_address": "access_address", "fault_address": "access_address",
+               "number_of_streams": "stream_count", "stream_directory_count": "stream_count",
+               "threads": "thread_count", "modules": "module_count", "pid": "process_id", "os_build": "os_build",
+               "number_parameters": "exception_parameter_count", "parameters": "exception_parameter_count"}
+
+
+def minidump_field(data, field, pe=None):
+    """One minidump_facts value; bare names get the mdmp_ prefix ('exception_code', 'reg_rax', aliases rip/eip -> pc,
+    rsp -> sp, rbp -> fp); "none" when absent; None when `data` is not an MDMP."""
+    if _MDMP_MEMO[:2] != [data, pe]:
+        _MDMP_MEMO[:] = [data, pe, minidump_facts(data, pe)]
+    f = _MDMP_MEMO[2]
+    if f is None:
+        return None
+    k = re.sub(r"\[(\d+)\]", r"_\1", re.sub(r"[\s-]+", "_", field.strip().lower()))
+    k = k[5:] if k.startswith("mdmp_") else k
+    if k.startswith(("info_", "exception_information_", "exceptioninformation_")):
+        k = "exception_info_" + k.rsplit("_", 1)[-1]
+    if "mdmp_" + k in f:
+        return f["mdmp_" + k]
+    if k in ("rip", "eip") and "mdmp_reg_" + k in f:
+        return f["mdmp_reg_" + k]
+    k = _MDMP_ALIAS.get(k, k)
+    return f.get("mdmp_" + k, f.get("mdmp_reg_" + k, "none"))
+
+
+_MDMP_MEMO = [None, None, None]
+
+
+# ---- faulting-instruction locator: fault pc / file offset (or a core / text report) -> function + decoded insn ----
+_FI_HEX = re.compile(r"0x[0-9a-fA-F]+")
+_FI_Q = (("offset", re.compile(r"(?:file[ _-]?offset|offset)\s*(?:of|is|=|:)?\s*(0x[0-9a-f]+|\d+)\b", re.I)),
+         ("va", re.compile(r"(?:\b[re]?ip|\bpc|instruction pointer|program counter|fault(?:ing)?[ _-]?(?:pc|ip|va|"
+                           r"address of the instruction)|\bva|virtual address|address|crashed at|faulted at|\bat)\s*"
+                           r"(?:of|is|was|=|:)?\s*(0x[0-9a-f]+)", re.I)),
+         ("si_addr", re.compile(r"(?:si_addr|fault(?:ing)?[ _-]?addr(?:ess)?|accessing|access(?:ed)? address|"
+                                r"addr)\s*(?:of|is|was|=|:)?\s*(0x[0-9a-f]+)", re.I)))
+_FI_SIGS = {"SIGSEGV": 11, "SIGBUS": 7, "SIGFPE": 8, "SIGILL": 4, "SIGTRAP": 5, "SIGABRT": 6}
+
+
+def _fi_gm(text):
+    """capstone intel text -> GM convention: lowercase, decimal numbers, single spaces, no trailing space."""
+    t = " ".join(text.lower().split())
+    return _FI_HEX.sub(lambda m: str(int(m.group(0), 16)), t)
+
+
+def _fi_img(data):
+    """{fmt, arch, bits, segs [(va, size, off, exec)], funcs [(start, size, name, source)], imports {slot: name},
+    gotbase, entry}; None when not an x86/x86-64/AArch64/ARM ELF or PE."""
+    if data[:4] == b"\x7fELF":
+        h = _core_hdr(data)
+        if not h or h[0] != "<" or h[2] not in (1, 2, 3):
+            return None
+        e, b64, et, em, entry, ph = h
+        arch = {62: "x86_64", 3: "i386", 183: "aarch64", 40: "arm"}.get(em)
+        if not arch:
+            return None
+        pf = []   # p_flags are not in _core_hdr's tuple: re-read them
+        phoff = struct.unpack_from("<Q" if b64 else "<I", data, 32 if b64 else 28)[0]
+        phes = struct.unpack_from("<H", data, 54 if b64 else 42)[0]
+        for k, p in enumerate(ph):
+            fl = struct.unpack_from("<I", data, phoff + k * phes + (4 if b64 else 24))[0]
+            if p[0] == 1:
+                pf.append((p[2], p[3], p[1], bool(fl & 1)))
+        segs = pf
+        img = dict(fmt="elf", arch=arch, bits=64 if b64 else 32, segs=segs, entry=entry, imports={}, gotbase=None,
+                   funcs=[(v, s, n, "symtab") for v, s, n in _elf_funcs(data)])
+        try:
+            from elftools.elf.elffile import ELFFile
+            from elftools.elf.relocation import RelocationSection
+            ef = ELFFile(io.BytesIO(data))
+            if not segs:   # relocatable object: sections stand in for segments
+                img["segs"] = [(s["sh_addr"], s["sh_size"], s["sh_offset"], bool(s["sh_flags"] & 4))
+                               for s in ef.iter_sections() if s["sh_type"] == "SHT_PROGBITS" and s["sh_flags"] & 2]
+            for s in ef.iter_sections():
+                if s.name == ".got.plt":
+                    img["gotbase"] = s["sh_addr"]
+                if isinstance(s, RelocationSection) and s["sh_link"] and s.name in (".rela.plt", ".rel.plt"):
+                    st = ef.get_section(s["sh_link"])
+                    for r in s.iter_relocations():
+                        nm = st.get_symbol(r["r_info_sym"]).name if r["r_info_sym"] else ""
+                        if nm:
+                            img["imports"][r["r_offset"]] = nm.split("@")[0]
+            if not img["funcs"] and ef.has_dwarf_info() is not None:
+                fde = {}
+                for x in ef.get_dwarf_info().EH_CFI_entries() if ef.get_section_by_name(".eh_frame") else ():
+                    hd = getattr(x, "header", None)
+                    if hd is not None and "initial_location" in hd:
+                        fde[hd["initial_location"]] = hd["address_range"]
+                img["funcs"] = [(a, n, f"sub_{a:x}", "eh_frame") for a, n in sorted(fde.items())]
+        except Exception:   # noqa: BLE001
+            pass
+        return img
+    if data[:2] == b"MZ":
+        import pefile
+        pe = pefile.PE(data=data, fast_load=True)
+        arch = {0x8664: "x86_64", 0x14c: "i386", 0xaa64: "aarch64"}.get(pe.FILE_HEADER.Machine)
+        if not arch:
+            return None
+        pe.parse_data_directories(directories=[0, 1, 3])
+        ib = pe.OPTIONAL_HEADER.ImageBase
+        segs = [(ib + s.VirtualAddress, min(s.SizeOfRawData, max(s.Misc_VirtualSize, 1)), s.PointerToRawData,
+                 bool(s.Characteristics & 0x20000000)) for s in pe.sections]
+        names, imports = {}, {}
+        for x in getattr(getattr(pe, "DIRECTORY_ENTRY_EXPORT", None), "symbols", None) or []:
+            if x.name and x.address:
+                names[ib + x.address] = x.name.decode("latin-1")
+        for d in getattr(pe, "DIRECTORY_ENTRY_IMPORT", None) or []:
+            for i in d.imports:
+                if i.name and i.address:
+                    imports[i.address] = i.name.decode("latin-1")
+        funcs = []
+        for rf in getattr(pe, "DIRECTORY_ENTRY_EXCEPTION", None) or []:
+            st = getattr(rf, "struct", None)
+            if st is not None and st.EndAddress > st.BeginAddress:
+                a = ib + st.BeginAddress
+                funcs.append((a, st.EndAddress - st.BeginAddress, names.get(a, f"sub_{a:x}"), "pdata"))
+        known = {f[0] for f in funcs}
+        funcs += [(a, 0, n, "export") for a, n in names.items() if a not in known]
+        return dict(fmt="pe", arch=arch, bits=64 if arch != "i386" else 32, segs=segs, funcs=sorted(funcs),
+                    imports=imports, gotbase=None, entry=ib + pe.OPTIONAL_HEADER.AddressOfEntryPoint)
+    return None
+
+
+def _fi_v2o(img, va, n=1):
+    for a, sz, o, _ in img["segs"]:
+        if a <= va and va + n <= a + sz:
+            return o + va - a
+    return None
+
+
+def _fi_o2v(img, off):
+    for a, sz, o, _ in img["segs"]:
+        if o <= off < o + sz:
+            return a + off - o
+    return None
+
+
+def _fi_func(img, va):
+    best = None
+    for v, sz, nm, src in img["funcs"]:
+        if v <= va and (va < v + sz or not sz) and (best is None or v > best[0] or (v == best[0] and sz)):
+            best = (v, sz, nm, src)
+    if best and not best[1]:   # size-less symbol: bounded by the next function start
+        nxt = min((v for v, *_ in img["funcs"] if v > best[0]), default=None)
+        if nxt is not None and va >= nxt:
+            return None
+    return best
+
+
+def _fi_md(arch):
+    import capstone as C
+    md = {"x86_64": lambda: C.Cs(C.CS_ARCH_X86, C.CS_MODE_64), "i386": lambda: C.Cs(C.CS_ARCH_X86, C.CS_MODE_32),
+          "aarch64": lambda: C.Cs(C.CS_ARCH_ARM64, C.CS_MODE_ARM),
+          "arm": lambda: C.Cs(C.CS_ARCH_ARM, C.CS_MODE_ARM)}[arch]()
+    md.detail = True
+    return md
+
+
+def _fi_target_name(img, data, md, t):
+    """Name of a direct call/branch target: local FUNC symbol, else the import its PLT/IAT stub jumps through."""
+    f = _fi_func(img, t)
+    if f and f[0] == t and f[3] in ("symtab", "export"):
+        return f[2].split("@")[0]
+    if t in img["imports"]:
+        return img["imports"][t]
+    o = _fi_v2o(img, t, 4)
+    if o is None:
+        return None
+    adrp = None
+    for i in md.disasm(bytes(data[o:o + 24]), t, 3):
+        m, ops = i.mnemonic, i.op_str
+        if m in ("endbr64", "endbr32", "bti", "nop"):
+            continue
+        if m == "adrp":
+            adrp = int(ops.split("#")[-1], 0)
+            continue
+        if m == "ldr" and adrp is not None:
+            mm = re.search(r"#(0x[0-9a-f]+|\d+)\]", ops)
+            return img["imports"].get(adrp + int(mm.group(1), 0)) if mm else None
+        if m.endswith("jmp"):
+            mm = re.search(r"\[(rip|ebx)?\s*\+?\s*(0x[0-9a-f]+)?\]", ops)
+            if not mm:
+                mm2 = re.search(r"\[(0x[0-9a-f]+)\]", ops)
+                return img["imports"].get(int(mm2.group(1), 16)) if mm2 else None
+            d = int(mm.group(2) or "0", 16)
+            slot = i.address + i.size + d if mm.group(1) == "rip" else (img["gotbase"] or 0) + d \
+                if mm.group(1) == "ebx" else d
+            return img["imports"].get(slot)
+        return None
+    return None
+
+
+def _fi_decode(img, data, va, code=None):
+    """capstone insn at va (code bytes override the image's, e.g. from a core) -> (insn, md) or (None, md)."""
+    md = _fi_md(img["arch"])
+    if code is None:
+        o = _fi_v2o(img, va)
+        if o is None:
+            return None, md
+        code = bytes(data[o:o + 16])
+    return next(md.disasm(code, va, 1), None), md
+
+
+def _fi_insn_facts(img, data, ins, md, out):
+    import capstone as C
+    arch = img["arch"]
+    gm = _fi_gm(f"{ins.mnemonic} {ins.op_str}")
+    out.update(fault_insn=gm, fault_insn_hex=" ".join(f"{ins.mnemonic} {ins.op_str}".split()),
+               fault_insn_bytes=ins.bytes.hex(), fault_insn_size=str(ins.size), fault_mnemonic=ins.mnemonic,
+               fault_operands=_fi_gm(ins.op_str) or "none")
+    mem, acc = None, None
+    for op in ins.operands:
+        if op.type == (C.x86.X86_OP_MEM if arch in ("x86_64", "i386") else
+                       C.arm64.ARM64_OP_MEM if arch == "aarch64" else C.arm.ARM_OP_MEM):
+            mem = op
+            acc = getattr(op, "access", 0)
+    if mem is not None and ins.mnemonic not in ("lea", "nop", "endbr64", "prefetcht0", "prefetchw"):
+        m = mem.mem
+        rn = lambda r: ins.reg_name(r) if r else "none"   # noqa: E731
+        out.update(fault_mem_base=rn(m.base), fault_mem_index=rn(m.index),
+                   fault_mem_disp=str(m.disp), fault_mem_disp_hex=hex(m.disp))
+        if arch in ("x86_64", "i386"):
+            out["fault_mem_scale"] = str(m.scale)
+            out["fault_access_size"] = str(mem.size)
+            if m.segment:
+                out["fault_mem_segment"] = ins.reg_name(m.segment)
+        else:
+            mn = ins.mnemonic
+            sz = 1 if mn.endswith("b") and mn not in ("sub",) else 2 if mn.endswith("h") else None
+            if sz is None and ins.operands:
+                r0 = ins.reg_name(ins.operands[0].reg) or ""
+                sz = 4 if r0[:1] in ("w", "s") else 8 if r0[:1] in ("x", "d") else 16 if r0[:1] == "q" else \
+                    4 if arch == "arm" else None
+                if mn.endswith("p") and sz:
+                    sz *= 2
+            out["fault_access_size"] = str(sz) if sz else "none"
+        if not acc or arch in ("aarch64", "arm"):   # capstone's arm64 access flags are unreliable for stores
+            mn = ins.mnemonic
+            acc = (2 if mn.startswith("st") else 1 if mn.startswith("ld") else 0) if arch in ("aarch64", "arm") \
+                else (2 if mn.startswith(("mov", "stos")) and ins.operands[0].type == C.x86.X86_OP_MEM else 1)
+        if ins.mnemonic in ("push", "call") and arch in ("x86_64", "i386"):
+            acc = 1 if ins.operands and ins.operands[0].type == C.x86.X86_OP_MEM else acc
+        out["fault_access"] = {1: "read", 2: "write", 3: "read_write"}.get(acc & 3, "none")
+    else:
+        out.update(fault_mem_base="none", fault_mem_index="none", fault_mem_disp="none", fault_access="none",
+                   fault_access_size="none")
+    if ins.operands and (ins.mnemonic in ("call", "bl", "blx", "jmp") or arch in ("aarch64", "arm") and
+                         re.fullmatch(r"b(\.\w+)?", ins.mnemonic)):
+        op = ins.operands[0]
+        if op.type == (C.x86.X86_OP_IMM if arch in ("x86_64", "i386") else C.arm64.ARM64_OP_IMM if arch == "aarch64"
+                       else C.arm.ARM_OP_IMM):
+            out["fault_call_target"] = hex(op.imm)
+            out["fault_call_target_name"] = _fi_target_name(img, data, md, op.imm) or "none"
+    return mem
+
+
+def _fi_classify(out, mem, sig, si_addr, regs, arch):
+    mn = out.get("fault_mnemonic", "")
+    tgt = out.get("fault_call_target_name", "none")
+    fn = out.get("fault_function", "none")
+    if mn in ("div", "idiv") or sig == 8 and mn.startswith(("div", "idiv", "sdiv", "udiv")):
+        return "divide_error"
+    if mn == "ud2" or mn == "udf" or mn == "ud1":
+        return "ud2_trap" if mn != "udf" else "udf_trap"
+    if mn in ("int3", "brk", "bkpt"):
+        return "int3_trap" if mn == "int3" else "brk_trap"
+    if mn == "hlt":
+        return "hlt"
+    if "__stack_chk_fail" in tgt or "__fortify_fail" in tgt or "__stack_chk_fail" in fn:
+        return "stack_protector"
+    if tgt in ("abort", "__assert_fail", "__assert_rtn", "_assert", "__assert", "_wassert", "raise") or \
+            tgt.startswith("__assert"):
+        return "assert_abort" if "assert" in tgt else "abort"
+    acc = out.get("fault_access", "none")
+    if out.get("fault_bad_call") == "true":
+        return "call_bad_pointer"
+    if mem is None or acc == "none":
+        if mn.startswith("call") or mn in ("blr", "blx", "bx"):
+            return "call_bad_pointer" if sig in (11, 7) else "call"
+        return {11: "segfault", 7: "bus_error", 4: "illegal_instruction", 5: "trap", 6: "abort"}.get(sig, "none")
+    rw = "write" if acc in ("write", "read_write") else "read"
+    if mn.startswith("call") or mn.startswith("jmp") or mn.startswith("push") and sig == 11 and si_addr is not None \
+            and regs.get("sp") is not None and abs(si_addr - regs["sp"]) < 0x10000:
+        rw = "read"
+    ea = None
+    base = out.get("fault_mem_base")
+    if regs and base != "none" and base in regs:
+        idx = out.get("fault_mem_index")
+        ea = regs[base] + (regs.get(idx, 0) * int(out.get("fault_mem_scale", "1")) if idx != "none" else 0) \
+            + int(out["fault_mem_disp"])
+        ea &= (1 << 64) - 1
+        out["fault_mem_address"] = hex(ea)
+        out["fault_mem_base_value"] = hex(regs[base])
+    if si_addr is not None and si_addr < 0x1000 or ea is not None and ea < 0x1000 or \
+            regs and base in regs and regs[base] == 0:
+        return f"null_pointer_{rw}"
+    if sig in (11, 7) or si_addr is not None:
+        return f"bad_pointer_{rw}"
+    return f"memory_{rw}"
+
+
+def fault_insn_facts(data, va=None, offset=None, core=None, question=None, si_addr=None, signal=None):
+    """'Find the faulting instruction': {field: answer string} for a fault pc of executable `data` (ELF / PE; x86-64,
+    i386, AArch64, ARM). The pc comes from `va` (int / "0x.."), `offset` (file offset), an ELF `core` of `data` (its
+    NT_PRSTATUS pc + siginfo; `data` itself may be the core when no executable is handed out), or the `question` /
+    text-report string ("rip 0x401136", "offset 0x1136", "si_addr 0x10", "SIGFPE"). Fields (absent -> "none"):
+    fault_va, fault_file_offset, fault_function (FUNC symbol, else .eh_frame FDE / PE .pdata start as sub_<hex>),
+    fault_function_source (symtab/eh_frame/pdata/export), fault_function_start, fault_function_end,
+    fault_function_offset (0x1a), fault_function_offset_dec, fault_symbol (func+0x1a), fault_insn (GM convention:
+    lowercase capstone intel, decimal numbers, `mov dword ptr [rax], 0`), fault_insn_hex (capstone native),
+    fault_insn_bytes, fault_insn_size, fault_mnemonic, fault_operands, fault_mem_base/_index/_scale/_disp,
+    fault_access_size (bytes), fault_access (read/write/read_write/none), fault_call_target(_name),
+    fault_mem_address (core regs), fault_signal, fault_si_addr, fault_class (null_pointer_read/_write,
+    bad_pointer_read/_write, divide_error, ud2_trap, int3_trap, brk_trap, hlt, call_bad_pointer, stack_protector,
+    assert_abort, abort, memory_read/_write). None when nothing can be located."""
+    try:
+        return _fault_insn_facts(bytes(data), va, offset, bytes(core) if core else None, question, si_addr, signal)
+    except Exception:   # noqa: BLE001 -- hostile/truncated input
+        return None
+
+
+def _fi_int(v):
+    if v is None or isinstance(v, int):
+        return v
+    s = str(v).strip().lower()
+    return int(s, 16) if s.startswith("0x") else int(s) if s.isdigit() else None
+
+
+def _fi_stack_ret(img, data, cf, cd, bias, md):
+    """First return address on the core's stack (from sp, 4 KB) that lands just after a call in the executable."""
+    h = _core_hdr(cd)
+    loads = [p for p in h[5] if p[0] == 1]
+    W = 8 if h[1] else 4
+    sp = _fi_int(cf.get("core_sp"))
+    if sp is None:
+        return None
+    blob = _core_read(loads, cd, sp, 4096) or b""
+    lr = _fi_int(cf.get("core_reg_x30") or cf.get("core_reg_lr"))
+    cands = ([lr] if lr else []) + [int.from_bytes(blob[k:k + W], "little") for k in range(0, len(blob) - W + 1, W)]
+    for w in cands:
+        r = w - bias
+        if not any(a <= r < a + sz and x for a, sz, _, x in img["segs"]):
+            continue
+        for back in ((4,) if img["arch"] in ("aarch64", "arm") else (5, 6, 2, 3, 7)):
+            o = _fi_v2o(img, r - back)
+            if o is None:
+                continue
+            i = next(md.disasm(bytes(data[o:o + back]), r - back, 1), None)
+            if i and i.size == back and i.mnemonic in ("call", "bl", "blr", "blx"):
+                return r - back
+    return None
+
+
+def _fault_insn_facts(d, va, offset, core, question, si_addr, signal):
+    if core is None and d[:4] == b"\x7fELF" and len(d) > 18 and d[16] == 4:
+        core, d = d, b""
+    img = _fi_img(d) if d else None
+    out = {}
+    q = question or ""
+    sig = _fi_int(signal) if not isinstance(signal, str) or signal.strip().isdigit() else \
+        _FI_SIGS.get(signal.strip().upper())
+    for nm, n in _FI_SIGS.items():
+        if sig is None and re.search(rf"\b{nm}\b|\b{nm[3:]}\b", q, re.I if nm != "SIGILL" else 0):
+            sig = n
+    if sig is None and re.search(r"divide error|division by zero|#de\b", q, re.I):
+        sig = 8
+    if sig is None and re.search(r"segfault|segmentation fault|access violation|0xc0000005", q, re.I):
+        sig = 11
+    va, offset, si_addr = _fi_int(va), _fi_int(offset), _fi_int(si_addr)
+    if va is None and offset is None and q:
+        for kind, rx in _FI_Q:
+            m = rx.search(q)
+            if not m:
+                continue
+            v = _fi_int(m.group(1))
+            if kind == "offset" and offset is None:
+                offset = v
+            elif kind == "si_addr" and si_addr is None:
+                si_addr = v
+            elif kind == "va" and va is None and not re.match(r"(?:si_)?addr|accessing", m.group(0), re.I):
+                va = v
+        if va is None and offset is None and img:
+            m = re.search(r"([A-Za-z_.$][\w.$@]*)\s*\+\s*(0x[0-9a-f]+|\d+)", q, re.I)
+            f = next((f for f in img["funcs"] if m and f[2].split("@")[0] == m.group(1)), None)
+            if f:
+                va = f[0] + _fi_int(m.group(2))
+    regs, code = {}, None
+    if core is not None:
+        cf = elf_core_facts(core, d or None)
+        if not cf or cf.get("core_is_core") != "true":
+            return None if va is None and offset is None else _fi_finish(img, d, va, offset, out, None, sig,
+                                                                         si_addr, regs)
+        if img is None:   # no executable handed out: decode from the core's own dump
+            arch = cf.get("core_arch")
+            if arch not in ("x86_64", "i386", "aarch64", "arm"):
+                return None
+            img = dict(fmt="core", arch=arch, bits=64 if cf.get("core_class") == "ELF64" else 32, segs=[], funcs=[],
+                       imports={}, gotbase=None, entry=None)
+        sig = sig or _fi_int(cf.get("core_signal_number"))
+        if si_addr is None and cf.get("core_fault_address") not in (None, "none") and sig in (11, 7):
+            si_addr = _fi_int(cf["core_fault_address"])
+        regs = {k[9:]: int(v, 16) for k, v in cf.items() if k.startswith("core_reg_")}
+        if "rsp" in regs or "esp" in regs:
+            regs["sp"] = regs.get("rsp", regs.get("esp"))
+        pc = _fi_int(cf.get("core_pc"))
+        out.update(fault_signal=cf.get("core_signal", "none"), fault_core_pc=cf.get("core_pc", "none"))
+        h = _core_hdr(core)
+        loads = [p for p in h[5] if p[0] == 1]
+        ent = _fi_int(cf.get("core_entry"))
+        bias = ent - img["entry"] if ent is not None and img.get("entry") is not None else 0
+        if img["fmt"] == "core":
+            bias = 0
+        if va is None and offset is None and pc is not None:
+            in_exe = img["fmt"] == "core" or any(a <= pc - bias < a + sz and x for a, sz, _, x in img["segs"])
+            if in_exe:
+                va = pc - bias
+                code = _core_read(loads, core, pc, 16) or _core_read(loads, core, pc, 4)
+            else:
+                md = _fi_md(img["arch"])
+                mapped = _core_read(loads, core, pc, 1) is not None or cf.get("core_pc_module", "none") != "none"
+                r = _fi_stack_ret(img, d, cf, core, bias, md) if img["fmt"] != "core" else None
+                if r is not None:
+                    va = r
+                    out["fault_frame"] = "caller"
+                    if not mapped:
+                        out["fault_bad_call"] = "true"
+                else:
+                    va = pc
+                    code = _core_read(loads, core, pc, 16)
+            out["fault_load_bias"] = hex(bias)
+    if va is None and offset is None:
+        return None
+    return _fi_finish(img, d, va, offset, out, code, sig, si_addr, regs)
+
+
+def _fi_finish(img, d, va, offset, out, code, sig, si_addr, regs):
+    if img is None:
+        return None
+    if va is None:
+        va = _fi_o2v(img, offset)
+        out["fault_file_offset"] = hex(offset)
+        if va is None:
+            return None
+    else:
+        fo = _fi_v2o(img, va)
+        if fo is None and code is None and img["fmt"] != "core" and out.get("fault_bad_call") != "true":
+            return None   # pc outside every loaded segment of this image
+        out["fault_file_offset"] = hex(fo) if fo is not None else "none"
+    out["fault_va"] = hex(va)
+    if sig is not None:
+        out.setdefault("fault_signal", _CORE_SIG.get(sig, f"SIG{sig}"))
+    out["fault_si_addr"] = hex(si_addr) if si_addr is not None else "none"
+    f = _fi_func(img, va) if any(a <= va < a + sz and x for a, sz, _, x in img["segs"]) else None
+    if f:
+        out.update(fault_function=f[2], fault_function_source=f[3], fault_function_start=hex(f[0]),
+                   fault_function_end=hex(f[0] + f[1]) if f[1] else "none", fault_function_offset=hex(va - f[0]),
+                   fault_function_offset_dec=str(va - f[0]), fault_symbol=f"{f[2]}+{hex(va - f[0])}")
+    ins, md = _fi_decode(img, d, va, code)
+    mem = _fi_insn_facts(img, d, ins, md, out) if ins else None
+    if ins is None:
+        out["fault_insn"] = "none"
+    out["fault_class"] = _fi_classify(out, mem, sig, si_addr, regs, img["arch"]) if ins else \
+        ("call_bad_pointer" if out.get("fault_bad_call") == "true" else "none")
+    return out
+
+
+_FI_ALIAS = {"function": "function", "func": "function", "symbol": "symbol", "instruction": "insn",
+             "faulting_instruction": "insn", "disassembly": "insn", "mnemonic": "mnemonic", "class": "class",
+             "classification": "class", "crash_type": "class", "fault_type": "class", "kind": "class",
+             "offset_in_function": "function_offset", "function_offset": "function_offset", "base": "mem_base",
+             "base_register": "mem_base", "index_register": "mem_index", "displacement": "mem_disp",
+             "access_size": "access_size", "size": "access_size", "access": "access", "access_type": "access",
+             "read_or_write": "access", "address": "va", "pc": "va", "file_offset": "file_offset"}
+
+
+def fault_insn_field(data, field, va=None, offset=None, core=None, question=None, si_addr=None, signal=None):
+    """One fault_insn_facts value; bare names get the fault_ prefix (aliases: function, symbol, instruction,
+    mnemonic, class, access, base_register ...); "none" when absent; None when nothing could be located."""
+    key = (data, va, offset, core, question, si_addr, signal)
+    if _FI_MEMO[0] is None or len(_FI_MEMO[0]) != len(key) or any(a is not b for a, b in zip(_FI_MEMO[0], key)):
+        _FI_MEMO[:] = [key, fault_insn_facts(data, va, offset, core, question, si_addr, signal)]
+    f = _FI_MEMO[1]
+    if f is None:
+        return None
+    k = field.strip().lower()
+    k = k[6:] if k.startswith("fault_") else k
+    k = _FI_ALIAS.get(k, k)
+    return f.get("fault_" + k, "none")
+
+
+_FI_MEMO = [None, None]
+
+
+# ---- crash exploitability VERDICT ("triage what went wrong from the wreckage"): fault class + CWE + rating ----------
+# Rule order = CERT GDB `exploitable` plugin rules.py (!exploitable heritage; near NULL = fa < 64 KiB); first match wins,
+# the rest are other_tags. Evidence: an ELF core (+ companion exe -> fault_insn_facts decodes the faulting insn, walks
+# out of libc to the call site), the abort reason glibc leaves in the dump (__abort_msg page: "*** stack smashing
+# detected ***", "free(): double free detected", "Assertion `..' failed."), and/or explicit kwargs / a text report.
+# Fixtures: tests/data/binary_fixtures/cverdict_* (cverdict_check.py; oracle = the plugin itself + readelf).
+# PossibleStackCorruption / UseAfterFree (gdb unwinder / ASan) are only taken from report text. Field names SPECULATIVE.
+_CV_RULES = (("ReturnAv", "EXPLOITABLE"), ("UseAfterFree", "EXPLOITABLE"), ("SegFaultOnPc", "EXPLOITABLE"),
+             ("BranchAv", "EXPLOITABLE"), ("StackCodeExecution", "EXPLOITABLE"),
+             ("StackBufferOverflow", "EXPLOITABLE"), ("PossibleStackCorruption", "EXPLOITABLE"),
+             ("DestAv", "EXPLOITABLE"), ("BadInstruction", "EXPLOITABLE"), ("HeapError", "EXPLOITABLE"),
+             ("StackOverflow", "PROBABLY_EXPLOITABLE"), ("SegFaultOnPcNearNull", "PROBABLY_EXPLOITABLE"),
+             ("BranchAvNearNull", "PROBABLY_EXPLOITABLE"), ("BlockMoveAv", "PROBABLY_EXPLOITABLE"),
+             ("DestAvNearNull", "PROBABLY_EXPLOITABLE"), ("SourceAvNearNull", "PROBABLY_NOT_EXPLOITABLE"),
+             ("FloatingPointException", "PROBABLY_NOT_EXPLOITABLE"), ("BenignSignal", "PROBABLY_NOT_EXPLOITABLE"),
+             ("SourceAv", "UNKNOWN"), ("AbortSignal", "UNKNOWN"), ("AccessViolation", "UNKNOWN"),
+             ("UncategorizedSignal", "UNKNOWN"))
+_CV_SIG = {"SIGHUP": 1, "SIGINT": 2, "SIGQUIT": 3, "SIGILL": 4, "SIGTRAP": 5, "SIGABRT": 6, "SIGIOT": 6, "SIGBUS": 7,
+           "SIGFPE": 8, "SIGKILL": 9, "SIGUSR1": 10, "SIGSEGV": 11, "SIGUSR2": 12, "SIGPIPE": 13, "SIGALRM": 14,
+           "SIGTERM": 15, "SIGCHLD": 17, "SIGCONT": 18, "SIGSTOP": 19, "SIGTSTP": 20, "SIGURG": 23, "SIGVTALRM": 26,
+           "SIGPROF": 27, "SIGWINCH": 28, "SIGIO": 29, "SIGPOLL": 29, "SIGSYS": 31}
+_CV_BENIGN = {15, 2, 3, 9, 1, 14, 26, 27, 29, 23, 10, 12, 28, 17, 18, 19, 20}
+_CV_EXC = {0xC0000005: 11, 0xC0000094: 8, 0xC0000095: 8, 0xC000008E: 8, 0xC000001D: 4, 0xC0000096: 4, 0xC0000409: 6,
+           0xC0000374: 6, 0xC00000FD: 11, 0x80000003: 5, 0xC0000602: 6}   # NTSTATUS -> POSIX-equivalent signal
+_CV_ABORT = re.compile(r"\*\*\* (?:stack smashing|buffer overflow) detected \*\*\*[^\0\n]{0,40}|"
+                       r"(?:free|malloc|realloc|calloc|corrupted|double free|munmap_chunk|malloc_consolidate|"
+                       r"_int_free|_int_malloc|tcache_thread_shutdown|malloc_printerr)[\w (),]{0,24}?"
+                       r"(?:\(\))?: ?[a-z][^\0\n]{2,80}|double free or corruption[^\0\n]{0,30}|"
+                       r"corrupted (?:size vs\. prev_size|double-linked list|top size)[^\0\n]{0,30}|"
+                       r"[^\0\n]{0,160}Assertion [`'][^\0\n]{1,240}' failed\.?|"
+                       r"(?:AddressSanitizer|UndefinedBehaviorSanitizer): [^\0\n]{4,120}")
+_CV_FC = {   # fault_class -> CWE
+    "null_deref": 476, "wild_write": 787, "wild_read": 125, "exec_non_code": 119, "stack_overrun": 121,
+    "stack_canary": 121, "fortify_overflow": 787, "heap_corruption": 122, "double_free": 415, "use_after_free": 416,
+    "divide_by_zero": 369, "assertion": 617, "stack_exhaustion": 674, "bad_instruction": None, "abort": None,
+    "access_violation": None, "benign_signal": None, "none": None}
+_CV_CWE_NAME = {476: "NULL Pointer Dereference", 787: "Out-of-bounds Write", 125: "Out-of-bounds Read",
+                119: "Improper Restriction of Operations within the Bounds of a Memory Buffer",
+                121: "Stack-based Buffer Overflow", 122: "Heap-based Buffer Overflow", 415: "Double Free",
+                416: "Use After Free", 369: "Divide By Zero", 617: "Reachable Assertion",
+                674: "Uncontrolled Recursion"}
+
+
+def _cv_int(v):
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    m = re.search(r"-?(?:0x[0-9a-f]+|\d+)", str(v), re.I)
+    return int(m.group(), 0) if m and str(v).strip().lower() not in ("none", "") else None
+
+
+def _cv_sig(v):
+    if v is None:
+        return None
+    s = str(v).strip().upper()
+    m = re.search(r"SIG[A-Z]+", s)
+    if m and m.group() in _CV_SIG:
+        return _CV_SIG[m.group()]
+    n = _cv_int(v)
+    return _CV_EXC.get(n & 0xFFFFFFFF, n) if n is not None else None
+
+
+def _cv_core_maps(d):
+    """(loads [(off, va, filesz)], NT_FILE [(start, end, name)]) of an ELF core."""
+    h = _core_hdr(d)
+    e, b64 = h[0], h[1]
+    W = 8 if b64 else 4
+    notes, maps = [], []
+    for t, off, _, fs, _ in h[5]:
+        if t == 4:
+            _note_walk(d, e, off, fs, 4, "none", notes)
+    for nt in notes:
+        b = d[nt["desc_offset"]:nt["desc_offset"] + nt["desc_size"]]
+        if nt["owner"] == "CORE" and nt["type"] == 0x46494c45 and len(b) >= 2 * W:
+            cnt = struct.unpack_from(e + ("Q" if b64 else "I"), b, 0)[0]
+            if cnt <= (len(b) - 2 * W) // (3 * W):
+                nm = b[2 * W + 3 * W * cnt:].split(b"\0")
+                for k in range(cnt):
+                    s, en, _ = struct.unpack_from(e + ("QQQ" if b64 else "III"), b, 2 * W + 3 * W * k)
+                    maps.append((s, en, nm[k].decode("utf-8", "replace") if k < len(nm) else ""))
+    return [(off, va, ms) for t, off, va, _, ms in h[5] if t == 1], maps
+
+
+def _cv_mitigations(x):
+    """checksec-style mitigations of an ELF / PE executable: {canary, nx, pie, relro, fortify, cfg} ("none" unknown)."""
+    tf = lambda b: "true" if b else "false"   # noqa: E731
+    m = dict.fromkeys(("canary", "nx", "pie", "relro", "fortify", "cfg"), "none")
+    if not x:
+        return m
+    if x[:4] == b"\x7fELF":
+        h = elf_header_facts(x, hcfg=False) or {}
+        names = set(re.findall(rb"\0(__\w{2,40}_chk(?:_fail)?)(?:@\w+)?\0", x[:1 << 24]))
+        m.update(canary=tf(any(n.startswith(b"__stack_chk_fail") for n in names)),
+                 nx=h.get("has_nx", "none"), pie=h.get("is_pie", "none"), relro=h.get("relro", "none"),
+                 fortify=tf(any(n.endswith(b"_chk") and not n.startswith(b"__stack_chk") for n in names)),
+                 cfg="false")
+    elif x[:2] == b"MZ":
+        import pefile
+        try:
+            pe = pefile.PE(data=x, fast_load=True)
+            pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG"]])
+        except Exception:   # noqa: BLE001
+            return m
+        dc = pe.OPTIONAL_HEADER.DllCharacteristics
+        lc = getattr(getattr(pe, "DIRECTORY_ENTRY_LOAD_CONFIG", None), "struct", None)
+        m.update(canary=tf(bool(getattr(lc, "SecurityCookie", 0))), nx=tf(dc & 0x100), pie=tf(dc & 0x40),
+                 relro="none", fortify="none", cfg=tf(dc & 0x4000))
+    return m
+
+
+def _cv_text(t, ev):
+    """Fill missing evidence from a text crash report (gdb / dmesg / siginfo dumps, ASan, WER-style)."""
+    g = lambda rx: (re.search(rx, t, re.I | re.M) or [None, None])[1]   # noqa: E731
+    ev.setdefault("signal", g(r"\b(SIG[A-Z]{2,7})\b") or g(r"(?:exception(?: code)?|ExceptionCode)\s*[:=]?\s*(0x[0-9a-f]{8})")
+                  or g(r"\b(?:si_signo|signal|signo)\s*[:=]\s*(\d+)"))
+    ev.setdefault("si_code", g(r"\bsi_code\s*[:=]\s*(-?\d+|0x[0-9a-f]+)"))
+    ev.setdefault("fault_addr", g(r"(?:si_addr|fault(?:ing)?[ _]addr(?:ess)?|segfault at|accessing address|"
+                                  r"unknown address|cr2)\s*[:=]?\s*(?:0x)?([0-9a-f]{1,16})\b"))
+    if ev.get("fault_addr") is not None and not str(ev["fault_addr"]).startswith("0x"):
+        ev["fault_addr"] = "0x" + ev["fault_addr"]
+    ev.setdefault("pc", g(r"\b(?:rip|eip|pc|ip)\s*[:=]?\s*(0x[0-9a-f]+)"))
+    ev.setdefault("sp", g(r"\b(?:rsp|esp|sp)\s*[:=]?\s*(0x[0-9a-f]+)"))
+    ev.setdefault("insn", g(r"=>\s*0x[0-9a-f]+(?:\s*<[^>]*>)?:\s*([^\n]+)") or g(r"\binstruction\s*[:=]\s*([^\n]+)"))
+    ev.setdefault("access", g(r"\b(READ|WRITE) of size") or g(r"\baccess(?:_type)?\s*[:=]\s*(read|write|exec\w*)")
+                  or g(r"(?:trying to|attempt to) (read|write|execute)"))
+    if not ev.get("abort_msg"):
+        m = _CV_ABORT.search(t)
+        ev["abort_msg"] = m.group().strip() if m else None
+    if re.search(r"heap-use-after-free|use[- ]after[- ]free", t, re.I):
+        ev.setdefault("uaf", True)
+
+
+def crash_verdict_facts(data=None, exe=None, **kw):
+    """Crash triage verdict (dict of strings; None when no crash evidence at all). `data` = ELF core (`exe` = companion
+    executable, used for the faulting insn, call-site walk and mitigations), a text crash report, or an executable
+    with explicit kwargs: signal (11 / "SIGSEGV" / 0xC0000005), si_code, fault_addr, pc, sp, insn ("mov dword ptr
+    [rax], 1"), access (read/write/exec), call_target, abort_msg, stack_range=(lo, hi), heap_range, modules=[(lo, hi,
+    name)]. Fields: fault_class (null_deref / wild_write / wild_read / exec_non_code / stack_overrun / stack_canary /
+    fortify_overflow / heap_corruption / double_free / use_after_free / divide_by_zero / assertion / stack_exhaustion /
+    bad_instruction / abort / access_violation / benign_signal), cwe ("CWE-476"), cwe_number, cwe_name,
+    exploitability (EXPLOITABLE / PROBABLY_EXPLOITABLE / PROBABLY_NOT_EXPLOITABLE / UNKNOWN; aliases rating,
+    classification), exploitable_rule ("DestAvNearNull"), other_tags (JSON), signal, signal_number, si_code,
+    fault_address, fault_address_class (null_page / non_canonical / stack / heap / module / unmapped / none),
+    fault_insn, fault_insn_class (read / write / exec / call_reg / branch / ret / block_move / push / none),
+    abort_reason, canary / nx / pie / relro / fortify / cfg (from the executable), mitigations (JSON list present),
+    checksec."""
+    try:
+        return _crash_verdict(bytes(data) if data else b"", bytes(exe) if exe else None, kw)
+    except Exception:   # noqa: BLE001 -- hostile / truncated input
+        return None
+
+
+def _crash_verdict(d, x, kw):
+    ev = {k: v for k, v in kw.items() if v is not None}
+    fi, loads, maps, b64, core = {}, [], [], True, False
+    h = _core_hdr(d) if d[:4] == b"\x7fELF" else None
+    if h and h[2] == 4:
+        core, b64 = True, h[1]
+        loads, maps = _cv_core_maps(d)
+        fi = fault_insn_facts(x or d, core=d if x else None) or {}
+        cf = elf_core_facts(d, x) or {}
+        ev.setdefault("signal", cf.get("core_signal_number"))
+        ev.setdefault("si_code", cf.get("core_si_code"))
+        ev.setdefault("fault_addr", cf.get("core_fault_address"))
+        ev.setdefault("pc", cf.get("core_pc"))
+        ev.setdefault("sp", cf.get("core_sp"))
+        if not ev.get("abort_msg"):
+            for t, off, _, fs, _ in h[5]:   # glibc __abort_msg / ASan report pages live in the writable anon dumps
+                seg = d[off:off + fs] if t == 1 else b""
+                m = _CV_ABORT.search(seg.decode("latin-1")) if b"***" in seg or b"free" in seg or b"Assertion" \
+                    in seg or b"malloc" in seg or b"corrupted" in seg or b"Sanitizer" in seg else None
+                if m:
+                    ev["abort_msg"] = m.group().strip()
+                    break
+    elif h:
+        x = x or d
+    elif d:
+        _cv_text(d[:1 << 20].decode("utf-8", "replace"), ev)
+    if x and not fi and ev.get("pc") is not None and x[:4] == b"\x7fELF" and not core:
+        fi = fault_insn_facts(x, va=_cv_int(ev["pc"]), si_addr=_cv_int(ev.get("fault_addr")),
+                              signal=_cv_sig(ev.get("signal"))) or {}
+    sig = _cv_sig(ev.get("signal"))
+    if sig is None and not fi and not ev.get("abort_msg"):
+        return None
+    fa, pc, sp = _cv_int(ev.get("fault_addr")), _cv_int(ev.get("pc")), _cv_int(ev.get("sp"))
+    sc = _cv_int(ev.get("si_code"))
+    if fa is None and fi.get("fault_si_addr", "none") != "none":
+        fa = _cv_int(fi["fault_si_addr"])
+    insn = (ev.get("insn") or (fi.get("fault_insn") if fi.get("fault_insn", "none") != "none" else "") or "").strip()
+    insn = re.sub(r"^(?:0x[0-9a-f]+\s*(?:<[^>]*>)?:?\s*)", "", insn.lower())
+    mn = (fi.get("fault_mnemonic") or insn.split(" ")[0] if insn else fi.get("fault_mnemonic", "")) or ""
+    if insn.startswith(("rep ", "repe ", "repne ", "lock ")):
+        mn = " ".join(insn.split()[:2])
+    acc = str(ev.get("access") or fi.get("fault_access") or "none").lower()
+    acc = "write" if acc in ("write", "read_write") else "read" if acc == "read" else \
+        "exec" if acc.startswith("exec") else "none"
+    if acc == "none" and insn and "[" in insn and not re.match(r"(?:call|jmp|j\w+|ret|lea|nop)\b", mn):
+        ops = insn.split(" ", 1)[1] if " " in insn else ""
+        acc = "write" if "[" in ops.split(",")[0] and mn not in ("cmp", "test", "push") else "read"
+    tgt = str(ev.get("call_target") or fi.get("fault_call_target_name") or "none")
+    abort = str(ev.get("abort_msg") or "") or None
+    near = lambda a: a is not None and a < 0x10000   # noqa: E731
+    av = sig in (11, 7)
+    is_ret = mn.startswith(("ret", "iret"))
+    is_jmp = bool(re.fullmatch(r"j[a-z]{1,4}", mn))
+    is_call = mn.startswith("call") or mn in ("blr", "blx", "bx", "br")
+    if is_jmp and fa is None:
+        fa = _cv_int(insn.split(" ", 1)[1]) if " " in insn and re.fullmatch(r"j\w+ 0x[0-9a-f]+", insn) else None
+    # regions
+    stk = ev.get("stack_range")
+    if not stk and sp is not None and loads:
+        stk = next(((va, va + ms) for _, va, ms in loads if va <= sp < va + ms), None)
+        if stk and any(s <= sp < e for s, e, _ in maps):
+            stk = None
+    mods = list(ev.get("modules") or maps)
+    heap = ev.get("heap_range")
+
+    def region(a):
+        if a is None:
+            return "none"
+        if a < 0x10000:
+            return "null_page"
+        if b64 and 0x00007FFFFFFFFFFF < a < 0xFFFF800000000000:
+            return "non_canonical"
+        if stk and stk[0] <= a < stk[1]:
+            return "stack"
+        if heap and heap[0] <= a < heap[1]:
+            return "heap"
+        if any(s <= a < e for s, e, *_ in mods):
+            return "module"
+        if loads and any(va <= a < va + ms for _, va, ms in loads):
+            return "heap"
+        return "unmapped" if loads or mods or heap or stk else "none"
+    pc_reg = region(pc)
+    tgt_a = fa   # what the bad access aimed at: a GP fault (SI_KERNEL, si_addr 0) on ret -> the popped return address
+    if is_ret and sc == 128 and core and sp is not None:
+        w = _core_read([p for p in h[5] if p[0] == 1], d, sp, 8 if b64 else 4)
+        tgt_a = int.from_bytes(w, "little" if h[0] == "<" else "big") if w else fa
+    tl = (abort or "") + " " + tgt
+    canary = re.search(r"stack smashing detected|__stack_chk_fail", tl) is not None
+    fortify = re.search(r"buffer overflow detected|__fortify_fail|__chk_fail", tl) is not None and not canary
+    heaperr = re.search(r"\b(?:free|malloc|realloc|calloc|munmap_chunk|malloc_consolidate|_int_free|_int_malloc)\b"
+                        r"(?:\(\))?:|double free|corrupted (?:size|double-linked|top)|heap-buffer-overflow|"
+                        r"malloc_printerr|__malloc_assert", tl) is not None or \
+        sig == 6 and tgt in ("free", "malloc", "realloc", "calloc", "cfree", "__libc_free", "__libc_malloc")
+    uaf = bool(ev.get("uaf")) or re.search(r"use[- ]after[- ]free", tl, re.I) is not None
+    m_eq = lambda: fa is not None and (fi.get("fault_mem_address") in (None, "none") or
+                                       _cv_int(fi.get("fault_mem_address")) == fa)   # noqa: E731
+    dest = av and acc == "write" and m_eq()
+    src = av and acc == "read" and m_eq()
+    sopc = av and fa is not None and pc is not None and fa == pc
+    branch = av and not sopc and (is_jmp or is_call and not mn.startswith("callf"))   # no insn at a wild pc
+    stk_ovf = av and (mn.startswith("push") or is_call and fa is not None and sp is not None and
+                      fa + (8 if b64 else 4) == sp) and not (stk and sp is not None and stk[0] <= sp < stk[1])
+    benign = sig in _CV_BENIGN
+    known = av or sig in (6, 8, 4, 31) or benign
+    match = {"ReturnAv": av and is_ret, "UseAfterFree": uaf,
+             "SegFaultOnPc": sopc and not near(fa), "BranchAv": branch and fa is not None and not near(fa),
+             "StackCodeExecution": not benign and sig is not None and pc_reg == "stack",
+             "StackBufferOverflow": canary, "PossibleStackCorruption": bool(ev.get("stack_corruption")),
+             "DestAv": dest and not near(fa), "BadInstruction": sig in (4, 31), "HeapError": heaperr,
+             "StackOverflow": stk_ovf, "SegFaultOnPcNearNull": sopc and near(fa),
+             "BranchAvNearNull": branch and near(fa), "BlockMoveAv": av and bool(re.match(r"rep\w* \w*mov", mn)),
+             "DestAvNearNull": dest and near(fa), "SourceAvNearNull": src and near(fa),
+             "FloatingPointException": sig == 8, "BenignSignal": benign,
+             "SourceAv": src and not near(fa), "AbortSignal": sig == 6, "AccessViolation": av,
+             "UncategorizedSignal": sig is not None and not known}
+    hits = [(r, rt) for r, rt in _CV_RULES if match[r]]
+    rule, rating = hits[0] if hits else ("none", "UNKNOWN")
+    # fault class: the bug the wreckage points at (abort reasons beat the generic signal)
+    if uaf:
+        fc = "use_after_free"
+    elif re.search(r"double free", tl):
+        fc = "double_free"
+    elif heaperr:
+        fc = "heap_corruption"
+    elif canary:
+        fc = "stack_canary"
+    elif fortify:
+        fc = "fortify_overflow"
+    elif re.search(r"Assertion [`'].*failed|__assert", tl) or tgt.startswith(("__assert", "_assert", "_wassert")):
+        fc = "assertion"
+    elif sig == 8:
+        fc = "divide_by_zero" if sc in (1, 3) or sc is None or mn in ("div", "idiv", "sdiv", "udiv") else "fpe"
+    elif av and is_ret:
+        fc = "stack_overrun"
+    elif stk_ovf:
+        fc = "stack_exhaustion"
+    elif av and (sopc or branch or acc == "exec") or pc_reg == "stack" and av:
+        fc = "null_deref" if near(fa) else "exec_non_code"
+    elif av and near(fa):
+        fc = "null_deref"
+    elif av and acc == "write":
+        fc = "wild_write"
+    elif av and acc == "read":
+        fc = "wild_read"
+    elif sig in (4, 31):
+        fc = "bad_instruction"
+    elif sig == 6:
+        fc = "abort"
+    elif av:
+        fc = "access_violation"
+    elif benign:
+        fc = "benign_signal"
+    else:
+        fc = "none"
+    cwe = _CV_FC.get(fc)
+    ic = "ret" if is_ret else "call_reg" if is_call and re.fullmatch(r"\w+ (?:[re]?[a-z0-9]{1,3}|x\d+|w\d+)", insn) \
+        and not re.fullmatch(r"\w+ (?:0x)?[0-9a-f]+", insn) else "branch" if is_call or is_jmp else \
+        "block_move" if re.match(r"rep\w* \w*mov", mn) else "push" if mn.startswith("push") else \
+        "exec" if sopc or acc == "exec" else acc if acc in ("read", "write") else "none"
+    s = lambda v: "none" if v is None else str(v)   # noqa: E731
+    out = {"fault_class": fc, "cwe": f"CWE-{cwe}" if cwe else "none", "cwe_number": s(cwe),
+           "cwe_name": _CV_CWE_NAME.get(cwe, "none"), "exploitability": rating, "rating": rating,
+           "classification": rating, "exploitable_rule": rule, "other_tags": _jv([r for r, _ in hits[1:]]),
+           "signal": next((k for k, v in _CV_SIG.items() if v == sig), s(sig)), "signal_number": s(sig),
+           "si_code": s(sc), "fault_address": hex(fa) if fa is not None else "none",
+           "fault_address_class": region(tgt_a), "fault_target": hex(tgt_a) if tgt_a is not None else "none", "pc": hex(pc) if pc is not None else "none", "pc_region": pc_reg,
+           "fault_insn": insn or "none", "fault_insn_class": ic, "fault_function": fi.get("fault_function", "none"),
+           "abort_reason": abort or "none"}
+    mit = _cv_mitigations(x)
+    out.update(mit, mitigations=_jv([k for k, v in mit.items() if v not in ("false", "none")]),
+               checksec=" ".join(f"{k}={v}" for k, v in mit.items()))
+    return out
+
+
+_CV_ALIAS = {"verdict": "exploitability", "exploitable": "exploitability", "rule": "exploitable_rule",
+             "short_description": "exploitable_rule", "cwe_id": "cwe", "bug_class": "fault_class", "class": "fault_class",
+             "crash_class": "fault_class", "address_class": "fault_address_class", "insn_class": "fault_insn_class",
+             "instruction_class": "fault_insn_class", "abort_message": "abort_reason", "stack_canary": "canary",
+             "pie_enabled": "pie", "nx_enabled": "nx", "full_relro": "relro"}
+_CV_MEMO = [None, None]
+
+
+def crash_verdict_field(data, field, exe=None, **kw):
+    """One crash_verdict_facts value ("none" for an unknown field); None when there is no crash evidence."""
+    key = (data, exe, tuple(sorted(kw.items())))
+    if _CV_MEMO[0] is None or _CV_MEMO[0][0] is not data or _CV_MEMO[0][1] is not exe or _CV_MEMO[0][2] != key[2]:
+        _CV_MEMO[:] = [key, crash_verdict_facts(data, exe, **kw)]
+    f = _CV_MEMO[1]
+    if f is None:
+        return None
+    k = re.sub(r"[\s\-]+", "_", field.strip().lower())
+    k = _CV_ALIAS.get(k, k)
+    return f.get(k, "none")
+
+
+# ---- static stack unwinder: ELF core (+ companion executable) -> frames innermost-first, CFI or frame-pointer chain ----
+# Fixtures: tests/data/binary_fixtures/unwind_* (unwind_check.py; oracle = gdb's own unwinder + readelf frames-interp).
+# Field names are SPECULATIVE; aarch64 (x29/x30 chain, CFI regs 29-31) is coded but has no core fixture.
+# DWARF register numbers: x86_64 rbx 3, rbp 6, rsp 7, r12-r15 12-15, RA column 16; aarch64 x19-x30 19-30, sp 31.
+_UW_ARCH = {62: ({3: "rbx", 6: "rbp", 7: "rsp", 12: "r12", 13: "r13", 14: "r14", 15: "r15"}, 6, 7, 16, "rip"),
+            183: ({**{k: f"x{k}" for k in range(19, 31)}, 31: "sp"}, 29, 31, 30, "pc")}
+
+
+def _uw_cfi(x):
+    """(eh_frame CallFrameInfo, sorted [(initial_loc, fde_offset)] from .eh_frame_hdr | None) of an ELF, else None."""
+    from elftools.elf.elffile import ELFFile
+    from elftools.dwarf.callframe import CallFrameInfo
+    ef = ELFFile(io.BytesIO(x))
+    eh, hdr = ef.get_section_by_name(".eh_frame"), ef.get_section_by_name(".eh_frame_hdr")
+    if eh is None or eh["sh_type"] == "SHT_NOBITS":
+        return None
+    dw = ef.get_dwarf_info(relocate_dwarf_sections=False)
+    cfi = CallFrameInfo(stream=io.BytesIO(eh.data()), size=eh["sh_size"], address=eh["sh_addr"],
+                        base_structs=dw.structs, for_eh_frame=True)
+    tab = None
+    if hdr is not None:
+        h, ha = hdr.data(), hdr["sh_addr"]
+        if len(h) >= 12 and h[0] == 1 and h[1] == 0x1b and h[2] == 0x03 and h[3] == 0x3b:
+            n = struct.unpack_from("<I", h, 8)[0]
+            if 12 + 8 * n <= len(h):
+                tab = sorted((ha + a, ha + f - eh["sh_addr"]) for a, f in struct.iter_unpack("<ii", h[12:12 + 8 * n]))
+    return cfi, tab
+
+
+def _uw_fde(ctx, rel):
+    """Decoded CFI table rows ([row dicts]) of the FDE covering link-time address `rel`; None when none covers it."""
+    from elftools.dwarf.callframe import FDE
+    cfi, tab, cache = ctx
+    if tab is not None:
+        k = bisect.bisect_right(tab, (rel, 1 << 62)) - 1
+        cands = [tab[k][1]] if k >= 0 else []
+    else:
+        if "all" not in cache:
+            cache["all"] = [e for e in cfi.get_entries() if isinstance(e, FDE)]
+        cands = [e for e in cache["all"] if e.header["initial_location"] <= rel <
+                 e.header["initial_location"] + e.header["address_range"]]
+    for c in cands[:1]:
+        if c not in cache:
+            fde = cfi._parse_entry_at(c) if isinstance(c, int) else c   # noqa: SLF001 -- one FDE, not the whole table
+            cache[c] = (fde.header["initial_location"], fde.header["address_range"], fde.get_decoded().table) \
+                if isinstance(fde, FDE) else None
+        f = cache[c]
+        if f and f[0] <= rel < f[0] + f[1]:
+            return f
+    return None
+
+
+def stack_unwind_facts(data, exe=None):
+    """{field: answer} unwinding the crashing thread of an ELF core (x86_64 / aarch64) statically: CFI (.eh_frame of
+    the companion `exe`: CFA rule + RA/saved-register offsets at each pc) where an FDE covers the pc, else the frame
+    pointer chain ([fp] = caller fp, [fp+W] = return address). Stops after `main` (gdb's default) or when the pc leaves
+    the executable. Fields: unwind_frame_count, unwind_frames (JSON ["fn+0xoff"]), unwind_functions,
+    unwind_return_addresses (pcs, frame 0 = faulting pc), unwind_frame_sizes (CFA - sp per frame, decimal),
+    unwind_frame_modules / unwind_module_offsets (NT_FILE), unwind_frame_<i>_{function,offset,module,pc,size,method},
+    unwind_method (cfi / frame_pointer / mixed), unwind_symbols, caller:<fn>, stack_frame_size:<fn>, and per function
+    with an FDE cfa_frame_size:<fn> (largest CFA offset of its table = frame size at the body). `data` = the exe alone
+    gives only cfa_frame_size:*. {} when not ELF; never raises."""
+    try:
+        return _stack_unwind_facts(bytes(data), bytes(exe) if exe else None)
+    except Exception:   # noqa: BLE001 -- hostile/truncated input
+        return {}
+
+
+_UW_GPR = "rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15".split()
+_UW_OPS = {0: ("UWOP_PUSH_NONVOL", 1), 1: ("UWOP_ALLOC_LARGE", 2), 2: ("UWOP_ALLOC_SMALL", 1),
+           3: ("UWOP_SET_FPREG", 1), 4: ("UWOP_SAVE_NONVOL", 2), 5: ("UWOP_SAVE_NONVOL_FAR", 3), 6: ("UWOP_EPILOG", 2),
+           8: ("UWOP_SAVE_XMM128", 2), 9: ("UWOP_SAVE_XMM128_FAR", 3), 10: ("UWOP_PUSH_MACHFRAME", 1)}
+
+
+def _uw_pe_info(img, rva, depth=0):
+    """(stack bytes the prolog allocates, frame register | None, prolog size, [op names], [pushed regs]) of the
+    UNWIND_INFO at `rva` (chained infos folded in); None when unreadable."""
+    u = img(rva, 4)
+    if not u or u[0] & 7 not in (1, 2) or depth > 8:
+        return None
+    flags, plen, n, fr = u[0] >> 3, u[1], u[2], u[3]
+    raw = img(rva + 4, 2 * n + 12) or img(rva + 4, 2 * n)
+    if raw is None or len(raw) < 2 * n:
+        return None
+    alloc, ops, pushed, k = 0, [], [], 0
+    while k < n:
+        op, info = raw[2 * k + 1] & 15, raw[2 * k + 1] >> 4
+        slots = 3 if op == 1 and info == 1 else _UW_OPS.get(op, ("", 1))[1]
+        if k + slots > n:
+            return None
+        nm = _UW_OPS.get(op, (f"UWOP_{op}",))[0]
+        if op == 0:
+            alloc += 8
+            pushed.append(_UW_GPR[info])
+            nm += f"({_UW_GPR[info]})"
+        elif op == 1:
+            v = struct.unpack_from("<H", raw, 2 * k + 2)[0] * 8 if info == 0 else struct.unpack_from("<I", raw, 2 * k + 2)[0]
+            alloc += v
+            nm += f"({v})"
+        elif op == 2:
+            alloc += info * 8 + 8
+            nm += f"({info * 8 + 8})"
+        elif op == 10:
+            alloc += 48 if info else 40
+        ops.append(nm)
+        k += slots
+    if flags & 4:   # UNW_FLAG_CHAININFO: RUNTIME_FUNCTION of the parent follows the (even-padded) codes
+        co = 4 + 2 * (n + (n & 1))
+        ch = img(rva + co, 12)
+        p = _uw_pe_info(img, struct.unpack_from("<I", ch, 8)[0], depth + 1) if ch else None
+        if p:
+            alloc += p[0]
+            ops += p[3]
+            pushed += p[4]
+            fr = fr or (p[1] or 0)
+    return alloc, _UW_GPR[fr & 15] if fr & 15 else None, plen, ops, pushed
+
+
+def _uw_pe(d):
+    """cfa_frame_size:<fn> (prolog allocation + 8 for the return address = CFA offset at the body), pe_stack_alloc,
+    pe_frame_register, pe_prolog_size, pe_unwind_codes, pe_pushed_registers per .pdata RUNTIME_FUNCTION of a PE32+;
+    functions named from the COFF symbol table (MinGW keeps one) and always also by RVA (0x...)."""
+    import pefile
+    pe = pefile.PE(data=d, fast_load=True)
+    if pe.FILE_HEADER.Machine != 0x8664:
+        return {}
+    secs = [(s.VirtualAddress, max(s.Misc_VirtualSize, s.SizeOfRawData), s.PointerToRawData, s.SizeOfRawData)
+            for s in pe.sections]
+
+    def img(rva, n):
+        for va, vs, po, rs in secs:
+            if va <= rva and rva + n <= va + min(vs, rs) and po + rva - va + n <= len(d):
+                return d[po + rva - va:po + rva - va + n]
+        return None
+    dd = pe.OPTIONAL_HEADER.DATA_DIRECTORY
+    if len(dd) <= 3 or not dd[3].VirtualAddress:
+        return {"pe_runtime_function_count": "0"}
+    pd = img(dd[3].VirtualAddress, dd[3].Size) or b""
+    names = {}
+    fh = pe.FILE_HEADER
+    st, ns = fh.PointerToSymbolTable, fh.NumberOfSymbols
+    if st and 0 < ns < 2_000_000 and st + 18 * ns <= len(d):
+        strtab = st + 18 * ns
+        k = 0
+        while k < ns:
+            nm8, val, sec, typ, _, aux = struct.unpack_from("<8sIhHBB", d, st + 18 * k)
+            if typ & 0x30 == 0x20 and 0 < sec <= len(secs):
+                if nm8[:4] == b"\0\0\0\0":
+                    o = strtab + struct.unpack_from("<I", nm8, 4)[0]
+                    z = d.find(b"\0", o, o + 4096)
+                    nm = d[o:z if z >= 0 else o].decode("latin-1")
+                else:
+                    nm = nm8.rstrip(b"\0").decode("latin-1")
+                names.setdefault(secs[sec - 1][0] + val, nm)
+            k += 1 + aux
+    try:   # stripped COFF symtab (lld/zig, MSVC): exported names
+        pe.parse_data_directories(directories=[0])
+        for sy in getattr(getattr(pe, "DIRECTORY_ENTRY_EXPORT", None), "symbols", None) or []:
+            if sy.name and sy.address:
+                names.setdefault(sy.address, sy.name.decode("latin-1"))
+    except Exception:   # noqa: BLE001
+        pass
+    out = {}
+    cnt = 0
+    for b, e, u in struct.iter_unpack("<III", pd[:len(pd) // 12 * 12]):
+        if not b or e <= b:
+            continue
+        cnt += 1
+        r = _uw_pe_info(img, u & ~1) if not u & 1 else None
+        if r is None:
+            continue
+        keys = [hex(b)] + ([names[b]] if b in names else [])
+        for key in keys:
+            out.setdefault("cfa_frame_size:" + key, str(r[0] + 8))
+            out.setdefault("pe_stack_alloc:" + key, str(r[0]))
+            out.setdefault("pe_frame_register:" + key, r[1] or "none")
+            out.setdefault("pe_prolog_size:" + key, str(r[2]))
+            out.setdefault("pe_unwind_codes:" + key, _jv(r[3]) if r[3] else "none")
+            out.setdefault("pe_pushed_registers:" + key, _jv(r[4]) if r[4] else "none")
+    out["pe_runtime_function_count"] = str(cnt)
+    return out
+
+
+def _stack_unwind_facts(d, x):
+    if d[:2] == b"MZ":
+        return _uw_pe(d)
+    h = _core_hdr(d)
+    if not h:
+        return {}
+    if h[2] != 4:   # the executable alone: per-function CFA sizes only
+        x, d = x or d, None
+    out = {}
+    xh = _core_hdr(x) if x else None
+    ctx = None
+    if xh and xh[2] in (2, 3) and x[5] == 1:
+        try:
+            c = _uw_cfi(x)
+            ctx = (c[0], c[1], {}) if c else None
+        except Exception:   # noqa: BLE001
+            ctx = None
+    funcs = _elf_funcs(x) if xh and x[5] == 1 else []
+    if ctx and len(funcs) <= 1500:   # bounded: one FDE parse per function
+        for v, _, nm in funcs:
+            f = _uw_fde(ctx, v)
+            offs = [r["cfa"].offset for r in f[2] if r["cfa"].offset is not None] if f and f[0] == v else []
+            if offs:
+                out.setdefault("cfa_frame_size:" + nm, str(max(offs)))
+    if d is None:
+        return out
+    e, b64, _, em, _, ph = h
+    if em not in _UW_ARCH or not b64 or e != "<":
+        return out
+    cf = _elf_core_facts(d, None) or {}
+    names, FP, SP, RA, PCN = _UW_ARCH[em]
+    W = 8
+    loads = [p for p in ph if p[0] == 1]
+    rd = lambda a: (lambda b: struct.unpack("<Q", b)[0] if b else None)(_core_read(loads, d, a, W))   # noqa: E731
+    gi = lambda n: _fi_int(cf.get("core_reg_" + n))   # noqa: E731
+    regs = {k: gi(n) for k, n in names.items()}
+    pc = gi(PCN)
+    if pc is None or regs.get(SP) is None:
+        return out
+    notes, aux, maps = [], {}, []
+    for t, off, _, fs, _ in ph:
+        if t == 4:
+            _note_walk(d, e, off, fs, 4, "none", notes)
+    for nt in notes:
+        b = d[nt["desc_offset"]:nt["desc_offset"] + nt["desc_size"]]
+        if nt["owner"] == "CORE" and nt["type"] == 6:
+            for k in range(len(b) // 16):
+                a, v = struct.unpack_from("<QQ", b, 16 * k)
+                aux.setdefault(a, v)
+        elif nt["owner"] == "CORE" and nt["type"] == 0x46494c45 and len(b) >= 16 and not maps:
+            cnt, pg = struct.unpack_from("<QQ", b, 0)
+            if cnt <= (len(b) - 16) // 24:
+                nm = b[16 + 24 * cnt:].split(b"\0")
+                for k in range(cnt):
+                    s, en, o = struct.unpack_from("<QQQ", b, 16 + 24 * k)
+                    maps.append((s, en, o * pg, nm[k].decode("utf-8", "replace").rsplit("/", 1)[-1] if k < len(nm)
+                                 else ""))
+    bias = aux[9] - xh[4] if xh and 9 in aux else 0
+    xsegs = [(va, va + fs) for t, _, va, fs, _ in xh[5] if t == 1] if xh else []
+    home = next((m[3] for m in maps if m[0] <= pc < m[1]), None)
+    in_exe = (lambda r: any(a <= r < b for a, b in xsegs)) if xh else \
+        (lambda r: home is not None and any(m[0] <= r < m[1] and m[3] == home for m in maps))   # noqa: E731
+    frames, methods = [], set()
+    for i in range(64):
+        rel = pc - bias
+        look = rel if i == 0 else rel - 1
+        if i and not in_exe(look):
+            break
+        fn = _core_func(funcs, look) if xh and in_exe(look) else None
+        f = _uw_fde(ctx, look) if ctx and xh and in_exe(look) else None
+        row = None
+        if f:
+            row = next((r for r in reversed(f[2]) if r["pc"] <= look), None)
+        sp = regs.get(SP)
+        nregs = dict(regs)
+        if row and row["cfa"].reg is not None and regs.get(row["cfa"].reg) is not None:
+            cfa = regs[row["cfa"].reg] + row["cfa"].offset
+            ra_rule = row.get(RA)
+            ra = rd(cfa + ra_rule.arg) if ra_rule is not None and ra_rule.type == "OFFSET" else \
+                regs.get(RA) if em == 183 and i == 0 else None
+            for k in names:
+                rr = row.get(k)
+                if rr is not None and rr.type == "OFFSET":
+                    nregs[k] = rd(cfa + rr.arg)
+            nregs[SP] = cfa
+            how = "cfi"
+        elif regs.get(FP) and sp is not None and sp < regs[FP] < sp + (1 << 20) and not regs[FP] % W:
+            fp = regs[FP]   # a plausible frame record: 8-aligned, above sp, inside the same stack
+            cfa = fp + 2 * W if em == 62 else None
+            ra, nregs[FP] = rd(fp + W), rd(fp)
+            nregs[SP] = fp + 2 * W
+            how = "frame_pointer"
+        else:
+            cfa, ra, how = None, None, "none"
+        mod = next((m for m in maps if m[0] <= pc < m[1]), None)
+        frames.append({"pc": hex(pc), "function": fn[2] if fn else "none",
+                       "offset": hex(rel - fn[0]) if fn else "none", "module": mod[3] or "none" if mod else "none",
+                       "module_offset": hex(pc - mod[0] + mod[2]) if mod else "none",
+                       "size": str(cfa - sp) if cfa is not None and sp is not None else "none", "method": how})
+        if how != "none":
+            methods.add(how)
+        if (fn and fn[2] == "main") or not in_exe(look) or not ra or how == "none" or \
+                nregs.get(SP) is None or (sp is not None and (nregs[SP] < sp or (nregs[SP] == sp and ra == pc))):
+            break
+        regs, pc = nregs, ra
+    jl = lambda k: _jv([fr[k] for fr in frames])   # noqa: E731
+    out.update(unwind_frame_count=str(len(frames)), unwind_functions=jl("function"), unwind_return_addresses=jl("pc"),
+               unwind_frames=_jv([f"{fr['function']}+{fr['offset']}" if fr["function"] != "none" else
+                                  (f"{fr['module']}+{fr['module_offset']}" if fr["module"] != "none" else fr["pc"])
+                                  for fr in frames]),
+               unwind_frame_sizes=jl("size"), unwind_frame_modules=jl("module"), unwind_module_offsets=jl("module_offset"),
+               unwind_method="none" if not methods else methods.pop() if len(methods) == 1 else "mixed")
+    out["unwind_symbols"] = out["unwind_frames"]
+    for i, fr in enumerate(frames):
+        for k in ("function", "offset", "module", "pc", "size", "method"):
+            out[f"unwind_frame_{i}_{k}"] = fr[k]
+        if fr["function"] != "none":
+            out.setdefault("stack_frame_size:" + fr["function"], fr["size"])
+            out.setdefault("caller:" + fr["function"], frames[i + 1]["function"] if i + 1 < len(frames) else "none")
+    return out
+
+
+_UW_ALIAS = {"frames": "unwind_frames", "backtrace": "unwind_frames", "call_stack": "unwind_frames",
+             "stack": "unwind_frames", "frame_count": "unwind_frame_count", "depth": "unwind_frame_count",
+             "functions": "unwind_functions", "return_addresses": "unwind_return_addresses",
+             "frame_sizes": "unwind_frame_sizes", "modules": "unwind_frame_modules", "method": "unwind_method",
+             "innermost_function": "unwind_frame_0_function", "crash_function": "unwind_frame_0_function"}
+
+
+def stack_unwind_field(data, field, exe=None):
+    """One stack_unwind_facts value (aliases: frames/backtrace, frame_count, functions, frame_sizes, method,
+    frame_size:<fn> -> cfa_frame_size:<fn>); "none" when absent / not an ELF core."""
+    if _UW_MEMO[0] is None or _UW_MEMO[0][0] is not data or _UW_MEMO[0][1] is not exe:
+        _UW_MEMO[:] = [(data, exe), stack_unwind_facts(data, exe)]
+    f = _UW_MEMO[1]
+    k = field.strip()
+    kl = k.lower()
+    if ":" in k:
+        p, fn = k.split(":", 1)
+        p = p.strip().lower()
+        k = ("cfa_frame_size" if p in ("frame_size", "cfa_offset", "cfa_frame_size") else p) + ":" + fn.strip()
+    else:
+        k = _UW_ALIAS.get(kl, kl if kl.startswith(("unwind_", "cfa_", "stack_", "caller", "pe_")) else "unwind_" + kl)
+    return f.get(k, "none")
+
+
+_UW_MEMO = [None, None]
+
+
+# --- Textual crash REPORT parsers (Java / hs_err / .NET / Go / Rust / Python / sanitizers / glibc / dmesg) ------------
+# crash_report(bytes) -> {format, kind, message, frames (innermost first; Python's "most recent call LAST" reversed),
+# fault_function (innermost non-runtime frame), fault_addr, access (READ/WRITE of size N), bug_class, cwe, ...}.
+# Member of a zip/jar, a sidecar text file, UTF-16LE text, or printable runs of a binary. Off-peak breadth build:
+# GM field names are SPECULATIVE. Fixtures: tests/data/binary_fixtures/crashrep_* (crashrep_check.py).
+
+_CR_EXTRA = {119: "memory_corruption", 121: "stack_based_buffer_overflow", 122: "heap_based_buffer_overflow",
+             129: "improper_validation_of_array_index", 362: "data_race", 401: "memory_leak", 562: "return_of_stack_variable_address",
+             617: "reachable_assertion", 674: "uncontrolled_recursion", 704: "incorrect_type_conversion",
+             763: "release_of_invalid_pointer", 770: "allocation_without_limits", 1335: "incorrect_bitwise_shift"}
+_CR_CLASS = (   # (regex over kind + message, cwe | "rw" = 125 READ / 787 WRITE, specific cwe | None)
+    (r"double.free|attempting double-free", 415, None),
+    (r"use.after.free|heap-use-after-free|stack-use-after-scope", 416, None),
+    (r"stack-use-after-return", 562, None),
+    (r"stack smashing|stack-buffer-overflow|stack-buffer-underflow", "rw", 121),
+    (r"heap-buffer-overflow|corrupted size|free\(\): invalid next size|corrupted top size|malloc\(\): corrupted", "rw", 122),
+    (r"global-buffer-overflow|container-overflow|buffer overflow detected|dynamic-stack-buffer-overflow", "rw", None),
+    (r"nil pointer|null pointer|NullPointerException|NullReferenceException|'NoneType' object|"
+     r"unwrap\(\)` on a `None`|ArgumentNullException|zero page", 476, None),
+    (r"index out of (?:range|bounds)|IndexOutOfRange|IndexOutOfBounds|IndexError|out of bounds|slice bounds|"
+     r"ArgumentOutOfRange", "rw", None),
+    (r"divide by zero|division by zero|ZeroDivisionError|DivideByZero|/ by zero|divide error|integer divide", 369, None),
+    (r"shift exponent|shift.*out of bounds", 1335, None),
+    (r"integer overflow|signed integer|unsigned integer|with overflow|OverflowException|OverflowError|"
+     r"negation of|cannot be represented", 190, None),
+    (r"use-of-uninitialized-value|uninitiali[sz]ed", 457, None),
+    (r"data race|concurrent map", 362, None),
+    (r"memory leak|LeakSanitizer", 401, None),
+    (r"StackOverflow|RecursionError|recursion|stack-overflow|stack overflow|goroutine stack exceeds", 674, None),
+    (r"ClassCastException|InvalidCastException|bad-cast|dynamic-type-mismatch|TypeError: .*cannot be cast", 704, None),
+    (r"invalid pointer|bad-free|not malloc|alloc-dealloc-mismatch|new-delete-type-mismatch", 763, None),
+    (r"OutOfMemory|MemoryError|allocation-size-too-big|out of memory|requested allocation size", 770, None),
+    (r"AssertionError|assertion failed|Assertion `", 617, None),
+)
+_CR_RT = re.compile(r"^(?:java\.|javax\.|jdk\.|sun\.|com\.sun\.|kotlin\.|scala\.|System\.|Microsoft\.|runtime\.|std::|"
+                    r"core::|alloc::|__rustc::|rust_begin_unwind|rust_panic|<(?:std|core|alloc)::|__libc_|_start$|__asan|"
+                    r"__interceptor_|___?interceptor_|__sanitizer|__ubsan|__GI_|__pthread|pthread_kill|raise$|abort$|"
+                    r"(?:malloc|free|calloc|realloc|operator new|operator delete)\b|panic$|testing\.)")
+_CR_RX = {
+    "hs_err": re.compile(r"A fatal error has been detected by the Java Runtime|#\s+Problematic frame:"),
+    "sanitizer": re.compile(r"==\d+==\s*(?:ERROR|WARNING): \w+Sanitizer|^WARNING: ThreadSanitizer|"
+                            r"^[^\s:][^\n:]*:\d+:\d+: runtime error: ", re.M),
+    "go": re.compile(r"^(?:panic|fatal error): .*\n(?:.*\n){0,12}?goroutine \d+ \[", re.M),
+    "rust": re.compile(r"^thread '[^'\n]*'(?: \(\d+\))? panicked at ", re.M),
+    "python": re.compile(r"^Traceback \(most recent call last\):", re.M),
+    "dotnet": re.compile(r"^Unhandled [Ee]xception[.:] |^\s+at \S.*\) in .+:line \d+\s*$", re.M),
+    "java": re.compile(r"^Exception in thread \"|^\s*at [\w$.<>/-]+\((?:[\w$.\- ]+\.(?:java|kt|scala|groovy|clj):\d+|"
+                       r"Native Method|Unknown Source)\)|^Caused by: [\w$.]+", re.M),
+    "glibc": re.compile(r"\*\*\* (?:stack smashing|buffer overflow) detected \*\*\*|^(?:free|malloc|realloc|munmap_chunk|"
+                        r"double free or corruption|corrupted (?:size|double)|malloc_consolidate)[^\n]*(?:\(\)|\(\w+\))",
+                        re.M),
+    "dmesg": re.compile(r"[^\s\[\]]{1,64}\[\d+\]: (?:segfault at [0-9a-f]+ ip |trap |general protection )|"
+                        r"traps: [^\s\[\]]{1,64}\[\d+\] "),
+}
+
+
+def _cr_hex(s):
+    try:
+        return hex(int(str(s), 16))
+    except (TypeError, ValueError):
+        return None
+
+
+def _cr_frame(fn, file=None, line=None, raw=None, rt=None, **kw):
+    fn = (fn or "").strip()
+    return {"function": fn, "file": file, "line": str(line) if line is not None else None, "raw": (raw or fn).strip(),
+            "runtime": bool(_CR_RT.match(fn)) if rt is None else rt, **kw}
+
+
+def _cr_java_frames(lines, i):
+    out = []
+    while i < len(lines):
+        m = re.match(r"^\s*at\s+(\S+?)\((.*?)\)(?:\s*~?\[.*\])?\s*$", lines[i])
+        if not m:
+            break
+        fn = m.group(1).rsplit("/", 1)[-1]
+        fm = re.match(r"^(.*?):(\d+)$", m.group(2))
+        out.append(_cr_frame(fn, fm.group(1) if fm else m.group(2) or None, fm.group(2) if fm else None, lines[i]))
+        i += 1
+    more = 0
+    if i < len(lines):
+        mm = re.match(r"^\s*\.\.\. (\d+) more\s*$", lines[i])
+        if mm:
+            more, i = int(mm.group(1)), i + 1
+    return out, more, i
+
+
+def _cr_java(t):
+    lines = t.splitlines()
+    hm = re.search(r"^(?:Exception in thread \"([^\"]*)\" )?([A-Za-z_][\w$]*(?:\.[\w$]+)+)(?::\s?(.*))?$\n\s*at ", t, re.M)
+    if not hm:
+        return None
+    i = t[:hm.start()].count("\n")
+    fr, more, i = _cr_java_frames(lines, i + 1)
+    chain, cur = [], fr
+    while i < len(lines):
+        m = re.match(r"^\s*(Caused by|Suppressed): ([\w$.]+)(?::\s?(.*))?$", lines[i])
+        if not m:
+            i += 1
+            if i < len(lines) and not lines[i - 1].strip() and not re.match(r"^\s*(?:at |Caused by|Suppressed|\.\.\.)", lines[i]):
+                break
+            continue
+        f2, more, i = _cr_java_frames(lines, i + 1)
+        if more and m.group(1) == "Caused by":
+            f2 = f2 + cur[-more:]
+        chain.append((m.group(1), m.group(2), m.group(3), f2))
+        if m.group(1) == "Caused by":
+            cur = f2
+    r = {"format": "java", "thread": hm.group(1), "kind": hm.group(2), "message": hm.group(3), "frames": fr}
+    causes = [c for c in chain if c[0] == "Caused by"]
+    if causes:
+        r.update(root_cause=causes[-1][1], root_cause_message=causes[-1][2], root_frames=causes[-1][3],
+                 cause_chain=[c[1] for c in causes])
+    sup = [c[1] for c in chain if c[0] == "Suppressed"]
+    if sup:
+        r["suppressed"] = sup
+    return r
+
+
+def _cr_dotnet(t):
+    hm = re.search(r"^(?:Unhandled [Ee]xception[.:]\s*)?([A-Za-z_][\w`]*(?:\.[\w`+]+)+)(?::\s?(.*?))?\s*$", t, re.M)
+    um = re.search(r"^Unhandled [Ee]xception[.:]\s*([A-Za-z_][\w`.+]*)(?::\s?(.*?))?\s*$", t, re.M)
+    hm = um or hm
+    if not hm:
+        return None
+    inner = re.findall(r"^\s*---> ([\w`.+]+)(?::\s?(.*?))?\s*$", t[hm.start():], re.M)
+    groups, cur = [], []
+    for ln in t[hm.end():].splitlines():
+        if re.match(r"^\s*--- End of inner exception stack trace ---", ln):
+            groups.append(cur)
+            cur = []
+            continue
+        m = re.match(r"^\s+at (.+?)(?:\s+in (.+?):line (\d+))?\s*$", ln)
+        if m:
+            fn = m.group(1)
+            fn = fn[:fn.find("(")] if "(" in fn else fn
+            cur.append(_cr_frame(fn, m.group(2), m.group(3), ln))
+        elif ln.strip() and not ln.strip().startswith(("--->", "---")) and cur:
+            break
+    groups.append(cur)
+    fr = groups[-1] if groups else []
+    if not fr and not um:
+        return None
+    r = {"format": "dotnet", "kind": hm.group(1), "message": hm.group(2), "frames": fr}
+    if inner:
+        r.update(root_cause=inner[-1][0], root_cause_message=inner[-1][1] or None, root_frames=groups[0],
+                 cause_chain=[x[0] for x in inner])
+    return r
+
+
+def _cr_go(t):
+    hm = re.search(r"^(panic|fatal error): (.*?)(?: \[recovered\])?\s*$", t, re.M)
+    if not hm:
+        return None
+    msg = hm.group(2)
+    body = msg[len("runtime error: "):] if msg.startswith("runtime error: ") else msg
+    kind = re.split(r"\s*\[|:", body, 1)[0].strip() if msg.startswith("runtime error: ") or hm.group(1) == "fatal error" \
+        else "panic"
+    r = {"format": "go", "kind": kind, "message": msg}
+    sm = re.search(r"^\[signal (\w+): [^\]]*?code=(0x[0-9a-f]+) addr=(0x[0-9a-f]+) pc=(0x[0-9a-f]+)\]", t, re.M)
+    if sm:
+        r.update(signal=sm.group(1), fault_addr=sm.group(3), pc=sm.group(4), signal_code=sm.group(2))
+    gm = re.search(r"^goroutine (\d+) \[[^\]]*\]:\s*$", t[hm.end():], re.M)
+    fr = []
+    if gm:
+        r["thread"] = gm.group(1)
+        lines = t[hm.end() + gm.end():].lstrip("\n").splitlines()
+        k = 0
+        while k + 1 < len(lines) and lines[k].strip():
+            fn, loc = lines[k].strip(), lines[k + 1]
+            if fn.startswith("created by "):
+                break
+            fm = re.match(r"^\s+(\S.*?):(\d+)(?: \+0x[0-9a-f]+)?\s*$", loc)
+            if not fm:
+                break
+            fn = fn[:fn.rfind("(")] if fn.endswith(")") and "(" in fn else fn
+            fr.append(_cr_frame(fn, fm.group(1), fm.group(2), lines[k].strip() + "\n" + loc.strip()))
+            k += 2
+    r["frames"] = fr
+    return r
+
+
+def _cr_rust(t):
+    hm = re.search(r"^thread '([^'\n]*)'(?: \((\d+)\))? panicked at (?:'(.*?)', )?(\S+?):(\d+):(\d+):?\s*$", t, re.M)
+    if not hm:
+        return None
+    msg = hm.group(3)
+    if msg is None:
+        ml = []
+        for ln in t[hm.end():].lstrip("\n").splitlines():
+            if not ln.strip() or ln.startswith(("note: ", "stack backtrace:")):
+                break
+            ml.append(ln)
+        msg = "\n".join(ml) or None
+    r = {"format": "rust", "kind": "panic", "message": msg, "thread": hm.group(1), "tid": hm.group(2),
+         "panic_file": hm.group(4), "panic_line": hm.group(5), "panic_col": hm.group(6)}
+    em = re.search(r"on an `Err` value: (\w+)", msg or "")
+    if em:
+        r["error_type"] = em.group(1)
+    fr, last = [], None
+    bm = re.search(r"^stack backtrace:\s*$", t[hm.end():], re.M)
+    if bm:
+        for ln in t[hm.end() + bm.end():].lstrip("\n").splitlines():
+            m = re.match(r"^\s*(\d+):\s+(?:0x[0-9a-f]+ - )?(.+?)\s*$", ln)
+            a = re.match(r"^\s+at (.+?):(\d+)(?::\d+)?\s*$", ln)
+            if m:
+                last = _cr_frame(re.sub(r"::h[0-9a-f]{16}$", "", m.group(2)), raw=ln)
+                fr.append(last)
+            elif a and last is not None:
+                last.update(file=a.group(1), line=a.group(2), raw=last["raw"].strip() + "\n" + ln.strip())
+            elif ln.strip():
+                break
+    r["frames"] = fr
+    return r
+
+
+def _cr_python(t):
+    blocks = [m.start() for m in re.finditer(r"^Traceback \(most recent call last\):", t, re.M)]
+    if not blocks:
+        return None
+    parsed = []
+    for k, s in enumerate(blocks):
+        seg = t[s:blocks[k + 1] if k + 1 < len(blocks) else len(t)].splitlines()[1:]
+        fr, exc = [], None
+        for ln in seg:
+            m = re.match(r'^\s+File "([^"]+)", line (\d+), in (.+?)\s*$', ln)
+            if m:
+                lib = bool(re.search(r"[/\\](?:lib[/\\]python[\d.]*|site-packages|dist-packages)[/\\]|^<frozen ", m.group(1)))
+                fr.append(_cr_frame(m.group(3), m.group(1), m.group(2), ln, rt=lib))
+                continue
+            e = re.match(r"^([A-Za-z_][\w.]*)(?::\s?(.*))?$", ln)
+            if e and fr and not ln[:1].isspace():
+                exc = (e.group(1), e.group(2))
+                break
+        if exc:
+            parsed.append((fr[::-1], exc))
+    if not parsed:
+        return None
+    fr, (kind, msg) = parsed[-1]
+    r = {"format": "python", "kind": kind, "message": msg, "frames": fr}
+    if len(parsed) > 1:
+        r.update(root_cause=parsed[0][1][0], root_cause_message=parsed[0][1][1], root_frames=parsed[0][0],
+                 cause_chain=[p[1][0] for p in parsed[:-1]][::-1])
+    return r
+
+
+def _cr_asan_frames(lines, i):
+    fr = []
+    while i < len(lines):
+        m = re.match(r"^\s*#(\d+) (0x[0-9a-f]+)(?: in (.+?))?\s*$", lines[i])
+        if not m:
+            if fr:
+                break
+            i += 1
+            continue
+        rest = re.sub(r"\s*\(BuildId: \w+\)$", "", m.group(3) or "")
+        file = line = mod = None
+        mm = re.match(r"^(.*?)\s*\(([^()]*?)\+(0x[0-9a-f]+)\)$", rest)
+        if mm:
+            rest, mod = mm.group(1), mm.group(2)
+        else:
+            fm = re.match(r"^(.+?) (\S+?)(?::(\d+))?(?::\d+)?$", rest)
+            if fm and re.search(r"[/\\]|\.\w+$", fm.group(2)):
+                rest, file, line = fm.group(1), fm.group(2), fm.group(3)
+        fr.append(_cr_frame(rest or m.group(2), file, line, lines[i], pc=m.group(2), module=mod))
+        i += 1
+    return fr, i
+
+
+def _cr_sanitizer(t):
+    em = re.search(r"^(?:==\d+==\s*)?(ERROR|WARNING): (\w+Sanitizer): ([\w-]+(?: [\w-]+)*?)(?: on (?:unknown )?address "
+                   r"(0x[0-9a-f]+))?(?: (?:at )?\(?pc (0x[0-9a-f]+) bp (0x[0-9a-f]+) sp (0x[0-9a-f]+))?(?: T\d+\)?)?"
+                   r"(?: \(pid=\d+\))?\s*$", t, re.M)
+    if not em:
+        um = re.search(r"^([^\s:][^\n:]*):(\d+):(\d+): runtime error: (.*?)\s*$", t, re.M)
+        if not um:
+            return None
+        msg = um.group(4)
+        kind = re.split(r"[:,]| \d| '", msg, 1)[0].strip()
+        lines = t[um.end():].lstrip("\n").splitlines()
+        fr, _ = _cr_asan_frames(lines[:64], 0) if lines and re.match(r"^\s*#0 ", lines[0]) else ([], 0)
+        return {"format": "ubsan", "sanitizer": "UndefinedBehaviorSanitizer", "kind": kind, "message": msg,
+                "fault_file": um.group(1), "fault_line": um.group(2), "fault_col": um.group(3), "frames": fr}
+    bug = em.group(3).strip()
+    rest = t[em.end():]
+    lines = rest.splitlines()
+    r = {"format": "asan" if em.group(2) == "AddressSanitizer" else em.group(2).lower().replace("sanitizer", "san"),
+         "sanitizer": em.group(2), "kind": bug, "message": em.group(0).strip().split("==", 2)[-1].strip(),
+         "fault_addr": em.group(4), "pc": em.group(5), "bp": em.group(6), "sp": em.group(7)}
+    am = re.search(r"^(READ|WRITE) of size (\d+) at (0x[0-9a-f]+) thread (T\d+)", rest, re.M)
+    if am:
+        r.update(access_type=am.group(1), access_size=am.group(2), thread=am.group(4))
+        r["fault_addr"] = r["fault_addr"] or am.group(3)
+    sm = re.search(r"^The signal is caused by a (READ|WRITE|UNKNOWN) memory access", rest, re.M)
+    if sm and sm.group(1) != "UNKNOWN":
+        r["access_type"] = sm.group(1)
+    if re.search(r"address points to the zero page", rest):
+        r["message"] += " (zero page)"
+    dm = re.search(r"^attempting (?:double-free|free) on (0x[0-9a-f]+) in thread (T\d+)", rest, re.M)
+    if dm:
+        r.update(fault_addr=r["fault_addr"] or dm.group(1), thread=dm.group(2))
+    rm = re.search(r"is located (\d+) bytes? (to the left of|to the right of|after|before|inside of|inside) "
+                   r"(\d+)-byte region \[(0x[0-9a-f]+),(0x[0-9a-f]+)\)", rest)
+    if rm:
+        r.update(region_offset=rm.group(1), region_relation=rm.group(2), region_size=rm.group(3),
+                 region_start=rm.group(4))
+    vm = re.search(r"^\s*Address 0x[0-9a-f]+ is located in stack of thread T\d+ at offset (\d+) in frame\s*\n"
+                   r"\s*#0 0x[0-9a-f]+ in (\S+)", rest, re.M)
+    if vm:
+        r.update(stack_frame_function=vm.group(2), stack_offset=vm.group(1))
+    vv = re.search(r"\[(\d+), (\d+)\) '([^']+)'(?: \(line \d+\))?(?: <== Memory access at offset \d+ "
+                   r"(?:overflows|underflows|partially overflows|is inside) this variable)", rest)
+    if vv:
+        r["stack_variable"] = vv.group(3)
+    smm = re.search(r"^SUMMARY: \w+Sanitizer: (.*?)\s*$", rest, re.M)
+    if smm:
+        r["summary"] = smm.group(1)
+    r["frames"], _ = _cr_asan_frames(lines[:256], 0)
+    for lbl, key in (("freed by thread", "free_frames"), ("previously allocated by thread", "alloc_frames"),
+                     ("allocated by thread", "alloc_frames")):
+        p = rest.find(lbl)
+        if p >= 0 and key not in r:
+            r[key], _ = _cr_asan_frames(rest[p:].splitlines()[1:64], 0)
+    lm = re.search(r"^(Direct|Indirect) leak of (\d+) byte\(s\) in (\d+) object\(s\)", rest, re.M)
+    if lm:
+        r.update(leak_kind=lm.group(1), leak_bytes=lm.group(2))
+    return r
+
+
+_CR_GLIBC = (
+    (r"\*\*\* stack smashing detected \*\*\*", "stack smashing detected"),
+    (r"\*\*\* buffer overflow detected \*\*\*", "buffer overflow detected"),
+    (r"(?:free|realloc|malloc|munmap_chunk|malloc_consolidate|_int_\w+)\(\): [^\n]*?(?=\n|$)", None),
+    (r"double free or corruption \((?:fasttop|out|!prev|top)\)", None),
+    (r"corrupted (?:size vs\. prev_size|double-linked list)[^\n]*", None),
+)
+
+
+def _cr_glibc(t):
+    best = None
+    for rx, kind in _CR_GLIBC:
+        m = re.search(rx, t)
+        if m and (best is None or m.start() < best[0].start()):
+            best = (m, kind)
+    if not best:
+        return None
+    m, kind = best
+    line = t[t.rfind("\n", 0, m.start()) + 1:t.find("\n", m.end()) if "\n" in t[m.end():] else len(t)].strip()
+    msg = m.group(0).strip()
+    r = {"format": "glibc", "kind": kind or msg, "message": line, "signal": "SIGABRT", "frames": []}
+    pm = re.search(r"\*\*\*: (?:terminated|(\S+) terminated)", line)
+    if pm and pm.group(1):
+        r["program"] = pm.group(1)
+    if re.search(r"stack smashing|buffer overflow detected", msg):
+        r["access_type"] = "WRITE"
+    return r
+
+
+def _cr_dmesg(t):
+    m = re.search(r"(?:^|\]\s*|\s)([^\s\[\]]{1,64})\[(\d+)\]: segfault at ([0-9a-f]+) ip ([0-9a-f]+) sp ([0-9a-f]+) "
+                  r"error ([0-9a-f]+)(?: (?:in|likely on CPU \d+ \([^)]*\)) )?(?:in )?(?:([^\s\[]+)\[([0-9a-f]+)\+([0-9a-f]+)\])?",
+                  t, re.M)
+    if m:
+        err = int(m.group(6), 16)
+        acc = "EXEC" if err & 0x10 else "WRITE" if err & 2 else "READ"
+        r = {"format": "dmesg", "kind": "segfault", "signal": "SIGSEGV", "message": re.sub(r"^[\]\s]+", "", m.group(0)).strip(),
+             "program": m.group(1), "pid": m.group(2), "fault_addr": _cr_hex(m.group(3)), "pc": _cr_hex(m.group(4)),
+             "sp": _cr_hex(m.group(5)), "error_code": m.group(6), "access_type": acc,
+             "page_present": "true" if err & 1 else "false", "user_mode": "true" if err & 4 else "false",
+             "frames": []}
+        if m.group(7):
+            r.update(module=m.group(7), module_base=_cr_hex(m.group(8)), module_size=_cr_hex(m.group(9)),
+                     module_offset=hex(int(m.group(4), 16) - int(m.group(8), 16)))
+        return r
+    m = re.search(r"(?:traps: )?([^\s\[\]]{1,64})\[(\d+)\]:? (?:trap )?(general protection fault|divide error|invalid opcode|"
+                  r"int3|stack segment|alignment check)\w*? ip:?\s*([0-9a-f]+) sp:?\s*([0-9a-f]+) error:?\s*([0-9a-f]+)"
+                  r"(?: in ([^\s\[]+)\[([0-9a-f]+)\+([0-9a-f]+)\])?", t)
+    if not m:
+        return None
+    sig = {"divide error": "SIGFPE", "invalid opcode": "SIGILL", "int3": "SIGTRAP", "alignment check": "SIGBUS"}
+    r = {"format": "dmesg", "kind": m.group(3), "signal": sig.get(m.group(3), "SIGSEGV"), "message": m.group(0).strip(),
+         "program": m.group(1), "pid": m.group(2), "pc": _cr_hex(m.group(4)), "sp": _cr_hex(m.group(5)),
+         "error_code": m.group(6), "frames": []}
+    if m.group(7):
+        r.update(module=m.group(7), module_base=_cr_hex(m.group(8)), module_size=_cr_hex(m.group(9)),
+                 module_offset=hex(int(m.group(4), 16) - int(m.group(8), 16)))
+    return r
+
+
+def _cr_hs_err(t):
+    hm = re.search(r"^#\s+(SIG\w+|EXCEPTION_\w+|Internal Error)\s*\((0x[0-9a-f]+|[^)]*)\)(?: at pc=(0x[0-9a-f]+))?"
+                   r"(?:, pid=(\d+))?(?:, tid=(\d+))?", t, re.M)
+    r = {"format": "hs_err", "kind": hm.group(1) if hm else "fatal error", "frames": []}
+    if hm:
+        r.update(signal=hm.group(1) if hm.group(1).startswith("SIG") else None, signal_number=hm.group(2),
+                 pc=hm.group(3), pid=hm.group(4), tid=hm.group(5), message=hm.group(0).lstrip("# ").strip())
+    pm = re.search(r"^#\s+Problematic frame:\s*\n#\s+(([A-Za-z])\s+(?:\[([^\]+]+)\+(0x[0-9a-f]+)\])?\s*(.*?))\s*$", t, re.M)
+    if pm:
+        sym = re.sub(r"\+0x[0-9a-f]+$", "", pm.group(5).strip()) or None
+        r.update(problematic_frame=pm.group(1).strip(), problematic_frame_type=pm.group(2), problematic_library=pm.group(3),
+                 problematic_offset=pm.group(4), problematic_symbol=sym)
+    sm = re.search(r"si_signo: (\d+) \((\w+)\), si_code: (\d+) \((\w+)\), si_addr: (0x[0-9a-f]+)", t)
+    if sm:
+        r.update(fault_addr=sm.group(5), signal_code=sm.group(4), signal=r.get("signal") or sm.group(2))
+    tm = re.search(r"^Current thread \([^)]*\):\s+(\w+) \"([^\"]*)\"", t, re.M)
+    if tm:
+        r["thread"] = tm.group(2)
+    nm = re.search(r"^Native frames:[^\n]*\n((?:[VvCjJA] [^\n]*\n?)+)", t, re.M) or \
+        re.search(r"^Java frames:[^\n]*\n((?:[VvCjJA] [^\n]*\n?)+)", t, re.M)
+    if nm:
+        for ln in nm.group(1).splitlines():
+            m = re.match(r"^([VvCjJA])\s+(?:\d+\s+(?:c[12]|jvmci)?\s*)?(?:\[([^\]+]+)\+(0x[0-9a-f]+)\]\s*)?(.*?)\s*$", ln)
+            if not m:
+                continue
+            ty, lib, off, s = m.groups()
+            if ty in "jJA":
+                fn = s.split("(", 1)[0]
+                rt = bool(_CR_RT.match(fn))
+            else:
+                fn = re.sub(r"\+0x[0-9a-f]+$| 0x[0-9a-f]+$", "", s.split("(", 1)[0].strip()) or (f"{lib}+{off}" if lib else "")
+                rt = ty in "Vv" or bool(lib and re.match(r"lib(?:jvm|jli|java|c|pthread)[.\-]", lib)) or bool(_CR_RT.match(fn))
+            if fn:
+                r["frames"].append(_cr_frame(fn, lib, None, ln, rt=rt, frame_type=ty, offset=off))
+    if not hm and not pm:
+        return None
+    return r
+
+
+_CR_GATE = {"hs_err": ("Problematic frame", "fatal error has been detected"), "sanitizer": ("Sanitizer", "runtime error: "),
+            "go": ("goroutine ",), "rust": ("panicked at ",), "python": ("Traceback (most recent",),
+            "dotnet": ("nhandled ", ":line "), "java": ("at ", "Caused by: "),
+            "glibc": ("***", "(): ", "double free", "corrupted "), "dmesg": ("segfault at ", "traps: ", " trap ")}
+_CR_ORDER = ("hs_err", "sanitizer", "go", "rust", "python", "dotnet", "java", "glibc", "dmesg")
+_CR_FN = {"hs_err": _cr_hs_err, "sanitizer": _cr_sanitizer, "go": _cr_go, "rust": _cr_rust, "python": _cr_python,
+          "dotnet": _cr_dotnet, "java": _cr_java, "glibc": _cr_glibc, "dmesg": _cr_dmesg}
+
+
+def _cr_classify(r):
+    """(bug_class, cwe int | None, specific cwe | None) from kind + message + access + fault address."""
+    txt = " ".join(str(r.get(k) or "") for k in ("kind", "message", "summary", "root_cause", "root_cause_message"))
+    acc = r.get("access_type")
+    for rx, cwe, spec in _CR_CLASS:
+        if re.search(rx, txt, re.I):
+            if cwe == "rw":
+                cwe = 787 if acc == "WRITE" or re.search(r"stack smashing|buffer overflow detected|corrupt|invalid next", txt) \
+                    else 125
+            return cwe, spec
+    fa = r.get("fault_addr")
+    if fa and r["format"] in ("asan", "hs_err", "dmesg", "go") or re.search(r"\bSEGV\b|segfault|SIGSEGV", txt):
+        try:
+            if fa and int(fa, 16) < 0x1000:
+                return 476, None
+        except ValueError:
+            pass
+        return 119, None
+    if r["format"] in ("java", "dotnet", "python", "rust", "go"):
+        return 248, None
+    return None, None
+
+
+def _cr_text(b):
+    """Bytes -> text: BOM / UTF-16 (NUL-heavy) / UTF-8 text / printable runs of a binary."""
+    b = b[:1 << 23]
+    if b[:2] in (b"\xff\xfe", b"\xfe\xff") or (len(b) > 8 and b.count(b"\0") > len(b) // 3):
+        enc = "utf-16-be" if b[:2] == b"\xfe\xff" or (b[:1] == b"\0" and b[1:2] != b"\0") else "utf-16-le"
+        return b[2 if b[:2] in (b"\xff\xfe", b"\xfe\xff") else 0:].decode(enc, "ignore")
+    if b[:4] in (b"\x7fELF", b"\xca\xfe\xba\xbe") or b[:2] == b"MZ" or b.count(b"\0") > 16:
+        if not any(g.encode() in b for gs in _CR_GATE.values() for g in gs if len(g) > 4):
+            return ""
+        return _crash_ascii(b, 1 << 23)
+    return b.decode("utf-8", "replace").replace("\r\n", "\n")
+
+
+def crash_report_parse(text):
+    """Crash-report text -> parsed dict (see crash_report) or None."""
+    hits = []
+    for name in _CR_ORDER:
+        m = any(g in text for g in _CR_GATE[name]) and _CR_RX[name].search(text)
+        if m:
+            hits.append(name)
+    for name in hits:
+        try:
+            r = _CR_FN[name](text)
+        except (ValueError, IndexError, TypeError, AttributeError):
+            r = None
+        if r and (r.get("frames") or r.get("message") or r.get("kind")):
+            return r
+    return None
+
+
+def crash_report(member_bytes):
+    """A textual crash report (member / sidecar / zip entry / UTF-16 / strings of a binary) -> {format, kind,
+    message, frames [{function, file, line, raw, runtime}] innermost first, fault_addr, access_type, access_size,
+    bug_class, cwe, ...}; None when there is none."""
+    try:
+        b = bytes(member_bytes)
+        if b[:2] == b"PK":
+            z = zipfile.ZipFile(io.BytesIO(b))
+            infos = sorted((i for i in z.infolist() if not i.is_dir() and i.file_size < 1 << 22
+                            and not i.filename.endswith((".class", ".dex", ".so", ".png", ".jpg"))),
+                           key=lambda i: (not re.search(r"(?i)crash|trace|panic|hs_err|asan|error|stack|log|dump|report",
+                                                        i.filename), i.filename))
+            for i in infos[:256]:
+                r = crash_report_parse(_cr_text(z.read(i)))
+                if r:
+                    r["source"] = i.filename
+                    return _cr_finish(r)
+            return None
+        r = crash_report_parse(_cr_text(b))
+        if r:
+            r["source"] = "raw"
+            return _cr_finish(r)
+    except Exception:   # noqa: BLE001 -- hostile / truncated input
+        return None
+    return None
+
+
+def _cr_finish(r):
+    fr = r.get("frames") or []
+    cwe, spec = _cr_classify(r)
+    user = next((f for f in fr if not f["runtime"]), None)
+    if r.get("access_type") and r.get("access_size"):
+        r["access"] = f"{r['access_type']} of size {r['access_size']}"
+    for k in ("fault_addr", "pc", "bp", "sp"):
+        if r.get(k):
+            r[k] = _cr_hex(r[k]) or r[k]
+    ix = re.search(r"index (?:out of range )?\[?(-?\d+)\]? (?:with length|out of bounds for (?:length|type '[^']*\[))\s*(\d+)"
+                   r"|the len is (\d+) but the index is (\d+)|Index (-?\d+) out of bounds for length (\d+)",
+                   " ".join(str(r.get(k) or "") for k in ("message", "root_cause_message")))
+    if ix:
+        g = ix.groups()
+        r["index"], r["length"] = (g[0], g[1]) if g[0] else (g[3], g[2]) if g[2] else (g[4], g[5])
+    src = user or (fr[0] if fr else None)
+    r.update(bug_class=(_VC_NAMES.get(cwe) or (_CR_EXTRA.get(cwe),))[0] if cwe else None,
+             cwe=f"CWE-{cwe}" if cwe else None, cwe_specific=f"CWE-{spec or cwe}" if cwe else None,
+             frame_count=len(fr), top_frame=fr[0]["function"] if fr else None,
+             fault_function=src["function"] if src else r.get("problematic_symbol"),
+             outer_function=fr[-1]["function"] if fr else None)
+    if src:
+        r.setdefault("fault_file", src["file"])
+        if not r.get("fault_line"):
+            r["fault_line"] = src["line"]
+    if r.get("panic_file"):
+        r["fault_file"], r["fault_line"] = r["panic_file"], r["panic_line"]
+    if r.get("root_frames"):
+        ru = next((f for f in r["root_frames"] if not f["runtime"]), r["root_frames"][0])
+        r["root_cause_function"] = ru["function"]
+    if r.get("kind"):
+        r["kind_short"] = re.split(r"[.:]", r["kind"])[-1] if r["format"] in ("java", "dotnet", "python") else r["kind"]
+    return r
+
+
+_CR_ALIAS = {"type": "kind", "exception": "kind", "exception_type": "kind", "exception_class": "kind",
+             "error_message": "message", "exception_message": "message", "panic_message": "message",
+             "bug_type": "kind", "crash_type": "kind", "address": "fault_addr", "fault_address": "fault_addr",
+             "faulting_address": "fault_addr", "si_addr": "fault_addr", "crash_address": "fault_addr",
+             "ip": "pc", "rip": "pc", "fault_pc": "pc", "access_kind": "access_type", "size": "access_size",
+             "vuln_class": "bug_class", "vulnerability_class": "bug_class", "class": "bug_class",
+             "fault_frame": "fault_function", "crashing_function": "fault_function", "faulting_function": "fault_function",
+             "function": "fault_function", "innermost_frame": "top_frame", "outermost_frame": "outer_function",
+             "entry_function": "outer_function", "cause": "root_cause", "caused_by": "root_cause",
+             "file": "fault_file", "line": "fault_line", "line_number": "fault_line", "lang": "format",
+             "language": "format", "report_format": "format"}
+
+
+def crash_report_facts(member_bytes):
+    """{field: answer string} over crash_report: found, format, kind, kind_short, message, signal, fault_addr, pc,
+    bp, sp, access ("READ of size 4"), access_type, access_size, bug_class, cwe (canonical CWE-125/787/476/...),
+    cwe_specific (CWE-121/122 where known), frames (JSON list, innermost first), frame_count, top_frame,
+    fault_function (innermost non-runtime frame), fault_file, fault_line, outer_function, root_cause(+_message,
+    _function), cause_chain, thread, pid, tid, index, length, region_*, problematic_*, module*, summary, ...
+    Absent -> "none"; no report -> found "false" and everything "none"."""
+    r = crash_report(member_bytes)
+    if not r:
+        return {"found": "false"}
+    out = {"found": "true"}
+    for k, v in r.items():
+        if v is None or k in ("root_frames", "free_frames", "alloc_frames"):
+            continue
+        if k == "frames":
+            out["frames"] = _jv([f["function"] for f in v]) if v else "none"
+            out["frames_raw"] = _jv([f["raw"] for f in v]) if v else "none"
+        elif isinstance(v, list):
+            out[k] = _jv(v)
+        else:
+            out[k] = str(v)
+    for k in ("free_frames", "alloc_frames", "root_frames"):
+        if r.get(k):
+            out[k] = _jv([f["function"] for f in r[k]])
+            u = next((f for f in r[k] if not f["runtime"]), None)
+            if u:
+                out[k[:-7] + "_function"] = u["function"]
+    return out
+
+
+def crash_report_field(member_bytes, field):
+    """One crash_report_facts value; accepts 'crash_report_x' / 'report_x' / 'crash_x' / bare 'x' and common
+    aliases (exception_type, fault_address, vuln_class, ...); "none" when unknown/absent."""
+    k = re.sub(r"[^a-z0-9]+", "_", str(field).strip().lower()).strip("_")
+    k = re.sub(r"^(?:crash_report_|crashrep_|report_|crash_)", "", k)
+    k = _CR_ALIAS.get(k, k)
+    if _CR_MEMO[:1] != [member_bytes]:
+        _CR_MEMO[:] = [member_bytes, crash_report_facts(member_bytes)]
+    return _CR_MEMO[1].get(k, "false" if k == "found" else "none")
+
+
+_CR_MEMO = [None, None]
+
+
+# --- ProGuard / R8 mapping.txt retrace (off-peak breadth: trace-symbolization-retrace). A bundle (zip / tar[.gz] /
+# plain text) holding an obfuscated Java/Android stack trace (`at a.b.a(SourceFile:3)`, logcat prefixes ok) plus a
+# mapping.txt (`orig.C -> a.b:` + `    1:2:T m(args):4:5 -> a` members; one minified range repeated = inline stack,
+# innermost first). Field names SPECULATIVE. retrace_facts(data, mapping=None) -> {found, format, kind, message,
+# fault_function/class/method/file/line, outer_function, frame_count, frames, inlined_frame_count, obfuscated_*}.
+_RT_CLS = re.compile(r"^(\S+) -> (\S+):\s*$")
+_RT_MEM = re.compile(r"^\s+(?:(\d+):(\d+):)?(\S+) ([^\s(]+)\(([^)]*)\)(?::(\d+)(?::(\d+))?)? -> (\S+)\s*$")
+_RT_FLD = re.compile(r"^\s+(\S+) (\S+) -> (\S+)\s*$")
+_RT_SRC = re.compile(r'^\s*#\s*\{.*"id"\s*:\s*"sourceFile".*"fileName"\s*:\s*"([^"]+)"')
+_RT_AT = re.compile(r"\bat\s+([\w$.<>-]+)\.([\w$<>-]+)\(([^)]*)\)")
+_RT_EXC = re.compile(r"(?:^|Exception in thread \"[^\"]*\"\s+|Caused by:\s+|:\s+FATAL EXCEPTION.*?\n.*?)"
+                     r"((?:[\w$]+\.)*[\w$]*(?:Exception|Error|Throwable|[\w$]))(?::\s?(.*))?$")
+
+
+def _rt_parse_map(text):
+    """mapping.txt text -> (cls {obf: orig}, mem {obf_cls: {obf_m: [entry]}}, src {orig_cls: file}, meta)."""
+    cls, mem, src, meta, cur, last_orig = {}, {}, {}, {}, None, None
+    for ln in text.splitlines():
+        if ln.startswith("#"):
+            m = re.match(r"#\s*(pg_map_id|compiler|compiler_version|pg_map_hash):\s*(.+)", ln)
+            if m:
+                meta[m.group(1)] = m.group(2).strip()
+            elif _RT_SRC.match(ln) and last_orig:
+                src[last_orig] = _RT_SRC.match(ln).group(1)
+            continue
+        m = _RT_CLS.match(ln)
+        if m and not ln[:1].isspace():
+            last_orig, cur = m.group(1), m.group(2)
+            cls[cur] = last_orig
+            mem.setdefault(cur, {})
+            continue
+        if cur is None or not ln[:1].isspace():
+            continue
+        m = _RT_MEM.match(ln)
+        if m:
+            a, b, typ, name, args, c, d, obf = m.groups()
+            oc, _, om = name.rpartition(".")
+            mem[cur].setdefault(obf, []).append({
+                "a": int(a) if a else None, "b": int(b) if b else None, "c": int(c) if c else None,
+                "d": int(d) if d else None, "cls": oc or cls[cur], "name": om or name, "args": args, "type": typ})
+    return cls, mem, src, meta
+
+
+def _rt_is_map(text):
+    n = sum(1 for ln in text.splitlines()[:4000] if _RT_CLS.match(ln) and not ln[:1].isspace())
+    return n >= 1 and bool(re.search(r"^\s+\S.* -> \S+\s*$", text, re.M))
+
+
+def _rt_file(src, oc):
+    return src.get(oc) or (oc.rpartition(".")[2].split("$")[0] + ".java")
+
+
+def _rt_frame(cls, mem, src, oc, om, loc):
+    """One obfuscated frame -> [ {class, method, file, line} ] innermost first (several when inlined)."""
+    m = re.search(r":(\d+)\s*$", loc)
+    L = int(m.group(1)) if m else None
+    orig_c = cls.get(oc, oc)
+    ents = (mem.get(oc) or {}).get(om) or []
+    if not ents:
+        return [{"class": orig_c, "method": om, "file": _rt_file(src, orig_c) if oc in cls else (loc.split(":")[0] or None),
+                 "line": L, "mapped": oc in cls}], False
+    if L is not None:
+        hit = [e for e in ents if e["a"] is not None and e["a"] <= L <= e["b"]]
+        if not hit:
+            hit = [e for e in ents if e["a"] is None] or ents[:1]
+    else:
+        hit = [e for e in ents if e["a"] is None] or ents
+    # group = the first run of entries sharing one minified range (inline stack); else alternatives
+    grp = [hit[0]] + [e for e in hit[1:] if (e["a"], e["b"]) == (hit[0]["a"], hit[0]["b"]) and e["a"] is not None]
+    if hit[0]["a"] is None:
+        grp = hit[:1]
+    ambiguous = len({(e["cls"], e["name"]) for e in hit}) > len({(e["cls"], e["name"]) for e in grp})
+    out = []
+    for i, e in enumerate(grp):
+        if e["c"] is None:
+            ln = L
+        elif e["d"] is not None and e["a"] is not None and L is not None and e["d"] - e["c"] == e["b"] - e["a"]:
+            ln = e["c"] + (L - e["a"])
+        else:
+            ln = e["c"]
+        out.append({"class": e["cls"], "method": e["name"], "file": _rt_file(src, e["cls"]), "line": ln,
+                    "mapped": True, "inlined": i < len(grp) - 1})
+    return out, ambiguous
+
+
+def _rt_members(data):
+    """bytes -> [(name, text)] for a zip / tar[.gz] / gzip / plain-text bundle."""
+    b = bytes(data)[:1 << 25]
+    out = []
+    if b[:2] == b"PK":
+        z = zipfile.ZipFile(io.BytesIO(b))
+        for i in z.infolist()[:512]:
+            if not i.is_dir() and i.file_size < 1 << 23 and not i.filename.endswith(
+                    (".class", ".dex", ".so", ".jar", ".apk", ".png", ".jpg")):
+                out.append((i.filename, z.read(i)))
+    elif b[:2] == b"\x1f\x8b" or b[257:262] == b"ustar":
+        import gzip, tarfile
+        raw = gzip.decompress(b) if b[:2] == b"\x1f\x8b" else b
+        if raw[257:262] == b"ustar":
+            with tarfile.open(fileobj=io.BytesIO(raw)) as t:
+                for m in t.getmembers()[:512]:
+                    if m.isfile() and m.size < 1 << 23:
+                        out.append((m.name, t.extractfile(m).read()))
+        else:
+            out.append(("raw", raw))
+    else:
+        out.append(("raw", b))
+    res = []
+    for n, x in out:
+        if x[:4] in (b"\x7fELF", b"\xca\xfe\xba\xbe", b"dex\n") or x[:2] in (b"MZ", b"PK") or x.count(b"\0") > 64:
+            continue
+        if x[:2] in (b"\xff\xfe", b"\xfe\xff"):
+            t = x[2:].decode("utf-16-le" if x[:2] == b"\xff\xfe" else "utf-16-be", "ignore")
+        else:
+            t = x.decode("utf-8", "replace")
+        res.append((n, t.replace("\r\n", "\n")))
+    return res
+
+
+def retrace_facts(data, mapping=None):
+    try:
+        return _retrace_facts(data, mapping)
+    except Exception:   # noqa: BLE001 -- hostile / truncated input
+        return {"found": "false"}
+
+
+def _retrace_facts(data, mapping):
+    mems = _rt_members(data)
+    if mapping is not None:
+        mems += [("mapping", t) for _, t in _rt_members(mapping)]
+    maps, traces = [], []
+    for n, t in mems:
+        if _rt_is_map(t):
+            # a plain-text bundle may carry both: split off the trace lines
+            maps.append(t)
+            rest = "\n".join(ln for ln in t.splitlines() if _RT_AT.search(ln) and " -> " not in ln)
+            if rest:
+                traces.append((n, t))
+        elif _RT_AT.search(t):
+            traces.append((n, t))
+    if not maps or not traces:
+        return {"found": "false"}
+    cls, mem, src = {}, {}, {}
+    meta = {}
+    for t in maps:
+        c, m, s, me = _rt_parse_map(t)
+        cls.update(c); mem.update(m); src.update(s); meta.update(me)
+    traces.sort(key=lambda nt: (not re.search(r"(?i)crash|trace|stack|log|exception|error", nt[0]), nt[0]))
+    tname, text = traces[0]
+    lines = [ln for ln in text.splitlines() if " -> " not in ln and not _RT_MEM.match(ln)]
+    kind = msg = None
+    frames, raw, inl, amb = [], [], 0, False
+    for ln in lines:
+        m = _RT_AT.search(ln)
+        if m:
+            oc, om, loc = m.groups()
+            fs, a = _rt_frame(cls, mem, src, oc, om, loc)
+            amb |= a
+            inl += sum(1 for f in fs if f.get("inlined"))
+            raw.append(f"{oc}.{om}({loc})")
+            frames.extend(fs)
+            continue
+        if frames and re.search(r"Caused by:", ln):
+            break
+        e = re.search(r"(?:Exception in thread \"[^\"]*\"\s+|Caused by:\s+|^|\s)((?:[\w$]+\.)+[\w$]+|[\w$]+(?:Exception|Error))"
+                      r"(?::\s?(.*))?\s*$", ln.strip())
+        if e and kind is None and not frames and ("." in e.group(1) or e.group(2) is not None):
+            k = e.group(1)
+            kind, msg = cls.get(k, k), (e.group(2) or "").strip() or None
+    if not frames or not any(f["mapped"] for f in frames):
+        return {"found": "false"}
+    def fn(f):
+        return f"{f['class']}.{f['method']}"
+    def fl(f):
+        return f"{fn(f)}({f['file'] or 'Unknown Source'}{':' + str(f['line']) if f['line'] is not None else ''})"
+    top = frames[0]
+    r0 = raw[0]
+    oc0 = r0.split("(")[0].rpartition(".")[0]
+    out = {"found": "true", "format": "r8" if meta.get("compiler", "").upper() == "R8" else "proguard",
+           "kind": kind or "none", "message": msg or "none", "source": tname,
+           "fault_function": fn(top), "fault_class": top["class"], "fault_method": top["method"],
+           "fault_file": top["file"] or "none", "fault_line": str(top["line"]) if top["line"] is not None else "none",
+           "fault_frame": fl(top), "outer_function": fn(frames[-1]), "frame_count": str(len(frames)),
+           "obfuscated_frame_count": str(len(raw)), "inlined_frame_count": str(inl),
+           "frames": ", ".join(fn(f) for f in frames), "retraced_trace": "\n".join("at " + fl(f) for f in frames),
+           "obfuscated_frame": r0, "obfuscated_function": r0.split("(")[0], "obfuscated_class": oc0,
+           "original_class": cls.get(oc0, oc0), "ambiguous": "true" if amb else "false",
+           "class_count": str(len(cls)), "map_id": meta.get("pg_map_id", "none"),
+           "compiler": meta.get("compiler", "none"), "compiler_version": meta.get("compiler_version", "none")}
+    if kind:
+        out["kind_simple"] = kind.rpartition(".")[2]
+    return out
+
+
+_RT_ALIAS = {"function": "fault_function", "method": "fault_method", "class": "fault_class", "file": "fault_file",
+             "line": "fault_line", "source_file": "fault_file", "fault_source_file": "fault_file",
+             "line_number": "fault_line", "fault_line_number": "fault_line", "top_frame": "fault_frame",
+             "crashing_method": "fault_function", "crashing_function": "fault_function",
+             "crashing_class": "fault_class", "deobfuscated_function": "fault_function",
+             "deobfuscated_class": "fault_class", "original_method": "fault_function", "exception": "kind",
+             "exception_type": "kind", "exception_class": "kind", "exception_message": "message",
+             "caller": "outer_function", "entry_function": "outer_function", "frames_count": "frame_count",
+             "stack_depth": "frame_count", "depth": "frame_count", "inlined_frames": "inlined_frame_count",
+             "obfuscated_name": "obfuscated_function", "obfuscated_method": "obfuscated_function",
+             "minified_class": "obfuscated_class", "obfuscated_top_frame": "obfuscated_frame",
+             "mapping_id": "map_id", "pg_map_id": "map_id", "stack_trace": "retraced_trace", "trace": "retraced_trace",
+             "deobfuscated_trace": "retraced_trace", "retraced_frames": "frames", "call_chain": "frames"}
+
+
+def retrace_field(data, field, mapping=None):
+    """One retrace_facts value; accepts 'retrace_x' / 'proguard_x' / 'r8_x' / bare 'x' and common aliases;
+    "none" when unknown/absent ("false" for found)."""
+    k = re.sub(r"[^a-z0-9]+", "_", str(field).strip().lower()).strip("_")
+    k = re.sub(r"^(?:retrace_|retraced_(?=f)|proguard_|r8_|mapping_(?!id))", "", k)
+    k = _RT_ALIAS.get(k, k)
+    if _RT_MEMO[:2] != [data, mapping]:
+        _RT_MEMO[:] = [data, mapping, retrace_facts(data, mapping)]
+    return _RT_MEMO[2].get(k, "false" if k == "found" else "none")
+
+
+_RT_MEMO = [None, None, None]

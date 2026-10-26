@@ -101,6 +101,9 @@ _BUILTIN = {
     # D25: the ROOT nk cell's name (base block root cell offset @0x24 -> 0x1000 + off), not the base-block file name --
     # "HuntressArtifactAssemblyLine" single, random names TT and all Mastery sets
     ("registry", "hive_root_name"): _v("registry:hive_root_name", 25),
+    # D26: SCCA header executable name (UTF-16LE @0x10, 60 bytes, NUL-terminated) after MAM\x04 Xpress-Huffman
+    # decompression -- prebuilt prefetch.pf_value promoted via prefetch.py: "CMD.EXE" single, TT and 10/10 Mastery
+    ("prefetch", "executable_name"): _v("prefetch:executable_name", 26),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

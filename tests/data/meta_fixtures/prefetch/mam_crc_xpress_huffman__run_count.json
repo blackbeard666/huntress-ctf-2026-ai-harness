@@ -1,0 +1,8 @@
+{
+ "field": "prefetch.run_count",
+ "expected": "23",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/prefetch/GENERATOR_prefetch_variants.py.txt <outdir>  (stdlib struct SCCA writer from GENERATOR_prefetch.py.txt + MS-XCA LZNT1 / plain-Xpress / Xpress-Huffman compressors -> mam_crc_xpress_huffman.bin)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/prefetch/ORACLE_prefetch_variants.py.txt tests/data/meta_fixtures/prefetch/mam_crc_xpress_huffman__run_count.bin  -> key 'run_count' (libyal pyscca 20260527 in tools/pylib-scca + dissect.util.compression lznt1/lzxpress/lzxpress_huffman + zlib.crc32 + struct; v31/unknown versions handed to pyscca patched to v30; non-SCCA/non-MAM -> field absent 'none')",
+ "decoy": false,
+ "member": "REGSVR32.EXE-8C2A5D11.pf"
+}

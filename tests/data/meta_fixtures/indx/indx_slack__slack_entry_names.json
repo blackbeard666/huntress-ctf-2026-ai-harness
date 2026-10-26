@@ -1,0 +1,8 @@
+{
+ "field": "indx.slack_entry_names",
+ "expected": "[\"Very Long Directory Listing Name To Straddle Sector Boundaries.docx\",\"staging area notes.txt\"]",
+ "generator_cmd": "truncate -s 8M a.img && tools/fsroot/usr/sbin/mkntfs -F -Q -q -s 512 -c 4096 -L EVID a.img; for n in <11 names>; do tools/fsroot/usr/sbin/ntfscp -q a.img x.txt \"$n\"; done (ntfs-3g 2022.10.3 writes the root $I30 INDX block); python3 -I tests/data/meta_fixtures/logfile/GENERATOR_ntfs_logfile_indx.py.txt a.img b.img <out> -> indx_slack.bin",
+ "oracle_cmd": "PYTHONPATH=tools/pylib-dfirntfs python3 -P tests/data/meta_fixtures/logfile/ORACLE_dfir_ntfs.py.txt indx indx_slack.bin (dfir_ntfs 1.1.20 RestartPage/RestartArea/LogRecordPage, IndexBuffer + MFT.SlackSpace.carve) -> slack carved [both deleted names]",
+ "decoy": false,
+ "member": "$I30"
+}

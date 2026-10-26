@@ -1,0 +1,10 @@
+{
+ "codec": "malbolge",
+ "plain": null,
+ "encoded": "(=<`#9]~6ZY32Vx/4Rs+0No-&Jk)\"Fh}|Bcy?`=*z]Kw%oG4UUS0/@-ejc(:'8dc",
+ "generator_cmd": "printf %s '<Wikipedia Malbolge hello world program>'",
+ "oracle_cmd": "python3 -c 'from malbolge.malbolge import main; main()' prog.mb   # PyPI malbolge 1.0.0 vendored at tools/malbolge-pkg (PYTHONPATH)  -> Hello World!",
+ "oracle_plain": "Hello World!",
+ "expected": "none",
+ "decoy": true
+}

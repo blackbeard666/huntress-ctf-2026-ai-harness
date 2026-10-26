@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-29bc0953c8be2ee5",
+ "decoy": false,
+ "_why": "split-resources-arsc-overlay (rows 22, 61, 104): base proof() reads R.string.proof_token (0x7f010001, const + Resources.getString); base default, values-night, values-v35 and the xhdpi / fr config splits carry decoy ANS values, the installed split_config.xxhdpi.apk's override is what a 420 dpi en-US device resolves",
+ "generator_cmd": "python3 tests/data/android_fixtures/splitres_src/gen_splitres.py dpi_locale tests/data/android_fixtures/splitres_dpi_locale.zip  # apktool-bundled aapt2 compile + link --stable-ids --split <apk>:<cfg> (real config splits) / link --package-id 0x80 --allow-reserved-package-id (isolated feature split), smali -> classes.dex via `apktool b`, `zip -0 -j -X` bundle",
+ "oracle_cmd": "same script, oracle stage (stdout): `aapt2 dump resources` of every member -> (id, config, value), the device table (en-US, 420 dpi -> xxhdpi, sdk 34, notnight; xhdpi / fr config splits not installed) picks the config, `unzip -p <member> res/raw/vault.bin | base64 -d` for a raw entry -> ANS-29bc0953c8be2ee5"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "legacy_evt.record_count",
+ "expected": "5",
+ "generator_cmd": "python3 tests/data/meta_fixtures/evt/gen_evt.py.txt wrapped 3 > w3.evt (stdlib struct writer: ELF_LOGFILE_HEADER + EVENTLOGRECORDs + EOF record, per MS-EVEN/libevt docs)",
+ "oracle_cmd": "python3 -c 'import pyevt; f=pyevt.file(); f.open(\"w3.evt\"); ...' (libevt-python 20260705) -> number_of_records 5 (ids 5..9, oldest at StartOffset 0x200, wrapped)",
+ "decoy": false,
+ "member": "SecEvent.Evt"
+}

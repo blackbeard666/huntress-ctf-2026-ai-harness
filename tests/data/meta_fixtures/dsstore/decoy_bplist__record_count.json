@@ -1,0 +1,8 @@
+{
+ "field": "dsstore.record_count",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"import plistlib; open('x','wb').write(plistlib.dumps({'ShowStatusBar': False, 'WindowBounds': '{{100, 100}, {640, 480}}'}, fmt=plistlib.FMT_BINARY))\"  (a bwsp-style binary plist renamed .DS_Store -- impostor, no Bud1 allocator)",
+ "oracle_cmd": "file decoy_bplist__record_count.bin -> Apple binary property list (not 'Apple Desktop Services Store')",
+ "decoy": true,
+ "member": "Downloads/.DS_Store"
+}

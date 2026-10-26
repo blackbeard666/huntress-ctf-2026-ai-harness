@@ -1,0 +1,14 @@
+{
+ "corpus": {
+  "a.py": "print('hello world')\n",
+  "b.ps1": "Write-Output 'hello'\n"
+ },
+ "text": "print('hello world')\n",
+ "expected_plain": null,
+ "expected_true": [],
+ "expected_decoys": [],
+ "generator_cmd": "python3 tests/data/script_fixtures/ic_gen.py $TMPDIR/icgen  (stdlib base64 writer)",
+ "oracle_cmd": "find . -name '*.py' | sort | while read f; do sed -n \"s/.*b64decode('\\(.*\\)').*/\\1/p\" \"$f\" | { base64 -d; echo; } | tr '|' '\\n' | sed \"s|^|${f#./}\\t|\"; done | awk -F'\\t' '\n{ split($2, kv, \"=\"); k = kv[1]; v = substr($2, length(k) + 2); f = $1; d = f; sub(/\\/[^\\/]*$/, \"\", d); if (d == f) d = \".\";\n  if (k == \"language\") L[f] = v; else if (k == \"next_language\") N[f] = v;\n  else if (k == \"campaign_id\") { n = split(v, p, \"-\"); C[f] = tolower(p[n]) }\n  else if (k ~ /url$/ || k == \"handoff_id\") { cnt++; F[cnt] = f; K[cnt] = k; V[cnt] = v; D[cnt] = d } }\nEND { for (i = 1; i <= cnt; i++) { t = 0;\n    for (j = 1; j <= cnt; j++) if (j != i && D[j] == D[i] && V[j] == V[i] && (N[F[j]] == L[F[i]] || N[F[i]] == L[F[j]])) t = 1;\n    if (t) { print \"TRUE\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i]; continue }\n    h = V[i]; sub(/^[a-z]+:\\/\\//, \"\", h); sub(/[\\/.].*/, \"\", h); n = split(h, hp, \"-\"); tok = tolower(hp[n]);\n    if (K[i] == \"handoff_id\") { c = 0; for (j = 1; j <= cnt; j++) if (D[j] == D[i] && K[j] == \"handoff_id\" && N[F[j]] == L[F[i]]) c = 1;\n      if (c) print \"DECOY\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i]; continue }\n    if (index(tok, C[F[i]]) != 1) print \"DECOY\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i] } }' | sort  # plain: n/a",
+ "checks": "lib.codec.indicator_collisions(plans of corpus) true/decoys == expected_true/expected_decoys [member, key, value]; indicator_answer(res, member, field)",
+ "decoy": true
+}

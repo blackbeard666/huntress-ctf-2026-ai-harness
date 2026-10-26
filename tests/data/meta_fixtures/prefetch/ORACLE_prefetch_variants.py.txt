@@ -1,0 +1,63 @@
+"""Independent oracle for the Prefetch variant fixtures (does NOT import lib.meta): MAM payloads decompressed with
+dissect.util.compression (lznt1 / lzxpress / lzxpress_huffman), CRC32 with zlib, SCCA fields with libyal pyscca
+(libscca-python 20260527 in tools/pylib-scca; a v31 / unknown-version file is handed to pyscca with its version u32
+patched to 30 -- libscca parses up to v30 and the v31 layout is the v30 one), fixed-header values with struct.
+Usage: .venv/bin/python -I ORACLE_prefetch_variants.py.txt <file.bin>  -> one JSON object of GM-spelled values."""
+import datetime
+import json
+import os
+import struct
+import sys
+import tempfile
+import zlib
+
+sys.path.insert(0, os.path.join(os.getcwd(), "tools", "pylib-scca"))
+import pyscca  # noqa: E402
+from dissect.util.compression import lznt1, lzxpress, lzxpress_huffman  # noqa: E402
+
+d = open(sys.argv[1], "rb").read()
+out = {}
+if d[:3] == b"MAM":
+    kind, crcf = d[3] & 0x0F, bool(d[3] & 0x80)
+    size, = struct.unpack_from("<I", d, 4)
+    pay = d[12:] if crcf else d[8:]
+    dec = {2: lznt1.decompress, 3: lzxpress.decompress, 4: lzxpress_huffman.decompress}.get(kind)
+    out["compression_format"] = {2: "lznt1", 3: "xpress", 4: "xpress_huffman"}.get(kind)
+    out["uncompressed_size_bytes"] = str(size)
+    if crcf:
+        stored, = struct.unpack_from("<I", d, 8)
+        out["mam_crc32_u32_hex"] = "0x%08x" % stored
+        out["mam_crc32_valid"] = "true" if zlib.crc32(d[:8] + b"\0" * 4 + d[12:]) == stored else "false"
+    else:
+        out["mam_crc32_u32_hex"] = "none"
+    s = dec(pay)[:size] if dec else b""
+else:
+    s = d
+    out["compression_format"] = "none"
+    out["uncompressed_size_bytes"] = "none"
+if s[4:8] == b"SCCA":
+    ver, fsize = struct.unpack_from("<I", s, 0)[0], struct.unpack_from("<I", s, 12)[0]
+    out["format_version"] = str(ver)
+    out["file_size_bytes"] = str(fsize)
+    out["header_file_size_matches"] = "true" if fsize == len(s) else "false"
+    raw_name = s[16:76].decode("utf-16-le")
+    name = raw_name.split("\0")[0]
+    out["executable_name_struct"] = name
+    out["executable_name_length"] = str(len(name))
+    out["prefetch_hash_u32_hex"] = "0x%08x" % struct.unpack_from("<I", s, 76)[0]
+    with tempfile.NamedTemporaryFile(suffix=".pf", delete=False) as t:
+        t.write(struct.pack("<I", 30) + s[4:] if ver not in (17, 23, 26, 30) else s)
+    try:
+        f = pyscca.open(t.name)
+        out["executable_name"] = f.executable_filename
+        out["prefetch_hash_pyscca"] = "0x%08x" % f.prefetch_hash
+        if ver in (17, 23, 26, 30, 31):
+            out["run_count"] = str(f.run_count)
+            ft = f.get_last_run_time_as_integer(0)
+            out["last_run_time_utc"] = (datetime.datetime(1601, 1, 1) + datetime.timedelta(
+                microseconds=ft // 10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            out["volume_serial_u32_hex"] = "0x%08x" % f.get_volume_information(0).serial_number
+        f.close()
+    finally:
+        os.unlink(t.name)
+print(json.dumps(out, ensure_ascii=False))

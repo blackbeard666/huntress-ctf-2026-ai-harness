@@ -1,0 +1,20 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "python",
+    "kind": "RuntimeError",
+    "message": "config broken",
+    "root_cause": "json.decoder.JSONDecodeError",
+    "fault_function": "load",
+    "frame_count": "2",
+    "cwe": "CWE-248"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # python3 raise RuntimeError from JSONDecodeError",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_python_chain.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

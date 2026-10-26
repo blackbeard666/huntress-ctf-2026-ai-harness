@@ -1,0 +1,8 @@
+{
+ "field": "xml_report.record_ids",
+ "expected": "[2001,2003,2004]",
+ "generator_cmd": "heredoc: wevtutil qe System /f:xml /e:Events layout, 3 events out of record order",
+ "oracle_cmd": "python3 -c \"from lxml import etree; ...xpath('//e:EventRecordID/text()')\" -> sorted [2001, 2003, 2004]",
+ "decoy": false,
+ "member": "system_events.xml"
+}

@@ -1079,8 +1079,426 @@ def _pef_host_ptrs(z):
 def puzzle_candidates(apk):
     """Decoded candidate strings from assets/*huntress_puzzle.json (the primary, fast path). A field that names a zip
     entry (D20 `dynamic`: data=`assets/payload.dex`; see puzzle_pointer_candidates) yields that entry's tokens first,
-    never the pointer string itself."""
-    return _puzzle_candidates(apk)
+    never the pointer string itself. A split bundle (.apks: base.apk + split APKs) goes through split_bundle_candidates."""
+    out = _puzzle_candidates(apk)
+    if not any(ANS_RE_T.search(c) for c in out):
+        mem, ids = bundle_members(apk)
+        if mem:
+            out = split_bundle_candidates(mem, ids=ids) + out
+    return out
+
+
+# --- bundle container formats (coverage atlas rows 58, 62: bundle-container-formats) ---------------------------------
+# One normalised member list for every multi-APK container: .apks / .apkm / .xapk inner APKs (as _bundle_apks), plus
+# bundletool toc.pb split ids (BuildApksResult{1 variant} Variant{2 apk_set} ApkSet{1 module_metadata{1 name},
+# 2 apk_description} ApkDescription{1 targeting, 2 path, 3 split_apk_metadata{1 split_id}}; ApkTargeting{1 abi{1 Abi{1
+# alias}}, 3 language{1}, 4 density{1 ScreenDensity{1 alias}}}), XAPK Android/obb/*.obb expansion zips, AAB modules
+# (<m>/manifest/AndroidManifest.xml -> <m> re-laid as an APK, split id <m>), and one level of zip-in-zip.
+_BDL_NEST = re.compile(r"(?i).+\.(?:apks|xapk|apkm|aab|zip)$")
+_BDL_OBB = re.compile(r"(?i).+\.obb$")
+_BDL_MAX = 64 << 20
+_TOC_ABI = {1: "armeabi", 2: "armeabi_v7a", 3: "arm64_v8a", 4: "x86", 5: "x86_64", 6: "mips", 7: "mips64"}
+_TOC_DPI = {2: "ldpi", 3: "mdpi", 4: "tvdpi", 5: "hdpi", 6: "xhdpi", 7: "xxhdpi", 8: "xxxhdpi"}
+
+
+def _pb_sub(b, num):
+    """LEN values of field `num` of one protobuf message ([] when malformed)."""
+    try:
+        return [v for f, wt, v in _pb_fields(b) if f == num and wt == 2]
+    except (ValueError, IndexError):
+        return []
+
+
+def _pb_ints(b, num):
+    try:
+        return [v for f, wt, v in _pb_fields(b) if f == num and wt == 0]
+    except (ValueError, IndexError):
+        return []
+
+
+def toc_split_ids(toc):
+    """{apk path: split id} of a bundletool toc.pb (BuildApksResult). The split_apk_metadata.split_id wins; an empty id
+    of a module's master split stays "" for base (the base) else the module name; a config split without an id is
+    named from its targeting (`[<module>.]config.<abi|density|lang>`). {} when not a toc. Never raises."""
+    out = {}
+    try:
+        for var in _pb_sub(toc, 1):
+            for aset in _pb_sub(var, 2):
+                mod = next((x.decode("utf-8", "replace") for m in _pb_sub(aset, 1) for x in _pb_sub(m, 1)), "")
+                for d in _pb_sub(aset, 2):
+                    path = next((x.decode("utf-8", "replace") for x in _pb_sub(d, 2)), "")
+                    if not path:
+                        continue
+                    sm = _pb_sub(d, 3)
+                    sid = next((x.decode("utf-8", "replace") for m in sm for x in _pb_sub(m, 1)), "")
+                    if not sid:
+                        tg, q = next(iter(_pb_sub(d, 1)), b""), None
+                        for a in (y for x in _pb_sub(tg, 1) for y in _pb_sub(x, 1)):
+                            q = q or _TOC_ABI.get(next(iter(_pb_ints(a, 1)), 0))
+                        for a in (y for x in _pb_sub(tg, 4) for y in _pb_sub(x, 1)):
+                            q = q or _TOC_DPI.get(next(iter(_pb_ints(a, 1)), 0))
+                        q = q or next((y.decode("utf-8", "replace") for x in _pb_sub(tg, 3) for y in _pb_sub(x, 1)), None)
+                        pre = "" if mod in ("", "base") else mod + "."
+                        sid = pre + "config." + q if q else ("" if mod in ("", "base") or not sm else mod)
+                    if sid:
+                        out[path] = sid
+    except Exception:  # noqa: BLE001 - not a toc / truncated
+        return {}
+    return out
+
+
+def _aab_module_apk(z, mod):
+    """AAB module `mod` re-laid as APK bytes (dex/ and root/ flattened, manifest/ skipped), None when too big."""
+    infos = [i for i in z.infolist() if i.filename.startswith(mod + "/") and not i.is_dir()]
+    if sum(i.file_size for i in infos) > _AAB_MAX_BASE:
+        return None
+    bio, seen, cut = io.BytesIO(), set(), len(mod) + 1
+    with zipfile.ZipFile(bio, "w", zipfile.ZIP_STORED) as out:
+        for i in infos:
+            rel = i.filename[cut:]
+            if rel.startswith("manifest/"):
+                continue
+            rel = rel[4:] if rel.startswith(("dex/", "root/")) else rel
+            if rel and rel not in seen:
+                seen.add(rel)
+                out.writestr(rel, z.read(i))
+    return bio.getvalue()
+
+
+def bundle_members(apk, depth=1):
+    """(members [(name, bytes)], split ids {name: id}) of a multi-APK container, ([], {}) for a plain APK. Members:
+    inner *.apk (.apks / .apkm / .xapk, ids from XAPK manifest.json then bundletool toc.pb), XAPK *.obb expansion
+    zips (after the APKs), AAB modules re-laid as APKs (base first, feature id = module dir), and -- at most `depth`
+    levels -- the members of a container nested in a plain zip (`app.xapk`, `release.aab` inside the artifact zip).
+    A D26-style stored zip of APKs yields exactly _bundle_apks / _xapk_split_ids. Never raises."""
+    mem, ids = _bundle_apks(apk), {}
+    try:
+        if hasattr(apk, "seek"):
+            apk.seek(0)
+        ids = _xapk_split_ids(apk)
+        if hasattr(apk, "seek"):
+            apk.seek(0)
+        with zipfile.ZipFile(apk) as z:
+            nti = z.NameToInfo
+            i = nti.get("toc.pb")
+            if i is not None and i.file_size < 1 << 22:
+                for k, v in toc_split_ids(z.read(i)).items():
+                    ids.setdefault(k, v)
+            for i in z.infolist():
+                if _BDL_OBB.fullmatch(i.filename) and i.file_size < _BDL_MAX:
+                    b = z.read(i)
+                    if b[:2] == b"PK":
+                        mem.append((i.filename, b))
+            if "base/manifest/AndroidManifest.xml" in nti:
+                mods = sorted({n.split("/", 1)[0] for n in nti if re.fullmatch(r"[^/]+/manifest/AndroidManifest\.xml", n)},
+                              key=lambda m: (m != "base", m))
+                for m in mods:
+                    b = _aab_module_apk(z, m)
+                    if b is not None:
+                        fn = "base.apk" if m == "base" else f"split_{m}.apk"
+                        mem.append((fn, b))
+                        if m != "base":
+                            ids.setdefault(fn, m)
+            if depth > 0 and not mem:
+                for i in z.infolist():
+                    if _BDL_NEST.fullmatch(i.filename) and i.file_size < _BDL_MAX:
+                        b = z.read(i)
+                        if b[:2] != b"PK":
+                            continue
+                        sub, sids = bundle_members(io.BytesIO(b), depth - 1)
+                        if sub:
+                            mem += sub
+                            for k, v in sids.items():
+                                ids.setdefault(k, v)
+                            break
+    except Exception:  # noqa: BLE001 - truncated / impostor container
+        pass
+    return mem, ids
+
+
+def _bundle_apks(apk):
+    """[(name, bytes)] of the inner APKs of a split bundle (.apks / .xapk), [] otherwise."""
+    try:
+        with zipfile.ZipFile(apk) as z:
+            return [(i.filename, z.read(i)) for i in z.infolist()
+                    if i.filename.lower().endswith(".apk") and z.read(i)[:2] == b"PK"]
+    except (OSError, zipfile.BadZipFile, ValueError):
+        return []
+
+
+# --- config-split device selection (coverage atlas rows 58, 104: split-config-device-select) ---------------------------
+# The pinned solve-oracle emulator: x86_64 image (x86 then the ARM translation as fallbacks), 420 dpi, en-US. Feature
+# splits are always installed; per (owning split, dimension) only the best-matching config split is.
+INSTALL_DEVICE = {"abis": ("x86_64", "x86", "arm64_v8a", "armeabi_v7a", "armeabi", "mips64", "mips"), "dpi": 420,
+                  "lang": "en", "region": "US"}
+SPLIT_INSTALL_LOG = []  # [(member, split name, reason)] of config splits the pinned device would not install
+_CFG_DPI = {"ldpi": 120, "mdpi": 160, "tvdpi": 213, "hdpi": 240, "xhdpi": 320, "xxhdpi": 480, "xxxhdpi": 640}
+
+
+def _cfg_dim(tok):
+    """('abi'|'dpi'|'lang', normalised value) of a config-split qualifier (`x86_64`, `arm64-v8a`, `xxhdpi`, `en`,
+    `fr_FR`, `b+sr+Latn`), None when it is not one of those dimensions."""
+    t = (tok or "").strip().lower().replace("-", "_")
+    if t in INSTALL_DEVICE["abis"]:
+        return "abi", t
+    if t in _CFG_DPI:
+        return "dpi", t
+    m = re.fullmatch(r"(?:b\+)?([a-z]{2,3})(?:[_+]r?([a-z]{2}|\d{3})|\+[a-z]{4})*", t)
+    if m and t not in ("base", "master", "universal"):
+        return "lang", m[1]
+    return None
+
+
+def _xapk_split_ids(apk):
+    """{member file: split id} from an XAPK manifest.json `split_apks` ([{file, id}]), {} otherwise."""
+    try:
+        with zipfile.ZipFile(apk) as z:
+            i = z.NameToInfo.get("manifest.json")
+            o = json.loads(z.read(i)) if i is not None and i.file_size < 1 << 20 else {}
+        return {str(x["file"]): str(x["id"]) for x in o.get("split_apks", []) if isinstance(x, dict)
+                and x.get("file") and x.get("id")} if isinstance(o, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _install_select(mem, ids=None):
+    """(installed, dropped) member lists of a split bundle for INSTALL_DEVICE. Split name = binary manifest `split=`,
+    else the XAPK manifest.json id, else the file name (`split_config.x86_64.apk`, `config.xxhdpi.apk`,
+    `base-en.apk`). Feature / unknown splits and the base are kept; bundletool `standalones/` are dropped when the
+    bundle has splits; per (owner = `configForSplit` or the `<owner>.config.` prefix, dimension) only the best config
+    split stays: ABI by INSTALL_DEVICE order, density the smallest bucket >= the device dpi else the largest below,
+    language every split of the device language (none when absent). Bundle order is kept."""
+    ids = ids or {}
+    info, groups = [], {}
+    for k, (fn, b) in enumerate(mem):
+        attrs = {}
+        try:
+            attrs = next((a for kind, tag, a, _ in _spl_manifest(b) if kind == "start" and tag == "manifest"), {})
+        except Exception:  # noqa: BLE001
+            attrs = {}
+        base_fn = fn.rsplit("/", 1)[-1]
+        name = attrs.get("split") or ids.get(fn) or ids.get(base_fn)
+        stem = base_fn[:-4] if base_fn.lower().endswith(".apk") else base_fn
+        owner, dim = "", None
+        if name:
+            m = re.fullmatch(r"(?:(.+?)\.)?config\.(.+)", name)
+            if m and str(attrs.get("isFeatureSplit", "")).lower() != "true":
+                owner, dim = attrs.get("configForSplit") or m[1] or "", _cfg_dim(m[2])
+        elif attrs.get("package") is None or fn.startswith("splits/") or "-" in stem:
+            m = re.fullmatch(r"(?:split_)?(?:(.+?)\.)?config\.(.+)", stem) or re.fullmatch(r"([\w.]+)-(.+?)(?:_\d+)?", stem)
+            if m and _cfg_dim(m[2]):
+                owner, dim = m[1] or "", _cfg_dim(m[2])
+                owner = "" if owner == "base" else owner
+        info.append((k, fn, name or stem, dim))
+        if dim:
+            groups.setdefault((owner, dim[0]), []).append((k, dim[1]))
+    drop = {}
+    has_split = any(not fn.startswith("standalones/") for _k, fn, _n, _d in info)
+    for k, fn, _n, _d in info:
+        if fn.startswith("standalones/") and has_split:
+            drop[k] = "standalone APK (pre-L only)"
+    dev = INSTALL_DEVICE
+    for (owner, d), lst in groups.items():
+        if d == "abi":
+            best = min((dev["abis"].index(v) for _k, v in lst))
+            keep = {k for k, v in lst if dev["abis"].index(v) == best}
+        elif d == "dpi":
+            up = [v for _k, v in lst if _CFG_DPI[v] >= dev["dpi"]]
+            pick = min(up, key=_CFG_DPI.get) if up else max((v for _k, v in lst), key=_CFG_DPI.get)
+            keep = {k for k, v in lst if v == pick}
+        else:
+            keep = {k for k, v in lst if v == dev["lang"]}
+        for k, v in lst:
+            if k not in keep:
+                drop[k] = f"{d}={v} not selected for the pinned device"
+    ins = [mem[k] for k, *_x in info if k not in drop]
+    out = [mem[k] for k, *_x in info if k in drop]
+    for k, fn, n, _d in info:
+        if k in drop:
+            SPLIT_INSTALL_LOG.append((fn, n, drop[k]))
+    del SPLIT_INSTALL_LOG[:-64]
+    return ins, out
+
+
+def bundle_install_set(data):
+    """Member names of a split bundle (.apks / .xapk / apkm zip: path, bytes, file object or a [(name, bytes)] list)
+    that the pinned solve-oracle device (INSTALL_DEVICE: x86_64, 420 dpi -> xxhdpi, en-US) would install: base,
+    feature splits, and the best ABI / density / language config split per owner; [] when not a bundle."""
+    try:
+        if isinstance(data, list):
+            mem, ids = data, {}
+        else:
+            src = io.BytesIO(data) if isinstance(data, (bytes, bytearray)) else data
+            mem = _bundle_apks(src)
+            if hasattr(src, "seek"):
+                src.seek(0)
+            ids = _xapk_split_ids(src)
+        return [n for n, _b in _install_select(mem, ids)[0]] if mem else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+# --- split binding check (coverage atlas rows 49, 59, 83, 104: split-signature-digest-binding) -----------------------
+# PackageManager installs a split only when it is signed by the base's signer and carries the base's versionCode
+# (INSTALL_FAILED_INVALID_APK otherwise); the base code may also pin a split asset's SHA-256 / CRC32 (hex / base64
+# string or a const / const-wide literal in its dex). When two candidate splits compete, the one failing a binding the
+# base offers is a decoy: dropped from the install set and logged in SPLIT_BIND_LOG. A lone split is never dropped.
+SPLIT_BIND_LOG = []  # [(member, split name, reason)] of splits that failed the base's binding
+_SBD_MAX_ENTRY = 4 << 20
+
+
+def split_member_facts(b):
+    """{"split", "vc" (versionCode int|None), "rev" (revisionCode int|None), "certs" (set of signer cert SHA-256 lower
+    hex: v1 PKCS#7 + v2/v3 block), "ent" ({entry: (crc32, sha256 hex)} outside META-INF)} of an inner APK's bytes;
+    None when it is not a readable zip. Never raises."""
+    try:
+        f = {"split": None, "vc": None, "rev": None, "certs": set(), "ent": {}}
+        for kind, tag, attrs, _ in _spl_manifest(b):
+            if kind == "start" and tag == "manifest":
+                f["split"] = attrs.get("split") if isinstance(attrs.get("split"), str) else None
+                for k, key in (("vc", "versionCode"), ("rev", "revisionCode")):
+                    v = attrs.get(key)
+                    f[k] = v if isinstance(v, int) and not isinstance(v, bool) else int(v) if str(v).isdigit() else None
+                break
+        f["certs"] = {c["sha256"] for c in signing_certs(io.BytesIO(b))}
+        with zipfile.ZipFile(io.BytesIO(b)) as z:
+            for i in z.infolist()[:512]:
+                if not i.filename.startswith("META-INF/") and not i.is_dir() and i.file_size <= _SBD_MAX_ENTRY:
+                    f["ent"][i.filename] = (i.CRC, hashlib.sha256(z.read(i)).hexdigest())
+        return f
+    except Exception:  # noqa: BLE001 - truncated / impostor member
+        return None
+
+
+def _sbd_pinned(dex, crc, sha):
+    """True when the base dex bytes pin an entry digest: SHA-256 hex (either case) / base64, CRC32 as 8 hex digits or as
+    a 4-byte little-endian const / const-wide literal."""
+    d = bytes.fromhex(sha)
+    pins = (sha.encode(), sha.upper().encode(), base64.b64encode(d), b"%08x" % crc, b"%08X" % crc,
+            struct.pack("<I", crc & 0xFFFFFFFF))
+    return any(p in dex for p in pins)
+
+
+def split_binding_select(mem, base):
+    """(kept, dropped) of a bundle's members against the base APK `base` (bytes): with >= 2 non-base members, a split
+    signed by a cert set disjoint from the base's (both known), or whose versionCode differs from the base's (both
+    known), or whose entry shares a name with a base-pinned entry of another split but not its digest, is dropped --
+    only while another split passes. The base and all members are kept when nothing distinguishes them."""
+    others = [(n, b) for n, b in mem if b is not base]
+    if len(others) < 2:
+        return list(mem), []
+    try:
+        bf = split_member_facts(base) or {"certs": set(), "vc": None}
+        with zipfile.ZipFile(io.BytesIO(base)) as z:
+            dex = b"".join(z.read(i) for i in z.infolist()
+                           if re.fullmatch(r"classes\d*\.dex", i.filename) and i.file_size <= _DXE_MAX_DEX)
+        facts = {id(b): split_member_facts(b) for _n, b in others}
+        why = {}
+        pinned = {}  # entry name -> member ids whose bytes match a base pin
+        for n, b in others:
+            f = facts[id(b)]
+            if f is None:
+                continue
+            for e, (crc, sha) in f["ent"].items():
+                if e != "AndroidManifest.xml" and dex and _sbd_pinned(dex, crc, sha):
+                    pinned.setdefault(e, set()).add(id(b))
+        for n, b in others:
+            f = facts[id(b)]
+            if f is None:
+                continue
+            if bf["certs"] and f["certs"] and not bf["certs"] & f["certs"]:
+                why[id(b)] = "signer cert %s.. differs from the base's" % sorted(f["certs"])[0][:16]
+            elif bf["vc"] is not None and f["vc"] is not None and f["vc"] != bf["vc"]:
+                why[id(b)] = f"versionCode {f['vc']} != base {bf['vc']}"
+            else:
+                miss = [e for e in f["ent"] if e in pinned and id(b) not in pinned[e]]
+                if miss:
+                    why[id(b)] = f"{miss[0]} digest not pinned in the base dex"
+        if not why or all(id(b) in why for _n, b in others):
+            return list(mem), []
+        kept = [(n, b) for n, b in mem if id(b) not in why]
+        dropped = [(n, b) for n, b in mem if id(b) in why]
+        for n, b in dropped:
+            SPLIT_BIND_LOG.append((n, (facts[id(b)] or {}).get("split"), why[id(b)]))
+        del SPLIT_BIND_LOG[:-64]
+        return kept, dropped
+    except Exception:  # noqa: BLE001
+        return list(mem), []
+
+
+def split_bundle_candidates(mem, ids=None):
+    """D26 'Split Decision' (.apks = base.apk + feature/config splits, mem=[(name, bytes)]): v1 the base puzzle's
+    `split` parts have empty slot(s), each split's json carries `part` + `part_index` (fill, then the usual
+    parts/order assemblies); v2 `codec: analysis` base whose dex reads a split's `assets/huntress_feature.bin` at run
+    time (deep eval with the split assets served; else context_chain_scan on the whole install: splitSourceDirs +
+    ZipFile, AssetManager.open across splits, createContextForSplit). Base = the member holding huntress_puzzle.json,
+    else the one whose manifest has no `split=`. Then the base APK on its own."""
+    def jsons(b):
+        try:
+            with zipfile.ZipFile(io.BytesIO(b)) as z:
+                return [(n, json.loads(z.read(n))) for n in z.namelist() if n.endswith(".json")]
+        except (zipfile.BadZipFile, ValueError, UnicodeDecodeError):
+            return []
+    base = next((b for _n, b in mem if any(j.endswith("huntress_puzzle.json") for j, _ in jsons(b))), None) \
+        or next((b for _n, b in mem if _spl_manifest(b) and _spl_name(b) is None), mem[0][1])
+    puzzle = next((o for j, o in jsons(base) if j.endswith("huntress_puzzle.json")), None)
+    out, assets = [], {}
+    try:
+        inst, dropped = _install_select(mem, ids)
+    except Exception:  # noqa: BLE001
+        inst, dropped = mem, []
+    inst, unbound = split_binding_select(inst, base)  # a decoy split failing the base's signer / version / pin binding
+    dropped = dropped + unbound
+    if isinstance(puzzle, dict) and isinstance(puzzle.get("parts"), list):
+        def fill(members):
+            parts, rest = [str(x) for x in puzzle["parts"]], []
+            for _n, b in members:
+                for _j, o in jsons(b):
+                    if isinstance(o, dict) and "part" in o:
+                        i = o.get("part_index")
+                        if isinstance(i, int) and 0 <= i < len(parts) and not parts[i]:
+                            parts[i] = str(o["part"])
+                        else:
+                            rest.append(str(o["part"]))
+            return [x or (rest.pop(0) if rest else x) for x in parts]
+        sel = _split_assemblies(fill(inst), puzzle.get("order"))  # the installed config split wins a part_index
+        everything = _split_assemblies(fill(mem), puzzle.get("order")) if dropped else sel
+        out += sel + [c for c in everything if c not in sel]  # the all-splits value too, after, when it differs
+    res_served, res_rest = [], []
+    if not any(ANS_RE_T.search(c) for c in out):  # a value the code reads by R id from a split's resources.arsc
+        try:
+            res_served, res_rest = split_resource_candidates([m for m in inst if m[1] is base]
+                                                             + [m for m in inst if m[1] is not base], extra=dropped)
+        except Exception:  # noqa: BLE001
+            res_served, res_rest = [], []
+        out += res_served
+    if not any(ANS_RE_T.search(c) for c in out) and isinstance(puzzle, dict) \
+            and str(puzzle.get("codec", "")).lower() == "analysis":
+        for _n, b in inst + dropped:  # installed splits first (the device's splitSourceDirs), decoy configs last
+            if b is base:
+                continue
+            try:
+                with zipfile.ZipFile(io.BytesIO(b)) as z:
+                    for e in z.namelist():  # the first split holding a name wins (splitSourceDirs order)
+                        if not e.startswith("META-INF/") and e not in assets \
+                                and not re.fullmatch(r"classes\d*\.dex|AndroidManifest\.xml|resources\.arsc", e):
+                            assets[e] = z.read(e)
+            except zipfile.BadZipFile:
+                continue
+        try:  # lib/<abi>/*.so of the ABI config / feature splits (bundletool never leaves them in base.apk)
+            libs = _nlb_split_libs([(n, b, True) for n, b in inst if b is not base]
+                                   + [(n, b, False) for n, b in dropped if b is not base])
+        except Exception:  # noqa: BLE001
+            libs = []
+        if assets or libs:
+            out += _dex_eval_deep(io.BytesIO(base), assets=assets or None, libs=libs)
+        if not any(ANS_RE_T.search(c) for c in out):  # the read is inline / via AssetManager / createContextForSplit
+            out += context_chain_scan(io.BytesIO(base), splits=_split_facts(inst, base))
+    if not any(ANS_RE_T.search(c) for c in out):
+        out += _puzzle_candidates(io.BytesIO(base))
+    if not any(ANS_RE_T.search(c) for c in out):
+        out += res_rest  # every other config's value of a code-read id: the worker sees the overrides
+    return out
 
 
 def _puzzle_candidates(apk, depth=3, seen=None, top=True):
@@ -1508,6 +1926,165 @@ def zip_structure_scan(apk, depth=2):
     return list(dict.fromkeys(hits))
 
 
+# --- Janus dex / APK polyglots (CVE-2017-13156; coverage atlas rows 62, 105) -----------------------------------------
+# A dex prepended before the zip (`dex\n03x` at byte 0, central-directory offsets shifted by the dex size, header
+# file_size = the whole file or just the dex) is still a valid APK to zipfile / the installer, but Android 5-8.0 with a
+# v1-only signature hands the FILE to the dex loader, which runs the PREPENDED dex, not classes.dex: the "runtime view".
+# A v2 / v3 / v3.1 block (verified on 7.0+) or minSdk >= 26 shuts that path, so the zip view wins there. The reverse
+# polyglot (a dex after the EOCD or in the archive comment) is never loaded: an inert view, listed after the runtime one.
+_JNS_MAGIC = re.compile(rb"dex\n0[0-9]{2}\x00")
+_JNS_V2_IDS = frozenset((0x7109871A, 0xF05368C0, 0x1B93AD61))
+_JNS_MAX_FILE, _JNS_DECODE_BUDGET, _JNS_DEADLINE_S = 64 << 20, 200, 0.6
+
+
+def _jns_dex_ok(d, o):
+    return o + 0x70 <= len(d) and _JNS_MAGIC.match(d, o) is not None and \
+        struct.unpack_from("<I", d, o + 0x28)[0] == 0x12345678
+
+
+def _jns_tokens(dex, deadline):
+    """ANS tokens of one standard dex: literal bytes, then its pool strings through decode_any (bounded)."""
+    hits = [m.decode() for m in ANS_RE_B.findall(dex)]
+    if hits:
+        return list(dict.fromkeys(hits))
+    try:
+        pool = _cdx_pool(dex, 0, [])
+    except (struct.error, IndexError, ValueError):
+        pool = []
+    enc = [s.strip() for s in pool if _CDX_ENCODED.fullmatch(s.strip())]
+    for s in dict.fromkeys(sorted(enc, key=len, reverse=True)[:_JNS_DECODE_BUDGET]):
+        if time.time() > deadline:
+            break
+        hits += ANS_RE_T.findall(decode_any(s, depth=2, cap=200, chain=False) or "")
+    return list(dict.fromkeys(hits))
+
+
+def janus_polyglot_facts(apk):
+    """Janus polyglot facts of an APK, None when it is not one (no dex at byte 0 / after the EOCD / in the comment, or
+    the zip does not parse): {"kind": "prepended" | "appended" | "comment", "dex_off", "dex_size", "cd_shift" (central
+    directory offset - its stored value: the prepended size zipfile compensates), "min_sdk", "v2" (a v2 / v3 / v3.1
+    signature block), "block_ids" / "extra_ids" (APK Signing Block pair ids; extra = not a known scheme / padding /
+    stamp id), "runtime": "prepended dex" | "zip", "views": {"runtime view": [tokens], "zip view": [tokens],
+    "inert view": [tokens]}}. Runtime = the prepended dex when minSdk < 26 and no v2 block (Android < 8 Janus path).
+    Never raises."""
+    try:
+        with zipfile.ZipFile(apk) as z:
+            fp = z.fp
+            fp.seek(0, 2)
+            if fp.tell() > _JNS_MAX_FILE:
+                return None
+            fp.seek(0)
+            b = fp.read()
+            cd, comment = z.start_dir, z.comment
+        e = b.rfind(b"PK\x05\x06")
+        if e < 0 or e + 22 > len(b):
+            return None
+        stored_cd = struct.unpack_from("<I", b, e + 16)[0]
+        eocd_end = e + 22 + struct.unpack_from("<H", b, e + 20)[0]
+        kind = off = None
+        if _jns_dex_ok(b, 0):
+            kind, off = "prepended", 0
+        else:
+            c = b.find(comment, e + 22) if comment else -1
+            for k, lo, hi in (("comment", c, c + len(comment)), ("appended", eocd_end, len(b))):
+                if lo < 0 or kind:
+                    continue
+                for m in _JNS_MAGIC.finditer(b, lo, hi):
+                    if _jns_dex_ok(b, m.start()):
+                        kind, off = k, m.start()
+                        break
+        if kind is None:
+            return None
+        with zipfile.ZipFile(io.BytesIO(b)) as z:  # a polyglot: now the zip view's dex and manifest
+            names = z.namelist()
+            dexes = [z.read(n) for n in names if re.fullmatch(r"classes\d*\.dex", n) and z.getinfo(n).file_size < 32 << 20]
+            man = z.read("AndroidManifest.xml") if "AndroidManifest.xml" in names and \
+                z.getinfo("AndroidManifest.xml").file_size < 1 << 22 else b""
+        size = struct.unpack_from("<I", b, off + 0x20)[0]
+        if not 0x70 <= size <= len(b) - off:
+            nxt = b.find(b"PK\x03\x04", off + 0x70) if kind == "prepended" else -1
+            size = (nxt if nxt > 0 else len(b)) - off
+        dex = b[off:off + size]
+        min_sdk = 1
+        for ev, tag, attrs, _ in (_axml_events(man) if man[:2] == b"\x03\x00" else ()):
+            if ev == "start" and tag == "uses-sdk" and attrs is not None:
+                v = {k.split(":")[-1]: x for k, x in attrs.items()}.get("minSdkVersion")
+                min_sdk = int(v) if str(v).isdigit() else min_sdk
+                break
+        ids = []
+        if cd >= 32 and b[cd - 16:cd] == b"APK Sig Block 42":
+            bsz = struct.unpack_from("<Q", b, cd - 24)[0]
+            if 24 <= bsz <= cd - 8:
+                blk, i = b[cd - bsz - 8:cd], 8
+                while i + 12 <= len(blk) - 24 and len(ids) < _SIG_PAIR_MAX:
+                    n, pid = struct.unpack_from("<QI", blk, i)
+                    if n < 4 or i + 8 + n > len(blk) - 24:
+                        break
+                    ids.append(pid)
+                    i += 8 + n
+        v2 = bool(_JNS_V2_IDS & set(ids))
+        runtime = "prepended dex" if kind == "prepended" and min_sdk < 26 and not v2 else "zip"
+        deadline = time.time() + _JNS_DEADLINE_S
+        zip_view = list(dict.fromkeys(t for d in dexes for t in _jns_tokens(d, deadline)))
+        own = _jns_tokens(dex, deadline)
+        views = {"runtime view": own if runtime != "zip" else zip_view,
+                 "zip view": zip_view if runtime != "zip" else [],
+                 "inert view": own if runtime == "zip" else []}
+        return {"kind": kind, "dex_off": off, "dex_size": size, "cd_shift": cd - stored_cd, "min_sdk": min_sdk,
+                "v2": v2, "block_ids": [f"0x{x:08x}" for x in ids],
+                "extra_ids": [f"0x{x:08x}" for x in ids if x not in _SIG_BLOCK_SKIP and x != 0x42726577],
+                "runtime": runtime, "views": views}
+    except Exception:  # noqa: BLE001 - truncated / impostor archive: not a polyglot we can read
+        return None
+
+
+def _jns_runtime_apk(apk):
+    """The APK as the Janus runtime sees it: the prepended dex as classes.dex beside the zip's other entries (bytes)."""
+    with zipfile.ZipFile(apk) as z:
+        fp = z.fp
+        fp.seek(0)
+        head = fp.read(0x70)
+        size = struct.unpack_from("<I", head, 0x20)[0]
+        first = min((i.header_offset for i in z.infolist()), default=size)
+        fp.seek(0)
+        dex = fp.read(size if 0x70 <= size <= first else first)
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as w:
+            w.writestr("classes.dex", dex)
+            for i in z.infolist():
+                if not re.fullmatch(r"classes\d*\.dex", i.filename):
+                    w.writestr(i.filename, z.read(i))
+    return out.getvalue()
+
+
+def janus_polyglot_scan(apk, deep=True):
+    """ANS tokens of a Janus polyglot, runtime view first, then the zip view, then an inert appended dex's (candidates;
+    janus_polyglot_facts labels each). With `deep`, a prepended runtime dex with no pool token is re-laid as the APK's
+    classes.dex and run through dex_strings (the full evaluator chain). [] when not a polyglot; never raises."""
+    f = janus_polyglot_facts(apk)
+    if not f:
+        return []
+    v = f["views"]
+    hits = list(v["runtime view"])
+    if not hits and deep and f["runtime"] == "prepended dex":
+        try:
+            hits = dex_strings(io.BytesIO(_jns_runtime_apk(apk)))
+        except Exception:  # noqa: BLE001 - unreadable re-layout: the static views below stand
+            hits = []
+    return list(dict.fromkeys(hits + v["zip view"] + v["inert view"]))
+
+
+def _janus_runtime_stage(apk):
+    """extract_answer stage: [] unless the APK is a Janus polyglot. Prepended + runtime view live -> that view's tokens
+    only; otherwise (zip view is what runs) the zip's dex_strings, so an inert appended dex never outranks it."""
+    f = janus_polyglot_facts(apk)
+    if not f:
+        return []
+    if f["runtime"] == "prepended dex":
+        return [h for h in janus_polyglot_scan(apk) if h not in f["views"]["zip view"]]
+    return dex_strings(apk)
+
+
 # --- UTF-16 string pools: binary AXML manifest / layouts and resources.arsc (coverage atlas rows 22, 60, 61) ----------
 ANS_RE_U16 = re.compile(rb"A\x00N\x00S\x00-\x00(?:[0-9A-Fa-f]\x00){16}")
 _POOL_HDR = b"\x01\x00\x1c\x00"  # RES_STRING_POOL_TYPE, headerSize 0x1c
@@ -1699,6 +2276,7 @@ def resource_table(apk_or_bytes):
                             ent = out.setdefault(rid, {"type": tname, "name": kpool[key] if key < len(kpool) else None,
                                                        "values": []})
                             ent["values"].append((cfg, val))
+                            ent.setdefault("cfgs", []).append(bytes(b[c + 20:c + 20 + min(u32(c + 20), 64)]))
                     c += cs
             at += size
     except Exception:  # noqa: BLE001 - truncated / impostor table: what was parsed so far
@@ -1715,14 +2293,15 @@ def _rid_resolve(tab, v, depth=0):
     return v
 
 
-def resource_id_refs(apk):
+def resource_id_refs(apk, tab=None):
     """Which arsc entries the code reads: every `const`/`const/high16` 0xPPTTEEEE (PP = an arsc package id) in a dex
     method, and every Resources.getIdentifier(name, type, pkg) whose const-string name/type match an arsc entry.
     [{"id", "type", "name", "values": [(config, value)], "method", "via"}] ordered proof/ChallengeActivity-style
-    methods first, then dex order. [] when absent; never raises."""
+    methods first, then dex order. `tab` = a resource_table to match against instead of the APK's own (a split
+    bundle's merged table). [] when absent; never raises."""
     refs, deadline, units = [], time.time() + _RID_DEADLINE_S, [0]
     try:
-        tab = resource_table(apk)
+        tab = resource_table(apk) if tab is None else tab
         if not tab:
             return []
         pkgs = {rid >> 24 for rid in tab}
@@ -1832,6 +2411,173 @@ def resource_id_scan(apk):
         pass
     return list(dict.fromkeys(hits))
 
+
+# --- split resources.arsc overlay (coverage atlas rows 22, 61, 104: split-resources-arsc-overlay) ---------------------
+# A split bundle's members each carry a resources.arsc: config splits re-declare base entries under density / locale
+# qualifiers (same 0x7f ids), feature splits add their own entries (0x7f shared or 0x80+ isolated). The device sees ONE
+# merged table: per id, the best-matching config across the installed members (AssetManager2 order: base first, a tie
+# keeps the earlier member). The ids the code reads (resource_id_refs on every member dex, against the merged table)
+# are served from it: getString / getStringArray / getInteger values, and openRawResource / res/raw/* bytes read from
+# the member that owns the winning entry. Every other distinct value per config is reported after, in SPLIT_RES_LOG.
+RES_DEVICE = {"lang": "en", "country": "US", "density": 420, "sdk": 34, "sw": 411, "w": 411, "h": 914}
+SPLIT_RES_LOG = []  # [(res id, "type/name", qualifier, value, member)] of every config value of a code-read id
+_SRS_MAX_MEMBERS, _SRS_MAX_RAW = 64, 4 << 20
+
+
+def _srs_cfg(c, dev=RES_DEVICE):
+    """Parsed ResTable_config (raw bytes) when the pinned device matches it, else None."""
+    try:
+        c = bytes(c) + bytes(max(0, 52 - len(c)))
+        mcc, mnc = struct.unpack_from("<HH", c, 4)
+        lang, country = c[8:10].rstrip(b"\0").decode("latin-1"), c[10:12].rstrip(b"\0").decode("latin-1")
+        orient, dens, sdk = c[12], struct.unpack_from("<H", c, 14)[0], struct.unpack_from("<H", c, 24)[0]
+        layout, ui, sw, w, h = c[28], c[29], *struct.unpack_from("<HHH", c, 30)
+        if mcc or mnc or (lang and lang != dev["lang"]) or orient not in (0, 1) or sdk > dev["sdk"] \
+                or (ui & 0x0F) not in (0, 1) or (ui & 0x30) not in (0, 0x10) or (layout & 0x0F) > 2 \
+                or sw > dev["sw"] or w > dev["w"] or h > dev["h"]:
+            return None
+        loc = 0 if not lang else 3 if country == dev["country"] else 2 if not country else 1
+        return {"loc": loc, "sw": sw, "w": w, "h": h, "size": layout & 0x0F, "orient": orient, "ui": ui,
+                "dens": dens, "sdk": sdk}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _srs_better(a, b, req=RES_DEVICE["density"]):
+    """ResTable_config::isBetterThan for two matching configs (locale, sw / w / h dp, size, orientation, uiMode,
+    density -- the closest bucket, scaling down preferred -- then sdk)."""
+    for k in ("loc", "sw", "w", "h", "size", "orient", "ui"):
+        if a[k] != b[k]:
+            return a[k] > b[k]
+    if a["dens"] != b["dens"]:
+        x, y = a["dens"] or 160, b["dens"] or 160
+        if x == 0xFFFE or y == 0xFFFE:
+            return x == 0xFFFE
+        hi, lo, big = (x, y, True) if x > y else (y, x, False)
+        if req >= hi:
+            return big
+        if lo >= req:
+            return not big
+        return not big if (2 * lo - req) * hi > req * req else big
+    return a["sdk"] > b["sdk"]
+
+
+def _srs_qual(c):
+    p = _srs_cfg(c) or {}
+    q = _rid_config(bytes(c) + bytes(16), 0)
+    d = struct.unpack_from("<H", bytes(c) + bytes(16), 14)[0]
+    v = struct.unpack_from("<H", bytes(c) + bytes(32), 24)[0]
+    return "-".join(x for x in (q, {0: "", 0xFFFE: "anydpi", 0xFFFF: "nodpi", 120: "ldpi", 160: "mdpi", 240: "hdpi",
+                                     320: "xhdpi", 480: "xxhdpi", 640: "xxxhdpi"}.get(d, f"{d}dpi"),
+                                f"v{v}" if v else "") if x) + ("" if p or not c else "(no match)")
+
+
+def split_resource_table(members):
+    """Merged resources.arsc of a split bundle's members [(name, bytes)] (base first): {res id: {"type", "name",
+    "values": [(raw config, value, member index)]}} in member order. {} when no member has a table."""
+    out = {}
+    for mi, (_n, b) in enumerate(members[:_SRS_MAX_MEMBERS]):
+        try:
+            with zipfile.ZipFile(io.BytesIO(b)) as z:
+                if "resources.arsc" not in z.NameToInfo or z.getinfo("resources.arsc").file_size > _RID_MAX_ARSC:
+                    continue
+                tab = resource_table(z.read("resources.arsc"))
+        except Exception:  # noqa: BLE001
+            continue
+        for rid, e in tab.items():
+            m = out.setdefault(rid, {"type": e["type"], "name": e["name"], "values": []})
+            cf = e.get("cfgs") or [b""] * len(e["values"])
+            m["values"] += [(c, v, mi) for c, (_q, v) in zip(cf, e["values"])]
+    return out
+
+
+def _srs_pick(tab, rid, depth=0):
+    """(value, member index) the device resolves for `rid` (references followed, bag items resolved), (None, None)."""
+    best, bp = None, None
+    for c, v, mi in (tab.get(rid) or {}).get("values", []):
+        p = _srs_cfg(c)
+        if p is not None and (bp is None or _srs_better(p, bp)):
+            best, bp = (v, mi), p
+    if best is None or depth > 8:
+        return None, None
+    v, mi = best
+    if isinstance(v, tuple) and v[:1] == ("ref",):
+        return _srs_pick(tab, v[1], depth + 1)
+    if isinstance(v, list):
+        return [_srs_pick(tab, x[1], depth + 1)[0] if isinstance(x, tuple) and x[:1] == ("ref",) else x
+                for x in v], mi
+    return v, mi
+
+
+def _srs_tokens(v, members, mi, budget):
+    """ANS tokens of one served value: strings directly / via decode_any, a res/ path's bytes from member `mi`."""
+    hits = []
+    for s in _rid_flat(v):
+        data = s
+        if re.fullmatch(r"res/[\w.\-/]+", s) and mi is not None:
+            try:
+                with zipfile.ZipFile(io.BytesIO(members[mi][1])) as z:
+                    if z.getinfo(s).file_size > _SRS_MAX_RAW:
+                        continue
+                    data = z.read(s).decode("latin-1")
+            except Exception:  # noqa: BLE001
+                continue
+        m = ANS_RE_T.findall(data)
+        if m:
+            hits += m
+        elif budget[0] > 0 and _POOL_ENCODED.fullmatch(data.strip()):
+            budget[0] -= 1
+            dec = decode_any(data.strip(), depth=2, cap=200, chain=False)
+            hits += ANS_RE_T.findall(dec or "")
+    return hits
+
+
+def split_resource_candidates(members, extra=()):
+    """(served, rest) ANS tokens of the arsc ids the code reads across a split bundle (`members` = the installed
+    [(name, bytes)], base first; `extra` = members the device would not install): `served` = the value the pinned
+    device resolves from the merged table (en-US, 420 dpi -> xxhdpi, sdk 34) when split-sourced (an override or an
+    entry only a split defines); `rest` = base-only served values, then every other value per config (and the
+    not-installed members'),
+    logged in SPLIT_RES_LOG. ([], []) when absent; never raises."""
+    served, own, rest, budget = [], [], [], [_POOL_DECODE_BUDGET]
+    try:
+        members = list(members)[:_SRS_MAX_MEMBERS]
+        tab = split_resource_table(members)
+        if not tab:
+            return [], []
+        base_tab = {k: {**e, "values": [x for x in e["values"] if x[2] == 0]} for k, e in tab.items()}
+        ref_tab = {k: {**e, "values": [(_srs_qual(c), v) for c, v, _m in e["values"]]} for k, e in tab.items()}
+        refs, deadline = [], time.time() + 1.5
+        for _n, b in members:
+            if time.time() > deadline:
+                break
+            try:
+                with zipfile.ZipFile(io.BytesIO(b)) as z:
+                    if not any(re.fullmatch(r"classes\d*\.dex", n) for n in z.namelist()):
+                        continue
+            except Exception:  # noqa: BLE001
+                continue
+            refs += [int(r["id"], 16) for r in resource_id_refs(io.BytesIO(b), tab=ref_tab)]
+        for rid in dict.fromkeys(refs):
+            v, mi = _srs_pick(tab, rid)
+            hit = _srs_tokens(v, members, mi, budget) if v is not None else []
+            bv = _srs_pick(base_tab, rid)[0]
+            (served if hit and (mi != 0 or bv != v) else own).extend(hit)
+            e = tab[rid]
+            for c, x, m in e["values"]:
+                SPLIT_RES_LOG.append((f"0x{rid:08x}", f"{e['type']}/{e['name']}", _srs_qual(c), x, members[m][0]))
+                rest += _srs_tokens(x, members, m, budget)
+        for _n, b in list(extra)[:_SRS_MAX_MEMBERS]:  # the not-installed config splits' values of the same ids
+            xt = split_resource_table([(_n, b)])
+            for rid in dict.fromkeys(refs):
+                for c, x, _m in (xt.get(rid) or {}).get("values", []):
+                    SPLIT_RES_LOG.append((f"0x{rid:08x}", f"{xt[rid]['type']}/{xt[rid]['name']}", _srs_qual(c), x, _n))
+                    rest += _srs_tokens(x, [(_n, b)], 0, budget)
+    except Exception:  # noqa: BLE001
+        pass
+    del SPLIT_RES_LOG[:-256]
+    served = list(dict.fromkeys(served))
+    return served, [t for t in dict.fromkeys(own + rest) if t not in served]
 
 # --- React Native Hermes bytecode string table (coverage atlas row 54) ------------------------------------------------
 _HBC_MAGIC = b"\xc6\x1f\xbc\x03\xc1\x03\x19\x1f"
@@ -1963,8 +2709,14 @@ def dex_strings(apk):
             for n in z.namelist():
                 if re.fullmatch(r"classes\d*\.dex", Path(n).name):
                     hits += [m.decode() for m in ANS_RE_B.findall(z.read(n))]
+            z.fp.seek(0)
+            janus = _JNS_MAGIC.match(z.fp.read(8)) is not None
     except (OSError, zipfile.BadZipFile):
-        pass
+        janus = False
+    if janus:  # Janus polyglot (rows 62, 105): the prepended dex Android < 8 runs goes before classes.dex's literals
+        jf = janus_polyglot_facts(apk) or {}
+        if jf.get("runtime") == "prepended dex":
+            hits = list(dict.fromkeys(janus_polyglot_scan(apk) + hits))
     if hits:  # a literal that sits in a shadowed class copy (host vs payload dex, row 84) goes behind the running copy's
         sh = classloader_shadow_facts(apk)
         dem = set(sh.get("demoted") or ())
@@ -7043,6 +7795,253 @@ def signing_cert_scan(apk):
     return list(dict.fromkeys(hits))
 
 
+# --- APK Signature Scheme v3 / v3.1 key rotation + v4 .idsig (coverage atlas rows 59 / 105: "which signer is the app?") --
+# v3 signer attrs: proof-of-rotation 0x3ba06f8c (u32 version 1, then lp nodes: lp(signed data = lp cert + u32 sig alg
+# of the NEXT node), u32 flags, u32 sig alg (the parent's key over this node), lp signature), rotation-min-sdk 0x559f8b02,
+# rotation-on-dev-release 0xc2a6b3ba; v2 / v3.0 signed-data attr 0xbeeff00d = stripping protection (u32 scheme id).
+_ROT_POR, _ROT_STRIP, _ROT_MINSDK, _ROT_DEVREL = 0x3BA06F8C, 0xBEEFF00D, 0x559F8B02, 0xC2A6B3BA
+_ROT_FLAGS = ((1, "installed_data"), (2, "shared_uid"), (4, "permission"), (8, "rollback"), (16, "auth"))
+_ROT_SIG_ALGS = {0x0101: "RSA_PSS_WITH_SHA256", 0x0102: "RSA_PSS_WITH_SHA512", 0x0103: "RSA_PKCS1_V1_5_WITH_SHA256",
+                 0x0104: "RSA_PKCS1_V1_5_WITH_SHA512", 0x0201: "ECDSA_WITH_SHA256", 0x0202: "ECDSA_WITH_SHA512",
+                 0x0301: "DSA_WITH_SHA256", 0x0421: "VERITY_RSA_PKCS1_V1_5_WITH_SHA256",
+                 0x0423: "VERITY_ECDSA_WITH_SHA256", 0x0425: "VERITY_DSA_WITH_SHA256"}
+_ROT_SCHEME_SDK = (("v3.1", 33), ("v3", 28), ("v2", 24))     # platform verifier order (ApkSignatureVerifier)
+_ROT_MAX_NODES = 16
+
+
+def _rot_cert(der):
+    """Facts of one DER certificate (the signing_certs record minus scheme / der), or None."""
+    import hashlib
+    from asn1crypto import x509
+    try:
+        tbs = x509.Certificate.load(der)["tbs_certificate"]
+        subj = {}
+        for rdn in tbs["subject"].chosen:
+            for atv in rdn:
+                v, t = atv["value"].native, str(atv["type"].native)
+                subj[_SIG_DN_SHORT.get(t, t)] = v if isinstance(v, str) else str(v)
+        h = hashlib.sha256(der).hexdigest()
+        return {"subject": ", ".join(f"{k}={v}" for k, v in list(subj.items())[::-1]), "subject_fields": subj,
+                "serial": "%x" % tbs["serial_number"].native, "sha256": h, "sha1": hashlib.sha1(der).hexdigest(),
+                "md5": hashlib.md5(der).hexdigest(),
+                "sha256_colon": ":".join(h[i:i + 2] for i in range(0, 64, 2)).upper()}
+    except Exception:  # noqa: BLE001 - not a certificate
+        return None
+
+
+def _rot_alg(a):
+    return _ROT_SIG_ALGS.get(a, "0x%04x" % a)
+
+
+def _rot_lineage(v):
+    """Proof-of-rotation attribute value -> [node] oldest first: cert facts + "flags" / "capabilities" (apksigner
+    lineage --print-certs "Has ... capability") / "sig_alg" (the node's signature algorithm id; None when 0) /
+    "next_sig_alg" (the algorithm id inside its signed data)."""
+    if struct.unpack_from("<I", v, 0)[0] != 1:
+        return []
+    out, i = [], 4
+    while i < len(v) and len(out) < _ROT_MAX_NODES:
+        node, i = _sig_lp(v, i)
+        sd, k = _sig_lp(node, 0)
+        flags, alg = struct.unpack_from("<II", node, k)
+        der, j = _sig_lp(sd, 0)
+        nxt = struct.unpack_from("<I", sd, j)[0] if j + 4 <= len(sd) else 0
+        rec = _rot_cert(der) or {"subject": None, "sha256": hashlib.sha256(der).hexdigest()}
+        rec.update(flags=flags, capabilities=[n for b, n in _ROT_FLAGS if flags & b],
+                   sig_alg=_rot_alg(alg) if alg else None, next_sig_alg=_rot_alg(nxt) if nxt else None)
+        out.append(rec)
+    return out
+
+
+def _rot_signer(scheme, s):
+    """One v2 / v3 / v3.1 signer -> {"certs", "min_sdk", "max_sdk", "sig_algs", "attrs" ({0x id: hex}), "lineage",
+    "rotation_min_sdk", "stripping_protection"}."""
+    sd, i = _sig_lp(s, 0)
+    lo = hi = None
+    if scheme != "v2":
+        lo, hi = struct.unpack_from("<II", s, i)
+        i += 8
+    sigs, _ = _sig_lp(s, i)
+    _dg, k = _sig_lp(sd, 0)
+    certs, k = _sig_lp(sd, k)
+    if scheme != "v2":
+        k += 8
+    attrs, _ = _sig_lp(sd, k) if k + 4 <= len(sd) else (b"", 0)
+    ders, c = [], 0
+    while c < len(certs) and len(ders) < _SIG_MAX_CERTS:
+        der, c = _sig_lp(certs, c)
+        ders.append(der)
+    algs, c = [], 0
+    while c < len(sigs) and len(algs) < 8:
+        sg, c = _sig_lp(sigs, c)
+        algs.append(_rot_alg(struct.unpack_from("<I", sg, 0)[0]))
+    rec = {"certs": [x for x in map(_rot_cert, ders) if x], "min_sdk": lo, "max_sdk": hi, "sig_algs": algs,
+           "attrs": {}, "lineage": [], "rotation_min_sdk": None, "stripping_protection": None}
+    c = 0
+    while c < len(attrs):
+        a, c = _sig_lp(attrs, c)
+        if len(a) < 4:
+            continue
+        aid, val = struct.unpack_from("<I", a, 0)[0], a[4:]
+        rec["attrs"]["0x%08x" % aid] = val.hex() if len(val) <= 64 else "%d bytes" % len(val)
+        if aid == _ROT_POR:
+            rec["lineage"] = _rot_lineage(val)
+        elif aid in (_ROT_MINSDK, _ROT_STRIP) and len(val) >= 4:
+            rec["rotation_min_sdk" if aid == _ROT_MINSDK else "stripping_protection"] = \
+                struct.unpack_from("<I", val, 0)[0]
+    return rec
+
+
+def signing_lineage_facts(apk, sdk=34):
+    """Key-rotation view of an APK's signatures: {"schemes" (["v1", "v2", "v3", "v3.1"] present), "v1" ([cert]),
+    "v2" / "v3" / "v3.1" ([signer] -- certs, min_sdk / max_sdk, sig_algs, attrs, lineage oldest -> newest with flags /
+    capabilities, rotation_min_sdk, stripping_protection), "sdk", "verified_scheme" (the scheme a device at `sdk` uses:
+    v3.1 if some v3.1 signer covers sdk >= 33, else v3 (>= 28), v2 (>= 24), v1), "current_signer" (cert facts that
+    signingInfo.getApkContentsSigners()[0] reports), "apk_contents_signers" ([cert]),
+    "signing_certificate_history" (getSigningCertificateHistory(): lineage certs original first / current last, or the
+    signers when not rotated), "original_signer", "rotated" (bool)}. cert = {subject, subject_fields, serial, sha256,
+    sha1, md5, sha256_colon}. None when not a zip; never raises."""
+    try:
+        with zipfile.ZipFile(apk) as z:
+            blk = b""
+            fp, cd = z.fp, z.start_dir
+            if cd >= 32:
+                fp.seek(cd - 24)
+                tail = fp.read(24)
+                size = struct.unpack_from("<Q", tail)[0] if tail[8:] == b"APK Sig Block 42" else 0
+                if 24 <= size <= min(cd - 8, 32 << 20):
+                    fp.seek(cd - size - 8)
+                    blk = fp.read(size + 8)
+    except Exception:  # noqa: BLE001 - not a zip
+        return None
+    f = {"schemes": [], "v1": [], "v2": [], "v3": [], "v3.1": [], "sdk": sdk, "verified_scheme": None,
+         "current_signer": None, "apk_contents_signers": [], "signing_certificate_history": [],
+         "original_signer": None, "rotated": False}
+    try:
+        f["v1"] = [{k: v for k, v in c.items() if k in ("subject", "subject_fields", "serial", "sha256", "sha1", "md5",
+                                                        "sha256_colon")}
+                   for c in signing_certs(apk) if "v1" in c["scheme"].split("+")]
+    except Exception:  # noqa: BLE001
+        pass
+    i, end = 8, len(blk) - 24
+    while i + 12 <= end:
+        try:
+            n, pid = struct.unpack_from("<QI", blk, i)
+            if n < 4 or i + 8 + n > end:
+                break
+            scheme = _SIG_BLOCK_IDS.get(pid)
+            if scheme:
+                seq, _ = _sig_lp(blk[i + 12:i + 8 + n], 0)
+                j = 0
+                while j < len(seq) and len(f[scheme]) < _SIG_MAX_CERTS:
+                    s, j = _sig_lp(seq, j)
+                    f[scheme].append(_rot_signer(scheme, s))
+            i += 8 + n
+        except (ValueError, struct.error):
+            i += 8 + n
+    f["schemes"] = [s for s in ("v1", "v2", "v3", "v3.1") if f[s]]
+    for scheme, need in _ROT_SCHEME_SDK:
+        if sdk < need or not f[scheme]:
+            continue
+        ok = [s for s in f[scheme] if scheme == "v2" or (s["min_sdk"] or 0) <= sdk <= (s["max_sdk"] or 0)]
+        if ok and ok[0]["certs"]:
+            f["verified_scheme"] = scheme
+            f["apk_contents_signers"] = [s["certs"][0] for s in ok if s["certs"]]
+            lin = ok[0]["lineage"] if len(ok) == 1 else []
+            f["signing_certificate_history"] = [{k: v for k, v in n.items()} for n in lin] or \
+                list(f["apk_contents_signers"])
+            break
+    if f["verified_scheme"] is None and f["v1"]:
+        f["verified_scheme"], f["apk_contents_signers"] = "v1", f["v1"][:1]
+        f["signing_certificate_history"] = f["v1"][:1]
+    if f["apk_contents_signers"]:
+        f["current_signer"] = f["apk_contents_signers"][0]
+        f["original_signer"] = f["signing_certificate_history"][0]
+        f["rotated"] = f["original_signer"]["sha256"] != f["current_signer"]["sha256"]
+    return f
+
+
+def signing_lineage_scan(apk, sdk=34):
+    """ANS tokens in the DN values / serial of the APK's signers in key-rotation order (signing_lineage_facts): the
+    current signer at `sdk` first, then the rotation history newest -> oldest (proof-of-rotation lineage certs are not
+    in signing_certs), then every other scheme's signers; plain, else through decode_any. [] when absent; never raises."""
+    hits = []
+    try:
+        f = signing_lineage_facts(apk, sdk)
+        if not f:
+            return []
+        certs = list(f["apk_contents_signers"]) + f["signing_certificate_history"][::-1]
+        for s in ("v3.1", "v3", "v2"):
+            for sg in f[s]:
+                certs += sg["certs"] + sg["lineage"][::-1]
+        certs += f["v1"]
+        end, seen = time.time() + _SIG_BUDGET_S, set()
+        for c in certs:
+            if c.get("sha256") in seen or time.time() > end:
+                continue
+            seen.add(c.get("sha256"))
+            for v in dict.fromkeys(list((c.get("subject_fields") or {}).values()) + [c.get("serial") or ""]):
+                found = ANS_RE_T.findall(v)
+                if not found and len(v) >= 12:
+                    found = ANS_RE_T.findall(decode_any(v, depth=2, cap=600, chain=False) or "")
+                hits += found
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return list(dict.fromkeys(hits))
+
+
+def _idsig_info(si):
+    """One V4Signature.SigningInfo (lp digest, lp cert, lp additional data, lp public key, u32 sig alg, lp signature)
+    -> (record, end offset)."""
+    dg, j = _sig_lp(si, 0)
+    der, j = _sig_lp(si, j)
+    add, j = _sig_lp(si, j)
+    _pk, j = _sig_lp(si, j)
+    sa = struct.unpack_from("<I", si, j)[0]
+    _sg, k = _sig_lp(si, j + 4)
+    return {"apk_digest": dg.hex(), "cert": _rot_cert(der), "sig_alg": _rot_alg(sa), "additional_data": add.hex()}, k
+
+
+def idsig_facts(data, sdk=34):
+    """APK Signature Scheme v4 `.idsig` bytes (V4Signature, little-endian, u32-length-prefixed): {"version" (2 / 3),
+    "hash_algorithm" (1 = SHA-256), "log2_block_size", "salt" / "root_hash" (hex; the fs-verity merkle root),
+    "apk_digest" (hex), "cert" (cert facts of the primary v4 signer), "sig_alg", "additional_data" (hex),
+    "signing_info_blocks" ([{"block_id", "scheme" ("v3.1" for 0x1b93ad61), apk_digest, cert, sig_alg, ...}]: v3.1
+    rotation appends u32 block id + lp(SigningInfo) after the primary), "extra_signing_infos" (their count),
+    "current_cert" (the v3.1 block's cert when `sdk` >= 33, else the primary), "tree_size" (merkle tree bytes after the
+    signing infos)}, or None when not an idsig; never raises."""
+    try:
+        b = bytes(data)
+        ver = struct.unpack_from("<I", b, 0)[0]
+        if ver not in (2, 3):
+            return None
+        hi, i = _sig_lp(b, 4)
+        alg, log2 = struct.unpack_from("<IB", hi, 0)
+        salt, k = _sig_lp(hi, 5)
+        root, _ = _sig_lp(hi, k)
+        si, i = _sig_lp(b, i)
+        rec, k = _idsig_info(si)
+        if alg != 1 or rec["cert"] is None:
+            return None
+        blocks = []
+        while k + 8 <= len(si) and len(blocks) < 8:
+            bid = struct.unpack_from("<I", si, k)[0]
+            try:
+                raw, k = _sig_lp(si, k + 4)
+                blk = _idsig_info(raw)[0]
+            except (ValueError, struct.error):
+                break
+            blk.update(block_id="0x%08x" % bid, scheme=_SIG_BLOCK_IDS.get(bid))
+            blocks.append(blk)
+        tree = struct.unpack_from("<I", b, i)[0] if i + 4 <= len(b) else 0
+        cur = next((x["cert"] for x in blocks if x["scheme"] == "v3.1" and x["cert"] and sdk >= 33), rec["cert"])
+        return {"version": ver, "hash_algorithm": alg, "log2_block_size": log2, "salt": salt.hex(),
+                "root_hash": root.hex(), **rec, "signing_info_blocks": blocks, "extra_signing_infos": len(blocks),
+                "current_cert": cur, "tree_size": tree}
+    except Exception:  # noqa: BLE001 - truncated / not an idsig
+        return None
+
+
 # --- integrity-derived keys (coverage atlas rows 49 / 33: anti-tamper key = cert digest / dex header / entry CRC32) ----
 _IKD_CRC = re.compile(r"classes\d*\.dex|AndroidManifest\.xml|resources\.arsc|lib/[^/]+/[^/]+\.so")
 _IKD_MAX_FACTS, _IKD_BUDGET_S = 16, 0.8
@@ -7919,7 +8918,7 @@ def extract_answer(apk):
         m = ANS_RE_T.search(cand)
         if m:
             return m.group(0)
-    for stage in (classloader_shadow_scan, pinned_payload_scan, v1_tamper_scan, raw_entry_scan, dex_strings, nested_scan, static_key_cipher_scan, identity_key_scan,
+    for stage in (_janus_runtime_stage, classloader_shadow_scan, pinned_payload_scan, v1_tamper_scan, raw_entry_scan, dex_strings, nested_scan, static_key_cipher_scan, identity_key_scan,
                   signing_cert_scan, integrity_key_scan, dex_integrity_gate_scan, xamarin_assembly_scan, decompiled_scan):
         hits = [h for h in stage(apk) if not _eav_alphabet(h)]
         if hits:
@@ -10887,29 +11886,73 @@ def _nlb_call(elf, va, args, ret, vm=None, depth=0):
             "S": lambda x: ((x + 0x8000) & 0xFFFF) - 0x8000, "C": lambda x: x & 0xFFFF}.get(ret, _dxe_w32)(lo)
 
 
-def _nlb_resolver(z):
+# Split-bundle native libs (coverage atlas rows 37, 58, 104): bundletool puts lib/<abi>/*.so in ABI config splits
+# (split_config.x86_64.apk), never in base.apk, and a feature split may carry its own lib/<abi>/. System.loadLibrary
+# searches the whole install set; parsed ELFs are cached per .so sha256 (never id(): Mastery pool processes reuse ids).
+_NLB_ELF_CACHE = {}
+
+
+def _nlb_split_libs(members):
+    """[(tier, abi, .so bytes)] from the non-base members [(name, bytes, installed)] of a split bundle, install order.
+    tier 0 = an installed split (ABI config / feature), 1 = installed but unloadable as packaged
+    (`android:extractNativeLibs="false"` with a deflated .so: the package manager cannot map it in place), 2 = a config
+    split the pinned device would not install (last resort). [] when none; never raises."""
+    out = []
+    for _n, b, installed in members[:32]:
+        try:
+            noext = any(kind == "start" and tag == "application"
+                        and str(a.get("extractNativeLibs", "")).strip().lower() in ("false", "0")
+                        for kind, tag, a, _ in _spl_manifest(b))
+            with zipfile.ZipFile(io.BytesIO(b)) as zs:
+                for i in zs.infolist():
+                    m = re.fullmatch(r"lib/([^/]+)/[^/]+\.so", i.filename)
+                    if m and m.group(1) in _NLB_ABI_ORDER and 0 < i.file_size <= _NLB_MAX_SO:
+                        tier = 2 if not installed else 1 if noext and i.compress_type != zipfile.ZIP_STORED else 0
+                        out.append((tier, m.group(1), zs.read(i)))
+        except Exception:  # noqa: BLE001 - truncated / impostor split
+            continue
+    return out
+
+
+def _nlb_elf(b):
+    """(_NsoElf, {Java_* export: va}) of .so bytes, cached per sha256; raises on a truncated / impostor .so."""
+    k = hashlib.sha256(b).digest()
+    hit = _NLB_ELF_CACHE.get(k)
+    if hit is None:
+        elf = _NsoElf(b)
+        hit = (elf, {n: va for n, va, _ in _nso_exports(elf) if n.startswith("Java_")})
+        if len(_NLB_ELF_CACHE) >= 32:
+            _NLB_ELF_CACHE.pop(next(iter(_NLB_ELF_CACHE)))
+        _NLB_ELF_CACHE[k] = hit
+    return hit
+
+
+def _nlb_resolver(z, extra=()):
     """ref -> callable(raw registers) for app `native` methods whose Java_<mangled>[__<sig>] export (or a
     RegisterNatives {name, sig, fn} entry) sits in lib/<abi>/*.so; the first ABI the bridge can run wins. None when
-    the APK ships no runnable .so. The callable returns None when it cannot answer (the VM aborts that chain)."""
+    the APK ships no runnable .so. The callable returns None when it cannot answer (the VM aborts that chain).
+    extra = _nlb_split_libs() of a split bundle's other members: by tier, then ABI order (x86_64 first, arm64-v8a
+    under unicorn's aarch64 mode only when no x86_64 lib is loadable), after the APK's own lib/ at tier 0."""
     sos = {}
     for i in z.infolist():
         m = re.fullmatch(r"lib/([^/]+)/[^/]+\.so", i.filename)
         if m and m.group(1) in _NLB_ABI_ORDER and 0 < i.file_size <= _NLB_MAX_SO:
-            sos.setdefault(m.group(1), []).append(i)
+            sos.setdefault((0, m.group(1)), []).append(lambda i=i: z.read(i))
+    for tier, abi, b in extra:
+        sos.setdefault((tier, abi), []).append(lambda b=b: b)
     if not sos:
         return None
     dex = b"".join(z.read(i) for i in z.infolist() if re.fullmatch(r"classes\d*\.dex", i.filename)
                    and i.file_size <= _DXE_MAX_DEX)
     elves = []
-    for abi in _NLB_ABI_ORDER:
-        for i in sos.get(abi, []):
+    for key in [(t, abi) for t in (0, 1, 2) for abi in _NLB_ABI_ORDER]:
+        for rd in sos.get(key, []):
             try:
-                elf = _NsoElf(z.read(i))
+                elf, ex = _nlb_elf(rd())
             except Exception:  # noqa: BLE001 - truncated / impostor .so
                 continue
             if elf.arch not in _NLB_ABI or elf.e != "<" or elf.is64 != (elf.arch in ("EM_X86_64", "EM_AARCH64")):
                 continue
-            ex = {n: va for n, va, _ in _nso_exports(elf) if n.startswith("Java_")}
             try:
                 reg = {} if ex else dict(reversed(_nso_registered(elf, dex)))
             except Exception:  # noqa: BLE001
@@ -11024,9 +12067,27 @@ def dex_eval_scan(apk, deep=False):
     return list(dict.fromkeys(hits))
 
 
-def _dex_eval_deep(apk, entry_only=False):
+def _split_asset_vm(vmc, assets):
+    """D26 'Split Decision' v2: an in-dex `(String)[B` reader (walks ApplicationInfo.splitSourceDirs) returns the split
+    APK's `assets/<name>` bytes ({entry: bytes} of the bundle's splits)."""
+    def invoke(self, ref, raw, depth):
+        if ref.endswith(")[B") and _dxe_params(ref) == ["Ljava/lang/String;"] and raw and isinstance(raw[-1], str):
+            n = raw[-1]
+            b = assets.get(n, assets.get("assets/" + n.lstrip("/")))
+            if b is None:
+                hits = [v for k, v in assets.items() if k.rsplit("/", 1)[-1] == n.rsplit("/", 1)[-1]]
+                b = hits[0] if len(hits) == 1 else None
+            if b is not None:
+                return self.note(_dxe_barr(b))
+        return vmc.invoke(self, ref, raw, depth)
+    return type("_DxeSplitVM", (vmc,), {"invoke": invoke})
+
+
+def _dex_eval_deep(apk, entry_only=False, assets=None, libs=()):
     """dex_eval_scan(deep=True): returned ANS tokens of every static String-returning app method under _DxeDeepVM.
-    entry_only=True: only the methods _eav_reached() reaches from ChallengeActivity / MainActivity ([] without one)."""
+    entry_only=True: only the methods _eav_reached() reaches from ChallengeActivity / MainActivity ([] without one).
+    assets={entry: bytes} (D26 split bundle): the split APKs' assets, served to an in-dex `(String)[B` reader.
+    libs = _nlb_split_libs() of the bundle's splits: System.loadLibrary resolves across the install set."""
     rets, seen = [], []
     shadow, keep, dflt = set(), set(), {}  # reflectively invoked refs, their callers' tokens, defaulted-param runs
     deadline = time.time() + _DXE_DEEP_BUDGET_S
@@ -11035,7 +12096,7 @@ def _dex_eval_deep(apk, entry_only=False):
             dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
                      and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
             try:
-                natives = _nlb_resolver(z)
+                natives = _nlb_resolver(z, libs)
             except Exception:  # noqa: BLE001 - no runnable JNI bridge
                 natives = None
         for d in dexes:
@@ -11052,6 +12113,8 @@ def _dex_eval_deep(apk, entry_only=False):
                 vmc = _DxeRflVM if _dxe_reflective(dx) else _DxeDeepVM
             except (IndexError, struct.error):
                 vmc = _DxeDeepVM
+            if assets:
+                vmc = _split_asset_vm(vmc, assets)
             for ref in dx.order:
                 nreg, nin, _ins, acc = dx.code[ref]
                 ps = _dxe_params(ref)
@@ -14477,7 +15540,297 @@ class _DxlVM(_CtxVM):
 _CTX_DBG_GATE = re.compile(rb"Landroid/os/Debug;|TracerPid|Ldalvik/system/VMDebug;")
 
 
-def context_chain_scan(apk):
+# --- split install: the base dex reads ANOTHER APK of the bundle (coverage atlas rows 58, 102: v2-split-asset-read) ---
+# A `.apks` / `.xapk` / `.apkm` bundle installs base.apk + split_<name>.apk side by side. The Context of the base then
+# answers from the whole install: getApplicationInfo().splitSourceDirs / splitNames / splitPublicSourceDirs (bundle
+# order), java.util.zip.ZipFile(<split path> | File) getEntry / getJarEntry / getInputStream / entries / size / close,
+# ZipEntry getName / getSize / getCrc, AssetManager.open searching base then splits, createContextForSplit(name)
+# .getAssets() (that split first), and DataInputStream readLong / readInt / readShort / readFully on the streams.
+_SPL_ZIP = ("Ljava/util/zip/ZipFile;", "Ljava/util/jar/JarFile;")
+_SPL_FNF = ("Ljava/io/FileNotFoundException;", *_ENV_IOE)
+_CTX_SPLIT_VMS = {}
+_SPL_NEW = frozenset(("Ljava/io/DataInputStream;", "Ljava/io/BufferedInputStream;", *_SPL_ZIP))
+
+
+_SPL_PLAY = "Lcom/google/android/play/core/"
+
+
+class _CtxSplitMix:
+    """Mixin over _CtxVM / _DxlVM: self.apk["splits"] = [(path, split name, ZipFile)] of the bundle's other APKs.
+    Feature splits with code (rows 42, 101, 103; self.apk["splitdex"] = [(split name, [_DxDex])], always on a _DxlVM):
+    without isolatedSplits their classes join the base PathClassLoader (preloaded, the base wins a duplicate descriptor;
+    plain static invokes, Class.forName(n), getClassLoader().loadClass); with self.apk["iso"] only
+    createContextForSplit(n).getClassLoader() (parent = base) sees them. Play Core: SplitCompat.install -> true,
+    SplitInstallManagerFactory.create(ctx).getInstalledModules() -> the installed feature split names."""
+
+    def __init__(self, *a):
+        super().__init__(*a)
+        if self.apk.get("splitdex") and not self.apk.get("iso") and hasattr(self, "loaded"):
+            for _n, ds in self.apk["splitdex"]:
+                self.loaded += [d for d in ds if d not in self.loaded][:_DXL_MAX_DEXES - len(self.loaded)]
+
+    def invoke(self, ref, raw, depth):
+        if self.apk.get("splitdex"):
+            v = self.split_code(ref, raw)
+            if v is not _ENV_UNSET:
+                return v
+        return super().invoke(ref, raw, depth)
+
+    def split_loader(self, own):
+        ldr = _DxObj("Ldalvik/system/PathClassLoader;")
+        sd = self.apk["splitdex"]
+        ldr.f["L"] = [d for n, ds in sd for d in ds if n == own or own is None and not self.apk.get("iso")]
+        for d in ldr.f["L"]:
+            if d not in self.loaded and len(self.loaded) < _DXL_MAX_DEXES:
+                self.loaded.append(d)
+        return ldr
+
+    def split_code(self, ref, raw):  # noqa: C901 - one table of feature-split code models
+        cls, rest = ref.split("->", 1)
+        name, sig = rest.split("(", 1)
+        o = raw[0] if raw and isinstance(raw[0], _DxObj) else None
+        a = raw[1:] if o is not None else raw
+        if cls.startswith(_SPL_PLAY + "splitcompat/SplitCompat") and name in ("install", "installActivity", "a"):
+            self.log_probe("SplitCompat." + name, "ctx", "true")
+            return 1 if sig.endswith(")Z") else None
+        if cls.startswith(_SPL_PLAY + "splitinstall/SplitInstallManagerFactory") and name == "create":
+            return _DxObj(_SPL_PLAY + "splitinstall/SplitInstallManager;")
+        if cls.startswith(_SPL_PLAY + "splitinstall/") and name == "getInstalledModules" and o is not None:
+            s = _DxObj("Ljava/util/Set;")
+            s.f["ms"] = [n for _p, n, _z in self.apk.get("splits") or [] if n and not re.match(r"(?:.+\.)?config\.", n)]
+            self.log_probe("SplitInstallManager.getInstalledModules", "", ",".join(s.f["ms"]))
+            return s
+        if o is not None and "ms" in o.f:
+            ms = o.f["ms"]
+            if name == "contains" and a:
+                return int(a[0] in ms)
+            if name in ("size", "isEmpty"):
+                return len(ms) if name == "size" else int(not ms)
+            if name == "iterator":
+                it = _DxObj("Ljava/util/Iterator;")
+                it.f["mi"] = list(ms)
+                return it
+            raise _DxAbort
+        if o is not None and "mi" in o.f and name in ("hasNext", "next"):
+            if name == "hasNext":
+                return int(bool(o.f["mi"]))
+            if not o.f["mi"]:
+                raise _DxThrow("Ljava/util/NoSuchElementException;", "Ljava/lang/RuntimeException;")
+            return o.f["mi"].pop(0)
+        if name == "getClassLoader" and sig == ")Ljava/lang/ClassLoader;" and o is not None \
+                and (o.t == "Ljava/lang/Class;" or "split" in o.f or o.t in _CTX_TYPES):
+            return self.split_loader(o.f.get("split") if o.t != "Ljava/lang/Class;" else None)
+        if cls == "Ljava/lang/Class;" and name == "forName" and len(raw) == 1 and isinstance(raw[0], str) \
+                and not self.apk.get("iso") and 0 < len(raw[0]) < 256:
+            desc = "L" + raw[0].replace(".", "/") + ";"
+            if desc not in self.host.sfields and any(desc in d.sfields for d in self.loaded):
+                return self.klass(desc)
+        return _ENV_UNSET
+
+    def new_instance(self, t):
+        if t in _SPL_NEW:
+            return _DxObj(t)
+        return super().new_instance(t)
+
+    def env(self, ref, raw):
+        v = self.split_call(ref, raw)
+        return super().env(ref, raw) if v is _ENV_UNSET else v
+
+    def app_info(self):
+        ai = super().app_info()
+        sp, A = self.apk.get("splits") or [], "Landroid/content/pm/ApplicationInfo;->"
+        base = self.apk["path"]
+        for k, vals in (("splitSourceDirs", [p for p, _n, _z in sp]), ("splitPublicSourceDirs", [p for p, _n, _z in sp]),
+                        ("splitNames", [n for _p, n, _z in sp])):
+            arr = _DxArr(vals)
+            arr.t = "Ljava/lang/String;"
+            ai.f[A + k] = arr
+        ai.f[A + "nativeLibraryDir"] = base.rsplit("/", 1)[0] + "/lib/x86_64"
+        return ai
+
+    def split_entry(self, zi, z, n):
+        e = _DxObj("Ljava/util/zip/ZipEntry;")
+        e.f.update(zn=n, ze=(zi.CRC, zi.file_size, zi.compress_size), zz=z)
+        return e
+
+    def split_read(self, z, n):
+        i = z.NameToInfo.get(n)
+        if i is None or i.file_size > _CTX_MAX_ASSET:
+            return None
+        return z.read(i)
+
+    def split_call(self, ref, raw):  # noqa: C901 - one table of split-install models
+        cls, rest = ref.split("->", 1)
+        name, sig = rest.split("(", 1)
+        o = raw[0] if raw and isinstance(raw[0], _DxObj) else None
+        t = o.t if o is not None else None
+        a = raw[1:] if o is not None else raw
+        sp = self.apk.get("splits") or []
+        if t in _SPL_ZIP and name == "<init>" and a:
+            p = a[0].f.get("p") if isinstance(a[0], _DxObj) else a[0]
+            z = next((z for sp_p, _n, z in sp if sp_p == p), None)
+            if z is None:
+                return _ENV_UNSET
+            o.f.update(zip=True, zz=z, zp=p)
+            return self.log_probe("ZipFile", p, "split apk")
+        if t in _SPL_ZIP and "zz" in o.f:
+            z = o.f["zz"]
+            if name in ("getEntry", "getJarEntry") and a and isinstance(a[0], str):
+                i = z.NameToInfo.get(a[0])
+                return None if i is None else self.split_entry(i, z, a[0])
+            if name == "getInputStream" and a and isinstance(a[0], _DxObj) and "zn" in a[0].f:
+                b = self.split_read(z, a[0].f["zn"])
+                if b is None:
+                    raise _DxAbort
+                return self.stream("ZipFile.getInputStream", o.f["zp"] + "!" + a[0].f["zn"], b)
+            if name == "entries":
+                e = _DxObj("Ljava/util/Enumeration;")
+                e.f["sl"] = [self.split_entry(i, z, i.filename) for i in z.infolist()[:4096]]
+                return e
+            if name == "size":
+                return len(z.infolist())
+            if name == "getName":
+                return o.f["zp"]
+            if name == "close":
+                return None
+            raise _DxAbort
+        if t in ("Ljava/util/zip/ZipEntry;", "Ljava/util/jar/JarEntry;") and "zz" in o.f:
+            v = {"getCrc": o.f["ze"][0], "getSize": o.f["ze"][1], "getCompressedSize": o.f["ze"][2],
+                 "getName": o.f["zn"], "toString": o.f["zn"], "isDirectory": int(o.f["zn"].endswith("/"))}
+            if name not in v:
+                raise _DxAbort
+            return v[name]
+        if t == "Ljava/util/Enumeration;" and "sl" in o.f and name in ("hasMoreElements", "nextElement"):
+            if name == "hasMoreElements":
+                return int(bool(o.f["sl"]))
+            if not o.f["sl"]:
+                raise _DxThrow("Ljava/util/NoSuchElementException;", "Ljava/lang/RuntimeException;")
+            return o.f["sl"].pop(0)
+        if name == "createContextForSplit" and sig.endswith(")Landroid/content/Context;") and a and isinstance(a[0], str):
+            if not any(n == a[0] for _p, n, _z in sp):
+                self.log_probe(name, a[0], "NameNotFoundException")
+                raise _DxThrow(*_ENV_NNF)
+            c = _DxObj("Landroid/content/Context;")
+            c.f["split"] = a[0]
+            return c
+        if name == "getAssets" and sig == ")Landroid/content/res/AssetManager;":
+            am = _DxObj("Landroid/content/res/AssetManager;")
+            if o is not None and "split" in o.f:
+                am.f["split"] = o.f["split"]
+            return am
+        if (t == "Landroid/content/res/AssetManager;" or cls == "Landroid/content/res/AssetManager;") \
+                and name == "open" and a and isinstance(a[0], str):
+            n = "assets/" + a[0].lstrip("/")
+            own = o.f.get("split") if o is not None else None
+            zs = [z for _p, sn, z in sp if sn == own] + [self.z] + [z for _p, sn, z in sp if sn != own]
+            for z in zs:
+                b = self.split_read(z, n)
+                if b is not None:
+                    return self.stream("AssetManager.open", a[0], b)
+            self.log_probe("AssetManager.open", a[0], "FileNotFoundException")
+            raise _DxThrow(*_SPL_FNF)
+        if o is not None and "B" in o.f and name in ("readLong", "readInt", "readShort", "readUnsignedShort", "readByte",
+                                                     "readUnsignedByte", "readFully", "readBoolean", "readChar"):
+            b, pos = o.f["B"], o.f["pos"]
+            if name == "readFully":
+                if not a or not isinstance(a[0], list):
+                    raise _DxAbort
+                off, n = (a[1], a[2]) if len(a) >= 3 and isinstance(a[1], int) and isinstance(a[2], int) \
+                    else (0, len(a[0]))
+                if off < 0 or n < 0 or off + n > len(a[0]):
+                    raise _DxAbort
+            else:
+                n = {"readLong": 8, "readInt": 4, "readShort": 2, "readUnsignedShort": 2, "readChar": 2}.get(name, 1)
+            if pos + n > len(b):
+                o.f["pos"] = len(b)
+                raise _DxThrow("Ljava/io/EOFException;", *_ENV_IOE)
+            chunk, o.f["pos"] = b[pos:pos + n], pos + n
+            if name == "readFully":
+                a[0][off:off + n] = [(x ^ 0x80) - 0x80 for x in chunk]
+                return None
+            if name == "readBoolean":
+                return int(chunk[0] != 0)
+            v = int.from_bytes(chunk, "big", signed=name in ("readLong", "readInt", "readShort", "readByte"))
+            return v
+        return _ENV_UNSET
+
+
+def _split_facts(mem, base):
+    """[("split_<name>.apk", split name, ZipFile)] of the bundle members other than `base`, in bundle order (name =
+    the member manifest's `split=`, else the file stem)."""
+    out = []
+    for fn, b in mem:
+        if b is base:
+            continue
+        try:
+            z = zipfile.ZipFile(io.BytesIO(b))
+        except (zipfile.BadZipFile, ValueError):
+            continue
+        n = _spl_name(b) or Path(fn).stem.removeprefix("split_")
+        out.append((f"split_{n}.apk", n, z))
+    return out
+
+
+def _split_dexes(splits):
+    """[(split name, [_DxDex])] of the installed splits that ship code (classes*.dex, hasCode=true), bundle order."""
+    out = []
+    for _p, n, z in splits:
+        ds = []
+        for i in z.infolist():
+            if re.fullmatch(r"classes\d*\.dex", i.filename) and i.file_size <= _DXE_MAX_DEX and len(ds) < _DXL_MAX_DEXES:
+                try:
+                    b = z.read(i)
+                    if b[:4] == b"dex\n" and len(b) >= 0x70:
+                        ds.append(_DxDex(b))
+                except Exception:  # noqa: BLE001 - a malformed split dex contributes nothing
+                    continue
+        if ds:
+            out.append((n, ds))
+    return out
+
+
+def _spl_isolated(z):
+    """True when the base APK's binary manifest sets android:isolatedSplits="true" (each split its own ClassLoader)."""
+    try:
+        i = z.NameToInfo.get("AndroidManifest.xml")
+        m = z.read(i) if i is not None and i.file_size < 1 << 22 else b""
+        if m[:2] != b"\x03\x00":
+            return False
+        for kind, tag, attrs, _ in _axml_events(m):
+            if kind == "start" and tag == "manifest":
+                v = {x.split(":")[-1]: y for x, y in (attrs or {}).items()}.get("isolatedSplits")
+                return str(v).lower() in ("true", "-1", "1")
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
+def _spl_manifest(b):
+    """_axml_events of an inner APK's binary AndroidManifest.xml (attribute names without namespace); () when absent."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(b)) as z:
+            i = z.NameToInfo.get("AndroidManifest.xml")
+            m = z.read(i) if i is not None and i.file_size < 1 << 22 else b""
+    except (zipfile.BadZipFile, ValueError, OSError):
+        return []
+    if m[:2] != b"\x03\x00":
+        return []
+    return [(k, tag, {x.split(":")[-1]: y for x, y in (attrs or {}).items()}, r) for k, tag, attrs, r in _axml_events(m)]
+
+
+def _spl_name(b):
+    """The manifest `split=` of an inner APK (feature / config split), None for the base or an unreadable manifest."""
+    try:
+        for kind, tag, attrs, _ in _spl_manifest(b):
+            if kind == "start" and tag == "manifest":
+                s = attrs.get("split")
+                return s if isinstance(s, str) and s else None
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def context_chain_scan(apk, splits=None):
     """ANS tokens of app methods handed a Context (D23-style `Release.code(Context)` and its v2 successors), run by the
     deep evaluator on a clean retail Pixel whose Context answers from the APK's own bytes: assets (AssetManager.open ->
     zip entry, InputStream read / available / readAllBytes, readers), org.json JSONObject / JSONArray accessors,
@@ -14489,7 +15842,9 @@ def context_chain_scan(apk):
     from the manifest and NetworkSecurityPolicy.isCleartextTrafficPermitted from its networkSecurityConfig xml,
     Settings.Secure ANDROID_ID (a fixed 16-hex id), System.getProperty (ART's values), plus clean_device_scan's root /
     emulator / hook / installer / tamper / Build / clock tables. Returned values first, then strings the run built.
-    CONTEXT_STUB_HITS logs every stub answer. [] when absent; never raises; < 1.5 s."""
+    CONTEXT_STUB_HITS logs every stub answer. splits=[(path, split name, ZipFile)] (_split_facts of a bundle): the
+    install's other APKs behind splitSourceDirs / ZipFile / AssetManager / createContextForSplit (_CtxSplitMix).
+    [] when absent; never raises; < 1.5 s."""
     rets, seen = [], []
     del CONTEXT_STUB_HITS[:]
     deadline = time.time() + _CTX_BUDGET_S
@@ -14502,6 +15857,12 @@ def context_chain_scan(apk):
                 return []
             facts = _ctx_facts(apk) or {"pkg": None, "dbg": False, "certs": [], "ent": {}, "vc": 1, "vn": None,
                                         "path": "/data/app/app-1/base.apk"}
+            if splits:
+                pkg = facts.get("pkg")
+                facts["path"] = f"/data/app/{pkg or 'app'}-1/base.apk"
+                facts["splits"] = [(f"/data/app/{pkg or 'app'}-1/" + p.rsplit("/", 1)[-1], n, z) for p, n, z in splits]
+                facts["splitdex"] = _split_dexes(splits)
+                facts["iso"] = bool(facts["splitdex"]) and _spl_isolated(z)
             passes = [facts]
             if facts.get("dbg") and any(_CTX_DBG_GATE.search(d) for d in dexes):
                 passes = [dict(facts, dbg=False), facts]  # D21 debuggable manifest: intended (clean) flow first
@@ -14526,7 +15887,10 @@ def context_chain_scan(apk):
                         if time.time() > deadline or runs >= _CTX_MAX_RUNS:
                             break
                         runs += 1
-                        vm = (_DxlVM if _DXL_PRE.search(d) else _CtxVM)(dx, deadline, fx, z, prefs)
+                        vmc = _DxlVM if _DXL_PRE.search(d) or fx.get("splitdex") else _CtxVM
+                        if splits:
+                            vmc = _CTX_SPLIT_VMS.setdefault(vmc, type(vmc.__name__ + "Split", (_CtxSplitMix, vmc), {}))
+                        vm = vmc(dx, deadline, fx, z, prefs)
                         raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
                         for p in ps:
                             raw += [_DxObj(p) if p in _CTX_TYPES else _dxe_default(p)] + ([None] if p in "JD" else [])
@@ -16604,15 +17968,111 @@ class _DxeRflMethod(_RflMem):
     __slots__ = ("ps",)
 
 
+# v2-reflection-api-breadth: Class.getDeclaredMethods() / getMethods() scanned on Method.getName() (.equals / .hashCode()
+# / .startsWith) + getParameterTypes() (length, [0] == Long.TYPE: Class objects are interned, so `==` is identity like
+# ART) / getParameterCount / getReturnType / getModifiers; getDeclaredConstructor(..).newInstance(..) (+ Class.newInstance)
+# then an instance Method.invoke; Class.getSimpleName() / getName() as hash input; Integer.TYPE vs Integer.class picks the
+# (I) or (Ljava/lang/Integer;) overload. Member ORDER is the dex class_data order (direct methods, then virtual ones, each
+# ascending method_idx -- i.e. sorted by name then proto inside a class), which is what ART's getDeclaredMethods returns;
+# getMethods lists only the class's own public methods (inherited java.lang.Object members are not modelled). Fixtures
+# rflx_* (MethodHandles.findStatic + invokeExact is invoke-polymorphic: dyn() still aborts, no fixture builder here).
+_DXE_RFL_MEMBER = frozenset(("Ljava/lang/reflect/Method;", "Ljava/lang/reflect/Constructor;",
+                             "Ljava/lang/reflect/Executable;", "Ljava/lang/reflect/Member;"))
+
+
 class _DxeRflVM(_DxeDeepVM, _RflVM):
     def __init__(self, dx, deadline):
         super().__init__(dx, deadline)
+        self.rcls = {}
         for k, p in _DXE_PRIM_TYPES.items():
-            self.statics[k] = _RflCls(p)
+            self.statics[k] = self._rc(p)
+
+    def _rc(self, t):
+        c = self.rcls.get(t)
+        if c is None:
+            c = self.rcls[t] = _RflCls(t)
+        return c
+
+    def const_class(self, t):
+        return self._rc(t)
+
+    def _mref(self, o):
+        for mref in self._methods(o.t, o.name, len(o.ps)):
+            if _dxe_params(mref) == o.ps:
+                return mref
+        raise _DxAbort
+
+    def _construct(self, o, args, depth):
+        mref = self._mref(o)
+        if depth >= _DXE_DEPTH:
+            raise _DxAbort
+        obj = self.new_instance(o.t)
+        call = [obj]
+        for p, a in zip(o.ps, args):
+            call += [a] + ([None] if p in "JD" else [])
+        self.run(mref, call, depth + 1)
+        return obj
+
+    def reflect_api(self, cls, name, raw, depth):  # noqa: C901 - one table of Class / Method / Constructor models
+        o = raw[0] if raw else None
+        if cls == "Ljava/lang/Class;" and isinstance(o, _RflCls):
+            if name in ("getDeclaredMethods", "getMethods") and len(raw) == 1:
+                ct, pre = self._cls(o), self._cls(o) + "->"
+                out = _DxArr()
+                out.t = "Ljava/lang/reflect/Method;"
+                for mref, (_nreg, _nin, _ins, acc) in self.dx.code.items():  # class_data (declared) order
+                    if mref.startswith(pre) and mref[len(pre)] != "<" and (name == "getDeclaredMethods" or acc & 1):
+                        m = _DxeRflMethod(ct, mref[len(pre):mref.index("(")], None)
+                        m.ps = _dxe_params(mref)
+                        m.n = len(m.ps)
+                        out.append(m)
+                return out
+            if name in ("getDeclaredConstructor", "getConstructor") and len(raw) == 2 and isinstance(raw[1], list) \
+                    and all(isinstance(c, _RflCls) for c in raw[1]):
+                m = _DxeRflMethod(self._cls(o), "<init>", len(raw[1]))
+                m.ps = [c.t for c in raw[1]]
+                self._mref(m)
+                return m
+            if name == "newInstance" and len(raw) == 1:
+                m = _DxeRflMethod(self._cls(o), "<init>", 0)
+                m.ps = []
+                return self._construct(m, [], depth)
+            if name == "getSimpleName" and len(raw) == 1 and o.t.startswith("L") and o.t.endswith(";"):
+                sn = o.t[1:-1].rsplit("/", 1)[-1].rsplit("$", 1)[-1]
+                return "" if sn.isdigit() else sn
+            return _DXE_UNK
+        if cls in _DXE_RFL_MEMBER and isinstance(o, _DxeRflMethod):
+            if name == "getName" and len(raw) == 1:
+                return o.t[1:-1].replace("/", ".") if o.name == "<init>" else o.name
+            if name == "getParameterTypes" and len(raw) == 1:
+                out = _DxArr(self._rc(p) for p in o.ps)
+                out.t = "Ljava/lang/Class;"
+                return out
+            if name == "getParameterCount" and len(raw) == 1:
+                return len(o.ps)
+            if name == "getReturnType" and len(raw) == 1:
+                return self._rc(self._mref(o).rsplit(")", 1)[1])
+            if name == "getModifiers" and len(raw) == 1:
+                return self.dx.code[self._mref(o)][3] & 0xFFF
+            if name == "getDeclaringClass" and len(raw) == 1:
+                return self._rc(o.t)
+            if name == "newInstance" and len(raw) == 2 and o.name == "<init>":
+                args = raw[1] if isinstance(raw[1], list) else []
+                if len(args) != len(o.ps):
+                    raise _DxAbort
+                return self._construct(o, args, depth)
+        return _DXE_UNK
 
     def invoke(self, ref, raw, depth):
         cls, _, rest = ref.partition("->")
         name = rest[:rest.find("(")]
+        if cls == "Ljava/lang/Class;" or cls in _DXE_RFL_MEMBER:
+            v = self.reflect_api(cls, name, raw, depth)
+            if v is not _DXE_UNK:
+                return self.note(v)
+        if cls == "Ljava/lang/String;" and name in _BRC_STR and len(raw) == 2 and isinstance(raw[0], str) \
+                and isinstance(raw[1], str) and ref not in _DXE_INTR:  # a member-name filter: n.startsWith(key)
+            return int(_BRC_STR[name](raw[0], raw[1]))
         if cls == "Ljava/lang/Class;" and name in ("getDeclaredMethod", "getMethod") and len(raw) == 3 \
                 and isinstance(raw[2], list) and all(isinstance(c, _RflCls) for c in raw[2]):
             ct, mn = self._cls(raw[0]), raw[1]
@@ -16643,11 +18103,13 @@ class _DxeRflVM(_DxeDeepVM, _RflVM):
 
 def _dxe_reflective(dx):
     """True when the dex references Class.getDeclaredMethod / getMethod (a reflected mixer chain) or getDeclaredField /
-    getField (a D18 v2 chain: decryptByte'd class + field names -> Field.get, fixtures strdec_*)."""
+    getField (a D18 v2 chain: decryptByte'd class + field names -> Field.get, fixtures strdec_*), or the member-scan /
+    constructor lookups (getDeclaredMethods / getMethods / getDeclaredConstructor / getConstructor, fixtures rflx_*)."""
     for mi in range(dx.n_met):
         c, _, n = struct.unpack_from("<HHI", dx.d, dx.o_met + 8 * mi)
         if dx.typ(c) == "Ljava/lang/Class;" and dx.s(n) in ("getDeclaredMethod", "getMethod", "getDeclaredField",
-                                                            "getField"):
+                                                            "getField", "getDeclaredMethods", "getMethods",
+                                                            "getDeclaredConstructor", "getConstructor"):
             return True
     return False
 

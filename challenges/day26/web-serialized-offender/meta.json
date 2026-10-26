@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-20-serialized-offender",
+  "lane": "web",
+  "name": "🌐 Serialized Offender",
+  "ids": {
+    "single_solve": "web-exploitation-day-20-serialized-offender",
+    "time_trial": "web-exploitation-day-20-serialized-offender/time_trial",
+    "mastery": "web-exploitation-day-20-serialized-offender/mastery"
+  }
+}

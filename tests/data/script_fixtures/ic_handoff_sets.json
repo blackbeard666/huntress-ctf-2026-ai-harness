@@ -1,0 +1,32 @@
+{
+ "corpus": {
+  "evidence-01.zip/invoke-python-stage.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXBvd2Vyc2hlbGx8cm9sZT1yZWxheXxuZXh0X2xhbmd1YWdlPXB5dGhvbnxjYW1wYWlnbl9pZD1QT1dFUlNIRUxMLTFhMmIzYzRkfGhhbmRvZmZfaWQ9UFNQWS0xRjJFM0Q0QzVCNkE3OTgw').decode()\n",
+  "evidence-01.zip/4c1097.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXB5dGhvbnxyb2xlPWxhdW5jaGVyfG5leHRfbGFuZ3VhZ2U9bm9uZXxjYW1wYWlnbl9pZD1QWVRIT04tMWEyYjNjNGR8aGFuZG9mZl9pZD1QU1BZLTFGMkUzRDRDNUI2QTc5ODA=').decode()\n",
+  "evidence-02.zip/invoke-python-stage.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXBvd2Vyc2hlbGx8cm9sZT1yZWxheXxuZXh0X2xhbmd1YWdlPXB5dGhvbnxjYW1wYWlnbl9pZD1QT1dFUlNIRUxMLTJhMmIzYzRkfGhhbmRvZmZfaWQ9UFNQWS0wQTlCOEM3RDZFNUY0MDMx').decode()\n",
+  "evidence-02.zip/4c1097.py": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXB5dGhvbnxyb2xlPWxhdW5jaGVyfG5leHRfbGFuZ3VhZ2U9bm9uZXxjYW1wYWlnbl9pZD1QWVRIT04tMmEyYjNjNGR8aGFuZG9mZl9pZD1QU1BZLTFGMkUzRDRDNUI2QTc5ODE=').decode()\n"
+ },
+ "text": "import base64\n# inert analyst fixture\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXB5dGhvbnxyb2xlPWxhdW5jaGVyfG5leHRfbGFuZ3VhZ2U9bm9uZXxjYW1wYWlnbl9pZD1QWVRIT04tMmEyYjNjNGR8aGFuZG9mZl9pZD1QU1BZLTFGMkUzRDRDNUI2QTc5ODE=').decode()\n",
+ "expected_plain": "v=3|language=python|role=launcher|next_language=none|campaign_id=PYTHON-2a2b3c4d|handoff_id=PSPY-1F2E3D4C5B6A7981",
+ "expected_true": [
+  [
+   "evidence-01.zip/4c1097.py",
+   "handoff_id",
+   "PSPY-1F2E3D4C5B6A7980"
+  ],
+  [
+   "evidence-01.zip/invoke-python-stage.py",
+   "handoff_id",
+   "PSPY-1F2E3D4C5B6A7980"
+  ]
+ ],
+ "expected_decoys": [
+  [
+   "evidence-02.zip/4c1097.py",
+   "handoff_id",
+   "PSPY-1F2E3D4C5B6A7981"
+  ]
+ ],
+ "generator_cmd": "python3 tests/data/script_fixtures/ic_gen.py $TMPDIR/icgen  (stdlib base64 writer)",
+ "oracle_cmd": "find . -name '*.py' | sort | while read f; do sed -n \"s/.*b64decode('\\(.*\\)').*/\\1/p\" \"$f\" | { base64 -d; echo; } | tr '|' '\\n' | sed \"s|^|${f#./}\\t|\"; done | awk -F'\\t' '\n{ split($2, kv, \"=\"); k = kv[1]; v = substr($2, length(k) + 2); f = $1; d = f; sub(/\\/[^\\/]*$/, \"\", d); if (d == f) d = \".\";\n  if (k == \"language\") L[f] = v; else if (k == \"next_language\") N[f] = v;\n  else if (k == \"campaign_id\") { n = split(v, p, \"-\"); C[f] = tolower(p[n]) }\n  else if (k ~ /url$/ || k == \"handoff_id\") { cnt++; F[cnt] = f; K[cnt] = k; V[cnt] = v; D[cnt] = d } }\nEND { for (i = 1; i <= cnt; i++) { t = 0;\n    for (j = 1; j <= cnt; j++) if (j != i && D[j] == D[i] && V[j] == V[i] && (N[F[j]] == L[F[i]] || N[F[i]] == L[F[j]])) t = 1;\n    if (t) { print \"TRUE\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i]; continue }\n    h = V[i]; sub(/^[a-z]+:\\/\\//, \"\", h); sub(/[\\/.].*/, \"\", h); n = split(h, hp, \"-\"); tok = tolower(hp[n]);\n    if (K[i] == \"handoff_id\") { c = 0; for (j = 1; j <= cnt; j++) if (D[j] == D[i] && K[j] == \"handoff_id\" && N[F[j]] == L[F[i]]) c = 1;\n      if (c) print \"DECOY\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i]; continue }\n    if (index(tok, C[F[i]]) != 1) print \"DECOY\\t\" F[i] \"\\t\" K[i] \"\\t\" V[i] } }' | sort  # plain: sed -n \"s/.*b64decode('\\(.*\\)').*/\\1/p\" evidence-02.zip/4c1097.py | base64 -d",
+ "checks": "lib.codec.indicator_collisions(plans of corpus) true/decoys == expected_true/expected_decoys [member, key, value]; indicator_answer(res, member, field)"
+}

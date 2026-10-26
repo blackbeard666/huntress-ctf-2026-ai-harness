@@ -1,0 +1,47 @@
+"""Stdlib writer for the Prefetch identity fixtures (full exe path, volumes, directory strings, name/path hashes).
+Reuses scca() / mam() / FT() of GENERATOR_prefetch.py.txt (stdlib struct SCCA writer + MS-XCA LZXpress-Huffman
+compressor). Header hashes of the XP / Win7 cases are the REAL published prefetch names (NOTEPAD.EXE-336351A9 XP,
+CMD.EXE-4A81B364 Win7); the Win10 vol4 case reuses the D26 single's real CMD.EXE-CD245F9E hash; the renamed case
+carries a non-path hash like the D26 TT/Mastery kit. Values are oracled by ORACLE_prefetch_identity.py.txt
+(pyscca + windowsprefetch + dissect), NOT lib.meta. Usage: python3 -I GENERATOR_prefetch_identity.py.txt <outdir>"""
+import os
+import runpy
+import sys
+
+G = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "GENERATOR_prefetch.py.txt"))
+scca, mam, FT = G["scca"], G["mam"], G["FT"]
+
+
+def main(outdir):
+    os.makedirs(outdir, exist_ok=True)
+    W = lambda n, b: open(os.path.join(outdir, n), "wb").write(b)  # noqa: E731
+    V1 = "\\DEVICE\\HARDDISKVOLUME1"
+    W("ident_xp_v17.bin", scca(17, "NOTEPAD.EXE", 0x336351A9, 4, [FT(2009, 4, 1, 10, 11, 12)],
+                               [(V1, 0x1C2D3E4F, FT(2008, 1, 2, 3, 4, 5), ["\\WINDOWS", "\\WINDOWS\\SYSTEM32"])],
+                               [V1 + "\\WINDOWS\\SYSTEM32\\NTDLL.DLL", V1 + "\\WINDOWS\\SYSTEM32\\KERNEL32.DLL",
+                                V1 + "\\WINDOWS\\SYSTEM32\\NOTEPAD.EXE"]))
+    V2 = "\\DEVICE\\HARDDISKVOLUME2"
+    W("ident_win7_v23.bin", scca(23, "CMD.EXE", 0x4A81B364, 9, [FT(2016, 7, 8, 9, 10, 11)],
+                                 [(V2, 0x0A1B2C3D, FT(2014, 1, 5, 12, 0, 0),
+                                   ["\\WINDOWS\\SYSTEM32", "\\WINDOWS", "\\USERS\\BOB\\APPDATA"])],
+                                 [V2 + "\\WINDOWS\\SYSTEM32\\NTDLL.DLL", V2 + "\\WINDOWS\\SYSTEM32\\CMD.EXE",
+                                  V2 + "\\WINDOWS\\SYSTEM32\\WINBRAND.DLL"]))
+    VA, VB = "\\VOLUME{01dac5d839f8392d-5a3a0dd2}", "\\VOLUME{01dc7d37d91c1731-4aba5498}"
+    W("ident_win10_vol4_v30.bin", scca(30, "CMD.EXE", 0xCD245F9E, 2, [FT(2025, 3, 4, 5, 6, 7)],
+                                       [(VA, 0x5A3A0DD2, FT(2024, 6, 1, 2, 3, 4), ["\\WINDOWS", "\\WINDOWS\\SYSTEM32"])],
+                                       [VA + "\\WINDOWS\\SYSTEM32\\NTDLL.DLL", VA + "\\WINDOWS\\SYSTEM32\\CMD.EXE"]))
+    raw = scca(30, "PACKAGER.EXE", 0xD7FE7429, 5, [FT(2026, 10, 20, 8, 9, 10)],
+               [(VB, 0x4ABA5498, FT(2026, 1, 2, 3, 4, 5), ["\\WINDOWS", "\\WINDOWS\\SYSTEM32", "\\PROGRAMDATA"]),
+                ("\\VOLUME{01dc11112222aaaa-00c0ffee}", 0x00C0FFEE, FT(2025, 12, 31, 23, 59, 59), ["\\STAGE"])],
+               [VB + "\\WINDOWS\\SYSTEM32\\NTDLL.DLL", VB + "\\WINDOWS\\SYSTEM32\\PACKAGER.EXE",
+                "\\VOLUME{01dc11112222aaaa-00c0ffee}\\STAGE\\DROP.DLL", VB + "\\PROGRAMDATA\\X.DAT"])
+    W("ident_win10_mam_renamed.bin", mam(raw))
+    # decoys: header name absent from the filename strings; a renamed LNK
+    W("ident_decoy_noexe.bin", scca(30, "GHOST.EXE", 0x11223344, 1, [FT(2026, 1, 1, 0, 0, 1)],
+                                    [(VB, 0x4ABA5498, FT(2026, 1, 2, 3, 4, 5), ["\\WINDOWS"])],
+                                    [VB + "\\WINDOWS\\SYSTEM32\\NTDLL.DLL"]))
+    W("ident_decoy_lnk.bin", b"L\0\0\0\x01\x14\x02\0\0\0\0\0\xc0\0\0\0\0\0\0F" + b"\0" * 120)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])

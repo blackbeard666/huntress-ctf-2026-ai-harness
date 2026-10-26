@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/pyc.py", line 5, in <module>
+    outer()
+  File "/home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/pyc.py", line 4, in outer
+    return inner({})
+           ^^^^^^^^^
+  File "/home/testpwn/huntress-2026/.run/tmp/prebuild-d012dbdf/tmp.CM3oBQAvU4/pyc.py", line 2, in inner
+    return d["token"]
+           ~^^^^^^^^^
+KeyError: 'token'

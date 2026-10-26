@@ -1,0 +1,23 @@
+{
+ "family": "elf_core",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "core_is_core": "true",
+  "core_pc": "none",
+  "core_entry": "none",
+  "core_execfn": "none",
+  "core_exe_build_id": "1f284ebaa31a27ec484fbd66b83c6339d11a5dca",
+  "core_fname": "none",
+  "core_psargs": "none",
+  "core_signal": "none",
+  "core_fault_address": "none",
+  "core_pc_function": "none"
+ },
+ "companion": "core_decoy_trunc_exe.elf",
+ "generator_cmd": "bash core_gen.sh   # DECOY: first 4096 bytes of a gdb core (ET_CORE header + phdrs, every note cut off) -> signal/pc 'none'; x86 cores via gdb -batch -ex run -ex generate-core-file (our fixtures only)",
+ "oracle_cmd": "python3 core_oracle.py core_decoy_trunc.bin core_decoy_trunc_exe.elf   # gdb/gdb-multiarch (sysroot off) + readelf -n + file + pyelftools",
+ "decoy": true,
+ "note": "lib.binary.elf_core_field(core, key, exe=companion) per expected_facts key; fact names SPECULATIVE (GM label not seen)"
+}

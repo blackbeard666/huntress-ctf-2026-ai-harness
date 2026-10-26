@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "near miss: the only split lib exports ..._nativeShore, nativeShare is unbound (UnsatisfiedLinkError) -> no token; the base dex's literal ANS-0123456789ABCDEF decoy must not leak",
+ "generator_cmd": "python3 tests/data/android_fixtures/natsplit_src/gen_natsplit.py decoy_renamed tests/data/android_fixtures/natsplit_decoy_renamed.zip  # base.apk = d23_analysis_native_bridge_x86_64.apk with `zip -d 'lib/*'`; splits = apktool-bundled aapt2 link manifests (split= / isFeatureSplit / extractNativeLibs) + `zip -X -0|-9` of the d23 fixtures' libarena.so bytes; bundle `zip -0 -j -X`",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml` per member (split= / extractNativeLibs), `unzip -Zv` compression method of each lib/<abi>/*.so, x86_64>x86>arm64-v8a device table (feature splits always installed, deflated lib under extractNativeLibs=false unloadable), sha256sum of the loaded .so matched to its source fixture lib, whose token comes from the jadx + javac + `java -Djava.library.path` run in d23_analysis_native_bridge_{x86_64,arm64}.json (x86_64 = GM-confirmed D23 Mastery set5) -> none"
+}

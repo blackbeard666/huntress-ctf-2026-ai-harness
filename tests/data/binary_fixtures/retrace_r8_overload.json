@@ -1,0 +1,22 @@
+{
+  "family": "retrace",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "kind": "java.lang.IllegalStateException",
+    "message": "vault key rejected: 0",
+    "fault_function": "com.acme.vault.KeyStoreHelper.checkKey",
+    "fault_file": "KeyStoreHelper.java",
+    "fault_line": "9",
+    "outer_function": "com.acme.vault.Main.main",
+    "frame_count": "4",
+    "frames": "com.acme.vault.KeyStoreHelper.checkKey, com.acme.vault.KeyStoreHelper.unwrap, com.acme.vault.ConfigLoader.load, com.acme.vault.Main.main",
+    "fault_frame": "com.acme.vault.KeyStoreHelper.checkKey(KeyStoreHelper.java:9)"
+  },
+  "generator_cmd": "bash retrace_gen.sh   # javac --release 11 + R8 8.5.35 (tools/r8) obfuscation + run the obfuscated jar + zip/tar",
+  "oracle_cmd": "bash retrace_oracle.sh retrace_r8_overload.bin   # R8 com.android.tools.r8.retrace.Retrace + sed/awk",
+  "decoy": false,
+  "note": "lib.binary.retrace_field(data, key); fact names SPECULATIVE (off-peak breadth build). R8 overloaded minified name a.b.a with line ranges 1:2 / 3:3 (zip: crash.txt + mapping.txt + obfuscated app-release.jar)"
+}

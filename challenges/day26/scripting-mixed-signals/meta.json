@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-26-beam-message-flow",
+  "lane": "script-analysis",
+  "name": "📜 Mixed Signals",
+  "ids": {
+    "single_solve": "script-analysis-day-26-beam-message-flow",
+    "time_trial": "script-analysis-day-26-beam-message-flow/time_trial",
+    "mastery": "script-analysis-day-26-beam-message-flow/mastery"
+  }
+}

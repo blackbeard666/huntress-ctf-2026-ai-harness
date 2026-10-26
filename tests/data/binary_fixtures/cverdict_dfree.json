@@ -1,0 +1,30 @@
+{
+ "family": "crash_verdict",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "expected_facts": {
+  "exploitability": "EXPLOITABLE",
+  "exploitable_rule": "HeapError",
+  "fault_class": "double_free",
+  "cwe": "CWE-415",
+  "signal_number": "6",
+  "si_code": "-6",
+  "fault_address": "none",
+  "fault_address_class": "none",
+  "canary": "false",
+  "nx": "true",
+  "pie": "true",
+  "relro": "full",
+  "fortify": "false",
+  "cfg": "false"
+ },
+ "companion": "cverdict_dfree_exe.elf",
+ "oracle_other_tags": [
+  "AbortSignal"
+ ],
+ "generator_cmd": "bash cverdict_gen.sh   # gcc crasher, gdb run -> generate-core-file at the fatal signal",
+ "oracle_cmd": "python3 -I cverdict_oracle.py dfree   # CERT GDB exploitable plugin (tools/exploitable) + gdb $_siginfo / info proc mappings / bt + readelf -lWd --dyn-syms",
+ "decoy": false,
+ "note": "lib.binary.crash_verdict_field(core, key, exe=companion); fact names SPECULATIVE (GM label not seen)"
+}

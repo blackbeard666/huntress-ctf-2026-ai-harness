@@ -1,0 +1,11 @@
+{
+  "stage": "single_solve:generalizing",
+  "name": "\ud83d\udcdc Mixed Signals",
+  "lane": "script-analysis",
+  "worker": null,
+  "updated": "2026-10-26T21:27:47",
+  "launches": 1,
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

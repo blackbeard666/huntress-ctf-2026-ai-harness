@@ -1,0 +1,11 @@
+Signature-Version: 1.0
+Created-By: 1.0 (Android)
+SHA-256-Digest-Manifest: hCDULI4jGP8l7QqpMENxAMJHgDlZG6GoCaSwcOLJH+M=
+X-Android-APK-Signed: 2
+
+Name: AndroidManifest.xml
+SHA-256-Digest: uqZGzzLlWrEypCeZ6dgw0pALdfwIT/UkGomFQbe+n5k=
+
+Name: assets/huntress_feature.json
+SHA-256-Digest: BcAzLJPqSjxSSZk3KySxjd+DNDewWDLkbpNfy2MnIRc=
+

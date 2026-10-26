@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "2b70c93f-31da-4d86-9587-271fb28e24d8",
+  "window": null,
+  "elapsed": 3.88,
+  "in_window": 3.87,
+  "phases": {
+    "start": 0.0,
+    "download": 0.0,
+    "solve": 0.44,
+    "submit": 3.43
+  },
+  "routed": "local (no clock)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "silly-comet-coral-11"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

@@ -1,0 +1,27 @@
+{
+ "expected_plain": "v=3|language=sed|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=SED-3c4a78e8|url=https://sed-3c4a78e8cf.example.invalid/stage|file_path=/tmp/huntress-sed/.3c4a78e8cfd92146.stage",
+ "decoy": false,
+ "language": "sed",
+ "role": "launcher",
+ "family": "polyglot-sed",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/as_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' tests/data/script_fixtures/polyglot-sed-launcher.sed | head -n1 | sed -E 's/^HUNTRESS_ANALYSIS_V1:HB64-//' | xxd -r -p | base64 -d",
+ "expected_fields": {
+  "language": "sed",
+  "role": "launcher",
+  "verdict": "suspicious",
+  "attack": "T1059",
+  "adapter": "process_builder",
+  "host_profile": "standalone",
+  "obfuscation_profile": "hex_base64",
+  "stage_profile": "three_stage_decode_write_launch",
+  "next_language": "batch",
+  "stage_count": "3",
+  "steps": "decode_embedded,write_file,dispatch_process",
+  "campaign_id": "SED-3c4a78e8",
+  "url": "https://sed-3c4a78e8cf.example.invalid/stage",
+  "file_path": "/tmp/huntress-sed/.3c4a78e8cfd92146.stage",
+  "url_host": "sed-3c4a78e8cf.example.invalid",
+  "file_dir": "/tmp/huntress-sed/"
+ }
+}

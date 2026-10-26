@@ -1,0 +1,8 @@
+{
+ "field": "ntfs.mftmirr_cluster_number",
+ "expected": "1023",
+ "generator_cmd": "truncate -s 8M ntfs.img && mkntfs -F -Q -q -s 512 -c 4096 -L EVID ntfs.img (ntfs-3g 2022.10.3) && head -c 512 ntfs.img > ntfs_vbr.bin (carved $Boot)",
+ "oracle_cmd": "fsstat ntfs.img (sleuthkit) -> Volume Serial Number 7FE1EFE930B4D41B, First Cluster of MFT 4, MFT Mirror 1023, MFT entries 1024 B, index records 4096 B, sector 512, cluster 4096, Total Sector Range 0-16382; ntfsinfo -m ntfs.img agrees (LCN FILE_MFT 4, MFTMirr 1023)",
+ "decoy": false,
+ "member": "$Boot"
+}

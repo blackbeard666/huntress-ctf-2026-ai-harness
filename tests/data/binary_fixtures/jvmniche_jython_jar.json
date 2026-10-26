@@ -1,0 +1,32 @@
+{
+ "kind": "jvm_niche_facts",
+ "decoy": false,
+ "question": "Jython unit hello.py: which classfile holds the base64 HCFG config, and its code objects?",
+ "encoding": "classfile_cp_base64",
+ "expected_offset": null,
+ "expected": {
+  "niche_language": "jython",
+  "niche_classes": "[\"hello$py.class\"]",
+  "niche_class_count": "1",
+  "niche_primary_classfile": "hello$py.class",
+  "niche_primary_class": "hello$py",
+  "niche_source_file": "hello.py",
+  "niche_hcfg_classfile": "hello$py.class",
+  "niche_hcfg_in_primary": "true",
+  "references_niche_runtime": "true",
+  "jython_module": "hello",
+  "jython_code_objects": "[\"f$0\",\"greet$1\",\"beacon$2\"]",
+  "jruby_methods": "none",
+  "ceylon_module_class": "none",
+  "ceylon_module": "none",
+  "kotlin_script_class": "none",
+  "kotlin_script_base": "none"
+ },
+ "expected_config": {
+  "c2": "https://niche.example/gate",
+  "id": "day27-niche"
+ },
+ "generator_cmd": "bash jvmniche_gen.sh   # javac/jar OpenJDK 21 against stub runtime classes (not packed); SourceFile Utf8 renamed by stdlib; HCFG base64 via coreutils base64 -w0",
+ "oracle_cmd": "python3 jvmniche_oracle.py jvmniche_jython_jar.bin --unit hello.py   # unzip -Z1/-p + javap -v -p text (OpenJDK 21); HCFG via stdlib base64+crc32",
+ "note": "hello$py extends PyFunctionTable implements PyRunnable, literal via PyString.fromInterned"
+}

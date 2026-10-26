@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=erlang|role=relay|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=standalone|obfuscation_profile=base64|stage_profile=message_relay|next_language=bash|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=ERLANG-3c9a17e2|url=https://erlang-3c9a17e2b4.example.invalid/stage|file_path=/tmp/huntress-erlang/.3c9a17e2b4d01f66.stage",
+ "decoy": false,
+ "target": "actor-message-flow-model",
+ "note": "main -> relay {part,N,..} (out of index order) -> collector {chunk,N,..}; lib.codec.message_flow final consumer = collector, joined by index",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mf_gen.py  (stdlib base64/hex split of the plan over Erlang `Pid ! {Tag, N, Chunk}` / Go `ch <- part` messages)",
+ "oracle_cmd": "PATH=tools/erlang-dl/root/usr/lib/erlang/bin:$PATH escript tests/data/script_fixtures/mf_erl_relay_indexed.erl  (real Erlang/OTP runs the processes; the collector keysorts and base64-decodes what it received)"
+}

@@ -1,0 +1,29 @@
+{
+ "family": "fault_insn",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "input": "core_x64_nullw_exe.elf",
+ "args": {
+  "core": "core_x64_nullw.bin"
+ },
+ "expected_facts": {
+  "fault_va": "0x114d",
+  "fault_insn": "mov dword ptr [rdi], 65",
+  "fault_mnemonic": "mov",
+  "fault_insn_size": "6",
+  "fault_function": "crash_here",
+  "fault_function_offset": "0x4",
+  "fault_symbol": "crash_here+0x4",
+  "fault_mem_base": "rdi",
+  "fault_mem_index": "none",
+  "fault_mem_disp": "0",
+  "fault_access_size": "4",
+  "fault_access": "write",
+  "fault_class": "null_pointer_write"
+ },
+ "generator_cmd": "bash fault_gen.sh   # gcc / aarch64-linux-gnu-gcc crashers, strip -s, gdb generate-core-file; fault_core_* reuse core_gen.sh cores",
+ "oracle_cmd": "python3 fault_oracle.py --write   # objdump -M intel / aarch64 objdump, readelf -sW / --debug-dump=frames, gdb (pc, $_siginfo, bt, info auxv)",
+ "decoy": false,
+ "note": "lib.binary.fault_insn_field(input, key, **args) per expected_facts key; null expected = None (cannot locate). Field names SPECULATIVE (GM label not seen)"
+}

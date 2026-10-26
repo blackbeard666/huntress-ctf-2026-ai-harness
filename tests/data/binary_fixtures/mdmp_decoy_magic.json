@@ -1,0 +1,18 @@
+{
+ "family": "windows_minidump",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "generator_cmd": "bash mdmp_gen.sh   # python3 mdmp_gen.py (stdlib struct MINIDUMP writer): PAGEDU64 kernel-dump magic over the AV dump -> None",
+ "oracle_cmd": "python3 mdmp_oracle.py mdmp_decoy_magic.bin  --write mdmp_decoy_magic.json   # skelsec minidump 0.0.24 (tools/pydeps-minidump) + pefile + capstone + file",
+ "decoy": true,
+ "note": "lib.binary.minidump_field(dump, key, pe=companion) per expected_facts key; fact names SPECULATIVE (GM label not seen)",
+ "expected_facts": {
+  "mdmp_is_minidump": null,
+  "mdmp_exception_code": null,
+  "mdmp_pc": null,
+  "mdmp_fault_module": null
+ },
+ "file_b": "MS Windows 64bit crash dump, version 6.3800, MachineImageTyp",
+ "oracle_note": "MinidumpHeaderSignatureMismatchException"
+}

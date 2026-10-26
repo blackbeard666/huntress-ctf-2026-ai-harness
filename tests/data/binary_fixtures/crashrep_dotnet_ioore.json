@@ -1,0 +1,21 @@
+{
+  "family": "crash_report",
+  "encoding": "none",
+  "expected_offset": null,
+  "expected_config": null,
+  "expected_facts": {
+    "found": "true",
+    "format": "dotnet",
+    "kind": "System.IndexOutOfRangeException",
+    "message": "Index was outside the bounds of the array.",
+    "fault_function": "Demo.Svc.Loader.Read",
+    "fault_line": "3",
+    "outer_function": "Demo.Svc.Loader.Main",
+    "kind_short": "IndexOutOfRangeException",
+    "cwe": "CWE-125"
+  },
+  "generator_cmd": "bash crashrep_gen.sh   # dotnet net10.0 args[2] on empty args",
+  "oracle_cmd": "bash crashrep_oracle.sh   # grep -P/sed/awk over crashrep_dotnet_ioore.bin",
+  "decoy": false,
+  "note": "lib.binary.crash_report_field(data, key); fact names SPECULATIVE (off-peak breadth build)"
+}

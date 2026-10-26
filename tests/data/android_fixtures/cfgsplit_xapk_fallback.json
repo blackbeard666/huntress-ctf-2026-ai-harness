@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-574AC6E7261945B6",
+ "decoy": false,
+ "_why": "split-config-device-select (rows 58, 104): XAPK (manifest.json split_apks): no x86_64 split -> config.x86 beats arm64_v8a; no xxhdpi -> xhdpi beats hdpi; feature_a.config.x86 (configForSplit=feature_a) beats feature_a.config.arm64_v8a",
+ "generator_cmd": "python3 tests/data/android_fixtures/cfgsplit_src/gen_cfgsplit.py xapk_fallback tests/data/android_fixtures/cfgsplit_xapk_fallback.zip  # apktool-bundled aapt2 link -I android-framework.jar (split= / configForSplit / android:isFeatureSplit manifests) + python zipfile assets + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml <member>` for split= / configForSplit, install set from the script's own device table (x86_64>x86>arm64_v8a, smallest density >= 420 dpi else largest below, language en; base + feature splits always), `unzip -p <member> assets/huntress_split.json` fragments into the base puzzle slots -> ANS-574AC6E7261945B6"
+}

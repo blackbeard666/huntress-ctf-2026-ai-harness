@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (2088911 function calls (2053793 primitive calls) in 2.172 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    207/1    0.004    0.000    2.174    2.174 {built-in method builtins.exec}
+        1    0.001    0.001    2.174    2.174 solve.py:1(<module>)
+        1    0.003    0.003    1.715    1.715 solve.py:829(main)
+        1    0.020    0.020    1.485    1.485 solve.py:881(_solve_pairs)
+       41    0.000    0.000    0.979    0.024 codec.py:1292(find_codecs)
+       41    0.005    0.000    0.978    0.024 codec.py:1305(_find_codecs_uncached)
+       33    0.001    0.000    0.936    0.028 solve.py:377(_codec_hint)
+       24    0.001    0.000    0.899    0.037 solve.py:571(analyse_sh)
+       29    0.014    0.000    0.737    0.025 codec.py:2839(peel_plan)
+     6818    0.169    0.000    0.710    0.000 codec.py:2533(_peel_children)
+   105/25    0.001    0.000    0.614    0.025 <frozen importlib._bootstrap_external>:993(exec_module)
+   297/42    0.001    0.000    0.608    0.014 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+   136/20    0.001    0.000    0.604    0.030 <frozen importlib._bootstrap>:1349(_find_and_load)
+   136/20    0.001    0.000    0.603    0.030 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   126/21    0.001    0.000    0.600    0.029 <frozen importlib._bootstrap>:911(_load_unlocked)
+  972/939    0.002    0.000    0.550    0.001 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+    32/17    0.000    0.000    0.545    0.032 {built-in method builtins.__import__}
+        9    0.001    0.000    0.527    0.059 codec.py:14822(_cs_fold_codecs)
+    11017    0.024    0.000    0.503    0.000 __init__.py:280(_compile)
+      770    0.005    0.000    0.456    0.001 _compiler.py:745(compile)
+      775    0.001    0.000    0.417    0.001 __init__.py:226(compile)
+        1    0.002    0.002    0.277    0.277 codec.py:1(<module>)
+      770    0.004    0.000    0.246    0.000 _parser.py:969(parse)
+  854/761    0.004    0.000    0.240    0.000 {method 'acquire' of '_thread.lock' objects}
+ 2547/770    0.016    0.000    0.238    0.000 _parser.py:452(_parse_sub)

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+<hashTree>
+<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Smoke" enabled="true"/>
+<hashTree>
+<Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true"><collectionProp name="Arguments.arguments"><elementProp name="dpA" elementType="Argument"><stringProp name="Argument.name">dpA</stringProp><stringProp name="Argument.value">dj0zfGxhbmd1YWdlPWJlYW5zaGVsbHxyb2xlPXN0YWdlcnx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDEwNTl8YWRhcHRl</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp><elementProp name="dpB" elementType="Argument"><stringProp name="Argument.name">dpB</stringProp><stringProp name="Argument.value">cj1idWlsZF9leGVjfGhvc3RfcHJvZmlsZT1qbWV0ZXJfdGVzdF9wbGFufG9iZnVzY2F0aW9uX3Byb2ZpbGU9YjY0fHN0YWdlX3Byb2ZpbGU9dHdvX3N0YWdlX2Rvd25sb2FkX2V4ZWN1dGV8bmV4dF9sYW5ndWFnZT1iYXNofHN0YWdlX2NvdW50PTJ8c3RlcHM9ZmV0Y2hfc3RhZ2UscnVuX3N0YWdlfGNhbXBhaWduX2lkPUpNWC0zMzc1OTk4OXx1cmw9aHR0cHM6Ly9qbXgtMzM3NTk5ODliOC5leGFtcGxlLmludmFsaWQvc3RhZ2V8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3Mtam14Ly5iOGEyOTRkMTgxOWEyMjVmLnN0YWdl</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp><elementProp name="descriptor_2b99f74a" elementType="Argument"><stringProp name="Argument.name">descriptor_2b99f74a</stringProp><stringProp name="Argument.value">${dpA}${dpB}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp><elementProp name="host" elementType="Argument"><stringProp name="Argument.name">host</stringProp><stringProp name="Argument.value">qa.example.invalid</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp></collectionProp></Arguments>
+<hashTree/>
+<BeanShellSampler guiclass="TestBeanGUI" testclass="BeanShellSampler" testname="BeanShellSampler" enabled="true"><stringProp name="BeanShellSampler.query">// warm the cache&#xa;String d = vars.get(&quot;descriptor_2b99f74a&quot;);&#xa;Process pr = Runtime.getRuntime().exec(new String[]{&quot;sh&quot;, &quot;-c&quot;, &quot;true&quot;});&#xa;return &quot;ok&quot;;&#xa;</stringProp></BeanShellSampler>
+<hashTree/>
+</hashTree>
+</hashTree>
+</jmeterTestPlan>

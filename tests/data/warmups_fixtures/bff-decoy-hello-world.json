@@ -1,0 +1,10 @@
+{
+ "codec": "bf-full*",
+ "plain": null,
+ "encoded": "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.",
+ "generator_cmd": "printf %s '++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.'",
+ "oracle_cmd": "node tests/data/warmups_fixtures/bff_oracle.mjs   # -> 'Hello World!\\n': valid BF but no warmup sentence / slug -> not claimed",
+ "oracle_plain": "Hello World!\n",
+ "decoy": true,
+ "expected": "none"
+}

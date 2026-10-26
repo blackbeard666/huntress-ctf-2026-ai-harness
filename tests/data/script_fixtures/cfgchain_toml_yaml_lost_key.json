@@ -1,0 +1,11 @@
+{
+ "decoy": false,
+ "material": "{\n \"a/config/prod.exs\": \"import Config\\nconfig :relay, RelayWeb.Endpoint, url: [host: \\\"cdn.example.invalid\\\", port: 443],\\n  secret_salt: \\\"s4lt\\\", drop_zone: \\\"/tmp/.r\\\"\\nconfig :relay, sleep_ms: 9000, campaign_id: \\\"CMP-22B\\\"\\n\",\n \"b/relay.toml\": \"# converted\\ncampaign_id = \\\"CMP-22B\\\"\\n[endpoint]\\nhost = \\\"cdn.example.invalid\\\"\\nport = 443\\nsecret_salt = \\\"s4lt\\\"\\ndrop_zone = \\\"/tmp/.r\\\"\\nsleep_ms = 9000\\n\",\n \"c/relay.yaml\": \"campaign_id: CMP-22B\\nendpoint:\\n  host: cdn.example.invalid\\n  port: 443\\nsecret_salt: s4lt\\nsleepMs: 12000\\n\"\n}\n",
+ "rep": "config_chain",
+ "transform": "lost_key",
+ "key": null,
+ "expected": "drop_zone",
+ "note": "stage-config-survival-diff: lib.codec.config_chain/config_diff over a synthetic stage tree {member: text}",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cfgchain_gen.py tests/data/script_fixtures  (stdlib json; literal config.exs / runtime.exs / sys.config / vm.args / .env / TOML / YAML / JSON members)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/cfgchain_oracle.py tests/data/script_fixtures/cfgchain_toml_yaml.tree lost_key  (real Elixir 1.18 Config.Reader + :file.consult via cfgchain_oracle.exs, tomllib, PyYAML safe_load, json, shlex)"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "split-config-device-select (rows 58, 104): abi_dpi_lang layout but the installed x86_64 fragment is non-hex and the arm64 decoy a 5-hex near-miss: no 16-hex token from any install set",
+ "generator_cmd": "python3 tests/data/android_fixtures/cfgsplit_src/gen_cfgsplit.py decoy_nearmiss tests/data/android_fixtures/cfgsplit_decoy_nearmiss.zip  # apktool-bundled aapt2 link -I android-framework.jar (split= / configForSplit / android:isFeatureSplit manifests) + python zipfile assets + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml <member>` for split= / configForSplit, install set from the script's own device table (x86_64>x86>arm64_v8a, smallest density >= 420 dpi else largest below, language en; base + feature splits always), `unzip -p <member> assets/huntress_split.json` fragments into the base puzzle slots -> none(ANS-21D0BQ0880D52137)"
+}

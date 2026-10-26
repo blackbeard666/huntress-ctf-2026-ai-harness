@@ -1,0 +1,29 @@
+{
+ "family": "fault_insn",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "input": "fault_a64_ldrb.bin",
+ "args": {
+  "va": "0x40010c"
+ },
+ "expected_facts": {
+  "fault_va": "0x40010c",
+  "fault_insn": "ldrb w0, [x0, #5]",
+  "fault_mnemonic": "ldrb",
+  "fault_insn_size": "4",
+  "fault_function": "peek5",
+  "fault_function_offset": "0x0",
+  "fault_symbol": "peek5+0x0",
+  "fault_mem_base": "x0",
+  "fault_mem_index": "none",
+  "fault_mem_disp": "5",
+  "fault_access_size": "1",
+  "fault_access": "read",
+  "fault_class": "memory_read"
+ },
+ "generator_cmd": "bash fault_gen.sh   # gcc / aarch64-linux-gnu-gcc crashers, strip -s, gdb generate-core-file; fault_core_* reuse core_gen.sh cores",
+ "oracle_cmd": "python3 fault_oracle.py --write   # objdump -M intel / aarch64 objdump, readelf -sW / --debug-dump=frames, gdb (pc, $_siginfo, bt, info auxv)",
+ "decoy": false,
+ "note": "lib.binary.fault_insn_field(input, key, **args) per expected_facts key; null expected = None (cannot locate). Field names SPECULATIVE (GM label not seen)"
+}

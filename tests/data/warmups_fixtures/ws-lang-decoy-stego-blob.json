@@ -1,0 +1,10 @@
+{
+ "codec": "ws-lang",
+ "plain": null,
+ "encoded": " \t  \t\t\t  \t\t \t  \t \t\t   \t\t \t\t  \t \t  \t      \t\t\t \t\t\t \t\t \t\t\t\t \t\t\t  \t  \t\t \t \t\t  \t      \t\t  \t   \t\t  \t \t \t\t   \t\t \t\t \t\t\t\t \t\t  \t   \t\t \t  \t \t\t \t\t\t  \t\t  \t\t\t  \t      \t\t\t \t   \t\t \t    \t\t \t  \t \t\t\t  \t\t  \t      \t\t\t \t\t\t \t\t    \t \t\t\t  \t  \t\t \t\t \t \t\t\t \t \t \t\t\t      \t    \t  \t      \t \t \t   \t\t \t\t\t\t  \t      \t\t\t  \t\t \t\t \t\t\t\t \t\t \t\t   \t\t\t \t\t  \t\t  \t \t  \t \t\t    \t      \t\t\t  \t\t \t\t\t \t \t \t\t   \t  \t\t \t\t \t \t\t \t  \t \t\t\t \t    \t      \t\t\t \t   \t\t \t    \t\t \t  \t \t\t\t  \t\t  \t      \t\t  \t \t \t\t\t\t    \t\t    \t \t\t   \t\t \t\t\t \t    \t      \t\t    \t \t\t \t\t\t  \t\t\t  \t\t \t\t\t \t\t\t \t\t  \t \t \t\t\t  \t   \t      \t\t\t \t   \t\t \t\t\t\t  \t      \t\t\t \t   \t\t \t    \t\t  \t \t  \t      \t   \t\t\t \t\t    \t \t\t \t\t \t \t\t  \t \t  \t      \t  \t\t \t \t\t    \t \t\t\t  \t\t \t\t\t \t   \t\t  \t \t \t\t\t  \t   \t\t\t \t   \t      \t\t \t\t \t \t\t    \t \t\t\t     \t\t \t\t   \t\t  \t \t  \t \t\t \t \t\t\t \t\t  \t\t \t  \t \t\t\t     \t\t  \t \t \t\t\t  \t   \t \t\t \t  \t\t  \t   \t\t   \t",
+ "decoy": true,
+ "expected": "none",
+ "generator_cmd": "perl -CSA -e 'my $b=unpack(\"B*\",$ARGV[0]); $b=~tr/01/ \\t/; print $b' \"$plain\"",
+ "oracle_cmd": "ruby tests/data/warmups_fixtures/ws_oracle.rb raw <(printf %s \"$encoded\")  # independent Ruby Whitespace interpreter",
+ "oracle_plain": null
+}

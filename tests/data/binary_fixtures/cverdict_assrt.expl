@@ -1,0 +1,60 @@
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGABRT, Aborted.
+__pthread_kill_implementation (threadid=<optimized out>, signo=6, no_tid=0) at ./nptl/pthread_kill.c:44
+Saved corefile cv_assrt.core
+#0  __pthread_kill_implementation (threadid=<optimized out>, signo=6, no_tid=0) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (threadid=<optimized out>, signo=6) at ./nptl/pthread_kill.c:89
+#2  __GI___pthread_kill (threadid=<optimized out>, signo=signo@entry=6) at ./nptl/pthread_kill.c:100
+#3  0x00007ffff7c45b7e in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff7c288ec in __GI_abort () at ./stdlib/abort.c:77
+#5  0x00007ffff7c29979 in __libc_message_impl (vma_name=vma_name@entry=0x7ffff7ddb55b "glibc: assert", fmt=<optimized out>) at ../sysdeps/posix/libc_fatal.c:138
+#6  0x00007ffff7c3bf75 in __libc_message_wrapper (vmaname=0x7ffff7ddb55b "glibc: assert", fmt=<optimized out>) at ../include/stdio.h:203
+#7  __assert_fail (assertion=0x55555555600c "n < 4 && \"len within table\"", file=0x555555556004 "assrt.c", line=<optimized out>, function=<optimized out>) at ./assert/assert.c:37
+#8  0x0000555555555176 in check ()
+#9  0x0000555555555186 in main ()
+SIGINFO signo=6 code=-6
+SIADDR 0x3e80027dbd9
+REGS pc=0x7ffff7ca61ac sp=0x7fffffffdbe0
+RETWORD 0
+=> 0x7ffff7ca61ac <__GI___pthread_kill+284>:	mov    %eax,%r8d
+process 2612185
+Mapped address spaces:
+
+Start Addr         End Addr           Size               Offset             Perms File 
+0x0000555555554000 0x0000555555555000 0x1000             0x0                r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_assrt.exe 
+0x0000555555555000 0x0000555555556000 0x1000             0x1000             r-xp  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_assrt.exe 
+0x0000555555556000 0x0000555555557000 0x1000             0x2000             r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_assrt.exe 
+0x0000555555557000 0x0000555555558000 0x1000             0x2000             r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_assrt.exe 
+0x0000555555558000 0x0000555555559000 0x1000             0x3000             rw-p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_assrt.exe 
+0x0000555555559000 0x000055555557a000 0x21000            0x0                rw-p  [heap] 
+0x00007ffff7c00000 0x00007ffff7c28000 0x28000            0x0                r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7c28000 0x00007ffff7dc0000 0x198000           0x28000            r-xp  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7dc0000 0x00007ffff7e0e000 0x4e000            0x1c0000           r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e0e000 0x00007ffff7e12000 0x4000             0x20e000           r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e12000 0x00007ffff7e14000 0x2000             0x212000           rw-p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e14000 0x00007ffff7e21000 0xd000             0x0                rw-p   
+0x00007ffff7fa3000 0x00007ffff7fa6000 0x3000             0x0                rw-p   
+0x00007ffff7fb5000 0x00007ffff7fb8000 0x3000             0x0                rw-p   
+0x00007ffff7fb8000 0x00007ffff7fbc000 0x4000             0x0                r--p  [vvar] 
+0x00007ffff7fbc000 0x00007ffff7fbe000 0x2000             0x0                r--p  [vvar_vclock] 
+0x00007ffff7fbe000 0x00007ffff7fc0000 0x2000             0x0                r-xp  [vdso] 
+0x00007ffff7fc0000 0x00007ffff7fc1000 0x1000             0x0                r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7fc1000 0x00007ffff7ff0000 0x2f000            0x1000             r-xp  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ff0000 0x00007ffff7ffb000 0xb000             0x30000            r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffb000 0x00007ffff7ffd000 0x2000             0x3b000            r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffd000 0x00007ffff7ffe000 0x1000             0x3d000            rw-p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffe000 0x00007ffff7fff000 0x1000             0x0                rw-p   
+0x00007ffffffde000 0x00007ffffffff000 0x21000            0x0                rw-p  [stack] 
+Description: Abort signal
+Short description: AbortSignal (20/22)
+Hash: 9fc86e92394135eed79d51db607a3787.1077a6eb894c0505e37512f8b03b12b9
+Exploitability Classification: UNKNOWN
+Explanation: The target is stopped on a SIGABRT. SIGABRTs are often generated by libc and compiled check-code to indicate potentially exploitable conditions. Unfortunately this command does not yet further analyze these crashes.

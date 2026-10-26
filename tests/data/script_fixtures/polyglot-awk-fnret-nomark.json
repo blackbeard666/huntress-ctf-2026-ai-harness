@@ -1,0 +1,27 @@
+{
+ "expected_plain": "v=3|language=awk|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=AWK-bb967a50|url=https://awk-bb967a50e1.example.invalid/stage|file_path=/tmp/huntress-awk/.bb967a50e1bdc58f.stage",
+ "decoy": false,
+ "language": "awk",
+ "role": "launcher",
+ "family": "polyglot-awk",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/as_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "cat tests/data/script_fixtures/polyglot-awk-fnret-nomark.awk | grep -o 'return \"[^\"]*\"' | sed -E 's/^[^\"]*\"//; s/\"$//' | xxd -r -p | base64 -d",
+ "expected_fields": {
+  "language": "awk",
+  "role": "launcher",
+  "verdict": "suspicious",
+  "attack": "T1059",
+  "adapter": "process_builder",
+  "host_profile": "standalone",
+  "obfuscation_profile": "hex_base64",
+  "stage_profile": "three_stage_decode_write_launch",
+  "next_language": "batch",
+  "stage_count": "3",
+  "steps": "decode_embedded,write_file,dispatch_process",
+  "campaign_id": "AWK-bb967a50",
+  "url": "https://awk-bb967a50e1.example.invalid/stage",
+  "file_path": "/tmp/huntress-awk/.bb967a50e1bdc58f.stage",
+  "url_host": "awk-bb967a50e1.example.invalid",
+  "file_dir": "/tmp/huntress-awk/"
+ }
+}

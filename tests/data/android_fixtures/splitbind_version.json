@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-694f148cc54f9925",
+ "decoy": false,
+ "_why": "split-signature-digest-binding (rows 49, 59, 83, 104): both splits signed by the base key; the first carries android:versionCode 7 vs base 8 (rejected at install), the real one versionCode 8 + android:revisionCode 3",
+ "generator_cmd": "python3 tests/data/android_fixtures/splitbind_src/gen_splitbind.py version tests/data/android_fixtures/splitbind_version.zip  # apktool-bundled aapt2 link -I android-framework.jar manifests (split= / versionCode / revisionCode) + python zipfile assets + keytool RSA keys + `apksigner sign` v1+v2 (+ javac / d2j-jar2dex base dex for pin) + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `apksigner verify --min-sdk-version 21 --print-certs <member>` signer SHA-256 vs base, `aapt2 dump xmltree --file AndroidManifest.xml` versionCode vs base, `unzip -p <member> assets/huntress_split.json | sha256sum` vs the 64-hex `strings` of the base classes.dex; the single member passing every binding fills `ANS-` + part -> ANS-694f148cc54f9925"
+}

@@ -1,0 +1,9 @@
+{
+ "codec": "fish-mirror",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-35",
+ "encoded": "\"Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-35\"r\\\n                                                                                                   o;!?l<",
+ "generator_cmd": "perl -e '$t = chr(34) . $ARGV[0] . chr(34) . \"r\\\\\"; print $t, \"\\n\", \" \" x (length($t) - 6), \"o;!?l<\"' \"$plain\"",
+ "oracle_cmd": "node tests/data/warmups_fixtures/befunge_oracle.mjs fish",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-35",
+ "expected": "match"
+}

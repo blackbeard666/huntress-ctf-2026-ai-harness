@@ -1,0 +1,60 @@
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGSEGV, Segmentation fault.
+0x000000000040115b in cp ()
+Saved corefile cv_retov.core
+#0  0x000000000040115b in cp ()
+#1  0x4141414141414141 in ?? ()
+#2  0x4141414141414141 in ?? ()
+#3  0x4141414141414141 in ?? ()
+#4  0x00007fffffffe000 in ?? ()
+#5  0x00007fffffffe0a8 in ?? ()
+#6  0x00000001f7fc0000 in ?? ()
+#7  0x000000000040115c in cp ()
+#8  0x00007fffffffdfe0 in ?? ()
+#9  0x00007ffff7fe2dc6 in _dl_sysdep_start (start_argptr=<optimized out>, dl_main=0x0) at ../sysdeps/unix/sysv/linux/dl-sysdep.c:140
+Backtrace stopped: previous frame inner to this frame (corrupt stack?)
+SIGINFO signo=11 code=128
+SIADDR 0
+REGS pc=0x40115b sp=0x7fffffffdf68
+RETWORD 0x4141414141414141
+=> 0x40115b <cp+37>:	ret
+process 2612209
+Mapped address spaces:
+
+Start Addr         End Addr           Size               Offset             Perms File 
+0x0000000000400000 0x0000000000401000 0x1000             0x0                r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_retov.exe 
+0x0000000000401000 0x0000000000402000 0x1000             0x1000             r-xp  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_retov.exe 
+0x0000000000402000 0x0000000000403000 0x1000             0x2000             r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_retov.exe 
+0x0000000000403000 0x0000000000404000 0x1000             0x2000             rw-p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_retov.exe 
+0x00007ffff7c00000 0x00007ffff7c28000 0x28000            0x0                r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7c28000 0x00007ffff7dc0000 0x198000           0x28000            r-xp  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7dc0000 0x00007ffff7e0e000 0x4e000            0x1c0000           r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e0e000 0x00007ffff7e12000 0x4000             0x20e000           r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e12000 0x00007ffff7e14000 0x2000             0x212000           rw-p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e14000 0x00007ffff7e21000 0xd000             0x0                rw-p   
+0x00007ffff7fa3000 0x00007ffff7fa6000 0x3000             0x0                rw-p   
+0x00007ffff7fb6000 0x00007ffff7fb8000 0x2000             0x0                rw-p   
+0x00007ffff7fb8000 0x00007ffff7fbc000 0x4000             0x0                r--p  [vvar] 
+0x00007ffff7fbc000 0x00007ffff7fbe000 0x2000             0x0                r--p  [vvar_vclock] 
+0x00007ffff7fbe000 0x00007ffff7fc0000 0x2000             0x0                r-xp  [vdso] 
+0x00007ffff7fc0000 0x00007ffff7fc1000 0x1000             0x0                r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7fc1000 0x00007ffff7ff0000 0x2f000            0x1000             r-xp  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ff0000 0x00007ffff7ffb000 0xb000             0x30000            r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffb000 0x00007ffff7ffd000 0x2000             0x3b000            r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffd000 0x00007ffff7ffe000 0x1000             0x3d000            rw-p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffe000 0x00007ffff7fff000 0x1000             0x0                rw-p   
+0x00007ffffffde000 0x00007ffffffff000 0x21000            0x0                rwxp  [stack] 
+Description: Access violation during return instruction
+Short description: ReturnAv (1/22)
+Hash: 2afea913dd3519c8892dc66c67348ac1.0d3ff85d42c1ab848cbb5d877f69faa4
+Exploitability Classification: EXPLOITABLE
+Explanation: The target crashed on a return instruction, which likely indicates stack corruption.
+Other tags: PossibleStackCorruption (7/22), AccessViolation (21/22)

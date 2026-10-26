@@ -1,0 +1,79 @@
+"""Writer for the cross-trace prefetch host synthesis fixtures (synthesis_prefetch.py). Prefetch members come from the
+stdlib SCCA writer + MS-XCA Huffman compressor in ../prefetch/GENERATOR_prefetch.py.txt (scca(), mam(), FT());
+LNK siblings from pylnk3 (tools/pylib; LinkInfo VolumeID DriveSerialNumber via specify_local_location) with a
+TrackerDataBlock (sig 0xA0000003, MS-SHLLINK 2.5.10: length 0x58, version 0, MachineID[16], 2 x Droid) added as a
+pylnk3 ExtraData_Unparsed block; the zip with stdlib zipfile. Values are oracled by ORACLE_prefetch_hosts.py.txt
+(pyscca + LnkParse3), NOT by lib.meta. Usage: .venv/bin/python -I GENERATOR_prefetch_hosts.py.txt <outdir>"""
+import io
+import os
+import runpy
+import sys
+import zipfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+G = runpy.run_path(os.path.join(HERE, "..", "prefetch", "GENERATOR_prefetch.py.txt"), run_name="pf_gen")
+scca, FT, mam = G["scca"], G["FT"], G["mam"]
+sys.path.insert(0, os.path.join(os.getcwd(), "tools", "pylib"))
+import pylnk3  # noqa: E402
+
+
+def vol(serial, ctime, guid):
+    return ("\\VOLUME{%s-%08x}" % (guid, serial), serial, ctime, ["\\WINDOWS"])
+
+
+def pf(ver, exe, h, runs, v, wrap=False):
+    raw = scca(ver, exe, h, len(runs) + 2, runs, [v], [v[0] + "\\WINDOWS\\SYSTEM32\\" + exe])
+    return mam(raw) if wrap else raw
+
+
+def lnk(target, serial, machine):
+    lk = pylnk3.for_file(target)
+    lk.link_flags.HasLinkInfo = True
+    lk.link_flags.ForceNoLinkInfo = False   # pylnk3.for_file sets it; LnkParse3 then skips LinkInfo
+    lk._link_info = pylnk3.LinkInfo()
+    lk.specify_local_location(target, drive_type=pylnk3.DRIVE_FIXED, drive_serial=serial, volume_label="OS")
+    data = (0x58).to_bytes(4, "little") + bytes(4) + machine.encode().ljust(16, b"\0") + bytes(64)
+    lk.extra_data = pylnk3.ExtraData(blocks=[pylnk3.ExtraData_Unparsed(signature=0xA0000003, data=data)])
+    buf = io.BytesIO()
+    lk.write(buf)
+    return buf.getvalue()
+
+
+def zipit(path, members):
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for n, b in members:
+            z.writestr(n, b)
+
+
+def main(out):
+    os.makedirs(out, exist_ok=True)
+    A = vol(0x1A2B3C4D, FT(2025, 1, 10, 9, 0, 0), "01db6337a1b2c3d4")
+    B = vol(0x5E6F7081, FT(2024, 6, 2, 14, 30, 0), "01dab4f0c3d4e5f6")
+    zipit(os.path.join(out, "pfhost_a.zip"), [
+        ("CMD.EXE-0BD30981.pf", pf(30, "CMD.EXE", 0x0BD30981, [FT(2026, 3, 1, 8, 15, 0)], A, wrap=True)),
+        ("NOTEPAD.EXE-D8414F97.pf", pf(30, "NOTEPAD.EXE", 0xD8414F97,
+                                       [FT(2026, 3, 5, 17, 2, 9), FT(2026, 3, 2, 7, 0, 0)], A)),
+        ("POWERSHELL.EXE-022FA8C1.pf", pf(26, "POWERSHELL.EXE", 0x022FA8C1, [FT(2026, 2, 27, 23, 59, 1)], A)),
+        ("SVCHOST.EXE-1234ABCD.pf", pf(30, "MIMIKATZ.EXE", 0x1234ABCD, [FT(2026, 3, 3, 3, 3, 3)], B)),
+        ("wks07_cmd.lnk", lnk(r"C:\Windows\System32\cmd.exe", 0x1A2B3C4D, "WKS-07")),
+        ("srv_tool.lnk", lnk(r"C:\Tools\svchost.exe", 0x5E6F7081, "SRV-DB01")),
+        ("README.txt", b"triage bundle: prefetch + shortcuts\n"),
+    ])
+    # same serial, different volume creation time + device path: two hosts that a serial-only join would merge
+    C1 = vol(0x00C0FFEE, FT(2023, 9, 9, 9, 9, 9), "01d9e2f0aaaa0001")
+    C2 = vol(0x00C0FFEE, FT(2024, 2, 2, 2, 2, 2), "01da55f0bbbb0002")
+    zipit(os.path.join(out, "pfhost_b.zip"), [
+        ("RUNDLL32.EXE-EE1A4B7F.pf", pf(30, "RUNDLL32.EXE", 0xEE1A4B7F, [FT(2026, 1, 4, 10, 0, 0)], C1)),
+        ("WMIC.EXE-63BBC0B1.pf", pf(30, "WMIC.EXE", 0x63BBC0B1, [FT(2026, 1, 2, 10, 0, 0)], C2, wrap=True)),
+        ("REGSVR32.EXE-1AB0CDEF.pf", pf(23, "REGSVR32.EXE", 0x1AB0CDEF, [FT(2026, 1, 3, 10, 0, 0)], C1)),
+        ("SCHTASKS.EXE-2C3D4E5F.pf", pf(30, "SCHTASKS.EXE", 0x2C3D4E5F, [FT(2026, 1, 1, 10, 0, 0)], C2)),
+    ])
+    # decoy: no trace at all (a GIF renamed .pf, a shortcut)
+    zipit(os.path.join(out, "pfhost_decoy.zip"), [
+        ("CMD.EXE-0BD30981.pf", b"GIF89a\x01\x00\x01\x00\x00\x00\x00;"),
+        ("cmd.lnk", lnk(r"C:\Windows\System32\cmd.exe", 0x1A2B3C4D, "WKS-07")),
+    ])
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])

@@ -1,0 +1,8 @@
+{
+ "field": "ds_store.record_count",
+ "expected": "401",
+ "generator_cmd": "PYTHONPATH=tools/pylib_dsstore python3 -P tests/data/meta_fixtures/ds_store/mkdsstore_writer.py.txt OUT (pip ds_store 1.3.3 WRITER; big.DS_Store (2-level B-tree, 11 nodes))",
+ "oracle_cmd": "PYTHONPATH=tools/pylib_dsstore python3 -P -c \"from ds_store import DSStore; d=DSStore.open('big.DS_Store','r'); es=list(d); print(len(es), d._records, d._levels)\" -> 401 401 2",
+ "decoy": false,
+ "member": ".DS_Store"
+}

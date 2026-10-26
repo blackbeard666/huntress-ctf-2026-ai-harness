@@ -1,0 +1,8 @@
+{
+ "field": "csv_report.missing_record_ids",
+ "expected": "[103]",
+ "generator_cmd": "python3 csv.writer QUOTE_ALL (Get-WinEvent | Export-Csv PS5.1 layout with #TYPE line, RecordId 105,104,102,101)",
+ "oracle_cmd": "python3 -c \"import csv; r=list(csv.DictReader(l for l in open('getwinevent.csv',newline='') if not l.startswith('#TYPE'))); ids={int(x['RecordId']) for x in r}; print(sorted(set(range(min(ids),max(ids)+1))-ids))\" -> [103]",
+ "decoy": false,
+ "member": "security_export.csv"
+}

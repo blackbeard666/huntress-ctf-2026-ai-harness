@@ -1,0 +1,53 @@
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGSEGV, Segmentation fault.
+0x000055555555514d in peek ()
+Saved corefile cv_nullr.core
+#0  0x000055555555514d in peek ()
+#1  0x000055555555516e in main ()
+SIGINFO signo=11 code=1
+SIADDR 0x18
+REGS pc=0x55555555514d sp=0x7fffffffdf68
+RETWORD 0x55555555516e
+=> 0x55555555514d <peek+4>:	mov    (%rdi),%eax
+process 2611623
+Mapped address spaces:
+
+Start Addr         End Addr           Size               Offset             Perms File 
+0x0000555555554000 0x0000555555555000 0x1000             0x0                r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_nullr.exe 
+0x0000555555555000 0x0000555555556000 0x1000             0x1000             r-xp  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_nullr.exe 
+0x0000555555556000 0x0000555555557000 0x1000             0x2000             r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_nullr.exe 
+0x0000555555557000 0x0000555555558000 0x1000             0x2000             r--p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_nullr.exe 
+0x0000555555558000 0x0000555555559000 0x1000             0x3000             rw-p  /home/testpwn/huntress-2026/.run/tmp/prebuild-fe280ea7/cverdict_gen/cv_nullr.exe 
+0x0000555555559000 0x000055555557b000 0x22000            0x0                rw-p  [heap] 
+0x00007ffff7c00000 0x00007ffff7c28000 0x28000            0x0                r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7c28000 0x00007ffff7dc0000 0x198000           0x28000            r-xp  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7dc0000 0x00007ffff7e0e000 0x4e000            0x1c0000           r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e0e000 0x00007ffff7e12000 0x4000             0x20e000           r--p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e12000 0x00007ffff7e14000 0x2000             0x212000           rw-p  /usr/lib/x86_64-linux-gnu/libc.so.6 
+0x00007ffff7e14000 0x00007ffff7e21000 0xd000             0x0                rw-p   
+0x00007ffff7fa3000 0x00007ffff7fa6000 0x3000             0x0                rw-p   
+0x00007ffff7fb6000 0x00007ffff7fb8000 0x2000             0x0                rw-p   
+0x00007ffff7fb8000 0x00007ffff7fbc000 0x4000             0x0                r--p  [vvar] 
+0x00007ffff7fbc000 0x00007ffff7fbe000 0x2000             0x0                r--p  [vvar_vclock] 
+0x00007ffff7fbe000 0x00007ffff7fc0000 0x2000             0x0                r-xp  [vdso] 
+0x00007ffff7fc0000 0x00007ffff7fc1000 0x1000             0x0                r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7fc1000 0x00007ffff7ff0000 0x2f000            0x1000             r-xp  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ff0000 0x00007ffff7ffb000 0xb000             0x30000            r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffb000 0x00007ffff7ffd000 0x2000             0x3b000            r--p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffd000 0x00007ffff7ffe000 0x1000             0x3d000            rw-p  /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 
+0x00007ffff7ffe000 0x00007ffff7fff000 0x1000             0x0                rw-p   
+0x00007ffffffde000 0x00007ffffffff000 0x21000            0x0                rw-p  [stack] 
+Description: Access violation near NULL on source operand
+Short description: SourceAvNearNull (16/22)
+Hash: 4b655241e1b9d1d34bdaf2ac810a0180.4b655241e1b9d1d34bdaf2ac810a0180
+Exploitability Classification: PROBABLY_NOT_EXPLOITABLE
+Explanation: The target crashed on an access violation at an address matching the source operand of the current instruction. This likely indicates a read access violation, which may mean the application crashed on a simple NULL dereference to data structure that has no immediate effect on control of the processor.
+Other tags: AccessViolation (21/22)

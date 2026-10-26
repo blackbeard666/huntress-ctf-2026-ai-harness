@@ -1,0 +1,29 @@
+{
+ "kind": "jvm_niche_facts",
+ "decoy": true,
+ "question": "Jython unit hello.py: which classfile holds the HCFG config?",
+ "encoding": "classfile_cp_base64",
+ "expected_offset": null,
+ "expected": {
+  "niche_language": "none",
+  "niche_classes": "none",
+  "niche_class_count": "none",
+  "niche_primary_classfile": "none",
+  "niche_primary_class": "none",
+  "niche_source_file": "none",
+  "niche_hcfg_classfile": "none",
+  "niche_hcfg_in_primary": "none",
+  "references_niche_runtime": "false",
+  "jython_module": "none",
+  "jython_code_objects": "none",
+  "jruby_methods": "none",
+  "ceylon_module_class": "none",
+  "ceylon_module": "none",
+  "kotlin_script_class": "none",
+  "kotlin_script_base": "none"
+ },
+ "expected_config": null,
+ "generator_cmd": "bash jvmniche_gen.sh   # javac/jar OpenJDK 21 against stub runtime classes (not packed); SourceFile Utf8 renamed by stdlib; HCFG base64 via coreutils base64 -w0",
+ "oracle_cmd": "python3 jvmniche_oracle.py jvmniche_decoy_literals_jar.bin --unit hello.py   # unzip -Z1/-p + javap -v -p text (OpenJDK 21); HCFG via stdlib base64+crc32",
+ "note": "DECOY: plain javac class NAMED hello$py, runtime paths only as String literals (+HCFG) -> niche none"
+}

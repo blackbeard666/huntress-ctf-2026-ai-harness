@@ -1,0 +1,24 @@
+{
+ "family": "fault_insn",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "input": "core_x64_ud2_exe.elf",
+ "args": {
+  "core": "core_x64_ud2.bin"
+ },
+ "expected_facts": {
+  "fault_va": "0x40110a",
+  "fault_insn": "ud2",
+  "fault_mnemonic": "ud2",
+  "fault_insn_size": "2",
+  "fault_function": "bad_op",
+  "fault_function_offset": "0x4",
+  "fault_symbol": "bad_op+0x4",
+  "fault_class": "ud2_trap"
+ },
+ "generator_cmd": "bash fault_gen.sh   # gcc / aarch64-linux-gnu-gcc crashers, strip -s, gdb generate-core-file; fault_core_* reuse core_gen.sh cores",
+ "oracle_cmd": "python3 fault_oracle.py --write   # objdump -M intel / aarch64 objdump, readelf -sW / --debug-dump=frames, gdb (pc, $_siginfo, bt, info auxv)",
+ "decoy": false,
+ "note": "lib.binary.fault_insn_field(input, key, **args) per expected_facts key; null expected = None (cannot locate). Field names SPECULATIVE (GM label not seen)"
+}

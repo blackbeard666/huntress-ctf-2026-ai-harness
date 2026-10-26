@@ -1,0 +1,8 @@
+{
+ "field": "evt.record_count",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"open('fake.evtx','wb').write(b'ElfFile\\x00'+bytes(4088))\" (EVTX-magic impostor named .evt)",
+ "oracle_cmd": "file -b fake.evtx -> MS Windows 10-11 Event Log (no LfLe header); pyevt.file().open() -> unable to read file header",
+ "decoy": true,
+ "member": "AppEvent.Evt"
+}

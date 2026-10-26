@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-132EC369B20AC79B",
+ "decoy": false,
+ "_why": "createContextForSplit(\"feature_b\").getAssets().open(\"huntress_feature.bin\") -> DataInputStream.readLong x2, then base getAssets().open(\"huntress_salt.bin\") found only in feature_a (base then splits) -> readInt; bundle order splits first, base last (base = member with huntress_puzzle.json)",
+ "generator_cmd": "python3 tests/data/android_fixtures/split_src/gen_split.py ctx_split tests/data/android_fixtures/splitread_ctx_split.apks && mv tests/data/android_fixtures/splitread_ctx_split.apks tests/data/android_fixtures/splitread_ctx_split.zip  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool aapt2 link (base / split=\"feature_x\" manifests) + zipfile (assets, classes.dex) + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `aapt2 dump xmltree --file AndroidManifest.xml <member>` for split= names (base = no split), then java -Dctx.base=<base.apk> -Dctx.splits=<split paths in bundle order> -Dctx.names=<split names> -cp <javac out> com.huntress.arena.split2.Probe runs Release.code(new Context()) on the host JVM, real java.util.zip.ZipFile over the extracted members -> ANS-132EC369B20AC79B"
+}

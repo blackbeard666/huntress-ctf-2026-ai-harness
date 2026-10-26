@@ -1351,3 +1351,47 @@ assert _meta14.answer("d25-registry-001-registry-hive-root-name", {}, _regf25("H
     == ("HuntressArtifactAssemblyLine", _meta14.VERIFIED)
 assert _meta14.answer("d25-registry-001-registry-hive-root-name", {}, b"CREG" + b"\0" * 600)[0] is None
 print("ok  lib.meta: registry.hive_root_name verified D25 (root nk cell name)")
+
+# Day 26 "Food for Thought": warmups line codec = Brainfuck from ONE cell (+/- delta per UTF-8 byte, then '.'), exact
+# encoder; decode_chunk branch (a Morse run of '-'/'.' is not Brainfuck); Mastery line 26 through DAYS positionally
+_s26 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: happy-comet-blossom-79"
+_b26 = _wc.day_codec(26)[1](_s26)
+assert _b26.startswith("+" * 78 + "." + "+" * 27 + ".------.++.") and _b26.endswith("-" * 64 + "." + "+" * 10 + ".++.")
+assert _wc.day_codec(26)[2](_b26) == _s26 and _wc.day_codec(26)[3] is False and _dc(_b26) == _s26
+assert _dc("--... ...-- --...") != _wc.day_codec(26)[2]("+" * 55 + ".")
+_c26 = [_s26[i * len(_s26) // 26:(i + 1) * len(_s26) // 26] for i in range(26)]
+_m26 = "\n".join("%02d\t%s" % (k, _wc.day_codec(k)[1](p)) for k, p in enumerate(_c26, 1))
+assert _dec25.decode_chunked(_m26) == _s26, _dec25.decode_chunked(_m26)
+print("ok  warmups_codecs: D26 Brainfuck exact encoder + decode_chunk + Mastery line 26")
+
+# Day 26 "Split Decision": a split bundle (.apks = base.apk + feature split) -- the base puzzle's `split` parts have an
+# empty slot, the split's json carries `part` + `part_index`; lib.android.puzzle_candidates fills and assembles it
+# (GM-confirmed single ANS-7E37D134754DEA01). v2 (`codec: analysis` base reading the split's huntress_feature.bin)
+# goes through _dex_eval_deep(assets=...) (GM-confirmed TT ANS-2DF27FDEEFEF5A67, Mastery set10 ANS-BD603675DE19471A).
+import io as _io26, zipfile as _zf26  # noqa: E402
+def _zip26(entries):
+    b = _io26.BytesIO()
+    with _zf26.ZipFile(b, "w") as z:
+        for n, v in entries.items():
+            z.writestr(n, v)
+    return b.getvalue()
+_apks26 = _zip26({
+    "base.apk": _zip26({"assets/huntress_puzzle.json": '{"schema":"huntress.mobile.puzzle.v1","day":26,"codec":"split",'
+                        '"data":"","parts":["","ANS-7","E37D13"],"order":[2,0,1]}'}),
+    "feature.apk": _zip26({"assets/huntress_feature.json": '{"codec":"split","day":26,"feature":"arena_feature",'
+                           '"part":"4754DEA01","part_index":0}'})})
+assert _android.puzzle_candidates(_io26.BytesIO(_apks26))[0] == "ANS-7E37D134754DEA01"
+assert _android._bundle_apks(_io26.BytesIO(_zip26({"assets/x.json": "{}"}))) == []
+print("ok  lib.android: D26 split bundle (.apks) part fill + split-asset deep eval hook")
+
+# Day 26 "Before You Go": prefetch.executable_name = SCCA header name (UTF-16LE @0x10) -- prebuilt prefetch.pf_value
+# promoted to verified (single CMD.EXE, TT PACKAGER.EXE, 10/10 Mastery); the key lives in _BUILTIN only
+assert _meta14.lookup("prefetch", "executable_name")[0].tier == _meta14.VERIFIED
+assert _meta14.lookup("prefetch", "executable_name")[0].days == (26,)
+assert ("prefetch", "executable_name") not in _meta14._prebuilt_fields(_meta14.PREBUILT_DIR / "prefetch.py")
+_pf26 = bytearray(0x100)
+_st17.pack_into("<I4sI", _pf26, 0, 30, b"SCCA", 0x100)
+_pf26[16:16 + 14] = "CMD.EXE".encode("utf-16-le")
+assert _meta14.answer("d26-prefetch-001-prefetch-executable-name", {}, bytes(_pf26)) == ("CMD.EXE", _meta14.VERIFIED)
+assert _meta14.answer("d26-prefetch-001-prefetch-executable-name", {}, b"L\0\0\0" + b"\0" * 200)[0] == "none"
+print("ok  lib.meta: prefetch.executable_name verified D26 (SCCA header name, MAM-compressed too)")

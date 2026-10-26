@@ -1,0 +1,24 @@
+{
+ "family": "fault_insn",
+ "encoding": "none",
+ "expected_offset": null,
+ "expected_config": null,
+ "input": "core_x64_smash_exe.elf",
+ "args": {
+  "core": "core_x64_smash.bin"
+ },
+ "expected_facts": {
+  "fault_va": "0x11ab",
+  "fault_insn": "call 4208",
+  "fault_mnemonic": "call",
+  "fault_insn_size": "5",
+  "fault_function": "smash",
+  "fault_function_offset": "0x42",
+  "fault_symbol": "smash+0x42",
+  "fault_class": "stack_protector"
+ },
+ "generator_cmd": "bash fault_gen.sh   # gcc / aarch64-linux-gnu-gcc crashers, strip -s, gdb generate-core-file; fault_core_* reuse core_gen.sh cores",
+ "oracle_cmd": "python3 fault_oracle.py --write   # objdump -M intel / aarch64 objdump, readelf -sW / --debug-dump=frames, gdb (pc, $_siginfo, bt, info auxv)",
+ "decoy": false,
+ "note": "lib.binary.fault_insn_field(input, key, **args) per expected_facts key; null expected = None (cannot locate). Field names SPECULATIVE (GM label not seen)"
+}

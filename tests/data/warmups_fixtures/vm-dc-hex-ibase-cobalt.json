@@ -1,0 +1,9 @@
+{
+ "codec": "vm-dc",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "encoded": "16i 4EP 69P 63P 65P 20P 77P 6FP 72P 6BP 20P 64P 65P 63P 6FP 64P 69P 6EP 67P 20P 74P 68P 69P 73P 20P 77P 61P 72P 6DP 75P 70P 21P 20P 54P 6FP 20P 73P 6FP 6CP 76P 65P 2CP 20P 73P 75P 62P 6DP 69P 74P 20P 74P 68P 69P 73P 20P 65P 78P 61P 63P 74P 20P 61P 6EP 73P 77P 65P 72P 20P 74P 6FP 20P 74P 68P 65P 20P 47P 61P 6DP 65P 20P 4DP 61P 73P 74P 65P 72P 3AP 20P 63P 6FP 62P 61P 6CP 74P 2DP 68P 65P 72P 6FP 6EP 2DP 31P 37P\n",
+ "generator_cmd": "perl -e '@c = unpack \"U*\", $ARGV[0]; print \"16i \", join(\" \", map { sprintf \"%XP\", $_ } @c), \"\\n\"' \"$plain\"",
+ "oracle_cmd": "tools/vmlangs/usr/bin/dc",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: cobalt-heron-17",
+ "expected": "match"
+}

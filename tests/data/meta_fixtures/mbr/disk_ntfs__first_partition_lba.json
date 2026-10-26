@@ -1,0 +1,8 @@
+{
+ "field": "mbr.first_partition_lba",
+ "expected": "63",
+ "generator_cmd": "truncate -s 16M disk_ntfs.img; printf 'label: dos\\nlabel-id: 0x1234abcd\\nstart=63, size=12225, type=7, bootable\\nstart=12288, type=83\\n' | sfdisk disk_ntfs.img; mkntfs -F -Q -s 512 -c 1024 -p 63 -L PART1 p1.img (12225 sectors) && dd if=p1.img of=disk_ntfs.img bs=512 seek=63 conv=notrunc; head -c 32768 disk_ntfs.img > disk_ntfs.bin",
+ "oracle_cmd": "mmls disk_ntfs.img -> DOS table, 0x07 @63 (len 12225), 0x83 @12288; sfdisk -d -> label-id 0x1234abcd, p1 bootable; fsstat -o 63 -> NTFS, First Cluster of MFT 16, Mirror 3056, Cluster Size 1024, index records 4096",
+ "decoy": false,
+ "member": "disk.img"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-e841b8aa45a9247f",
+ "decoy": false,
+ "_why": "split-signature-digest-binding (rows 49, 59, 83, 104): same signer + versionCode; base classes.dex (javac + dex2jar) holds the SHA-256 hex of the real split's assets/huntress_split.json -> the other split with the same entry name is the decoy",
+ "generator_cmd": "python3 tests/data/android_fixtures/splitbind_src/gen_splitbind.py pin tests/data/android_fixtures/splitbind_pin.zip  # apktool-bundled aapt2 link -I android-framework.jar manifests (split= / versionCode / revisionCode) + python zipfile assets + keytool RSA keys + `apksigner sign` v1+v2 (+ javac / d2j-jar2dex base dex for pin) + `zip -0 -j -X` bundle",
+ "oracle_cmd": "same generator, oracle stage: unzip the bundle, `apksigner verify --min-sdk-version 21 --print-certs <member>` signer SHA-256 vs base, `aapt2 dump xmltree --file AndroidManifest.xml` versionCode vs base, `unzip -p <member> assets/huntress_split.json | sha256sum` vs the 64-hex `strings` of the base classes.dex; the single member passing every binding fills `ANS-` + part -> ANS-e841b8aa45a9247f"
+}

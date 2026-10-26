@@ -1,0 +1,9 @@
+{
+ "codec": "vm-forth",
+ "plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-35",
+ "encoded": "$4E emit\nchar i emit\nchar c emit\nchar e emit\n$20 emit\nchar w emit\nchar o emit\nchar r emit\nchar k emit\n$20 emit\nchar d emit\nchar e emit\nchar c emit\nchar o emit\nchar d emit\nchar i emit\nchar n emit\nchar g emit\n$20 emit\nchar t emit\nchar h emit\nchar i emit\nchar s emit\n$20 emit\nchar w emit\nchar a emit\nchar r emit\nchar m emit\nchar u emit\nchar p emit\n$21 emit\n$20 emit\n$54 emit\nchar o emit\n$20 emit\nchar s emit\nchar o emit\nchar l emit\nchar v emit\nchar e emit\n$2C emit\n$20 emit\nchar s emit\nchar u emit\nchar b emit\nchar m emit\nchar i emit\nchar t emit\n$20 emit\nchar t emit\nchar h emit\nchar i emit\nchar s emit\n$20 emit\nchar e emit\nchar x emit\nchar a emit\nchar c emit\nchar t emit\n$20 emit\nchar a emit\nchar n emit\nchar s emit\nchar w emit\nchar e emit\nchar r emit\n$20 emit\nchar t emit\nchar o emit\n$20 emit\nchar t emit\nchar h emit\nchar e emit\n$20 emit\n$47 emit\nchar a emit\nchar m emit\nchar e emit\n$20 emit\n$4D emit\nchar a emit\nchar s emit\nchar t emit\nchar e emit\nchar r emit\n$3A emit\n$20 emit\nchar m emit\nchar a emit\nchar p emit\nchar l emit\nchar e emit\n$2D emit\nchar o emit\nchar t emit\nchar t emit\nchar e emit\nchar r emit\n$2D emit\n$33 emit\n$35 emit\n",
+ "generator_cmd": "perl -e '@c = unpack \"U*\", $ARGV[0]; print join(\"\\n\", map { chr($_) =~ /[a-z]/ ? \"char \".chr($_).\" emit\" : sprintf(\"\\$%02X emit\", $_) } @c), \"\\n\"' \"$plain\"",
+ "oracle_cmd": "LD_LIBRARY_PATH=tools/vmlangs/usr/lib/x86_64-linux-gnu tools/vmlangs/usr/bin/gforth-0.7.3 -i tools/vmlangs/usr/lib/x86_64-linux-gnu/gforth/0.7.3/gforth.fi -p tools/vmlangs/usr/share/gforth/0.7.3 /dev/stdin -e bye",
+ "oracle_plain": "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: maple-otter-35",
+ "expected": "match"
+}

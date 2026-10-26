@@ -1,0 +1,8 @@
+{
+ "field": "legacy_evt.record_count",
+ "expected": "none",
+ "generator_cmd": "wevtutil.xml heredoc (a wevtutil qe /f:xml export, not a binary log)",
+ "oracle_cmd": "file -b -> XML 1.0 document; pyevt.file().open() -> unable to read file header",
+ "decoy": true,
+ "member": "System.evt"
+}

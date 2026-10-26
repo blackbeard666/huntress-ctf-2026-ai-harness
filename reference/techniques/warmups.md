@@ -1,4 +1,4 @@
-# warmups — technique log (days 1-25; updated after every day)
+# warmups — technique log (days 1-26; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
@@ -14,21 +14,26 @@ How this lane has looked so far (observations, not guarantees):
   wrapper. Something compressed inside." GZIP in base64 (`H4sI`); D22 "Another familiar wrapper ... inflation" ZLIB
   `78da` in base64 (`eNo`); D23 "The alphabet got bigger. Adobe ... neighbors" ASCII85 `<~...~>`; D24 "Count
   carefully. The comma knows where to stop."/"String Theory" NETSTRINGS `1:N,1:i,...`; D25 "Every character has a
-  point. A code point, anyway."/"You Have a Point" Unicode CODE POINTS `U+004E U+0069 ...` (D9's idea in U+ notation).
-  D1-D15 and D23-D25 one layer; D16-D17 and D19-D22 two, the pun naming BOTH (every number/word may be a layer or a key;
+  point. A code point, anyway."/"You Have a Point" Unicode CODE POINTS `U+004E U+0069 ...` (D9's idea in U+ notation);
+  D26 "A very small language has quite a lot to say."/"Food for Thought" (= brain food) BRAINFUCK: a PROGRAM whose output
+  is the sentence (only `+ - .`, one cell, no loops).
+  D1-D15 and D23-D26 one layer; D16-D17 and D19-D22 two, the pun naming BOTH (every number/word may be a layer or a key;
   "familiar" = a seen codec as the OUTER layer). D20/D22 twisted ONE PARAMETER of the previous day ("Same"/"Another").
   Families: D1-D11 base-N/char codes/escapes, D12-D15 free-text letter maps, D16-D17 carriers over hex, D18
   transposition, D19-D20 byte representation, D21-D22 compression, D23 bigger base-N alphabet, D24 framing, D25
-  character notation (back in the D7-D9 escape family). Since D23 every day opened a new family; only a
+  character notation, D26 ESOTERIC LANGUAGE (execute, don't decode). D23-D26 = four new families in a row; only a
   "Same ..."/"Another ..." prompt signals a knob day. On an unknown shape read the blob's STRUCTURE (repeating unit,
-  token shape) and name the spec from it + the pun.
-- Mastery is cumulative: day N = 5N-2 sets x N numbered lines `NN<TAB>fragment`, line k = day k's encoding (D25 line =
-  `U+006C U+0065 ...`; 123 x 25). Last line has no trailing newline; fragments split mid-word and join verbatim.
+  token shape, a tiny alphabet of operators) and name the spec from it + the pun ("language" = a program to RUN).
+- Mastery is cumulative: day N = 5N-2 sets x N numbered lines `NN<TAB>fragment`, line k = day k's encoding (D26 line =
+  a 166-217 B BF program printing a 5-char tail; 128 x 26). Last line has no trailing newline; fragments split
+  mid-word and join verbatim.
 - Clocks: D1-D15 TT ~5-8 s / Mastery ~5-9 s windows; since D16 mostly `deadline: null` (D18: 30 s / 105 s). The HARNESS
   kills solve.py at 60 s regardless (D17, D21). Recent: D22 Mastery 108 x 22 solve 15.9 s; D23 TT 5.1 s, Mastery first
   run INCORRECT (all NN wrong), re-submitted on the SAME attempt (solve 1.2 s); D24 TT 4.6 s / Mastery 4.5 s first try;
   D25 TT 1.1 s first try, Mastery 123 x 25 first submit INCORRECT (all NN wrong, the D23 bug class again), fixed and
-  re-submitted on the same attempt: 2.1 s (solve 0.76 s).
+  re-submitted on the same attempt: 2.1 s (solve 0.76 s). D26 TT 3.9 s (solve 0.44 s) first try; Mastery 128 x 26
+  solver_incomplete (solve 64.9 s, 0 answers, harness kill) -> a LIVE worker wrote an ad-hoc 26-codec positional decoder
+  and submitted CORRECT ~2 min 20 s after start; the generalize workers were cut off before a fix landed.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **Encoding per line** -- Mastery line k uses day k's encoding; detect each line's encoding from its ALPHABET, never its
@@ -106,11 +111,23 @@ How this lane has looked so far (observations, not guarantees):
   `split(',')`. The loop already covers len > 1 and mixed lengths; unbuilt knobs: len in UTF-8 BYTES vs chars,
   hex/varint/binary length prefixes, tnetstrings (type tag `,#^!~]}` instead of `,`), bencode (`4:spam`, `l..e`),
   RESP (`$5\r\nhello\r\n`), HTTP chunked, `index:char` frames OUT OF ORDER, `count:char` run-length, nested frames.
+- **Esoteric program dialect (D26)** -- the blob is a PROGRAM; its output is the text. Values seen: single/TT = ONE line
+  of Brainfuck, alphabet exactly `+ - .` (no `<>[],`, no comments, no newline), ONE cell from 0, each char = a run of
+  ONLY `+` or ONLY `-` equal to the difference from the previous char, then `.`; never wraps past 0/255 (3406 B for 109
+  chars, ~31 B per char); Mastery line 26 = the same over a 5-char slug tail, restarting at cell 0 (166-217 B, 128/128
+  sets). Parse rule (D26 solver `_bf`): whole text in `[+\-<>\[\].,\s]` with at least one `.` -> a full interpreter
+  (8-bit wrapping cells, bracket map, `,` reads 0, step cap) -> output, printable gate. The interpreter already
+  covers loops/`<>`; unbuilt knobs: comment text between commands, token-substituted dialects (Ook!, Blub, COW,
+  Pikalang, ReverseFuck), other tiny languages (Deadfish, Whitespace, Befunge, JSFuck) -- atlas gap list.
 - **Line wrapper / positional routing** -- `NN<TAB>fragment` numbering; fragments split mid-word and join verbatim in
   number order. Line k is decoded by `decode._positional` with day k's REGISTERED codec; a line whose day has no
   registered codec goes to `_unknown_line_cands`, which re-"decodes" text that is already plain (D25: `le-52` -> `-07`).
-  Rule: every new day = `register_free(name, day, fn)` on the RAW line, even when a whole-blob step decodes single/TT.
-- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 78 on day 16, 83 x 17 lines on day 17, ..., 108 x 22 on day 22, 113 x 23 on day 23, 118 x 24 on day 24, 123 x 25 on day 25); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
+  `_positional` checks `enc(dec(line)) == line` for a `warmups_codecs.DAYS` entry: D26's solver appended
+  `(26, "brainfuck", enc, _bf)` with enc = `'+'*ord(c)+'.>'` (absolute value per cell) while the GM writes one-cell
+  DELTAS -> the re-encode check failed on every set -> last line sent to `_unknown_line_cands` -> no template hit -> the
+  joint path -> 64.9 s timeout. Rule: every new day = `register_free(name, day, fn)` on the RAW line (no re-encode
+  check), or a DAYS entry whose ENCODER reproduces the GM's exact bytes (assert it on one real Mastery line).
+- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 78 on day 16, 83 x 17 lines on day 17, ..., 108 x 22 on day 22, 113 x 23 on day 23, 118 x 24 on day 24, 123 x 25 on day 25, 128 x 26 on day 26); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
   `artifacts[]`, only a top-level `sha256` = the zip; same on days 7-9). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
 - **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621; day 9: 644 vs 650); same sentence and encoding.
@@ -144,6 +161,7 @@ How this lane has looked so far (observations, not guarantees):
 | `<~` ... `~>` around `!`-`u` printable soup (`<~:2+3L+EqaECER/!@rGml...~>`, ~1.25 x the text; prompt "alphabet got bigger", "Adobe", "Eighty-Five", "neighbors") | Ascii85 (D23): `python3 -c "import base64,sys;print(base64.a85decode(open(sys.argv[1]).read().strip(),adobe=True).decode())" blob.txt`. No delimiters -> `a85decode(t)`; `0-9A-Za-z!#$%&()*+-;<=>?@^_{\|}~` -> `b85decode`; `.-:+=^!/*?&<>()[]{}@%$#` -> Z85; `xbtoa Begin` -> btoa. Then sniff magic (PDF-style a85 of zlib) |
 | `1:N,1:i,1:c,1:e,1: ,...` -- `digits:payload,` repeated, ~4x the text, the payload's `,`/`:` framed too (`1:,,`, `1::,`) (prompt "count", "comma", "stop", "string", "length") | netstrings (D24): cursor parse, NEVER split on `,`: loop `m=re.compile(r'(\d+):').match(t,i); k=int(m[1]); j=m.end(); out.append(t[j:j+k]); assert t[j+k] == ','; i=j+k+1` (D24 solver `_netstr`). Siblings: `l4:spame` bencode, `5:hello,` + type tag = tnetstring, `$5\r\n` RESP, hex-size lines = HTTP chunked, `N:c` with N > len = index or run count |
 | `U+004E U+0069 U+0063 ...` -- only `U+` + 4 hex tokens, one space apart, ~7 B per char (prompt "point", "code point", "every character") | code points (D25): `python3 -c "import re,sys;print(''.join(chr(int(h,16)) for h in re.findall(r'[Uu]\+([0-9A-Fa-f]{2,8})',open(sys.argv[1]).read())))" blob.txt`; `lib.warmups_codecs.uplus_dec` (also `\U0001F600`, `%u`, `0x`). Names (`LATIN CAPITAL LETTER N`) -> `unicodedata.lookup` |
+| Only `+ - .` (or `+-<>[].,`), runs of one sign then `.`, ~31 B per char, no letters (prompt "language", "small", "brain", "food for thought", "say") | Brainfuck (D26), loop-free one-cell form: `python3 -c "import sys;t=open(sys.argv[1]).read();print(''.join(chr((t[:i].count('+')-t[:i].count('-'))%256) for i,c in enumerate(t) if c=='.'))" blob.txt`; anything with `<>[]` -> the D26 solver's `_bf` interpreter. `Ook. Ook?` / `Blub.` / `MoO` -> map tokens to BF first. NEVER run untrusted programs outside a step-capped pure-python interpreter |
 | peel finds nothing | keyed/classical cipher: `lib.ciphers` (caesar_all, atbash, vigenere_crack, xor_crack, morse, base58, QP) |
 The generic path is `lib.decode.peel(data, accept)` (BFS over encodings) plus the day solvers in `challenges/day0N/warmups-*/solver/solve.py`. Each later solver re-checks every earlier day's cases.
 
@@ -155,33 +173,38 @@ rot-N needs a margin over the unshifted text; D6 a shell `read` loop lost the un
 WHOLE Mastery zip gave another set's slug (read the member); D8 a `str.replace` patch silently no-op'd; D11 strict len%4
 refused unpadded b64; D12 rot-N "decoded" reversed text (`69-fove-n`); D13 free lines must be assigned JOINTLY.
 
-**Days 14-24** (Caesar +7; ROT47; Morse over hex; Bacon a/b 5-groups over hex; rail fence 3/offset 0; hex of UTF-16LE
+**Days 14-25** (Caesar +7; ROT47; Morse over hex; Bacon a/b 5-groups over hex; rail fence 3/offset 0; hex of UTF-16LE
 + `fffe`; hex of UTF-16BE + `feff`; gzip in base64; zlib `78da` in base64; Adobe Ascii85 `<~...~>`; netstrings
-`1:N,1:i,...`): single CORRECT in 4.5-39 s, first submit each day. Lessons (details in Pitfalls): D14 rank 3-word slugs
-first; D15 ROT47 needs `register_free`; D16/D17 a carrier's 16-symbol output is a middle layer; D17 Mastery needed an
-early return; D18 lib's `rail_solve` existed but the carried solver never routed to it; D19's BOM-aware `_hex_utf16`
-carried D20 and D21's magic-sniffing `_b64z` carried D22 unchanged (write the GENERIC rule on day N); D21 Mastery died
-at 60 s on an ad-hoc solver; D23 Mastery all-NN-wrong from a pre-decoded line; D24 a strict whole-text cursor parser
-(None on mismatch) sits first in the pipeline -- a structural codec's repeating unit (`\d+:.,`) IS the cue.
+`1:N,1:i,...`; `U+XXXX` code points): single CORRECT in 4.5-39 s, first submit each day. Lessons (details in
+Pitfalls): D14 rank 3-word slugs first; D15 ROT47 needs `register_free`; D16/D17 a carrier's 16-symbol output is a
+middle layer; D17 Mastery needed an early return; D18 lib's `rail_solve` existed but the carried solver never routed to
+it; D19's BOM-aware `_hex_utf16` carried D20 and D21's magic-sniffing `_b64z` carried D22 unchanged (write the GENERIC
+rule on day N); D21 Mastery died at 60 s on an ad-hoc solver; D23 and D25 Mastery all-NN-wrong from a pre-decoded line
+(D25: no day-25 codec registered -> `_unknown_line_cands` re-decoded plain `le-52` to `le-07`; fixed with
+`register_free("uplus", 25, ...)` on the RAW line); D24 a strict whole-text cursor parser (None on mismatch) sits first
+in the pipeline -- a structural codec's repeating unit (`\d+:.,`) IS the cue.
 
-**Day 25: You Have a Point** ("Every character has a point. A code point, anyway." -- Unicode CODE POINTS).
-- 762-byte `blob.txt`, one line, no newline: `U+004E U+0069 U+0063 U+0065 U+0020 U+0077 ...` -- one `U+XXXX` token
-  (uppercase, 4 hex digits) per character of the 109-char sentence, single spaces between. One layer. Pun: "point" =
-  code point, "every character" = one token each. Triage previewed it; lib already had `uplus_dec` (prebuilt
-  `tgt:unicode-codepoint-notation`, row 22 of the atlas, rated "med").
-- Single: first submit, start 13:00:22.3Z -> CORRECT 13:00:49.2Z (~27 s); slug accepted exactly as decoded.
-- Solver: D24 lane solver + `_uplus` whole-blob step. TT CORRECT 1.1 s first try. Mastery 123 x 25 first submit
-  INCORRECT on all 123 sets -- slug words right, NN wrong (`-07`/`-22`/`-02` for `-52`/`-77`/`-57`): `_uplus_lines`
-  pre-decoded line 25 to plain `le-52`, no day-25 codec was registered, so `decode._positional` treated the last line
-  as UNKNOWN and `_unknown_line_cands` "re-decoded" the plain text. Generalize worker (~3 min) left line 25 raw and
-  added `register_free("uplus", 25, ...)`; re-submitted on the same attempt -> CORRECT 2.1 s (solve 0.76 s).
-- Lesson: the D23 trap struck AGAIN through a different code path. A new day's Mastery codec must be REGISTERED by day
-  number, never applied as a line pre-pass; before any timed start, print one joined Mastery sentence and compare the
-  slug's NN with the raw last line by eye (here the raw line literally spelled `5` `2`).
+**Day 26: Food for Thought** ("A very small language has quite a lot to say." -- BRAINFUCK, "brain food").
+- 3406-byte `blob.txt`, one line, no newline, alphabet exactly `+ - .`: `+`x78 `.` `+`x27 `.` `-`x6 `.` ... -- one
+  cell, each character = the signed difference from the previous one as a run of one sign, then `.` (109 dots = 109
+  chars). One layer, no loops, no `<>`. Pun: "very small language" = an 8-command esolang, "a lot to say" = output;
+  "Food for Thought" = brain food. Triage previewed the `+++.` soup; nothing in lib (atlas row 83 "Brainfuck/Ook!", rated
+  LOW: "program, not encoding" -- wrong). Worker wrote a 30-line step-capped interpreter `_bf` (no pip, no node).
+- Single: first submit, start 13:00:06.1Z -> CORRECT 13:00:32.7Z (~27 s); slug accepted exactly as printed.
+- Solver: D25 lane solver + whole-blob `_bf` step (gated: whole text in `[+\-<>\[\].,\s]`, has `.`) + a runtime
+  `warmups_codecs.DAYS` entry for day 26. TT CORRECT 3.9 s first try. Mastery 128 x 26: solve 64.9 s, ZERO answers
+  (harness kill): the DAYS entry's encoder (`'+'*ord(c)+'.>'`) does not reproduce the GM's delta bytes, so
+  `_positional`'s re-encode check rejected line 26 on every set and each set fell through `_unknown_line_cands` into
+  the joint search (diagnosis by code reading -- the two generalize workers profiled but were cut off at CORRECT; the
+  solver in `solver/` still carries the bug). Live worker: ad-hoc positional decoder for all 26 codecs -> CORRECT.
+- Lesson: a runtime codec registration is only as good as its ENCODER when `_positional` round-trips it. Prefer
+  `register_free("bf", 26, ...)` (decode-only) or encode in the GM's dialect, and time `hctf solver-test` on a REAL
+  Mastery case before any timed start (no D26 Mastery case existed before the run). Lane rating: esoteric languages
+  are now a live family -- a program blob means INTERPRET (pure python, step cap), never decode by charset tables.
 
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected (days 1-25; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-26; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
@@ -203,6 +226,9 @@ at 60 s on an ad-hoc solver; D23 Mastery all-NN-wrong from a pre-decoded line; D
   Mastery sentence of one set by eye before a timed start; all-sets-wrong-in-the-same-field = one line's routing.
   D25: a day with NO registered codec makes `_positional` send its (pre-decoded, plain) line to `_unknown_line_cands`,
   which mangles it -- register the codec for today's day number even if the whole-blob path already decodes it.
+  D26: a REGISTERED `DAYS` codec whose encoder doesn't round-trip the GM bytes is as bad as none (and slower: every set
+  pays the unknown-line + joint search -> 60 s kill). Many-to-one codecs (programs, padding, case-free, whitespace
+  variants) can't be round-tripped -> use `register_free` (decode-only) for them.
 - ENGLISH SCORING: don't count single letters/hex reads as English (D3 timeout); a rot-N must beat the unshifted text by a
   margin (D4). Rot-N is `decode_chunk`'s catch-all, so ANY unknown plain transform comes back as plausible rot garbage
   (D12 reversal `69-fove-n`, D13's rejected `ovisx-tviskr-fbvecw-31` = rot-N of Atbash): gibberish slug words = an unknown
@@ -231,6 +257,10 @@ at 60 s on an ad-hoc solver; D23 Mastery all-NN-wrong from a pre-decoded line; D
 - TOOLING: `str.replace`/sed solver patches silently no-op on a mismatched anchor (D8) -- assert the count. A literal
   backslash-u typed into a Bash/heredoc reached python already unescaped -- test on the artifact or `chr(92)+'u%04x'`.
   Two Morse tables: `lib.ciphers.morse_decode` drops `!` `,` `:` `-`; use `lib.warmups_codecs.morse_dec`.
+- PROGRAM blobs (D26 Brainfuck): interpret in a pure-python, step-capped interpreter (8-bit wrapping cells, `,` = 0);
+  never hand them to node/eval/an online runner. A loop-free one-cell BF is just a running sum of `+`/`-` read at `.`.
+  A BF charset test also matches Morse (`.`/`-`/space, D16 line 16): gate the interpreter's OUTPUT (printable + slug),
+  never the charset alone.
 - A TT start before a verified solver burns the clock (D18, 30 s). Timed windows leave no room for an LLM.
 - Don't over-read the prompt: "Again" (day 6) was flavour, not a second layer. Decode what the bytes show.
 - Don't contact anything beyond the GM. The decoded sentence states the answer outright.
