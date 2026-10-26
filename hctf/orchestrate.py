@@ -283,6 +283,7 @@ WEB_CODIFY_HOLD = float(os.environ.get("HCTF_WEB_CODIFY_HOLD", "0"))
 #              wait codify is ended before the generalize takes over the same plugin file (never two writers), and a live
 #              pass starts no background generalize while codify runs. 0 = the old blocked path.
 WEB_PAR_LIVE = os.environ.get("HCTF_WEB_PAR_LIVE", "1") != "0"
+DELTA_WAIT = float(os.environ.get("HCTF_DELTA_WAIT", "1.0"))   # D26: s the go text waits for mastery_delta (then inbox)
 # D26 post-mortem: the same parallel live answer on EVERY lane's first no-clock TT / Mastery attempt when a solver gap is
 # PREDICTED (_gap_predicted: id shapes new to the lane, artifact kinds the Single doesn't ship, an earlier mode of this
 # chain passed only by a live answer, or the lane's same mode needed a live answer / generalize yesterday). D26 warmups
@@ -2386,7 +2387,9 @@ class GenBaseline:
             self.seconds = 0.0
             self.done.set()
             return self
-        self.thread = threading.Thread(target=self._run, daemon=True, name="gen-baseline")
+        # D26: the replays (26-40 cases, up to 8 at once) ran un-niced beside the drop's claude workers (load 28 on 12
+        # CPUs): background class = nice + the shared bg slots; the accept step waits for it minutes later anyway
+        self.thread = threading.Thread(target=procgov.bg_wrap(self._run), daemon=True, name="gen-baseline")
         self.thread.start()
         return self
 
@@ -3115,6 +3118,11 @@ class Chain:
                     f"{ahead} id(s) new to the lane) -- the attempt can't pass as is: generalizing NOW, beside its banking")
         tc = json.loads((Path(data["local"]) / "contract.json").read_text())
         if not data.get("attempt_id") or cli.attempt_id(tc) != data["attempt_id"]:
+            return
+        if (timed.last_result(cid) or {}).get("attempt_id") == data["attempt_id"]:
+            # D26 warmups Mastery: the event poller delivered "solved" after the runner had returned -- the blocked path
+            # was already starting its own generalize, and two ran on the same variant (21:02:17 + 21:02:18)
+            say(f"[{cid}] early generalize: the runner already returned on this attempt -- the blocked path generalizes")
             return
         cli.save(cid, "start.json", tc)
         cli.save(cid, "contract.json", tc)
@@ -3938,6 +3946,30 @@ class Chain:
                      "transforms, magic): implement what they say before exploring the bytes.\n" + qtext)
         return note
 
+    def _delta_or_late(self, cid, fut):
+        """mastery_delta's text if ready within DELTA_WAIT s, else '' and the text goes to the worker's inbox when done."""
+        import concurrent.futures as _cf
+        try:
+            return fut.result(timeout=DELTA_WAIT) or ""
+        except _cf.TimeoutError:
+            pass
+        except Exception as e:  # noqa: BLE001 - advisory text only
+            say(f"[{cid}] mastery delta note: {e}")
+            return ""
+        if not getattr(self, "_delta_late", False):
+            self._delta_late = True
+
+            def late(f):
+                try:
+                    text = f.result() or ""
+                except Exception:  # noqa: BLE001
+                    return
+                if text:
+                    say(f"[{cid}] {text[:200]}")
+                    self._deliver_note(cid, text, "delta")
+            fut.add_done_callback(late)
+        return ""
+
     def _deliver_note(self, cid, note, key):
         """A late fact for the single worker: into the go text if it hasn't been sent yet, else the inbox."""
         if not note:
@@ -4464,11 +4496,20 @@ class Chain:
         self._pre_t["tri1"] = time.time()
         if body is None:
             # e.g. read-the-rules: no artifact, but the contract still names the answer ids
-            st = cli.call(cid, "status", cid)["body"] or {}
-            if st.get("answer_ids") or st.get("questions"):
-                cli.save(cid, "contract.json", st)
-                if not cli.load(cid, "start.json"):
-                    cli.save(cid, "start.json", st)
+            def fetch_status():
+                st = cli.call(cid, "status", cid)["body"] or {}
+                if st.get("answer_ids") or st.get("questions"):
+                    cli.save(cid, "contract.json", st)
+                    if not cli.load(cid, "start.json"):
+                        cli.save(cid, "start.json", st)
+            if web_live:
+                # D26 serialized-offender: start answered 503 control_unavailable and this status took 17.5 s (target
+                # `preparing`) before the go -- a live-web worker fetches its own target state; the contract lands
+                # in the background
+                threading.Thread(target=lambda: _quiet_errors(fetch_status, cid), daemon=True,
+                                 name=f"single-status-{self.base}").start()
+            else:
+                fetch_status()
         retrieved = ""
         if RETRIEVAL and not welcome:
             from . import retrieval
@@ -4483,6 +4524,11 @@ class Chain:
             except Exception as e:  # noqa: BLE001 - the prompt just lists fewer contracts
                 say(f"[{cid}] timed contract prefetch note: {e}")
         self._pre_t["tfetch"] = time.time()
+        _dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
+        delta_fut = ThreadPoolExecutor(max_workers=1).submit(
+            mastery_delta, cli.load(cid, "start.json") or cli.load(cid, "contract.json"),
+            [cli.load(f"{self.base}/{m}", "contract.json") or {} for m in ("time_trial", "mastery")],
+            known=(lambda: lane_known_shapes(self.lane, int(_dm.group(1)))) if _dm else None)
         if (RACE_FIRST_HANDOFF and not welcome and self._race_first_ready(cid)
                 and self._race_first_handoff(cid, staged, tfuts, "before the worker launch")):
             return True
@@ -4543,10 +4589,9 @@ class Chain:
             # MASTERY COMPOUNDS line logs after the go text; the sub-marks name any stall that is left.
             pre = getattr(self, "_pre_t", {})
             pre["pb_prior"] = time.time()
-            _dm = re.match(r"day(\d+)", self.sdir.parent.parent.name)
-            delta = mastery_delta(cli.load(cid, "start.json") or cli.load(cid, "contract.json"),
-                                  [cli.load(f"{self.base}/{m}", "contract.json") or {} for m in ("time_trial", "mastery")],
-                                  known=(lambda: lane_known_shapes(self.lane, int(_dm.group(1)))) if _dm else None)
+            # D26 script: the delta parsed a 9.5 MB Mastery contract on the go path (6.9 s on a saturated host). It is
+            # computed beside the prior-note staging; a late one reaches the worker through the inbox.
+            delta = self._delta_or_late(cid, delta_fut)
             if delta:
                 prior_note += " " + delta
             pre["pb_delta"] = time.time()

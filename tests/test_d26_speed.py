@@ -132,5 +132,88 @@ with patched(ENV):
             r = orchestrate.Chain._web_par_live(ch, "warmups-day-26/mastery", "mastery", *args)
         check(f"P2 {label}: no parallel live answer", r is None and not started)
 
+# ---- P4: CPU contention + today's two bugs -------------------------------------------------------------------------
+from hctf import duel, solvers, timed, workers  # noqa: E402
+
+
+class FakeChain:
+    base = "warmups-day-26"
+    lane = "warmups"
+    sdir = ROOT / "challenges" / "day26" / "warmups-x" / "solver"
+
+    def _worker_env(self, cid, stage):
+        return {}
+
+
+launched, logs, done = [], [], {"v": False}
+with patched({(duel, "_reserve"): lambda key, extra=False: True, (duel, "_release"): lambda key: None,
+              (duel, "_copy_solver"): lambda src, dst, cases: done.update(v=True),   # CORRECT lands during the copy
+              (workers, "run_local"): lambda *a, **k: launched.append(a) or (0, Path("x.log")),
+              (duel, "_mirror"): lambda sdir, stage, n: TD / f"duel{n}" / "solver"}):
+    d = duel.Duel(FakeChain(), "warmups-day-26", "single", "prompt", 60, cases=False)
+    d.start(delay=0, skip=lambda: done["v"], log=logs.append)
+    d.thread.join(5)
+check("P4 a single duel whose mode completed during the solver copy is not launched (D26 warmups racers +3-5 s)",
+      not launched and any("not launched" in m for m in logs), logs)
+d = duel.Duel(FakeChain(), "warmups-day-26", "single", "prompt", 60, cases=False)
+d2 = duel.Duel(FakeChain(), "warmups-day-26/time_trial", "generalize", "prompt", 60, cases=False)
+check("P4 single-duel racers run niced (HCTF_NICE); generalize duels are untouched",
+      d._env().get("HCTF_NICE") == duel.SINGLE_NICE and duel.SINGLE_NICE and "HCTF_NICE" not in d2._env())
+
+# a case dir still being written (no contract.json yet) no longer fails the whole baseline
+sd = TD / "solvecase" / "solver"
+(sd / "cases" / "auto-mastery-done").mkdir(parents=True)
+(sd / "cases" / "auto-mastery-writing").mkdir(parents=True)
+(sd / "cases" / "auto-mastery-done" / "contract.json").write_text(json.dumps({"answer_ids": ["a"]}))
+(sd / "cases" / "auto-mastery-done" / "expected.json").write_text(json.dumps({"a": "1"}))
+(sd / "solve.py").write_text("import json,sys\nprint(json.dumps({'a': '1'}))\n")
+with patched({(solvers, "run_solver"): lambda sdir, c, art, timeout=120, env_extra=None: ({"a": "1"}, None, 0.01)}):
+    try:
+        res = solvers.test_solver(sd, parallel=1)
+        err = None
+    except FileNotFoundError as e:
+        res, err = None, e
+check("P4 test_solver skips a case without contract.json instead of raising (D26 async baseline FileNotFoundError)",
+      err is None and [r["case"] for r in res] == ["auto-mastery-done"] and res[0]["ok"], (err, res))
+
+# the early generalize stands down when the runner already returned on that attempt (D26: two generalize workers)
+ch = bare_chain()
+ch._early = None
+att_dir = TD / "att"
+att_dir.mkdir()
+(att_dir / "contract.json").write_text(json.dumps({"attempt_id": "ca7796e4", "answer_ids": ["set1.message"]}))
+said.clear()
+with patched({(orchestrate, "say"): lambda *a, **k: said.append(a[0] if a else ""),
+              (workers, "EARLY_GENERALIZE"): True,
+              (timed, "last_result"): lambda cid: {"attempt_id": "ca7796e4", "result": "solver_incomplete"},
+              (cli, "attempt_id"): lambda c: c.get("attempt_id"),
+              (cli, "save"): lambda *a, **k: (_ for _ in ()).throw(AssertionError("saved"))}):
+    orchestrate.Chain._early_event(ch, "warmups-day-26/mastery",
+                                   {"event": "solved", "local": str(att_dir), "attempt_id": "ca7796e4",
+                                    "result": "solver_incomplete", "missing": ["set1.message"]})
+check("P4 early generalize: the runner already returned on this attempt -> no second generalize",
+      ch._early is None and any("already returned" in m for m in said), said[-2:])
+
+# P5: a slow mastery_delta reaches the worker through the inbox instead of holding the go text
+import threading  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+gate = threading.Event()
+ch = bare_chain()
+notes = []
+with patched({(orchestrate, "DELTA_WAIT"): 0.1, (orchestrate, "say"): lambda *a, **k: None,
+              (orchestrate.Chain, "_deliver_note"): lambda self, cid, note, key: notes.append((key, note))}):
+    fut = ThreadPoolExecutor(max_workers=1).submit(lambda: gate.wait(5) and "MASTERY COMPOUNDS: x")
+    t0 = __import__("time").time()
+    got = orchestrate.Chain._delta_or_late(ch, "warmups-day-26", fut)
+    took = __import__("time").time() - t0
+    gate.set()
+    fut.result(5)
+    __import__("time").sleep(0.2)
+check("P5 a slow mastery_delta: the go text gets '' after DELTA_WAIT, the text follows via the inbox",
+      got == "" and took < 1.0 and notes == [("delta", "MASTERY COMPOUNDS: x")], (got, took, notes))
+fut = ThreadPoolExecutor(max_workers=1).submit(lambda: "MASTERY COMPOUNDS: y")
+fut.result()
+check("P5 a ready mastery_delta is inlined as before", orchestrate.Chain._delta_or_late(ch, "w", fut) == "MASTERY COMPOUNDS: y")
+
 print(f"\n{len(failures)} failure(s)" + (": " + ", ".join(failures) if failures else ""))
 sys.exit(1 if failures else 0)

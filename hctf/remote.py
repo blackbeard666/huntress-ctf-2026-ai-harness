@@ -480,7 +480,7 @@ def tar_push(local_dir, remote_dir, exclude=("cases", "__pycache__")):
     """Replace remote_dir (relative to the remote home) with local_dir's contents in ONE ssh round trip: tar | ssh tar
     into a sibling, then swap. A no-change rsync of a solver dir took 1.84 s over the VPN (several protocol round
     trips); this ~0.75 s. For small trees only (the solver minus cases/); the caller falls back to rsync on failure."""
-    tar = subprocess.Popen(["tar", "czf", "-", *[f"--exclude={x}" for x in exclude], "-C", str(local_dir), "."],
+    tar = subprocess.Popen(["nice", "-n", "10", "tar", "czf", "-", *[f"--exclude={x}" for x in exclude], "-C", str(local_dir), "."],
                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     d = f"~/{remote_dir.lstrip('~/')}" if not remote_dir.startswith("~") else remote_dir
     cmd = (f"d={d}; rm -rf \"$d.new\" && mkdir -p \"$d.new\" && tar xzf - -C \"$d.new\" && rm -rf \"$d\" "

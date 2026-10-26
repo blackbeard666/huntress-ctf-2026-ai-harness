@@ -711,6 +711,9 @@ def test_solver(sdir, timeout=120, parallel=None, cases=None):
     if pats is not None:
         import fnmatch
         cases = [c for c in cases if any(fnmatch.fnmatchcase(c.name, p) for p in pats)]
+    # a case dir still being written (record_timed_case / add_case mid-copy) has no contract.json yet: D26's async
+    # baselines failed whole on one (FileNotFoundError) -- skip it; the next run sees it complete
+    cases = [c for c in cases if (c / "contract.json").exists()]
     groups = _dedupe_groups(cases)
     if parallel is None:
         parallel = case_parallel()

@@ -47,6 +47,10 @@ EXTRA = [tuple((x.strip().split(":", 1) + [""])[:2]) for x in
          os.environ.get("HCTF_DUEL_EXTRA", "claude-sonnet-5-5:high").split(",") if x.strip()]
 EXTRA_MAX = int(os.environ.get("HCTF_DUEL_EXTRA_MAX", "3"))
 EXTRA_MIN_AVAIL_GB = float(os.environ.get("HCTF_DUEL_EXTRA_MIN_AVAIL_GB", "1.5"))   # ~0.3 GB per claude worker
+# D26 post-mortem: single-duel racers never produced a first CORRECT in D21-D26 (41 launches) yet were 6 of the 12 claude
+# processes at the CPU peak (load 28 on 12 CPUs) -> they run niced; the chain's own worker and answer-first keep the CPU.
+# "" = not niced (old).
+SINGLE_NICE = os.environ.get("HCTF_DUEL_SINGLE_NICE", "10").strip()
 DELAY = float(os.environ.get("HCTF_DUEL_DELAY", "15"))    # single: give the reuse race its 3-9 s first
 GEN_AFTER = int(os.environ.get("HCTF_DUEL_GENERALIZE_AFTER", "1"))   # duel the 2nd+ generalize of a mode; -1 = never
 GEN_FIRST = os.environ.get("HCTF_DUEL_GENERALIZE_FIRST", "1") != "0"  # ... and the 1st when label-only / speed-only
@@ -215,6 +219,8 @@ class Duel:
         env = self.chain._worker_env(self.cid, self.stage)
         env.update({"HCTF_SOLVER_DIR": self.ddir, "HCTF_SOLVER_DIR_OVERRIDE": self.ddir, "HCTF_DUEL": "1",
                     "HCTF_LOG_POOL": "duel" if self.n == 1 else f"duel{self.n}"})
+        if self.stage == "single" and SINGLE_NICE:
+            env["HCTF_NICE"] = SINGLE_NICE   # the chain's own worker + answer-first keep the CPU at the drop
         if self.effort:
             env["HCTF_X_EFFORT"] = self.effort
         if self.model:
@@ -249,6 +255,12 @@ class Duel:
                         join(self.cid)    # the background prior cases/ copy (stage_prior_cases) must be complete
                 _copy_solver(self.src or self.chain.sdir, self.ddir, self.cases)
                 self.copied.set()
+                if self.stop_evt.is_set() or (skip and skip()):
+                    # D26: warmups' racers launched 3-5 s after the single was already CORRECT (skip() ran only before
+                    # the prior-cases join + copy)
+                    log(f"[{self.cid}] duel {self.stage}{'' if self.n == 1 else f' racer {self.n}'}: not launched "
+                        "(the mode completed during the solver copy)")
+                    return
                 log(f"[{self.cid}] duel {self.stage} worker -> local (effort "
                     f"{self.effort or workers.worker_effort(self.chain.lane)}"
                     f"{', model ' + self.model if self.model else ''}{'' if self.n == 1 else f', racer {self.n}'}) "
