@@ -370,7 +370,8 @@ ch = Chan(ok_reply)
 with patched({**QUIET, (gmroute, "_chan"): lambda: ch, (gmroute, "_contract_bytes"): lambda cid: 4_000_000}):
     gmroute._reply[("status", "binary-reverse-engineering-day-28-x/mastery")] = 900   # last reply was small (CORRECT)
     gmroute.call(["status", "binary-reverse-engineering-day-28-x/mastery"], 30, local_fn(delay=0.3))
-check("20 this cid's LAST status reply (small) beats the contract predictor: hedged again", len(ch.calls) == 1)
+check("20 a small LAST status reply never masks the multi-MB contract: local only (rehearsal D28 fair run: 4.7 MB binary "
+      "Mastery statuses rode the relay ~11 s each)", len(ch.calls) == 0, ch.calls)
 big_body = {"questions": [{"id": f"q{i}"} for i in range(2500)]}
 reset()
 with patched({**QUIET, (gmroute, "_chan"): lambda: Chan(ok_reply, delay=0.5), (gmroute, "_contract_bytes"): lambda cid: None}):

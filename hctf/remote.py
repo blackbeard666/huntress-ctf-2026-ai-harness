@@ -335,8 +335,9 @@ def _start_off_hb(cid):
 # D27 (plan P2-H): the start-side >200 KB->public guard above is start-only, but a SUBMIT reply can be large too (D27:
 # an 831 KB script submit reply took 11.7 s on the hb-daemon's one stdio channel). This learns a lane+mode's submit reply
 # size from `gmroute.note_slow` / the submit path and routes a later likely-large submit public instead of via daemon/hb.
-# DEFAULT OFF (HCTF_SUBMIT_REPLY_ROUTE=1 to enable) -- shipped on a drop day, validate on the rehearsal replay first.
-SUBMIT_REPLY_ROUTE = os.environ.get("HCTF_SUBMIT_REPLY_ROUTE", "0") != "0"
+# DEFAULT ON since the rehearsal D28 fair run (an 852 KB script submit reply took 10.0 s on the hb-daemon, GM 1.2 s);
+# also PREDICTIVE: today's contract of the mode > the limit routes the FIRST big submit public too. =0 disables.
+SUBMIT_REPLY_ROUTE = os.environ.get("HCTF_SUBMIT_REPLY_ROUTE", "1") != "0"
 SUBMIT_OFF_HB_MAX_KB = float(os.environ.get("HCTF_SUBMIT_OFF_HB_MAX_KB", "200"))
 _BIG_SUBMIT = {}   # gmroute shape ("<lane>[/mode]") -> largest submit reply bytes seen
 
@@ -365,7 +366,8 @@ def _submit_off_hb(cid):
     if not SUBMIT_REPLY_ROUTE or SUBMIT_OFF_HB_MAX_KB <= 0:
         return False
     from . import gmroute
-    return _BIG_SUBMIT.get(gmroute._shape(str(cid)), 0) > SUBMIT_OFF_HB_MAX_KB * 1024
+    seen = max(_BIG_SUBMIT.get(gmroute._shape(str(cid)), 0), gmroute._contract_bytes(str(cid)) or 0)
+    return seen > SUBMIT_OFF_HB_MAX_KB * 1024
 _EXEC_MARK = "HCTF-EXEC"
 # Single Solve start / submit over the run's long-lived Homebase daemon (warm GM pool, one stdio channel) instead of an
 # ssh exec + `python3 gm.py` per call: D12's five drop-time starts went out 2-6 s late on the busy 2-vCPU VM. Only in the

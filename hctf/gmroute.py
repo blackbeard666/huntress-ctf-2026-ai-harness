@@ -243,25 +243,35 @@ def _approx_bytes(env):
     return _reply_bytes(env) if isinstance(env, dict) else 0
 
 
+# rehearsal D28 fair run: binary single submits (292 KB replies) took 8.8-14.1 s each on relay1 for 0.3-0.8 s GM calls; a
+# submit reply tracks the mode's contract size (binary 340 KB contract -> 292 KB reply, script 852 KB) -> a submit whose
+# contract (or this lane+mode's last submit reply) exceeds this many KB never rides a relay channel. 0 = off.
+SUBMIT_RELAY_MAX = float(os.environ.get("HCTF_GM_SUBMIT_RELAY_MAX_KB", "200")) * 1024
+
+
+def _submit_big(args):
+    if SUBMIT_RELAY_MAX <= 0 or len(args) < 2:
+        return False
+    cid = str(args[1])
+    with _lock:
+        learned = _reply.get(("submit", _shape(cid))) or 0
+    return max(learned, _contract_bytes(cid) or 0) > SUBMIT_RELAY_MAX
+
+
 def _status_big(args):
-    """True when this status reply is known / predicted > STATUS_HEDGE_MAX: then the relay leg is not sent."""
+    """True when this status reply is known / predicted > STATUS_HEDGE_MAX: then the relay leg is not sent. The LARGEST
+    known size wins: a short 409 status/start reply (prerequisite_required before the Time Trial passes) must not mask
+    the mode's multi-MB contract -- rehearsal D28 fair run: three 4.7 MB binary Mastery statuses rode the relay, ~11 s each."""
     if STATUS_HEDGE_MAX <= 0 or len(args) < 2:
         return False
     cid = str(args[1])
     with _lock:
         last = _reply.get(("status", cid))
-    if last is not None:
-        return last > STATUS_HEDGE_MAX
-    n = _contract_bytes(cid)
-    if n is not None:
-        return n > STATUS_HEDGE_MAX
-    if "/" not in cid:
-        return False          # a Single's status before its start is a short 409; its contract.json appears with start
-    with _lock:
-        known = _reply.get(("start", _shape(cid)))
-    if known is None:
-        known = _earlier_start_bytes(cid)
-    return known > STATUS_HEDGE_MAX
+        known = _reply.get(("start", _shape(cid))) if "/" in cid else None
+    sizes = [last or 0, _contract_bytes(cid) or 0, known or 0]
+    if "/" in cid:            # a Single's status before its start is a short 409; its contract.json appears with start
+        sizes.append(_earlier_start_bytes(cid))
+    return max(sizes) > STATUS_HEDGE_MAX
 
 
 def _note_status_bytes(args, env):
@@ -456,7 +466,7 @@ def call(args, timeout, local_fn, public_fn=None):
                 _reply[("start", _shape(args[1]))] = _reply_bytes(env)
         return env
     _note_decision(op, how)
-    if how != "relay" or not _size_ok(args):
+    if how != "relay" or not _size_ok(args) or (op == "submit" and _submit_big(args)):
         return _timed(local_fn, op, "local")
     t0 = time.time()
     try:
@@ -473,9 +483,9 @@ def call(args, timeout, local_fn, public_fn=None):
         _say(f"[gmroute] {op} {args[1]}: relay failed ({str(e)[:80]}) -- today's path (start resumes the attempt)")
         return _timed(local_fn, op, "local")
     record(op, "relay", time.time() - t0)
-    if op == "start":
+    if op in ("start", "submit"):
         with _lock:
-            _reply[("start", _shape(args[1]))] = _reply_bytes(env)
+            _reply[(op, _shape(args[1]))] = _reply_bytes(env)
     return env
 
 
