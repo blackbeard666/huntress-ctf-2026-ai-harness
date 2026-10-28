@@ -1,0 +1,8 @@
+{
+ "field": "hfsplus.block_size_bytes",
+ "expected": "4096",
+ "generator_cmd": "mkfs.hfsplus -v MacHD h.img (16M, hfsprogs 540.1); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s FSBLOCKSIZE h.img",
+ "decoy": false,
+ "member": "MacHD.dmg"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "entra_signin.failed_signin_count",
+ "expected": "3",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> entra_signins.json",
+ "oracle_cmd": "jq '[.value[]|select(.status.errorCode!=0)]|length' entra_signins.json -> 3",
+ "decoy": false,
+ "member": "entra_signins.json"
+}

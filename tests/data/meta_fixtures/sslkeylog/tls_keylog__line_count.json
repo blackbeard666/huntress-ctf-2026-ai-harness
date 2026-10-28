@@ -1,0 +1,8 @@
+{
+ "field": "sslkeylog.line_count",
+ "expected": "6",
+ "generator_cmd": "sh tests/data/meta_fixtures/sslkeylog/GENERATOR_tls.sh.txt <dir> (OpenSSL req -x509 certs; Python ssl.MemoryBIO genuine TLS 1.2 + 1.3 handshakes, client ctx.keylog_filename = OpenSSL's keylog writer -> keylog.txt; stdlib struct pcap writer GENERATOR_tls.py.txt -> tls.pcap; Wireshark 4.6.4 `editcap -F pcapng --inject-secrets tls,keylog.txt` -> tls_dsb.pcapng, `editcap -F pcapng` -> tls_nodsb.pcapng)",
+ "oracle_cmd": "grep -cE '^[A-Z0-9_]+ [0-9a-f]{64} [0-9a-f]+$' keylog.txt -> 6 (the '# TLS secrets log file' comment line excluded)",
+ "decoy": false,
+ "member": "keylog.txt"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "filesystem.last_mounted_path",
+ "expected": "/boot",
+ "generator_cmd": "truncate -s 5M disk.img; sfdisk (dos: p1 start=64 size=64 type=83 empty, p2 start=128 size=8192 type=83); dd e2.img -> LBA 128; head -c 69632",
+ "oracle_cmd": "dd if=disk.img bs=512 skip=128 of=p2.img; dumpe2fs -h p2.img | sed -n \"s/^Last mounted on: *//p\"",
+ "decoy": false,
+ "member": "disk.img"
+}

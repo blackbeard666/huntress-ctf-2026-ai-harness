@@ -1,0 +1,8 @@
+{
+ "field": "sslkeylog.client_randoms",
+ "expected": "none",
+ "generator_cmd": "printf 'CLIENT_RANDOM 1234 abcd\\n# not a key log\\nCLIENT_RANDOM=deadbeefcafebabe00112233\\nGET /CLIENT_RANDOM HTTP/1.1\\n' > decoy.txt",
+ "oracle_cmd": "grep -cE '^[A-Z0-9_]+ [0-9a-f]{64} [0-9a-f]+$' decoy.txt -> 0 key lines",
+ "decoy": true,
+ "member": "decoy.txt"
+}

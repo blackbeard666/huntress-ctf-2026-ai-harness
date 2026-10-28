@@ -1,0 +1,8 @@
+{
+ "field": "ext.filesystem_type",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"import zipfile; z=zipfile.ZipFile('decoy.img','w'); z.writestr('etc/fstab','UUID=x / ext4 defaults 0 1\\\\n'*200); z.close()\" (zip renamed .img, no superblock)",
+ "oracle_cmd": "blkid -p decoy.img || echo none",
+ "decoy": true,
+ "member": "home.img"
+}

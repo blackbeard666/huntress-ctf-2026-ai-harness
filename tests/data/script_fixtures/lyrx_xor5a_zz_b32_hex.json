@@ -1,0 +1,7 @@
+{
+ "file": "lyrx_xor5a_zz_b32_hex.js",
+ "expected_plain": "v=3|language=javascript|role=dropper|verdict=malicious|attack=T1059|adapter=lyr_tag|steps=peel_layers,run_stage|campaign_id=LYR-xor5a_zz_b32_hex|url=https://lyr-x.example.invalid/xor5a_zz_b32_hex",
+ "decoy": false,
+ "generator_cmd": "tests/data/script_fixtures/lyrx_gen.sh (bash: zlib-flate/gzip -9n/base64/base32/xxd -p/iconv -t UTF-16LE/tr rot13/rev + perl b85/a85/url/xor5a; LYR tag = ENCODE order) -- 4-deep with one unknown name (zz) mid-chain, `//` comment",
+ "oracle_cmd": "sed -n 's/.*LYR-xor5a_zz_b32_hex-\\([^ ]*\\).*/\\1/p' lyrx_xor5a_zz_b32_hex.js | tr -d '\\n' | xxd -r -p | base32 -d | zlib-flate -uncompress | perl -0777 -pe 's/(.)/chr(ord($1)^0x5a)/gse'"
+}

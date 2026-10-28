@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-24-fail-open-friday",
+  "lane": "web",
+  "name": "🌐 Fail Open Friday",
+  "ids": {
+    "single_solve": "web-exploitation-day-24-fail-open-friday",
+    "time_trial": "web-exploitation-day-24-fail-open-friday/time_trial",
+    "mastery": "web-exploitation-day-24-fail-open-friday/mastery"
+  }
+}

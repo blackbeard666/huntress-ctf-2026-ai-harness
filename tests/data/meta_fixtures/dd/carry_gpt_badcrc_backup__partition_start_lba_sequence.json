@@ -1,0 +1,8 @@
+{
+ "field": "dd.partition_start_lba_sequence",
+ "expected": "[100,300,40]",
+ "generator_cmd": "gpt.img then python3 struct: primary entry[0] StartingLBA 100 -> 222 with stale CRCs (primary entry-array CRC mismatch)",
+ "oracle_cmd": "sfdisk --json badcrc.img | jq '[.partitiontable.partitions[].start]' ('The primary GPT table is corrupt, but the backup appears OK, so that will be used.')",
+ "decoy": false,
+ "member": "disk-001.img"
+}

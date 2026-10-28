@@ -1,0 +1,8 @@
+{
+ "field": "dd.partition_start_lba_sequence",
+ "expected": "none",
+ "generator_cmd": "printf 'Case notes\\nnot a disk image at all\\n' | gzip -9 -n > note.img.gz (gzip of plain text named like a disk)",
+ "oracle_cmd": "zcat note.img.gz > x.raw && sfdisk --json x.raw -> 'cannot open x.raw: Invalid argument' (37-byte ASCII text: no sector 0, no partition table)",
+ "decoy": true,
+ "member": "disk-001.img.gz"
+}

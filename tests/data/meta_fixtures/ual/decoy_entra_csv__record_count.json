@@ -1,0 +1,8 @@
+{
+ "field": "ual.record_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> entra_signins.csv",
+ "oracle_cmd": "head -1 entra_signins.csv | grep -c AuditData || echo none  # no AuditData column -> not a UAL export",
+ "decoy": true,
+ "member": "entra_signins.csv"
+}

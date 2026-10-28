@@ -1,0 +1,7 @@
+{
+ "file": "lyrx_decoy_unknown_noplan.sql",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "tests/data/script_fixtures/lyrx_gen.sh (bash: zlib-flate/gzip -9n/base64/base32/xxd -p/iconv -t UTF-16LE/tr rot13/rev + perl b85/a85/url/xor5a; LYR tag = ENCODE order) -- DECOY: a valid chain with unknown names whose plaintext is SQL text, not a v= plan",
+ "oracle_cmd": "sed -n 's/.*LYR-zz_rot13_b64x_hex-\\([^ ]*\\).*/\\1/p' lyrx_decoy_unknown_noplan.sql | tr -d '\\n' | xxd -r -p | base64 -d | tr 'A-Za-z' 'N-ZA-Mn-za-m' | zlib-flate -uncompress   # decoy: output is not a v= plan"
+}

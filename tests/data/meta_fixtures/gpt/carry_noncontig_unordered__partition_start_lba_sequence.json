@@ -1,0 +1,8 @@
+{
+ "field": "gpt.partition_start_lba_sequence",
+ "expected": "[100,300,40]",
+ "generator_cmd": "truncate -s 256K gpt.img && sgdisk -a 1 -n 3:300:349 -n 1:100:149 -n 7:40:79 -c 1:boot -c 3:root -c 7:swap gpt.img (used slots 1,3,7 with empties between; slot order != LBA order)",
+ "oracle_cmd": "sfdisk --json gpt.img | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.img"
+}

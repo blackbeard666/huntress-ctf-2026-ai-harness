@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "make-recipe-inner-scripts",
+ "note": ".ONESHELL recipe material is base64 of a benign make message plus an undefined make variable: no v=3 plan",
+ "generator_cmd": "bash tests/data/script_fixtures/bis_gen.sh  (run inside tests/data/script_fixtures; perl xor, coreutils base64, xxd, bash heredoc writer)",
+ "oracle_cmd": "sed -n 's/^PART_A := //p' tests/data/script_fixtures/bis_decoy_make_oneshell.mk | base64 -d"
+}

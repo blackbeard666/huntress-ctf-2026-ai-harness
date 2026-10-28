@@ -1,0 +1,4 @@
+CLIENT_RANDOM 1234 abcd
+# not a key log
+CLIENT_RANDOM=deadbeefcafebabe00112233
+GET /CLIENT_RANDOM HTTP/1.1

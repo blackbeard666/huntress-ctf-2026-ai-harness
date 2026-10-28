@@ -161,6 +161,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Compiler Says What"
   },
+  "binary-reverse-engineering-day-28-family-clustering": {
+    "day": 28,
+    "dir": "day28/binary-family-resemblance",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Family Resemblance"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -323,6 +329,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Packet Loss Prevention"
   },
+  "metadata-forensics-day-28-where-it-all-began": {
+    "day": 28,
+    "dir": "day28/metadata-where-it-all-began",
+    "lane": "metadata-forensics",
+    "name": "🔎 Where It All Began"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -484,6 +496,12 @@
     "dir": "day27/mobile-dependency-surface",
     "lane": "mobile-android",
     "name": "📱 Dependency Surface"
+  },
+  "mobile-android-day-28-protocol-reconstruction": {
+    "day": 28,
+    "dir": "day28/mobile-protocol-reconstruction",
+    "lane": "mobile-android",
+    "name": "📱 Protocol Reconstruction"
   },
   "read-the-rules": {
     "day": 1,
@@ -653,6 +671,12 @@
     "lane": "script-analysis",
     "name": "📜 FROM Whence It Came"
   },
+  "script-analysis-day-28-terraform-cloud-timeline": {
+    "day": 28,
+    "dir": "day28/scripting-out-of-order",
+    "lane": "script-analysis",
+    "name": "📜 Out of Order"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -815,6 +839,12 @@
     "lane": "warmups",
     "name": "👶 Monkey Business"
   },
+  "warmups-day-28": {
+    "day": 28,
+    "dir": "day28/warmups-back-in-sixteen",
+    "lane": "warmups",
+    "name": "👶 Back in Sixteen"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -952,6 +982,18 @@
     "dir": "day27/web-forwarded-misgivings",
     "lane": "web",
     "name": "🌐 Forwarded Misgivings"
+  },
+  "web-exploitation-day-24-fail-open-friday": {
+    "day": 28,
+    "dir": "day28/web-fail-open-friday",
+    "lane": "web",
+    "name": "🌐 Fail Open Friday"
+  },
+  "web-exploitation-day-25-if-a-breach-falls-in-a-log": {
+    "day": 28,
+    "dir": "day28/web-if-a-breach-falls-in-a-log",
+    "lane": "web",
+    "name": "🌐 If a Breach Falls in a Log"
   },
   "welcome-robots": {
     "day": 1,

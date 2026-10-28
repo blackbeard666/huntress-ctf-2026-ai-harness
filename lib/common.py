@@ -185,6 +185,30 @@ def find_artifact(root, artifact):
     raise FileNotFoundError(f"{artifact!r} not found under {root}")
 
 
+def _pname(s):
+    """Path(s).name without building a Path when s has no separator (the usual 'evidence.zip' / 'delivery 2: x.zip')."""
+    return s if "/" not in s and s != "." else Path(s).name
+
+
+_NAMES_MEMO = []   # [(questions list, len, names)] -- holds the list itself, so `is` can never match a reused id (D25)
+
+
+def _container_names(contract):
+    """Unique question container names (the part before '->'), question order. container_by_sha / delivery_missing run
+    once per question: a 12-set D28 metadata Mastery (396 ids) spent ~2 s re-parsing 350k Paths here (lane solver 1.1 s)."""
+    qs = (contract or {}).get("questions") or []
+    if _NAMES_MEMO and _NAMES_MEMO[0][0] is qs and _NAMES_MEMO[0][1] == len(qs):
+        return list(_NAMES_MEMO[0][2])
+    names, seen = [], set()
+    for q in qs:
+        n = _pname((q.get("artifact") or "").partition("->")[0].strip())
+        if n and n not in seen:
+            seen.add(n)
+            names.append(n)
+    _NAMES_MEMO[:] = [(qs, len(qs), tuple(names))]
+    return names
+
+
 def container_by_sha(root, contract, container):
     """Path of the downloaded file that IS `container` (a question's 'x.zip -> member' container name), matched by the
     contract's artifacts[].sha256 instead of by file name. The GM can ship one download per set that are all named
@@ -193,11 +217,7 @@ def container_by_sha(root, contract, container):
     contract carries no hashes or no file matches."""
     import hashlib
     arts = [a for a in (contract or {}).get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")]
-    names = []
-    for q in (contract or {}).get("questions") or []:
-        n = Path((q.get("artifact") or "").partition("->")[0].strip()).name
-        if n and n not in names:
-            names.append(n)
+    names = _container_names(contract)
     name = Path(container).name
     if not arts or name not in names:
         return None
@@ -223,11 +243,7 @@ def delivery_missing(root, contract, container):
     from set 1's bytes (seen on variant-mastery-7a6c43ab, where the live run only got delivery 1)."""
     import hashlib
     arts = [a for a in (contract or {}).get("artifacts") or [] if isinstance(a, dict) and a.get("sha256")]
-    names = []
-    for q in (contract or {}).get("questions") or []:
-        n = Path((q.get("artifact") or "").partition("->")[0].strip()).name
-        if n and n not in names:
-            names.append(n)
+    names = _container_names(contract)
     name = Path(container).name
     if len(arts) < 2 or len(arts) != len(names) or name not in names:
         return False

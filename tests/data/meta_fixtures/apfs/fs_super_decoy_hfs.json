@@ -1,0 +1,8 @@
+{
+ "field": "apfs.uuid",
+ "expected": "none",
+ "generator_cmd": "mkfs.hfsplus -v MacHD h.img (16M, hfsprogs 540.1); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s TYPE h.img (hfsplus, no NXSB) -> none",
+ "decoy": true,
+ "member": "container.apfs"
+}

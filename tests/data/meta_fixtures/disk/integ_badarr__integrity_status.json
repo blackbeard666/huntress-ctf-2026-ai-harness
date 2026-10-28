@@ -1,0 +1,8 @@
+{
+ "field": "disk.integrity_status",
+ "expected": "crc_mismatch",
+ "generator_cmd": "truncate -s 64K intact.img && sfdisk -q intact.img < g.sf (label gpt; label-id 6B1F0A2C-3D4E-4F50-8A61-72839405A6B7; start=40 size=24 linux 'data'; start=64 size=24 msdata 'spare'; util-linux sfdisk) && printf EVIDENCE-PAYLOAD | dd of=intact.img bs=512 seek=40 conv=notrunc && cp intact.img badarr.img && printf X | dd of=badarr.img bs=1 seek=1080 conv=notrunc (primary entry-array byte flipped, CRC not fixed)",
+ "oracle_cmd": "sgdisk -v badarr.img -> 'Main header: OK ... Main partition table CRC mismatch'",
+ "decoy": false,
+ "member": "badarr.img"
+}

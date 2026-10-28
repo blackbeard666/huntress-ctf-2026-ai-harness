@@ -1,0 +1,8 @@
+{
+ "field": "image.partition_start_lba_sequence",
+ "expected": "[100,300,40]",
+ "generator_cmd": "gpt.img (see gpt/noncontig_unordered) && sgdisk -h 1:3 hyb.img (hybrid MBR: 0xEE + real 0x83 entries 100/300) -> GPT wins",
+ "oracle_cmd": "sfdisk --json hyb.img | jq '[.partitiontable.partitions[].start]'  (Disklabel type: gpt)",
+ "decoy": false,
+ "member": "disk-001.img"
+}

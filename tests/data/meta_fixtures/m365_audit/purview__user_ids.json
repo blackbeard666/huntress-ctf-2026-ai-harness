@@ -1,0 +1,8 @@
+{
+ "field": "m365_audit.user_ids",
+ "expected": "[\"carol@fabrikam.com\",\"dave@fabrikam.com\"]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> ual_purview.csv",
+ "oracle_cmd": "python3 -I -c 'import csv,json,sys; print(json.dumps(list(csv.DictReader(open(sys.argv[1],encoding=\"utf-8-sig\")))))' ual_purview.csv | jq -c '[.[].UserId]|unique' -> [\"carol@fabrikam.com\",\"dave@fabrikam.com\"]",
+ "decoy": false,
+ "member": "ual_purview.csv"
+}

@@ -1,0 +1,11 @@
+{
+ "material": "resource \"terraform_data\" \"first\" {\n  input = \"seed\"\n}\n\nresource \"terraform_data\" \"drop\" {\n  triggers_replace = [terraform_data.first.id]\n  provisioner \"local-exec\" {\n    interpreter = [\"/bin/sh\", \"-c\"]\n    command     = \"printf \\\"v=3|role=launcher\\\\n\\\" > /tmp/inert.txt && echo \\\"${self.id}\\\"\"\n  }\n}\n",
+ "rep": "hcl_graph",
+ "transform": "local_exec",
+ "key": "terraform_data.drop",
+ "expected": "printf \"v=3|role=launcher\\n\" > /tmp/inert.txt && echo \"${self.id}\"",
+ "decoy": false,
+ "target": "hcl-resource-dependency-timeline",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/hclg_gen.py  (stdlib text writer; copy in hclg_tfdata_localexec.tf)",
+ "oracle_cmd": "python-hcl2 (pip, lark grammar): hcl2.loads(text)['resource'] -> provisioner local-exec command, json.loads of the quoted literal: hclg_gen.oracle_localexec"
+}

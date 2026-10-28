@@ -1,0 +1,8 @@
+{
+ "field": "raw_disk.partition_start_lba_sequence",
+ "expected": "[300,40,120]",
+ "generator_cmd": "qemu-img convert -c -f raw -O qcow2 -o cluster_size=4096 e256.img comp.qcow2 (deflate-compressed clusters)",
+ "oracle_cmd": "qemu-img convert -f qcow2 -O raw comp.qcow2 comp.qcow2.raw && sfdisk --json comp.qcow2.raw | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.qcow2"
+}

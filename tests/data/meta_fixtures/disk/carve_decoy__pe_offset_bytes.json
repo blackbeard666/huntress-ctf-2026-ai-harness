@@ -1,0 +1,7 @@
+{
+ "field": "disk.pe_offset_bytes",
+ "expected": "none",
+ "generator_cmd": "python3: 64 KiB zeros + bare magics with broken structure (MZ w/o PE header, %PDF-x.y, PNG sig + non-IHDR, SQLite header page_size 0, 7fELF alone, PK0304 alone)",
+ "oracle_cmd": "binwalk decoy.img: no PE/PNG/ELF/Zip signature; its PDF 'x.y' and SQLite hits are header-only (no %%EOF / page size 0) -> no carvable member",
+ "decoy": true
+}

@@ -1,0 +1,8 @@
+{
+ "field": "dd.partition_start_lba_sequence",
+ "expected": "[400,100,300]",
+ "generator_cmd": "truncate -s 256K dos.img && printf 'label: dos\\nlabel-id: 0x11223344\\nstart=400, size=100, type=83\\nstart=100, size=50, type=7\\nstart=300, size=40, type=b\\n' | sfdisk dos.img (MBR-only, no 0xEE, table order != LBA order)",
+ "oracle_cmd": "sfdisk --json dos.img | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.img"
+}

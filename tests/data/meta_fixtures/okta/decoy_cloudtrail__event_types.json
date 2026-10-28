@@ -1,0 +1,8 @@
+{
+ "field": "okta.event_types",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> cloudtrail_plain.json",
+ "oracle_cmd": "jq '.Records[0]|has(\"eventType\")' cloudtrail_plain.json  # false -> none",
+ "decoy": true,
+ "member": "cloudtrail_plain.json"
+}

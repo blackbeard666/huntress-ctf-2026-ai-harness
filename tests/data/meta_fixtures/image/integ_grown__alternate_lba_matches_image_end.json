@@ -1,0 +1,8 @@
+{
+ "field": "image.alternate_lba_matches_image_end",
+ "expected": "false",
+ "generator_cmd": "truncate -s 64K intact.img && sfdisk -q intact.img < g.sf (label gpt; label-id 6B1F0A2C-3D4E-4F50-8A61-72839405A6B7; start=40 size=24 linux 'data'; start=64 size=24 msdata 'spare'; util-linux sfdisk) && printf EVIDENCE-PAYLOAD | dd of=intact.img bs=512 seek=40 conv=notrunc && cp intact.img grown.img && truncate -s 96K grown.img (image grown, GPT not moved)",
+ "oracle_cmd": "sgdisk -v grown.img -> 'secondary header's self-pointer indicates that it doesn't reside at the end of the disk'",
+ "decoy": false,
+ "member": "grown.img"
+}

@@ -1375,6 +1375,36 @@ _m27 = "\n".join("%02d\t%s" % (k, _wc.day_codec(k)[1](p)) for k, p in enumerate(
 assert _dec25.decode_chunked(_m27) == _s27, _dec25.decode_chunked(_m27)
 print("ok  warmups_codecs: D27 Ook! exact encoder + decode_chunk + Mastery line 27")
 
+# Day 28 "Back in Sixteen": warmups line codec = lowercase hex of the UTF-8 bytes, whole hex string reversed (GM single
+# blob prefix "2353d247..." -> "...speedy-button-nugget-52"); decode_chunk branch; Mastery line 28 through DAYS
+_s28 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: speedy-button-nugget-52"
+_b28 = _wc.day_codec(28)[1](_s28)
+assert _b28.startswith("2353d24756767657e6d2") and _b28.endswith("563696e4"), _b28
+assert _wc.day_codec(28)[2](_b28) == _s28 and _wc.day_codec(28)[3] is False and _dc(_b28) == _s28
+_c28 = [_s28[i * len(_s28) // 28:(i + 1) * len(_s28) // 28] for i in range(28)]
+_m28 = "\n".join("%02d\t%s" % (k, _wc.day_codec(k)[1](p)) for k, p in enumerate(_c28, 1))
+assert _dec25.decode_chunked(_m28) == _s28, _dec25.decode_chunked(_m28)
+print("ok  warmups_codecs: D28 reversed-hex exact encoder + decode_chunk + Mastery line 28")
+
+# Day 28 "Where It All Began": disk.partition_start_lba_sequence = GPT entry StartingLBAs (else MBR primaries + EBR)
+assert _meta14.lookup("disk", "partition_start_lba_sequence")[0].days == (28,)
+_g28 = bytearray(512 * 40)
+_g28[510:512] = b"\x55\xaa"
+_g28[446 + 4] = 0xEE
+_g28[512:520] = b"EFI PART"
+_st17.pack_into("<QII", _g28, 512 + 72, 2, 4, 128)
+for _i, _lba in ((0, 34), (2, 36)):
+    _g28[1024 + _i * 128:1024 + _i * 128 + 16] = b"\x11" * 16
+    _st17.pack_into("<QQ", _g28, 1024 + _i * 128 + 32, _lba, _lba + 1)
+assert _meta14.answer("d28-disk-001-disk-partition-start-lba-sequence", {}, bytes(_g28)) == ("[34,36]", _meta14.VERIFIED)
+_m28b = bytearray(1024)
+_m28b[510:512] = b"\x55\xaa"
+for _i, (_t, _lba) in enumerate(((0x83, 60), (0x07, 93))):
+    _m28b[446 + 16 * _i + 4] = _t
+    _st17.pack_into("<I", _m28b, 446 + 16 * _i + 8, _lba)
+assert _meta14.answer("d28-disk-001-disk-partition-start-lba-sequence", {}, bytes(_m28b))[0] == "[60,93]"
+print("ok  lib.meta: disk.partition_start_lba_sequence verified D28 (GPT entry array, MBR fallback)")
+
 # Day 26 "Split Decision": a split bundle (.apks = base.apk + feature split) -- the base puzzle's `split` parts have an
 # empty slot, the split's json carries `part` + `part_index`; lib.android.puzzle_candidates fills and assembles it
 # (GM-confirmed single ANS-7E37D134754DEA01). v2 (`codec: analysis` base reading the split's huntress_feature.bin)
@@ -1414,3 +1444,17 @@ _pc27 += b"".join(_st17.pack("<IIII", 1, 0, 4, 4) + b"abcd" for _ in range(3)) +
 assert _meta14.answer("d27-pcap-001-pcap-packet-count", {}, _pc27) == ("3", _meta14.VERIFIED)
 assert _meta14.answer("d27-pcap-001-pcap-packet-count", {}, b"PK\3\4" + b"\0" * 60)[0] == "none"
 print("ok  lib.meta: pcap.packet_count verified D27 (complete records, truncated tail not counted)")
+
+# D28 speed: lib.meta._fields_lines reads a plain `("fmt", "field"): "func",` FIELDS block without ast (same dict,
+# same order); any other line shape -> None (ast path). lib.common._container_names = the per-question Path().name scan.
+_fl28 = 'X = 1\nFIELDS = {\n    # c\n    ("a", "b"): "f",\n\n    ("a", "c"): "g",  # n\n}\n'
+assert list(_meta14._fields_lines(_fl28).items()) == [(("a", "b"), "f"), (("a", "c"), "g")]
+assert _meta14._fields_lines(_fl28.replace('"g"', '"g" + "h"')) is None
+assert _meta14._fields_lines(_fl28.replace('("a", "b")', "('a', 'b')")) is None
+assert _meta14._fields_lines("FIELDS = {}\n") is None
+from lib import common as _cm28  # noqa: E402
+_ct28 = {"questions": [{"artifact": "evidence.zip -> a"}, {"artifact": "d/x.zip"}, {"artifact": "evidence.zip"}, {}]}
+assert _cm28._container_names(_ct28) == ["evidence.zip", "x.zip"] == _cm28._container_names(_ct28)
+_ct28["questions"].append({"artifact": "y.zip"})
+assert _cm28._container_names(_ct28) == ["evidence.zip", "x.zip", "y.zip"]
+print("ok  lib.meta/_fields_lines + lib.common._container_names (D28 lane-solver speed)")

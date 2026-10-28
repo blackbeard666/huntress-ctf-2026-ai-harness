@@ -1,0 +1,10 @@
+{
+ "material": "{\"plans\": {\"a_entry.plan\": \"v=3|language=batch|role=launcher|stage=1|stage_count=2|steps=acquire_remote>dispatch_process\", \"b_middle.plan\": \"v=3|language=perl|role=stager|stage=2|stage_count=3|steps=acquire_remote>write_file>dispatch_process\", \"c_final.plan\": \"v=3|language=lua|role=collector|stage=3|stage_count=2|steps=read_file>transmit_remote\", \"d_tail.plan\": \"v=3|language=php|role=reporter|stage=4|stage_count=2|steps=decode_configuration>return_configuration\"}, \"zip_infos\": {\"a_entry.plan\": \"2026-01-01T10:00:00\", \"b_middle.plan\": \"2026-01-01T13:30:00\", \"c_final.plan\": \"2026-01-01T11:30:00\", \"d_tail.plan\": \"2026-01-01T12:45:00\"}}",
+ "rep": "order_anomaly",
+ "transform": "member",
+ "key": null,
+ "expected": "b_middle.plan",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/oa_gen.py $TMPDIR/oagen  (stdlib plan writer; touch -d + Info-ZIP zip; corpus zipped)",
+ "oracle_cmd": "cd $TMPDIR/oagen/zipped && TZ=UTC; zipinfo -T ev.zip | awk '$NF ~ /\\.plan$/{print $NF \"\\t\" $(NF-1)}' | sort > t.tsv; for f in *.plan; do tr '|' '\\n' < \"$f\" | awk -v f=\"$f\" '{i=index($0,\"=\"); print f \"\\t\" substr($0,1,i-1) \"\\t\" substr($0,i+1)}'; done | awk -F'\\t' '$2==\"stage\"{print $1 \"\\t\" $3}' | sort | join -t$'\\t' - t.tsv | sort -t$'\\t' -k2,2n | awk -F'\\t' '{f[NR]=$1; t[NR]=$3} END{for(i=1;i<=NR;i++){ok=1; p=\"\"; for(j=1;j<=NR;j++){if(j==i) continue; if(p!=\"\" && t[j]<p) ok=0; p=t[j]} if(ok){c++; w=f[i]}} if(c==1) print w}'"
+}

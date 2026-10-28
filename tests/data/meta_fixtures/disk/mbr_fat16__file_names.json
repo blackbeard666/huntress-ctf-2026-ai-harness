@@ -1,0 +1,8 @@
+{
+ "field": "disk.file_names",
+ "expected": "[\"a.txt\",\"secret.bin\"]",
+ "generator_cmd": "PATH=tools/fsroot/usr/sbin:tools/fsroot/usr/bin:$PATH MTOOLS_SKIP_CHECK=1 TZ=UTC truncate -s 20M mbr.img && printf 'label: dos\\n63,32768,6\\n' | sfdisk -q mbr.img && mkfs.fat -F 16 -s 1 --offset 63 -n PART1 mbr.img 16384 && mcopy -i mbr.img@@32256 -m secret.bin a.txt ::/ && head -c 180224 mbr.img",
+ "oracle_cmd": "fls -r -o 63 mbr.img -> secret.bin, a.txt",
+ "decoy": false,
+ "member": "disk.img"
+}

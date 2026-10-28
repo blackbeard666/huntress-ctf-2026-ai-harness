@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "host": "jmx",
+ "host_profile": "jmeter_beanshell",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/plw_jmx_gen.py tests/data/script_fixtures  (plw_jmx_decoy_truncated; stdlib base64/binascii + xml.sax.saxutils.escape &quot;/&#xa;)",
+ "oracle_cmd": "python3 -I -c 'import sys,re,base64,xml.etree.ElementTree as E; t=E.parse(sys.argv[1]); src=\"\".join((e.text or \"\") for e in t.iter(\"stringProp\") if e.get(\"name\").endswith((\".query\",\".value\"))); print(base64.b64decode(bytes.fromhex(\"\".join(re.findall(r\"[0-9a-f]{16,}\", src)))).decode())' tests/data/script_fixtures/plw_jmx_decoy_truncated.jmx"
+}

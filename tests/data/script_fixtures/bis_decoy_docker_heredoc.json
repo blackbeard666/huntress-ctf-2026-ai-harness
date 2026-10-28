@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "make-recipe-inner-scripts",
+ "note": "RUN heredoc material is hex of a benign banner xor 0x5a plus an undefined ARG: no v=3 plan",
+ "generator_cmd": "bash tests/data/script_fixtures/bis_gen.sh  (run inside tests/data/script_fixtures; perl xor, coreutils base64, xxd, bash heredoc writer)",
+ "oracle_cmd": "perl -ne 'print join(\"\", map { chr(ord($_) ^ 0x5a) } split //, pack(\"H*\", $1)) if /^ARG STAGE_HEAD=(\\S+)/' tests/data/script_fixtures/bis_decoy_docker_heredoc.Dockerfile"
+}

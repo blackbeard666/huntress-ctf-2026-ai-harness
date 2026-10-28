@@ -1,0 +1,8 @@
+{
+ "field": "ewf.media_type",
+ "expected": "fixed",
+ "generator_cmd": "TZ=UTC ewfacquire -u -q -t lap -f encase5 -c none -b 16 -C IR-88 -E 1 -D \"laptop disk\" -e \"Analyst Two\" -N \"imaging test\" media.raw (ewf-tools 20140816)",
+ "oracle_cmd": "ewfinfo lap.E01 -> Media type: fixed disk",
+ "decoy": false,
+ "member": "lap.E01"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "ewf.acquisition_date",
+ "expected": "2026-10-28T15:02:12Z",
+ "generator_cmd": "TZ=UTC ewfacquire -u -q -t usb -f encase6 -c deflate:best -b 16 -d sha1 -C CASE-2026-0417 -E EV-07 -D \"Suspect USB thumb drive\" -e \"J. Rivera\" -N \"Seized at desk 4B\" -m removable media.raw (ewf-tools 20140816; media.raw = 64x512 B python Random(7) text+noise)",
+ "oracle_cmd": "TZ=UTC ewfinfo usb.E01 -> Acquisition date: Wed Oct 28 15:02:12 2026 (UTC)",
+ "decoy": false,
+ "member": "usb.E01"
+}

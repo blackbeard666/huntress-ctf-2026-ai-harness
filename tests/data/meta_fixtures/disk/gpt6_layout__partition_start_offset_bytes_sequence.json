@@ -1,0 +1,8 @@
+{
+ "field": "disk.partition_start_offset_bytes_sequence",
+ "expected": "[35840,17408,20480,24064,25600,38400]",
+ "generator_cmd": "truncate -s 64K gpt6.img && sgdisk -a 1 -U 0BADC0DE-1234-4321-ABCD-00112233EEFF -n 1:70:74 -c 1:alpha -n 2:34:39 -c 2:bravo -n 3:40:46 -c 3:charlie -n 5:47:49 -c 5:echo -n 6:50:69 -c 6:foxtrot -n 7:75:90 -c 7:golf gpt6.img (slot 4 left empty, table order != LBA order) && head -c 17408 (primary GPT only)",
+ "oracle_cmd": "sfdisk --json gpt6.img -> partitions[].start/size/type/uuid/name (table order) start x 512 (table order, NOT sorted)",
+ "decoy": false,
+ "member": "gpt6.img"
+}

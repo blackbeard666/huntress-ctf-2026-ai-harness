@@ -1,0 +1,11 @@
+{
+ "material": "# D28 shape: no resource / data / module block, so no dependency timeline (field absent)\nterraform {\n  required_version = \">= 1.4\"\n}\n\nlocals {\n  plan = \"resource terraform_data.x depends_on terraform_data.y\"\n}\n\noutput \"plan\" {\n  value = local.plan\n}\n",
+ "rep": "hcl_graph",
+ "transform": "order",
+ "key": "",
+ "expected": null,
+ "decoy": true,
+ "target": "hcl-resource-dependency-timeline",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/hclg_gen.py  (stdlib text writer; copy in hclg_decoy_no_resources.tf)",
+ "oracle_cmd": "terraform graph on the .tf prints an empty digraph (no resource nodes) -> field absent"
+}

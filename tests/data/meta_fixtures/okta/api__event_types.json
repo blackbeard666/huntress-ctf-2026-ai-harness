@@ -1,0 +1,8 @@
+{
+ "field": "okta.event_types",
+ "expected": "[\"user.account.lock\",\"user.authentication.auth_via_mfa\",\"user.session.start\"]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> okta_system_log.json",
+ "oracle_cmd": "jq -c '[.[].eventType]|unique' okta_system_log.json -> [\"user.account.lock\",\"user.authentication.auth_via_mfa\",\"user.session.start\"]",
+ "decoy": false,
+ "member": "okta_system_log.json"
+}

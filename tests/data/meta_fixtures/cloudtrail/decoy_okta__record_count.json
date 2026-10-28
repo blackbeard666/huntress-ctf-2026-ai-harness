@@ -1,0 +1,8 @@
+{
+ "field": "cloudtrail.record_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> okta_system_log.json",
+ "oracle_cmd": "jq '.[0]|has(\"eventName\")' okta_system_log.json  # false -> none",
+ "decoy": true,
+ "member": "okta_system_log.json"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "disk.partition_start_lbas",
+ "expected": "[100,300,40]",
+ "generator_cmd": "gpt.img then python3: zero LBA1..LBA33 (primary header + entry array gone; protective MBR kept)",
+ "oracle_cmd": "sfdisk --json zero1.img | jq '[.partitiontable.partitions[].start]' (libfdisk falls back to the backup header at the last LBA)",
+ "decoy": false,
+ "member": "disk-001.img"
+}

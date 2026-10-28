@@ -1,0 +1,54 @@
+# Fixture writer for prebuilt/tls_keylog.py: stdlib only. Two genuine OpenSSL handshakes over ssl.MemoryBIO
+# (A: TLS 1.2 ECDHE-RSA-AES128-GCM-SHA256, B: TLS 1.3), the client SSLContext writing SSLKEYLOGFILE lines via
+# ctx.keylog_filename (OpenSSL's own keylog writer). Server certs: `openssl req -x509 -set_serial` (see GENERATOR_tls.sh.txt).
+# Frames: Ethernet/IPv4/TCP, one TLS flight per segment, flights > 1400 B split into several segments.
+# usage: python3 GENERATOR_tls.py out.pcap keylog.txt certA keyA certB keyB
+import ssl, struct, sys
+out, klog, ca, ka, cb, kb = sys.argv[1:7]
+
+def ip4(src, dst, payload):
+    a = bytes(map(int, src.split("."))); b = bytes(map(int, dst.split(".")))
+    return struct.pack("!BBHHHBBH4s4s", 0x45, 0, 20 + len(payload), 1, 0, 64, 6, 0, a, b) + payload
+
+def tcp(sp, dp, seq, data):
+    return struct.pack("!HHIIBBHHH", sp, dp, seq, 1, 0x50, 0x18, 65535, 0, 0) + data
+
+def eth(l3):
+    return b"\x00\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb\x08\x00" + l3
+
+pk = []
+
+def session(C, S, cport, cert, key, maxv):
+    sctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); sctx.load_cert_chain(cert, key)
+    sctx.maximum_version = maxv
+    if maxv == ssl.TLSVersion.TLSv1_2:
+        sctx.set_ciphers("ECDHE-RSA-AES128-GCM-SHA256")
+    cctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); cctx.check_hostname = False; cctx.verify_mode = ssl.CERT_NONE
+    cctx.keylog_filename = klog
+    ci, co, si, so = ssl.MemoryBIO(), ssl.MemoryBIO(), ssl.MemoryBIO(), ssl.MemoryBIO()
+    c = cctx.wrap_bio(ci, co, server_hostname="tls.example"); s = sctx.wrap_bio(si, so, server_side=True)
+    seq = {"c": 1000, "s": 5000}
+    def flush(bio, who, peer):
+        d = bio.read()
+        while d:
+            chunk, d = d[:1400], d[1400:]
+            src, dst, sp, dp = (C, S, cport, 443) if who == "c" else (S, C, 443, cport)
+            pk.append(eth(ip4(src, dst, tcp(sp, dp, seq[who], chunk)))); seq[who] += len(chunk)
+            peer.write(chunk)
+    for _ in range(10):
+        for x in (c, s):
+            try: x.do_handshake()
+            except ssl.SSLWantReadError: pass
+        flush(co, "c", si); flush(so, "s", ci)
+        if c.version() and s.version() and not co.pending and not so.pending:
+            try: c.do_handshake(); s.do_handshake(); break
+            except ssl.SSLWantReadError: pass
+    c.write(b"GET / HTTP/1.1\r\nHost: tls.example\r\n\r\n"); flush(co, "c", si)
+
+open(klog, "w").close()
+session("10.0.0.5", "203.0.113.10", 50001, ca, ka, ssl.TLSVersion.TLSv1_2)
+session("10.0.0.5", "198.51.100.20", 50002, cb, kb, ssl.TLSVersion.TLSv1_3)
+with open(out, "wb") as f:
+    f.write(struct.pack("<IHHiIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
+    for i, p in enumerate(pk):
+        f.write(struct.pack("<IIII", 1700000000 + i, 0, len(p), len(p)) + p)

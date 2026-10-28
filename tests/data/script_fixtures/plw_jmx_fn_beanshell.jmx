@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Smoke" enabled="true"/>
+    <hashTree>
+      <Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true"><collectionProp name="Arguments.arguments"><elementProp name="descriptor_b20f6c58" elementType="Argument"><stringProp name="Argument.name">descriptor_b20f6c58</stringProp><stringProp name="Argument.value">${__BeanShell(String d = &quot;646a307a66477868626d64315957646c50574a6c5957357a61475673624878796232786c5057687663335238646d56795a476c6a6444317a64584e7761574e706233567a664746306447466a617a31554d5441314f5878685a47467764475679505739775a584a6864476c76626c396e636d46776148786f62334e305833427962325a7062475539616d316c6447567958324a6c5957357a6147567362487876596d5a3163324&quot; + &quot;e6864476c76626c3977636d396d6157786c5057686c654639694e6a5238633352685a32566663484a765a6d6c735a54313064323966633352685a3256665a473933626d7876595752665a58686c593356305a5878755a58683058327868626d64315957646c50574a6863326838633352685a32566659323931626e51394d6e787a64475677637a31685933463161584a6c58334a6c625739305a53786b61584e775958526a61&quot;; d += &quot;463977636d396a5a584e7a66474e68625842686157647558326c6b5055704e516931694d6a426d4e6d4d314f487831636d77396148523063484d364c79397162574974596a49775a6a5a6a4e5467755a586868625842735a533570626e5a6862476c6b4c334e305957646c66475a70624756666347463061443076644731774c326831626e52795a584e7a4c57707459693875596a49775a6a5a6a4e546775633352685a32553d&quot;; return d;)}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp></collectionProp></Arguments>
+      <hashTree/>
+      <BeanShellSampler guiclass="BeanShellSamplerGui" testclass="BeanShellSampler" testname="Sampler" enabled="true">
+        <stringProp name="BeanShellSampler.query">log.info(vars.get(&quot;descriptor_b20f6c58&quot;));&#xa;</stringProp>
+        <boolProp name="BeanShellSampler.resetInterpreter">false</boolProp>
+      </BeanShellSampler>
+      <hashTree/>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

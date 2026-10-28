@@ -1,0 +1,8 @@
+{
+ "field": "fat32.file_paths",
+ "expected": "[\"/Evidence/Quarterly Report 2026.docx\",\"/secret.bin\"]",
+ "generator_cmd": "PATH=tools/fsroot/usr/sbin:tools/fsroot/usr/bin:$PATH MTOOLS_SKIP_CHECK=1 TZ=UTC mkfs.fat -C -F 32 -f 1 -s 1 -n VOL32 -i 0BADF00D fat32.img 34000 && mmd -i fat32.img ::/Evidence && mcopy -i fat32.img -m 'Quarterly Report 2026.docx' ::/Evidence/ && mcopy -i fat32.img -m secret.bin ::/ && head -c 290816 fat32.img",
+ "oracle_cmd": "fls -r fat32.img -> d/d Evidence, + r/r Quarterly Report 2026.docx, r/r secret.bin",
+ "decoy": false,
+ "member": "fat32.img"
+}

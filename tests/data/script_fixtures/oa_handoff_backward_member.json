@@ -1,0 +1,10 @@
+{
+ "material": "{\"first.plan\": \"v=3|language=vbscript|role=dropper|stage=1|stage_count=2|steps=acquire_remote>dispatch_process|next_stage=second\", \"relay.plan\": \"v=3|language=python|role=relay|stage=3|stage_count=2|steps=locate_local>dispatch_process|next_stage=first\", \"second.plan\": \"v=3|language=powershell|role=loader|stage=2|stage_count=3|steps=decode_embedded>write_file>dispatch_process|next_stage=relay\"}",
+ "rep": "order_anomaly",
+ "transform": "member",
+ "key": "handoff_backward",
+ "expected": "relay.plan",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/oa_gen.py $TMPDIR/oagen  (stdlib plan writer; corpus backward)",
+ "oracle_cmd": "cd $TMPDIR/oagen/backward && for f in *.plan; do tr '|' '\\n' < \"$f\" | awk -v f=\"$f\" '{i=index($0,\"=\"); print f \"\\t\" substr($0,1,i-1) \"\\t\" substr($0,i+1)}'; done | awk -F'\\t' '$2==\"stage\"{S[$1]=$3} $2==\"next_stage\"{N[$1]=$3} END{for(f in N) if((N[f]\".plan\") in S && S[N[f]\".plan\"]<=S[f]) print (W==\"target\"?N[f]\".plan\":f)}' W=src"
+}

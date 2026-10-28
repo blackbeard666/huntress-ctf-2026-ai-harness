@@ -1,0 +1,8 @@
+{
+ "field": "pcap.tls_ja3s_md5",
+ "expected": "none",
+ "generator_cmd": "copy of pcap/app_decoy_no_tls__tls_sni_names.bin (see its json)",
+ "oracle_cmd": "tshark -r it -Y tls.handshake.type==2 -T fields -e tls.handshake.ja3s -> empty",
+ "decoy": true,
+ "member": "capture.pcap"
+}

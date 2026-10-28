@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=tcl|role=downloader|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=standalone|obfuscation_profile=gz_b64_rev_hex|stage_profile=single_stage|next_language=powershell|campaign_id=TCL-a07e33d1|url=https://tcl-a07e33d14e.example.invalid/stage",
+ "decoy": false,
+ "target": "descriptor-decode-call-wrapper",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/dcall_gen.py (stdlib gzip -> base64 -> reverse -> hexlify, wrapped in base64)",
+ "oracle_cmd": "printf 'source tests/data/script_fixtures/dcall_tcl_nomarker.tcl\\nputs $huntress_descriptor_a07e33d1\\n' | tclsh | xxd -r -p | rev | base64 -d | gunzip"
+}

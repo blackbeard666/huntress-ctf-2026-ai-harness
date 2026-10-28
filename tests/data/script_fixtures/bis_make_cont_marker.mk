@@ -1,0 +1,5 @@
+.PHONY: all
+all:
+	@echo "# HUNTRESS_ANALYSIS_V1:B64-dj0zfGxhbmd1YWdlPW1ha2VmaWxlfHJvbGU9bG9hZGVyfHZ\
+	lcmRpY3Q9c3VzcGljaW91c3xhdHRhY2s9VDEwNTkuMDA0fGNhbXBhaWduX2lkPU1BS0UtYzRkNWU2Zjd8dXJsPWh0dHBzOi8vbWFrZS1jNGQ1ZTZmNy5leGFtcGxlLmludmFsaWQvY29udHxmaWxlX3BhdGg9L3RtcC8ubWFrZS1jNGQ1ZTZmNw=="
+	-@true

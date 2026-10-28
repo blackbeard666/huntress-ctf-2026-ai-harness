@@ -1,0 +1,8 @@
+{
+ "field": "image.image_sector_count",
+ "expected": "64",
+ "generator_cmd": "truncate -s 256K gpt4k.img && printf 'label: gpt\\nlabel-id: 6E2A0F3C-...\\nstart=6, size=10, type=L, name=\"boot4k\"\\nstart=20, size=30, type=L, name=\"data4k\"\\n' | sfdisk --sector-size 4096 gpt4k.img",
+ "oracle_cmd": "fdisk -l --sector-size 4096 gpt4k.img -> '262144 bytes, 64 sectors'",
+ "decoy": false,
+ "member": "gpt4k.img"
+}

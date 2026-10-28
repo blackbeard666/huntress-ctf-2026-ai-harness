@@ -1,0 +1,8 @@
+{
+ "field": "entra_signin.ip_set",
+ "expected": "[\"198.51.100.7\",\"203.0.113.10\",\"203.0.113.99\"]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> entra_signins.json",
+ "oracle_cmd": "jq -c '[.value[].ipAddress]|unique' entra_signins.json -> [\"198.51.100.7\",\"203.0.113.10\",\"203.0.113.99\"]",
+ "decoy": false,
+ "member": "entra_signins.json"
+}

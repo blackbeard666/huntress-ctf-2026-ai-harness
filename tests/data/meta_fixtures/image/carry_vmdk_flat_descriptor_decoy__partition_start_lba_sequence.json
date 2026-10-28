@@ -1,0 +1,8 @@
+{
+ "field": "image.partition_start_lba_sequence",
+ "expected": "none",
+ "generator_cmd": "qemu-img convert -f raw -O vmdk -o subformat=monolithicFlat dos.img flat.vmdk (the 512-byte text DESCRIPTOR only; the data is in flat-flat.vmdk)",
+ "oracle_cmd": "sfdisk --json flat.vmdk -> 'does not contain a recognized partition table' (field absent)",
+ "decoy": true,
+ "member": "disk-001.vmdk"
+}

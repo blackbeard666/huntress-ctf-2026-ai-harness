@@ -1,0 +1,8 @@
+{
+ "field": "raw_disk.partition_start_lba_sequence",
+ "expected": "[100,300,40]",
+ "generator_cmd": "gpt.img then python3 struct: primary FirstUsableLBA 34 -> 35 without re-CRC (bad header CRC32)",
+ "oracle_cmd": "sfdisk --json badhdr.img | jq '[.partitiontable.partitions[].start]' (backup used)",
+ "decoy": false,
+ "member": "disk-001.img"
+}

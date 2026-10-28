@@ -1,0 +1,8 @@
+{
+ "field": "ntfs.offset_bytes_for_quarterly_report_2026_docx",
+ "expected": "1478656",
+ "generator_cmd": "PATH=tools/fsroot/usr/sbin:tools/fsroot/usr/bin:$PATH MTOOLS_SKIP_CHECK=1 TZ=UTC truncate -s 8M ntfs.img && mkntfs -q -F -f -L NTVOL ntfs.img && ntfscp -f ntfs.img 'Quarterly Report 2026.docx' 'Quarterly Report 2026.docx' && ntfscp -f ntfs.img secret.bin secret.bin && head -c 86016 ntfs.img",
+ "oracle_cmd": "istat ntfs.img 65 (full image) -> $DATA non-resident first cluster 361; fsstat cluster size 4096 -> 361*4096",
+ "decoy": false,
+ "member": "ntfs.img"
+}

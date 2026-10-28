@@ -1,0 +1,8 @@
+{
+ "field": "disk_image.partition_unique_guid_sequence",
+ "expected": "none",
+ "generator_cmd": "truncate -s 64K mbr.img && printf 'label: dos\\nlabel-id: 0x1a2b3c4d\\nstart=1, size=20, type=83, bootable\\nstart=21, size=100, type=5\\nstart=23, size=40, type=83\\nstart=66, size=50, type=7\\n' | sfdisk mbr.img (extended + 2 logicals via EBR chain)",
+ "oracle_cmd": "sfdisk --json mbr.img -> partitions[] (table order: mbr.img1, img2 extended, img5, img6 logicals) label dos: no partition GUIDs (field absent)",
+ "decoy": true,
+ "member": "mbr.img"
+}

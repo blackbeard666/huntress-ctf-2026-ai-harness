@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.rebuilt_image",
+ "expected": "b.img",
+ "generator_cmd": "truncate -s 128K a.img b.img; truncate -s 192K c.img; truncate -s 320K d.img; sfdisk scripts: a/b `label: gpt` label-id C0000000-.../30000000-..., start=40,size=32 + start=80,size=48; c gpt label-id 80000000-..., 64+40, 120+40, 200+100; d `label: dos` start=8,size=200 type 83; random data dd'd into a's two partitions, c's first, d's first (b's partitions left zero = rebuilt from an incomplete source); zip -9 -X kit.zip a.img b.img c.img d.img README.txt; kit2.zip = c.img a.img README.txt; decoy.zip = notes.txt pic.png",
+ "oracle_cmd": "sfdisk -J <img> (label, id, partition start/size); stat -c %s <img>; per partition `dd if=<img> bs=512 skip=<start> count=<size> | sha256sum`; sgdisk -v a.img / b.img -> 'No problems found' (both intact); sgdisk -v both intact; sfdisk -J a == b layout; dd|sha256sum of b's partitions = sha256 of zeros, a's random",
+ "decoy": false
+}

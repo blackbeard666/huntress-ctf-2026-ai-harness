@@ -251,6 +251,11 @@ DAYS = [
     # D27 "Monkey Business": the D26 Brainfuck program written in Ook! token pairs, single spaces (byte-exact on the
     # Single, TT e0e29c6f and 133/133 Mastery c6135949 line 27)
     (27, "ook", ook_enc, ook_dec, False),
+    # D28 "Back in Sixteen" ("Our sixteen-fingered friend is walking backwards."): lowercase hex of the UTF-8 bytes,
+    # then the whole hex STRING reversed (nibble order, not byte order), no separators (byte-exact on the Single,
+    # TT 96c99781 and 138/138 Mastery cd6a5b33 line 28)
+    (28, "hex-reversed", lambda s: _u(s).hex()[::-1],
+     lambda t: _t(bytes.fromhex(re.sub(r"\s+", "", t)[::-1])), False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N

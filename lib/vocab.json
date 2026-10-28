@@ -47,7 +47,20 @@
     "audit.Runner",
     "util.core.Worker",
     "tools.client.core.Main",
-    "sync.app.server.DispatcherAFH"
+    "sync.app.server.DispatcherAFH",
+    "service.audit.server.DaemonVKHB",
+    "sync.audit.audit.Dispatcher",
+    "sync.Entry",
+    "service.Launcher",
+    "tools.Daemon",
+    "app.tools.EntrySZBK",
+    "agent.cobalt.runtime.Bootstrap",
+    "service.zephyr.app.Entry",
+    "app.BootstrapUNP",
+    "server.agent.runtime.Bootstrap",
+    "agent.server.Dispatcher",
+    "client.app.core.EntryBPRYN",
+    "sync.LauncherFLVX"
   ],
   "-control": [
     "direct",
@@ -166,7 +179,20 @@
     "audit.Runner",
     "util.core.Worker",
     "tools.client.core.Main",
-    "sync.app.server.DispatcherAFH"
+    "sync.app.server.DispatcherAFH",
+    "service.audit.server.DaemonVKHB",
+    "sync.audit.audit.Dispatcher",
+    "sync.Entry",
+    "service.Launcher",
+    "tools.Daemon",
+    "app.tools.EntrySZBK",
+    "agent.cobalt.runtime.Bootstrap",
+    "service.zephyr.app.Entry",
+    "app.BootstrapUNP",
+    "server.agent.runtime.Bootstrap",
+    "agent.server.Dispatcher",
+    "client.app.core.EntryBPRYN",
+    "sync.LauncherFLVX"
   ],
   "control": [
     "direct",

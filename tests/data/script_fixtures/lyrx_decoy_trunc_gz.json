@@ -1,0 +1,7 @@
+{
+ "file": "lyrx_decoy_trunc_gz.tex",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "tests/data/script_fixtures/lyrx_gen.sh (bash: zlib-flate/gzip -9n/base64/base32/xxd -p/iconv -t UTF-16LE/tr rot13/rev + perl b85/a85/url/xor5a; LYR tag = ENCODE order) -- DECOY: gzip stream truncated to 40 bytes under b85/b64 -> gunzip fails, no plan",
+ "oracle_cmd": "sed -n 's/.*LYR-gz_b85_b64-\\([^ ]*\\).*/\\1/p' lyrx_decoy_trunc_gz.tex | tr -d '\\n' | base64 -d | python3 -c 'import sys,base64;sys.stdout.buffer.write(base64.b85decode(sys.stdin.read().strip()))' | gunzip   # decoy: output is not a v= plan"
+}

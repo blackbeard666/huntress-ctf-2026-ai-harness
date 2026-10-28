@@ -1,0 +1,8 @@
+{
+ "field": "image.partition_start_lba_sequence",
+ "expected": "[100,300,40]",
+ "generator_cmd": "head -c 40960 gpt.img > trunc.img (image cut before the backup GPT; primary intact)",
+ "oracle_cmd": "sgdisk -p trunc.img -> Number/Start rows 1:100 3:300 7:40 (gdisk loads the primary; libfdisk/mmls refuse the GPT and show only the 0xEE)",
+ "decoy": false,
+ "member": "disk-001.img"
+}

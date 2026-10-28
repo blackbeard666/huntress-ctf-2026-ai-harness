@@ -1,0 +1,8 @@
+{
+ "field": "ewf.case_number",
+ "expected": "IR-88",
+ "generator_cmd": "TZ=UTC ewfacquire -u -q -t lap -f encase5 -c none -b 16 -C IR-88 -E 1 -D \"laptop disk\" -e \"Analyst Two\" -N \"imaging test\" media.raw (ewf-tools 20140816)",
+ "oracle_cmd": "pyewf (libewf-python 20260924): h=pyewf.handle(); h.open([f]); h.get_header_value('case_number')",
+ "decoy": false,
+ "member": "lap.E01"
+}

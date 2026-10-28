@@ -1,0 +1,8 @@
+{
+ "field": "forensic_image.case_number",
+ "expected": "none",
+ "generator_cmd": "printf '\\x89PNG\\r\\n\\x1a\\n' > fake.E01; head -c 2000 media.raw >> fake.E01 (PNG-magic impostor renamed .E01)",
+ "oracle_cmd": "file -b fake.E01 -> PNG image data (no EVF signature); pyewf.check_file_signature -> False",
+ "decoy": true,
+ "member": "fake.E01"
+}

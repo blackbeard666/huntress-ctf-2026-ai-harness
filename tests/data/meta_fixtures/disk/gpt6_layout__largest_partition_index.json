@@ -1,0 +1,8 @@
+{
+ "field": "disk.largest_partition_index",
+ "expected": "5",
+ "generator_cmd": "truncate -s 64K gpt6.img && sgdisk -a 1 -U 0BADC0DE-1234-4321-ABCD-00112233EEFF -n 1:70:74 -c 1:alpha -n 2:34:39 -c 2:bravo -n 3:40:46 -c 3:charlie -n 5:47:49 -c 5:echo -n 6:50:69 -c 6:foxtrot -n 7:75:90 -c 7:golf gpt6.img (slot 4 left empty, table order != LBA order) && head -c 17408 (primary GPT only)",
+ "oracle_cmd": "sfdisk --json gpt6.img -> partitions[].start/size/type/uuid/name (table order) node of the largest size (gpt6.img6) - 1 = 0-based entry slot",
+ "decoy": false,
+ "member": "gpt6.img"
+}

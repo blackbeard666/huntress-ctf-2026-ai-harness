@@ -1,0 +1,8 @@
+{
+ "field": "okta.failure_count",
+ "expected": "2",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> okta_system_log.json",
+ "oracle_cmd": "jq '[.[]|select(.outcome.result==\"FAILURE\")]|length' okta_system_log.json -> 2",
+ "decoy": false,
+ "member": "okta_system_log.json"
+}

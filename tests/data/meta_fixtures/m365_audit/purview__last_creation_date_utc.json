@@ -1,0 +1,8 @@
+{
+ "field": "m365_audit.last_creation_date_utc",
+ "expected": "2024-03-05T14:15:59Z",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> ual_purview.csv",
+ "oracle_cmd": "python3 -I -c 'import csv,sys,datetime as d; print(max(d.datetime.strptime(r[\"CreationDate\"],\"%m/%d/%Y %I:%M:%S %p\") for r in csv.DictReader(open(sys.argv[1]))).strftime(\"%Y-%m-%dT%H:%M:%SZ\"))' ual_purview.csv -> 2024-03-05T14:15:59Z",
+ "decoy": false,
+ "member": "ual_purview.csv"
+}

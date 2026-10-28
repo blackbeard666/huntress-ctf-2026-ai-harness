@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.rebuilt_image",
+ "expected": "none",
+ "generator_cmd": "sfdisk dos label mbr.img (start=8 size=40 type=83) + README.txt -> stdlib zipfile",
+ "oracle_cmd": "unzip; sgdisk -v usb_mbr.img -> 'Found invalid GPT and valid MBR' (no GPT image in the set)",
+ "decoy": true
+}

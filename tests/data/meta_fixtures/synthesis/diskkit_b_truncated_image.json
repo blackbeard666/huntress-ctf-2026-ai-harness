@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.truncated_image",
+ "expected": "laptop_c.img",
+ "generator_cmd": "disk_integrity fixtures' images (sfdisk GPT intact.img / nobackup.img = backup header zeroed / cut.img = head -c 40960) zipped with stdlib zipfile as laptop_a.img (intact), laptop_b.img (nobackup), laptop_c.img (cut) + README.txt -> kit_b.zip = [laptop_a.img, laptop_c.img]",
+ "oracle_cmd": "unzip kit_b.zip; sgdisk -v laptop_c.img -> 'Disk size is smaller than the main header indicates!'; laptop_a.img -> 'No problems found'",
+ "decoy": false
+}

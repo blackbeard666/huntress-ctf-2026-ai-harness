@@ -1,0 +1,8 @@
+{
+ "field": "hfsx.block_size_bytes",
+ "expected": "8192",
+ "generator_cmd": "mkfs.hfsplus -s -b 8192 -v CaseVol hx.img (16M, case-sensitive HFSX, hfsprogs 540.1); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s FSBLOCKSIZE hx.img",
+ "decoy": false,
+ "member": "CaseVol.img"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "descriptor-decode-call-wrapper",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/dcall_gen.py (stdlib base64 twice over an x=3 text)",
+ "oracle_cmd": "grep -oE 'decode\\(\"[^\"]+' tests/data/script_fixtures/dcall_decoy_not_v.kts | cut -d'\"' -f2 | base64 -d | base64 -d  # -> x=3|..., not a v= plan"
+}

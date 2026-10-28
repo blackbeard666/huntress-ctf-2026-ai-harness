@@ -25,6 +25,7 @@ import math
 import re
 import struct
 import unicodedata
+import urllib.parse
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -2699,6 +2700,7 @@ def dex_strings(apk):
     with the Parcel / Bundle reads answering the constants the case compares against),
     then biometric_auth_scan() (an AuthenticationCallback.onAuthenticationSucceeded run with a null and an identity
     CryptoObject, a createConfirmDeviceCredentialIntent caller's onActivityResult(RESULT_OK); failure-only values demoted),
+    then deeplink_validation_scan() (a manifest deep-link activity run with the URI components its validators accept),
     then digest_answer_scan() (`"ANS-"` + hex prefix of a MessageDigest / Mac over the method's inputs:
     candidates), then ans_compose_scan() (`"ANS-"` + numeric constants of the same method: candidates, not one answer).
     then whitebox_table_scan() (a white-box / T-table / S-box chain decrypt walk evaluated over static / asset arrays).
@@ -2770,6 +2772,8 @@ def dex_strings(apk):
         hits = binder_transact_scan(apk)
     if not hits:
         hits = biometric_auth_scan(apk)
+    if not hits:
+        hits = deeplink_validation_scan(apk)
     if not hits:
         hits = _eav_anchor(apk, digest_answer_scan(apk))
     if not hits:
@@ -12984,7 +12988,8 @@ _ENV_STATICS = {f"Landroid/os/Build;->{k}": v for k, v in (
     ("BOOTLOADER", "slider-1.3-11180583"), ("HOST", "abfarm-release-2004-0050"), ("USER", "android-build"),
     ("TYPE", "user"), ("ID", "UQ1A.240205.004"), ("DISPLAY", "UQ1A.240205.004"), ("SERIAL", "unknown"),
     ("RADIO", "g5123b-130914-240205-B-11405587"), ("SUPPORTED_ABIS", None), ("CPU_ABI", "arm64-v8a"))}
-_ENV_STATICS.update({"Landroid/os/Build$VERSION;->SDK_INT": 34, "Landroid/os/Build$VERSION;->RELEASE": "14",
+# The API level lives in RES_DEVICE["sdk"] (the pinned emulator profile, row 111); RELEASE is its version name.
+_ENV_STATICS.update({"Landroid/os/Build$VERSION;->SDK_INT": RES_DEVICE["sdk"], "Landroid/os/Build$VERSION;->RELEASE": "14",
                      "Landroid/os/Build$VERSION;->INCREMENTAL": "11269751", "Landroid/os/Build$VERSION;->CODENAME": "REL"})
 _ENV_ABSENT = re.compile(r"(?i)(?:^|/)(?:su|busybox|daemonsu|sugote\w*|supolicy)$|magisk|supersu|superuser|frida|xposed"
                          r"|lsposed|substrate|/data/adb|/sbin/|qemu|goldfish|ranchu|genyd|genymotion|nox|bluestacks"
@@ -15010,9 +15015,9 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
         f, A = self.apk, "Landroid/content/pm/ApplicationInfo;->flags"
         if f is not None and "backup" in f:  # the manifest's FLAG_ALLOW_BACKUP / FLAG_USES_CLEARTEXT_TRAFFIC
             ai.f[A] = ai.f[A] & ~0x08008000 | (0x8000 if f["backup"] else 0) | (0x08000000 if f["cleartext"] else 0)
-        if f is not None and f.get("tsdk"):  # targetSdk defaults to minSdk; minSdk to 1
+        if f is not None:  # targetSdk defaults to minSdk; minSdk to 1 (no <uses-sdk>: both 1, row 111)
             A = "Landroid/content/pm/ApplicationInfo;->"
-            ai.f[A + "targetSdkVersion"], ai.f[A + "minSdkVersion"] = f["tsdk"], f.get("msdk") or 1
+            ai.f[A + "targetSdkVersion"], ai.f[A + "minSdkVersion"] = f.get("tsdk") or 1, f.get("msdk") or 1
         return ai
 
     def nsc_permitted(self, host):
@@ -17342,6 +17347,461 @@ def broadcast_receiver_scan(apk):
     [] when absent; never raises; < 1 s."""
     rows = broadcast_receiver_facts(apk)
     rows.sort(key=lambda r: not (r["result"] and ANS_RE_T.search(r["result"])))
+    return list(dict.fromkeys(t for r in rows for t in r["tokens"]))
+
+
+# --- deep-link input validation: the URI the exported handler accepts, then its gated value (coverage atlas row 112) --
+# Every manifest activity with a <data android:scheme> intent-filter has its onCreate(Bundle) / onNewIntent(Intent) run
+# with a delivered VIEW Intent whose getData() Uri starts as the manifest link (scheme://host + path / pathPrefix,
+# default `/unlock`). android.net.Uri semantics: getHost / getAuthority as given (no lowercasing), getPath /
+# getLastPathSegment percent-decoded ('+' kept), getEncodedPath raw, getQueryParameter the FIRST match with %XX and
+# '+' -> ' ' decoded (API 16+), Uri.parse never throws; Intent.parseUri("intent:...#Intent;scheme=..;S.k=v;end") yields
+# the data Uri and S./i./l./B. extras. Each component read is a named input: a validator with a finite accepted value
+# (equals / equalsIgnoreCase, startsWith / endsWith / contains a const -> the const, String.matches / Pattern.matches
+# with a literal-ish regex -> its shortest sample) answers it and the run repeats with the accepted value (_bnd_solve),
+# so the chain mixes the value the validator lets through. The manifest default is kept whenever it already passes.
+_DLV_PRE = re.compile(rb"Landroid/net/Uri;")
+_DLV_ENTRY = ("->onCreate(Landroid/os/Bundle;)V", "->onNewIntent(Landroid/content/Intent;)V", "->onResume()V")
+_DLV_URI, _DLV_INT = "Landroid/net/Uri;", "Landroid/content/Intent;"
+_DLV_FW = ("Landroid/app/", "Landroidx/appcompat/", "Landroidx/activity/", "Landroidx/fragment/", "Landroidx/core/app/",
+           "Landroid/view/", "Landroid/content/ContextWrapper;", "Landroid/content/Context;")
+_DLV_NOOP = frozenset(("onCreate", "onNewIntent", "onResume", "onStart", "setContentView", "finish", "<init>",
+                       "setIntent", "finishAffinity", "setTitle", "overridePendingTransition"))
+_DLV_BUDGET_S, _DLV_MAX_ACT, _DLV_MAX_RUNS = 0.8, 12, 48
+
+
+def _dlv_decode(s, plus=False):
+    """Uri.decode (plus=False) / the getQueryParameter decode (plus=True): %XX as UTF-8, bad escapes kept."""
+    s = s.replace("+", " ") if plus else s
+    return urllib.parse.unquote(s, errors="replace")
+
+
+def _dlv_parse(s):
+    """android.net.Uri.parse(s) components (hierarchical form); never raises."""
+    s = s or ""
+    r = {"scheme": None, "host": None, "port": -1, "epath": "", "query": None, "frag": None, "str": s}
+    rest = s
+    h = rest.find("#")
+    if h >= 0:
+        rest, r["frag"] = rest[:h], _dlv_decode(rest[h + 1:])
+    m = re.match(r"([A-Za-z][A-Za-z0-9+.\-]*):", rest)
+    if m:
+        r["scheme"], rest = m.group(1), rest[m.end():]
+    q = rest.find("?")
+    if q >= 0:
+        rest, r["query"] = rest[:q], rest[q + 1:]
+    if rest.startswith("//"):
+        e = len(rest)
+        for c in "/":
+            i = rest.find(c, 2)
+            e = i if i >= 0 else e
+        auth, rest = rest[2:e], rest[e:]
+        hp = auth[auth.rfind("@") + 1:]
+        if hp.startswith("["):
+            r["host"] = hp[:hp.find("]") + 1] if "]" in hp else hp
+        else:
+            host, _, port = hp.partition(":")
+            r["host"] = _dlv_decode(host)
+            r["port"] = int(port) if port.isdigit() else -1
+    r["epath"] = rest
+    return r
+
+
+def _dlv_query(qs, name):
+    """[decoded values] of `name` in the raw query string, in order."""
+    out = []
+    for kv in (qs or "").split("&"):
+        k, eq, v = kv.partition("=")
+        if _dlv_decode(k, True) == name:
+            out.append(_dlv_decode(v, True) if eq else "")
+    return out
+
+
+def _dlv_parse_intent(s):
+    """Intent.parseUri(s, URI_INTENT_SCHEME): (data uri string | None, action, {extra: value}); never raises."""
+    s, data, act, ex = s or "", None, None, {}
+    i = s.rfind("#")
+    if i < 0 or not s.startswith("#Intent;", i):
+        return s or None, None, {}
+    scheme = None
+    for part in s[i + 8:].split(";"):
+        if part == "end":
+            break
+        k, eq, v = part.partition("=")
+        if not eq:
+            continue
+        v = _dlv_decode(v)
+        if k == "action":
+            act = v
+        elif k == "scheme":
+            scheme = v
+        elif len(k) > 2 and k[1] == "." and k[0] in "SilBsbfdc":
+            try:
+                ex[k[2:]] = v if k[0] == "S" else int(v == "true") if k[0] == "B" else int(v) if k[0] in "ilsb" else v
+            except ValueError:
+                ex[k[2:]] = v
+    d = s[:i]
+    d = d[7:] if d.startswith("intent:") else d
+    if d:
+        data = (scheme + ":" if scheme else "") + d
+    return data, act, ex
+
+
+def _dlv_sample(rx):
+    """Shortest string Java's `matches(rx)` accepts for a literal-ish regex (literals, classes, groups, alternation,
+    bounded repeats), verified by re.fullmatch; None when not derivable."""
+    try:
+        from re import _parser as srp  # noqa: PLC0415 - stdlib regex parser
+        tree = srp.parse(rx)
+    except Exception:  # noqa: BLE001 - Java-only syntax: no sample
+        return None
+    cat = {"CATEGORY_DIGIT": "0", "CATEGORY_WORD": "a", "CATEGORY_SPACE": " ", "CATEGORY_NOT_DIGIT": "a",
+           "CATEGORY_NOT_WORD": "-", "CATEGORY_NOT_SPACE": "a"}
+    groups = {}
+
+    def gen(seq, depth=0):
+        if depth > 20:
+            raise ValueError
+        out = []
+        for op, av in seq:
+            n = str(op)
+            if n == "LITERAL":
+                out.append(chr(av))
+            elif n == "NOT_LITERAL":
+                out.append("a" if av != ord("a") else "b")
+            elif n == "ANY":
+                out.append("a")
+            elif n == "IN":
+                c = None
+                if av and str(av[0][0]) == "NEGATE":
+                    bad = {chr(x[1]) for x in av[1:] if str(x[0]) == "LITERAL"}
+                    c = next(ch for ch in "a0-_xZ" if ch not in bad)
+                for o2, a2 in av:
+                    if c is not None:
+                        break
+                    c = chr(a2) if str(o2) == "LITERAL" else chr(a2[0]) if str(o2) == "RANGE" else cat.get(str(a2))
+                if c is None:
+                    raise ValueError
+                out.append(c)
+            elif n in ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT"):
+                lo, _hi, sub = av
+                out.append(gen(sub, depth + 1) * lo)
+            elif n == "SUBPATTERN":
+                g = gen(av[-1], depth + 1)
+                if av[0]:
+                    groups[av[0]] = g
+                out.append(g)
+            elif n == "ATOMIC_GROUP":
+                out.append(gen(av, depth + 1))
+            elif n == "BRANCH":
+                out.append(gen(av[1][0], depth + 1))
+            elif n == "GROUPREF":
+                out.append(groups.get(av, ""))
+            elif n == "CATEGORY":
+                out.append(cat.get(str(av), "a"))
+            elif n != "AT":
+                raise ValueError
+        return "".join(out)
+
+    try:
+        s = gen(tree)
+        return s if re.fullmatch(rx, s) else None
+    except Exception:  # noqa: BLE001 - unsupported construct
+        return None
+
+
+def _dlv_manifest(z):
+    """([(activity class descriptor, {"scheme", "host", "path"}, exported)] deep-link activities, package)."""
+    out, pkg = [], None
+    try:
+        b = z.read("AndroidManifest.xml")
+        ev = _axml_events(b) if b[:2] == b"\x03\x00" else _xml_events(b)
+        cur, links = None, []
+        for kind, tag, attrs, _ in ev:
+            if kind == "start" and tag == "manifest":
+                pkg = attrs.get("package")
+            elif kind == "start" and tag in ("activity", "activity-alias"):
+                n = attrs.get("targetActivity") or attrs.get("name") or ""
+                n = (pkg or "") + n if n.startswith(".") else n if "." in n else f"{pkg}.{n}"
+                cur, links = ["L" + n.replace(".", "/") + ";", attrs.get("exported")], []
+            elif kind == "start" and tag == "data" and cur is not None:
+                links.append({k: attrs.get(k) for k in ("scheme", "host", "path", "pathPrefix", "pathPattern")})
+            elif kind == "end" and tag in ("activity", "activity-alias") and cur is not None:
+                if any(d.get("scheme") for d in links):
+                    m = {}
+                    for d in links:  # <data> attributes of one filter merge (scheme x host x path)
+                        for k, v in d.items():
+                            if v and k not in m:
+                                m[k] = v
+                    path = m.get("path") or m.get("pathPrefix") or "/unlock"
+                    out.append((cur[0], {"scheme": m.get("scheme"), "host": m.get("host") or "",
+                                         "path": path if path.startswith("/") else "/" + path}, cur[1] != "false"))
+                cur = None
+    except Exception:  # noqa: BLE001 - no / unreadable manifest
+        pass
+    return out, pkg
+
+
+class _DlvVM(_BrcVM):
+    """_BrcVM for one delivered deep link: the activity's getIntent() / onNewIntent Intent carries a Uri whose
+    components are named reads (`scheme`, `host`, `path`, `frag`, `q:<name>`, `<key>|S.<extra>` of a parseUri'd
+    read); validators on them record the accepted value as a want."""
+
+    def __init__(self, dx, deadline, answers, link, pkg=None):
+        super().__init__(dx, deadline, answers, None, None, pkg)
+        self.link, self.rk = link, set()
+        self.intent = _DxObj(_DLV_INT)
+        self.intent.f["$in"] = True
+
+    def read(self, kind, dflt=None, key=None):
+        if key is None:
+            return super().read(kind, dflt)
+        if key not in self.rk:
+            self.rk.add(key)
+            self.reads.append((key, kind))
+        if key in self.answers:
+            v = self.answers[key]
+        else:
+            sub = {k.split("|", 1)[1]: v for k, v in self.answers.items() if isinstance(k, str) and k.startswith(key + "|")}
+            v = "intent:#Intent;" + "".join(f"{k}={urllib.parse.quote(str(x), safe='')};" for k, x in sub.items()) + "end" \
+                if sub else dflt if dflt is not None else ""
+        if not isinstance(v, str):
+            return v
+        v = _BndStr(v)
+        v.k = key
+        return v
+
+    def _want(self, s, ok, val):
+        if isinstance(s, _BndStr) and not ok and val is not None:
+            self.wants[s.k] = val
+        return int(ok)
+
+    def _uri_str(self):
+        g = lambda k, d: self.answers.get(k, d)  # noqa: E731
+        names = dict.fromkeys(k.split("|", 1)[0] for k in self.answers if isinstance(k, str) and k.startswith("q:"))
+        q = "&".join(f"{k[2:]}={urllib.parse.quote(str(self.read('S', '', k)), safe='')}" for k in names)
+        return f"{g('scheme', self.link['scheme'])}://{g('host', self.link['host'])}{g('path', self.link['path'])}" + \
+            (f"?{q}" if q else "")
+
+    def invoke(self, ref, raw, depth):  # noqa: C901 - one framework model
+        ct, rest = ref.split("->", 1)
+        name = rest[:rest.index("(")]
+        o, a = (raw[0] if raw else None), raw[1:]
+        lib = ref not in self.dx.code
+        if lib and name == "getIntent" and rest.endswith("()Landroid/content/Intent;"):
+            return self.intent
+        if lib and name in _DLV_NOOP and (ct.startswith(_DLV_FW) or _dxx_supers(self.dx).get(ct)) and ct != _DLV_URI:
+            return None
+        if lib and name == "findViewById":
+            return _DxObj("Landroid/widget/TextView;")
+        if lib and name in ("setText", "append") and ct.startswith(("Landroid/widget/", "Landroidx/appcompat/widget/")):
+            for v in a:
+                self.keep(v)
+            return None
+        if isinstance(o, _DxObj) and o.t == _DLV_INT and (o.f.get("$in") or "$pu" in o.f):
+            if o.f.get("$in"):
+                if name == "getData":
+                    u = _DxObj(_DLV_URI)
+                    u.f["$in"] = True
+                    return u
+                if name == "getDataString":
+                    return self._uri_str()
+                if name == "getScheme":
+                    return self.read("S", self.link["scheme"], "scheme")
+                if name == "getAction":
+                    return "android.intent.action.VIEW"
+            else:
+                pk, ex = o.f["$pu"], o.f["$ex"]
+                if name in ("getStringExtra", "getCharSequenceExtra") and a:
+                    v = ex.get(a[0])
+                    if pk is None:
+                        return v
+                    v = self.read("S", v if isinstance(v, str) else "", f"{pk}|S.{a[0]}")
+                    return v
+                if name in ("getIntExtra", "getLongExtra", "getBooleanExtra") and a:
+                    v = ex.get(a[0])
+                    return v if isinstance(v, int) else (a[1] if len(a) > 1 else 0)
+                if name == "getData":
+                    return self._mk_uri(o.f.get("$data")) if o.f.get("$data") else None
+                if name == "getDataString":
+                    return o.f.get("$data")
+                if name == "getAction":
+                    return o.f.get("act")
+                if name == "hasExtra" and a:
+                    return int(a[0] in ex)
+                raise _DxAbort
+        if ct == _DLV_URI and name == "parse" and len(raw) == 1 and isinstance(o, str):  # static: raw[0] is the arg
+            return self._mk_uri(str(o))
+        if ct == _DLV_URI and name == "decode" and len(raw) == 1 and isinstance(o, str):
+            return _dlv_decode(o)
+        if ct == _DLV_INT and name == "parseUri" and len(raw) == 2 and isinstance(o, str):
+            s = o
+            pk = s.k if isinstance(s, _BndStr) else None
+            data, act, ex = _dlv_parse_intent(str(s))
+            it = _DxObj(_DLV_INT)
+            it.f.update({"$pu": pk, "$ex": ex, "$data": data, "act": act})
+            return it
+        if isinstance(o, _DxObj) and o.t == _DLV_URI:
+            return self._uri_call(o, name, a)
+        if ct in ("Ljava/lang/String;", "Ljava/lang/CharSequence;") and isinstance(o, str) and len(a) == 1 and \
+                isinstance(a[0], str) and name in ("startsWith", "endsWith", "contains", "matches"):
+            if name == "matches":
+                ok = re.fullmatch(a[0], o) is not None if _dlv_sample(a[0]) is not None else None
+                if ok is None:
+                    raise _DxAbort
+                return self._want(o, ok, _dlv_sample(a[0]))
+            return self._want(o, _BRC_STR[name](str(o), str(a[0])), str(a[0]))
+        if ct == "Ljava/lang/String;" and isinstance(o, _BndStr) and name in ("toLowerCase", "toUpperCase", "trim",
+                                                                               "toString", "intern"):
+            v = _BndStr(o.lower() if name == "toLowerCase" else o.upper() if name == "toUpperCase" else
+                        o.strip() if name == "trim" else str(o))
+            v.k = o.k
+            return v
+        if ct == "Ljava/util/regex/Pattern;":
+            if name == "matches" and len(raw) == 2 and isinstance(raw[0], str) and isinstance(raw[1], str):
+                smp = _dlv_sample(raw[0])
+                if smp is None:
+                    raise _DxAbort
+                return self._want(raw[1], re.fullmatch(raw[0], raw[1]) is not None, smp)
+            if name == "compile" and raw and isinstance(raw[0], str):
+                p = _DxObj(ct)
+                p.f["rx"] = raw[0]
+                return p
+            if name == "matcher" and isinstance(o, _DxObj) and a and isinstance(a[0], str):
+                m = _DxObj("Ljava/util/regex/Matcher;")
+                m.f.update({"rx": o.f.get("rx"), "s": a[0]})
+                return m
+        if ct == "Ljava/util/regex/Matcher;" and isinstance(o, _DxObj) and name in ("matches", "find") and "rx" in o.f:
+            rx, s = o.f["rx"], o.f["s"]
+            smp = _dlv_sample(rx)
+            if smp is None:
+                raise _DxAbort
+            ok = (re.fullmatch if name == "matches" else re.search)(rx, s) is not None
+            return self._want(s, ok, smp)
+        return super().invoke(ref, raw, depth)
+
+    def _mk_uri(self, s):
+        u = _DxObj(_DLV_URI)
+        u.f["$p"] = _dlv_parse(s)
+        return u
+
+    def _uri_call(self, o, name, a):  # noqa: C901 - one Uri model
+        if o.f.get("$in"):
+            ln = self.link
+            if name == "getScheme":
+                return self.read("S", ln["scheme"], "scheme")
+            if name in ("getHost", "getAuthority", "getEncodedAuthority"):
+                return self.read("S", ln["host"], "host")
+            if name in ("getPath", "getEncodedPath"):
+                return self.read("S", ln["path"], "path")
+            if name == "getLastPathSegment":
+                p = self.answers.get("path", ln["path"])
+                return self.read("S", p.rstrip("/").rsplit("/", 1)[-1], "last")
+            if name in ("getQueryParameter",) and a and isinstance(a[0], str):
+                return self.read("S", "", "q:" + a[0])
+            if name == "getFragment":
+                return self.read("S", "", "frag")
+            if name == "getPort":
+                return -1
+            if name in ("toString", "getSchemeSpecificPart"):
+                s = self._uri_str()
+                return s if name == "toString" else s.split(":", 1)[1]
+            if name in ("isHierarchical", "isAbsolute"):
+                return 1
+            if name == "isRelative":
+                return 0
+            raise _DxAbort
+        p = o.f.get("$p") or _dlv_parse("")
+        if name == "getScheme":
+            return p["scheme"]
+        if name in ("getHost", "getAuthority"):
+            return p["host"]
+        if name == "getPath":
+            return _dlv_decode(p["epath"]) if p["epath"] or p["host"] is not None else None
+        if name == "getEncodedPath":
+            return p["epath"]
+        if name == "getLastPathSegment":
+            segs = [x for x in p["epath"].split("/") if x]
+            return _dlv_decode(segs[-1]) if segs else None
+        if name == "getQueryParameter" and a and isinstance(a[0], str):
+            vs = _dlv_query(p["query"], a[0])
+            return vs[0] if vs else None
+        if name == "getEncodedQuery":
+            return p["query"]
+        if name == "getQuery":
+            return _dlv_decode(p["query"]) if p["query"] is not None else None
+        if name == "getFragment":
+            return p["frag"]
+        if name == "getPort":
+            return p["port"]
+        if name == "toString":
+            return p["str"]
+        raise _DxAbort
+
+
+def deeplink_validation_facts(apk):
+    """[{"class", "entry", "link", "accepted", "uri", "values", "tokens"}] per deep-link activity entry (manifest
+    <data scheme>): run with the manifest link, then with the component values its validators accept (equals,
+    startsWith / endsWith / contains, matches / Pattern, Intent.parseUri extras). [] when absent; never raises; < 1 s."""
+    rows = []
+    deadline = time.time() + _DLV_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            acts, pkg = _dlv_manifest(z)
+            if not acts:
+                return rows
+            dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
+                     and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+        for d in dexes:
+            if d[:4] != b"dex\n" or len(d) < 0x70 or not _DLV_PRE.search(d) or time.time() > deadline:
+                continue
+            try:
+                dx = _DxDex(d)
+            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                continue
+            runs = [_DLV_MAX_RUNS * 2]
+            for ct, link, exported in acts[:_DLV_MAX_ACT]:
+                for ent in _DLV_ENTRY:
+                    ref = ct + ent
+                    if ref not in dx.code or time.time() > deadline or runs[0] <= 0:
+                        continue
+                    tried = []
+
+                    def run(dx_, ref_, recv, _code, ans, dl, link_=link, tried_=tried):
+                        vm = _DlvVM(dx_, dl, ans, link_, pkg)
+                        tried_.append((len(ans), vm))
+                        try:
+                            vm.init_class(recv.t)
+                            vm.run(ref_, [recv, vm.intent if ref_.endswith(_DLV_ENTRY[1]) else None][
+                                :1 if ref_.endswith(_DLV_ENTRY[2]) else 2])
+                        except _FCF_CATCH:
+                            pass
+                        return vm
+
+                    per = [min(runs[0], _DLV_MAX_RUNS)]
+                    before = per[0]
+                    vm = _bnd_solve(dx, ref, _DxObj(ct), None, deadline, per, run=run)
+                    runs[0] -= before - per[0]
+                    if vm is not None and not any(ANS_RE_T.search(t) for t in vm.out + vm.seen):
+                        # no token: the run whose reads were answered most (the accepted path, not the rejection)
+                        vm = max(((n, v.steps, -k, v) for k, (n, v) in enumerate(tried) if v.out), default=(0, 0, 0, vm))[3]
+                    if vm is None or not vm.out:
+                        continue
+                    toks = list(dict.fromkeys(m for s in vm.out + vm.seen for m in ANS_RE_T.findall(s)))
+                    acc = {k: str(v) for k, v in vm.answers.items() if isinstance(k, str)}
+                    rows.append({"class": ct, "entry": ent[2:], "exported": exported, "link": dict(link),
+                                 "accepted": acc, "uri": vm._uri_str(), "values": list(dict.fromkeys(vm.out))[:16],
+                                 "tokens": toks})
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return rows
+
+
+def deeplink_validation_scan(apk):
+    """ANS tokens an exported deep-link handler computes from the URI its validator accepts
+    (deeplink_validation_facts), exported handlers first. [] when absent; never raises; < 1 s."""
+    rows = deeplink_validation_facts(apk)
+    rows.sort(key=lambda r: not r["exported"])
     return list(dict.fromkeys(t for r in rows for t in r["tokens"]))
 
 

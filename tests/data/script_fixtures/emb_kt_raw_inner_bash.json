@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=1|steps=acquire_remote,dispatch_process|url=https://prior-bash.example.invalid/s|file=/tmp/.prior1",
+ "decoy": false,
+ "target": "embedded-prior-script-dual-plan",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/emb_gen.py  (stdlib base64 / str.join / html.escape writer)",
+ "oracle_cmd": "python3 -I -c \"import re,sys,html;t=html.unescape(open(sys.argv[1]).read());m=re.search(r'Material_9c41d2ee=.([0-9,]+)',t);print(bytes((int(x)-9)%256 for x in m.group(1).split(',')).decode())\" tests/data/script_fixtures/emb_kt_raw_inner_bash.kt"
+}

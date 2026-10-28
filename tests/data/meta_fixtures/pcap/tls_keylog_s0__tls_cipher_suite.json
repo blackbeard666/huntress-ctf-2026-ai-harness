@@ -1,0 +1,8 @@
+{
+ "field": "pcap.tls_cipher_suite",
+ "expected": "0xc02f",
+ "generator_cmd": "sh tests/data/meta_fixtures/sslkeylog/GENERATOR_tls.sh.txt <dir> (OpenSSL req -x509 certs; Python ssl.MemoryBIO genuine TLS 1.2 + 1.3 handshakes, client ctx.keylog_filename = OpenSSL's keylog writer -> keylog.txt; stdlib struct pcap writer GENERATOR_tls.py.txt -> tls.pcap; Wireshark 4.6.4 `editcap -F pcapng --inject-secrets tls,keylog.txt` -> tls_dsb.pcapng, `editcap -F pcapng` -> tls_nodsb.pcapng); then `tshark -r tls.pcap -Y tcp.stream==0 -F pcap -w s0.pcap` (TLS 1.2 session only)",
+ "oracle_cmd": "tshark -r s0.pcap -Y tls.handshake.type==2 -T fields -e tls.handshake.ciphersuite -> 0xc02f",
+ "decoy": false,
+ "member": "s0.pcap"
+}

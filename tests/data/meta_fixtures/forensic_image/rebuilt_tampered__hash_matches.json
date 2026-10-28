@@ -1,0 +1,8 @@
+{
+ "field": "forensic_image.hash_matches",
+ "expected": "false",
+ "generator_cmd": "lap.E01 with 7 bytes \"REBUILT\" written at chunk 1 data +100 and that chunk's trailing adler32 recomputed (python zlib.adler32); stored MD5 left as acquired",
+ "oracle_cmd": "ewfverify rebuilt.E01 -> FAILURE (stored != calculated)",
+ "decoy": false,
+ "member": "rebuilt.E01"
+}

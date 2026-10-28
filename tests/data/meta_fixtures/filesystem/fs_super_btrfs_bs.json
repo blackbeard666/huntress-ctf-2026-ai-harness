@@ -1,0 +1,8 @@
+{
+ "field": "filesystem.block_size_bytes",
+ "expected": "4096",
+ "generator_cmd": "mkfs.btrfs -q -L btrvol -U 0d9e8f7a-6b5c-4d3e-a2f1-0e1d2c3b4a59 b.img (128M, btrfs-progs 6.17.1); head -c 69632",
+ "oracle_cmd": "blkid -p -o value -s FSBLOCKSIZE b.img",
+ "decoy": false,
+ "member": "volume.img"
+}

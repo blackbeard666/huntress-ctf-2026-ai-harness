@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "descriptor-decode-call-wrapper",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/dcall_gen.py (gzip stream cut 14 bytes short, base64, base64)",
+ "oracle_cmd": "sed -n 's/.*= \\(base64decode(\"[^\"]*\")\\).*/\\1/p' tests/data/script_fixtures/dcall_decoy_trunc_gzip.tf | (cd $(mktemp -d) && terraform console) | tr -d '\"\\n' | base64 -d | gunzip  # -> a cut-off prefix + unexpected end of file, no complete plan"
+}

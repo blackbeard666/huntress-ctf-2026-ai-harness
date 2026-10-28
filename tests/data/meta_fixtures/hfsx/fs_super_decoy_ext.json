@@ -1,0 +1,8 @@
+{
+ "field": "hfsx.block_size_bytes",
+ "expected": "none",
+ "generator_cmd": "mkfs.ext4 -q -L evidence-root -U 3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b e4.img (8M); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s TYPE e4.img (ext4, no H+/HX @0x400) -> none",
+ "decoy": true,
+ "member": "CaseVol.img"
+}

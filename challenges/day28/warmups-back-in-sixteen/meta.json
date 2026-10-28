@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-28",
+  "lane": "warmups",
+  "name": "👶 Back in Sixteen",
+  "ids": {
+    "single_solve": "warmups-day-28",
+    "time_trial": "warmups-day-28/time_trial",
+    "mastery": "warmups-day-28/mastery"
+  }
+}

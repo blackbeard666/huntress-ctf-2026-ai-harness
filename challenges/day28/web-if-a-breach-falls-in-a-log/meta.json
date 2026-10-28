@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-25-if-a-breach-falls-in-a-log",
+  "lane": "web",
+  "name": "🌐 If a Breach Falls in a Log",
+  "ids": {
+    "single_solve": "web-exploitation-day-25-if-a-breach-falls-in-a-log",
+    "time_trial": "web-exploitation-day-25-if-a-breach-falls-in-a-log/time_trial",
+    "mastery": "web-exploitation-day-25-if-a-breach-falls-in-a-log/mastery"
+  }
+}

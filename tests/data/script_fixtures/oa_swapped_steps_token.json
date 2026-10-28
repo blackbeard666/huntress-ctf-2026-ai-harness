@@ -1,0 +1,10 @@
+{
+ "material": "{\"exfil.plan\": \"v=3|language=jscript|role=collector|stage=3|stage_count=2|steps=read_file>transmit_remote|next_language=none\", \"loader.plan\": \"v=3|language=powershell|role=loader|stage=1|stage_count=3|steps=acquire_remote>dispatch_process>write_file|next_stage=stager\", \"runner.plan\": \"v=3|language=bash|role=runner|stage=3|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|next_language=none\", \"stager.plan\": \"v=3|language=python|role=stager|stage=2|stage_count=3|steps=decode_embedded>write_file>dispatch_process|next_stage=runner\"}",
+ "rep": "order_anomaly",
+ "transform": "step",
+ "key": null,
+ "expected": "dispatch_process",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/oa_gen.py $TMPDIR/oagen  (stdlib plan writer; corpus swapped)",
+ "oracle_cmd": "cd $TMPDIR/oagen/swapped && for f in *.plan; do tr '|' '\\n' < \"$f\" | awk -v f=\"$f\" '{i=index($0,\"=\"); print f \"\\t\" substr($0,1,i-1) \"\\t\" substr($0,i+1)}'; done | awk -F'\\t' '$2==\"steps\"{print $3}' | while read s; do grep -qxF \"$s\" gm_steps.txt && continue; k=$(echo \"$s\" | tr '>' '\\n' | sort | tr '\\n' ' '); while read g; do [ \"$(echo \"$g\" | tr '>' '\\n' | sort | tr '\\n' ' ')\" = \"$k\" ] || continue; paste <(echo \"$s\" | tr '>' '\\n') <(echo \"$g\" | tr '>' '\\n') | awk -v W=tok -F'\\t' '$1!=$2{print (W==\"pos\"?NR:$1); exit}'; done < gm_steps.txt; done"
+}

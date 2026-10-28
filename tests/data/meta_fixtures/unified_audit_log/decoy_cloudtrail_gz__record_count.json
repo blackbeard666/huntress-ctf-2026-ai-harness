@@ -1,0 +1,8 @@
+{
+ "field": "unified_audit_log.record_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> cloudtrail.json.gz",
+ "oracle_cmd": "zcat cloudtrail.json.gz | jq '.Records[0]|has(\"Operation\")'  # false -> none",
+ "decoy": true,
+ "member": "cloudtrail.json.gz"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.partition_sha256_map",
+ "expected": "{\"c.img\":[\"622d3c18517e99630fae00baeaf5c474937929ef30349377a93d7d919dc08aeb\",\"cc61635da46b2c9974335ea37e0b5fd660a5c8a42a89b271fa7ec2ac4b8b26f6\",\"16fa66a7dc98d93f2a4c5d20baf5177f59c4c37fc62face65690c11c15fe6ff9\"],\"a.img\":[\"e0b3c5b9d3893a54e7374891bbe92603aab81e3df8796ac122b4dc1846f4a338\",\"2d63c6f4c946a0d8ae294e100fd0822f485eabcd5b4a6c94a9e0f1c0c1c3c593\"]}",
+ "generator_cmd": "truncate -s 128K a.img b.img; truncate -s 192K c.img; truncate -s 320K d.img; sfdisk scripts: a/b `label: gpt` label-id C0000000-.../30000000-..., start=40,size=32 + start=80,size=48; c gpt label-id 80000000-..., 64+40, 120+40, 200+100; d `label: dos` start=8,size=200 type 83; random data dd'd into a's two partitions, c's first, d's first (b's partitions left zero = rebuilt from an incomplete source); zip -9 -X kit.zip a.img b.img c.img d.img README.txt; kit2.zip = c.img a.img README.txt; decoy.zip = notes.txt pic.png",
+ "oracle_cmd": "sfdisk -J <img> (label, id, partition start/size); stat -c %s <img>; per partition `dd if=<img> bs=512 skip=<start> count=<size> | sha256sum`; sgdisk -v a.img / b.img -> 'No problems found' (both intact); dd|sha256sum per partition (zip order c, a)",
+ "decoy": false
+}

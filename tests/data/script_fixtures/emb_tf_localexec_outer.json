@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=hcl|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=embedded_prior|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=powershell|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=TERRAFORM-4be1a9c0|url=https://terraform-4be1a9c0.example.invalid/outer|file_path=/tmp/huntress-hcl/.terraform-4be1a9c0.stage",
+ "decoy": false,
+ "target": "embedded-prior-script-dual-plan",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/emb_gen.py  (stdlib base64 / str.join / html.escape writer)",
+ "oracle_cmd": "python3 -I -c \"import re,base64,sys;print(base64.b64decode(re.search(r'HUNTRESS_ANALYSIS_V1:B64-(\\S+)',open(sys.argv[1]).read()).group(1)).decode())\" tests/data/script_fixtures/emb_tf_localexec_outer.tf"
+}

@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "96c99781-15e7-409e-8106-2e3dc14c8842",
+  "window": null,
+  "elapsed": 5.06,
+  "in_window": 5.06,
+  "phases": {
+    "start": 0.0,
+    "download": 0.0,
+    "solve": 1.05,
+    "submit": 4.0
+  },
+  "routed": "local (no clock)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "crisp-quilt-dune-67"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

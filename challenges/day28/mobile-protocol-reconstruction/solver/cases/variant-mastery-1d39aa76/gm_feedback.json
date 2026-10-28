@@ -1,0 +1,28 @@
+{
+ "attempt": "1d39aa76-a781-4833-93c4-a6a953e6c95c",
+ "rejected": {
+  "set7.answer": [
+   "ANS-0123456789ABCDEF"
+  ],
+  "set3.answer": [
+   "ANS-0123456789ABCDEF"
+  ],
+  "set1.answer": [
+   "ANS-0123456789ABCDEF"
+  ],
+  "set6.answer": [
+   "ANS-0123456789ABCDEF"
+  ],
+  "set2.answer": [
+   "ANS-0123456789ABCDEF"
+  ],
+  "set4.answer": [
+   "ANS-0123456789ABCDEF"
+  ],
+  "set5.answer": [
+   "ANS-0123456789ABCDEF"
+  ]
+ },
+ "require_complete": true,
+ "verified": 0
+}

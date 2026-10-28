@@ -1,0 +1,8 @@
+{
+ "field": "ext2.last_mounted_path",
+ "expected": "/boot",
+ "generator_cmd": "mkfs.ext2 -q -L OLDBOOT -b 1024 -U 11111111-2222-4333-8444-555555555555 e2.img (4M, E2FSPROGS_FAKE_TIME=1700000000); debugfs -w -R \"ssv last_mounted /boot\"; head -c 4096",
+ "oracle_cmd": "dumpe2fs -h e2.img | sed -n 's/^Last mounted on: *//p'",
+ "decoy": false,
+ "member": "boot.img"
+}

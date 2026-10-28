@@ -1,0 +1,142 @@
+[
+  {
+    "uuid": "u-2024-03-04T09:00:01.123Z",
+    "published": "2024-03-04T09:00:01.123Z",
+    "eventType": "user.session.start",
+    "version": "0",
+    "severity": "WARN",
+    "displayMessage": "user.session.start",
+    "actor": {
+      "id": "00u1",
+      "type": "User",
+      "alternateId": "bob@contoso.com",
+      "displayName": "bob"
+    },
+    "client": {
+      "ipAddress": "203.0.113.99",
+      "userAgent": {
+        "rawUserAgent": "Mozilla/5.0"
+      },
+      "geographicalContext": {
+        "country": "Nigeria"
+      }
+    },
+    "outcome": {
+      "result": "FAILURE",
+      "reason": "INVALID_CREDENTIALS"
+    },
+    "target": []
+  },
+  {
+    "uuid": "u-2024-03-04T09:00:20.456Z",
+    "published": "2024-03-04T09:00:20.456Z",
+    "eventType": "user.session.start",
+    "version": "0",
+    "severity": "WARN",
+    "displayMessage": "user.session.start",
+    "actor": {
+      "id": "00u1",
+      "type": "User",
+      "alternateId": "bob@contoso.com",
+      "displayName": "bob"
+    },
+    "client": {
+      "ipAddress": "203.0.113.99",
+      "userAgent": {
+        "rawUserAgent": "Mozilla/5.0"
+      },
+      "geographicalContext": {
+        "country": "Nigeria"
+      }
+    },
+    "outcome": {
+      "result": "FAILURE",
+      "reason": "INVALID_CREDENTIALS"
+    },
+    "target": []
+  },
+  {
+    "uuid": "u-2024-03-04T09:01:00.000Z",
+    "published": "2024-03-04T09:01:00.000Z",
+    "eventType": "user.authentication.auth_via_mfa",
+    "version": "0",
+    "severity": "INFO",
+    "displayMessage": "user.authentication.auth_via_mfa",
+    "actor": {
+      "id": "00u1",
+      "type": "User",
+      "alternateId": "alice@contoso.com",
+      "displayName": "alice"
+    },
+    "client": {
+      "ipAddress": "198.51.100.7",
+      "userAgent": {
+        "rawUserAgent": "Mozilla/5.0"
+      },
+      "geographicalContext": {
+        "country": "Netherlands"
+      }
+    },
+    "outcome": {
+      "result": "SUCCESS",
+      "reason": null
+    },
+    "target": []
+  },
+  {
+    "uuid": "u-2024-03-04T09:01:02.000Z",
+    "published": "2024-03-04T09:01:02.000Z",
+    "eventType": "user.session.start",
+    "version": "0",
+    "severity": "INFO",
+    "displayMessage": "user.session.start",
+    "actor": {
+      "id": "00u1",
+      "type": "User",
+      "alternateId": "alice@contoso.com",
+      "displayName": "alice"
+    },
+    "client": {
+      "ipAddress": "198.51.100.7",
+      "userAgent": {
+        "rawUserAgent": "Mozilla/5.0"
+      },
+      "geographicalContext": {
+        "country": "Netherlands"
+      }
+    },
+    "outcome": {
+      "result": "SUCCESS",
+      "reason": null
+    },
+    "target": []
+  },
+  {
+    "uuid": "u-2024-03-04T09:05:44.789Z",
+    "published": "2024-03-04T09:05:44.789Z",
+    "eventType": "user.account.lock",
+    "version": "0",
+    "severity": "INFO",
+    "displayMessage": "user.account.lock",
+    "actor": {
+      "id": "00u1",
+      "type": "User",
+      "alternateId": "bob@contoso.com",
+      "displayName": "bob"
+    },
+    "client": {
+      "ipAddress": "203.0.113.99",
+      "userAgent": {
+        "rawUserAgent": "Mozilla/5.0"
+      },
+      "geographicalContext": {
+        "country": "Nigeria"
+      }
+    },
+    "outcome": {
+      "result": "SUCCESS",
+      "reason": null
+    },
+    "target": []
+  }
+]

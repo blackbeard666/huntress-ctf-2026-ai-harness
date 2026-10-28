@@ -1,0 +1,8 @@
+{
+ "field": "filesystem.uuid",
+ "expected": "6b1c2d3e-4f50-4617-8899-aabbccddeeff",
+ "generator_cmd": "mkfs.xfs -q -L xfsdata -m uuid=6b1c2d3e-4f50-4617-8899-aabbccddeeff x.img (320M, xfsprogs 6.18.0); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s UUID x.img",
+ "decoy": false,
+ "member": "volume.img"
+}

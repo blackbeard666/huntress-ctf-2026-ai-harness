@@ -1,0 +1,8 @@
+{
+ "field": "cloudtrail.failed_console_login_count",
+ "expected": "1",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> cloudtrail_plain.json",
+ "oracle_cmd": "jq '[.Records[]|select(.eventName==\"ConsoleLogin\" and .responseElements.ConsoleLogin==\"Failure\")]|length' cloudtrail_plain.json -> 1",
+ "decoy": false,
+ "member": "cloudtrail_plain.json"
+}

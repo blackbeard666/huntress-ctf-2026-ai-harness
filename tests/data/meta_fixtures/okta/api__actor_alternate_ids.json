@@ -1,0 +1,8 @@
+{
+ "field": "okta.actor_alternate_ids",
+ "expected": "[\"alice@contoso.com\",\"bob@contoso.com\"]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> okta_system_log.json",
+ "oracle_cmd": "jq -c '[.[].actor.alternateId]|unique' okta_system_log.json -> [\"alice@contoso.com\",\"bob@contoso.com\"]",
+ "decoy": false,
+ "member": "okta_system_log.json"
+}

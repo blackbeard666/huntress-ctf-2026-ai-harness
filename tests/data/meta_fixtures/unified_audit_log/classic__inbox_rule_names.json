@@ -1,0 +1,8 @@
+{
+ "field": "unified_audit_log.inbox_rule_names",
+ "expected": "[\"...\",\"Archive Sync\"]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> ual_classic.csv",
+ "oracle_cmd": "python3 -I -c 'import csv,json,sys; print(json.dumps(list(csv.DictReader(open(sys.argv[1],encoding=\"utf-8-sig\")))))' ual_classic.csv | jq -c '[.[]|select(.Operations|test(\"InboxRule\"))|.AuditData|fromjson|.Parameters[]|select(.Name==\"Name\")|.Value]' -> [\"...\",\"Archive Sync\"]",
+ "decoy": false,
+ "member": "ual_classic.csv"
+}

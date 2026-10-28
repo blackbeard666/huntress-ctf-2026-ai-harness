@@ -1,0 +1,7 @@
+{
+ "entry": "deeplink_validation_scan",
+ "expected": "ANS-5d0c8e3a71f94b26",
+ "_why": "exported LinkActivity, manifest link huntress28://vault/unlock; onCreate requires getData().getHost().endsWith('huntress.local') (manifest host fails, accepted host = the const) and getPath() == '/unlock', then Log.d(ENC[k] ^ host.charAt(k % len))",
+ "generator_cmd": "python3 tests/data/android_fixtures/dlv_src/gen_dlv.py endswith_host tests/data/android_fixtures/dlv_endswith_host.apk  # javac --release 8 (app + android.net.Uri over java.net.URI / Intent.parseUri / Activity stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "same generator, stage 2: java -cp <javac out> com.huntress.mobile.d28.links.Probe -> a CALLER on the host JVM delivers new Intent().setData(Uri.parse('huntress28://huntress.local/unlock')) to LinkActivity.onCreate and prints its Log.d = 'vault: ANS-5d0c8e3a71f94b26'"
+}

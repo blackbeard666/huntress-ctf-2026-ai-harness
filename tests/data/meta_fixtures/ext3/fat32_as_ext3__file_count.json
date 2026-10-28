@@ -1,0 +1,8 @@
+{
+ "field": "ext3.file_count",
+ "expected": "none",
+ "generator_cmd": "PATH=tools/fsroot/usr/sbin:tools/fsroot/usr/bin:$PATH MTOOLS_SKIP_CHECK=1 TZ=UTC mkfs.fat -C -F 32 -f 1 -s 1 -n VOL32 -i 0BADF00D fat32.img 34000 && mmd -i fat32.img ::/Evidence && mcopy -i fat32.img -m 'Quarterly Report 2026.docx' ::/Evidence/ && mcopy -i fat32.img -m secret.bin ::/ && head -c 290816 fat32.img",
+ "oracle_cmd": "fsstat fat32.img -> FAT32",
+ "decoy": true,
+ "member": "fat32.img"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "hfsplus.uuid",
+ "expected": "0f191fb0-a559-33be-b2fa-7778199facc5",
+ "generator_cmd": "mkfs.hfsplus -v MacHD h.img (16M, hfsprogs 540.1); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s UUID h.img",
+ "decoy": false,
+ "member": "MacHD.dmg"
+}

@@ -1,0 +1,11 @@
+{
+  "stage": "single_solve:generalizing",
+  "name": "\u2699\ufe0f Family Resemblance",
+  "lane": "binary-reverse-engineering",
+  "worker": null,
+  "updated": "2026-10-28T21:25:06",
+  "launches": 1,
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

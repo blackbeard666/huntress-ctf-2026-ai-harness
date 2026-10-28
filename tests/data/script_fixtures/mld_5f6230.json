@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=zsh|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=b32_hex_rev|stage_profile=three_stage_decode_write_launch|next_language=xslt|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=ZSH-1f778fba|url=https://zsh-1f778fba4b.example.invalid/stage|file_path=/tmp/huntress-zsh/.1f778fba4bc770f2.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/multilang_drop/gen.py (stdlib base64/binascii writer, zsh D28 layout, marker LYR-b32_hex_rev)",
+ "oracle_cmd": "sed -n 1p mld_5f6230.zsh | sed -E 's/.*HUNTRESS_ANALYSIS_V1:LYR-[a-z0-9_]+-//; s/ -->$//' | rev | tr -d '\\n' | xxd -r -p | base32 -d"
+}

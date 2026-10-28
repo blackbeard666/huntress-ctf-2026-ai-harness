@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=kotlin|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=b64_rev|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=KOTLIN-973e96e9|url=https://kotlin-973e96e94e.example.invalid/stage|file_path=/tmp/huntress-kotlin/.973e96e94e07ca53.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/multilang_drop/gen.py (stdlib base64/binascii writer, kotlin D28 layout, marker LYR-b64_rev)",
+ "oracle_cmd": "grep -oE 'huntress_descriptor_[0-9a-f]{8}[^\"]*\"[^\"]+' mld_dda427.kt | cut -d'\"' -f2 | rev | tr -d '\\n' | base64 -d"
+}

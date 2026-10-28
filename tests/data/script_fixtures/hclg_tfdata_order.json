@@ -1,0 +1,11 @@
+{
+ "material": "# inert analysis fixture: resources declared out of apply order\nterraform {\n  required_version = \">= 1.4\"\n}\n\nlocals {\n  bundle = \"${terraform_data.fetch.id}-${var.region}\" // carries a resource ref\n  note   = \"terraform_data.ghost.id is only text\"\n  /* terraform_data.cleanup.id inside a comment is no edge */\n}\n\nvariable \"region\" {\n  default = \"us-east-1\"\n}\n\nresource \"terraform_data\" \"launch\" {\n  triggers_replace = [local.bundle, \"literal terraform_data.cleanup.id\"]\n  depends_on       = [terraform_data.stage]\n  provisioner \"local-exec\" {\n    command = <<-EOT\n      echo \"launch $${HOME} ${self.id}\"\n      printf '%s' \"${terraform_data.stage.id}\"\n    EOT\n  }\n  lifecycle { create_before_destroy = true }\n}\n\nresource \"terraform_data\" \"stage\" {\n  count = 2\n  input = { src = terraform_data.fetch.output, tag = \"v=3\" }\n}\n\nresource \"terraform_data\" \"cleanup\" {\n  for_each = toset([\"a\", \"b\"])\n  input    = each.key\n}\n\nresource \"terraform_data\" \"fetch\" {\n  input = \"https://example.invalid/x\"   # no deps\n}\n\noutput \"done\" {\n  value = terraform_data.launch.id\n}\n",
+ "rep": "hcl_graph",
+ "transform": "order",
+ "key": "",
+ "expected": "terraform_data.cleanup,terraform_data.fetch,terraform_data.stage,terraform_data.launch",
+ "decoy": false,
+ "target": "hcl-resource-dependency-timeline",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/hclg_gen.py  (stdlib text writer; copy in hclg_tfdata_order.tf)",
+ "oracle_cmd": "terraform graph (in a temp dir holding the .tf; builtin terraform_data, no init) -> Kahn over its edges, file order breaking ties: hclg_gen.oracle_order"
+}

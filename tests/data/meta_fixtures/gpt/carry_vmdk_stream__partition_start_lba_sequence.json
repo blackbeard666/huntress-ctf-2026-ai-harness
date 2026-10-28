@@ -1,0 +1,8 @@
+{
+ "field": "gpt.partition_start_lba_sequence",
+ "expected": "[100,300,40]",
+ "generator_cmd": "qemu-img convert -f raw -O vmdk -o subformat=streamOptimized hyb.img stream.vmdk (deflated grains, GD at end)",
+ "oracle_cmd": "qemu-img convert -f vmdk -O raw stream.vmdk stream.vmdk.raw && sfdisk --json stream.vmdk.raw | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.vmdk"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "partition_table.partition_start_lba_sequence",
+ "expected": "[300,40,120]",
+ "generator_cmd": "python3 gen2.py: stdlib struct/zlib WRITER of a GPT with SizeOfPartitionEntry=256, 16 entries, slots 0/5/9 (starts 300/40/120), valid CRCs, primary+backup",
+ "oracle_cmd": "sfdisk --json e256.img | jq '[.partitiontable.partitions[].start]' (libfdisk honours entry size 256)",
+ "decoy": false,
+ "member": "disk-001.img"
+}

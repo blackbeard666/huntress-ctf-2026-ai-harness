@@ -1,0 +1,8 @@
+{
+ "field": "exfat.file_count",
+ "expected": "0",
+ "generator_cmd": "PATH=tools/fsroot/usr/sbin:tools/fsroot/usr/bin:$PATH MTOOLS_SKIP_CHECK=1 TZ=UTC truncate -s 2M exfat.img && mkfs.exfat -b 4096 -c 4096 -L EXV exfat.img && head -c 32768 exfat.img",
+ "oracle_cmd": "fls exfat.img -> only EXV (Volume Label Entry), $VOLUME_GUID, $ALLOC_BITMAP, $UPCASE_TABLE metafiles",
+ "decoy": false,
+ "member": "exfat.img"
+}

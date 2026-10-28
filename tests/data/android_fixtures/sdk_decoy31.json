@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": null,
+ "_why": "targetSdk 31: the taken modern branch decodes a 15-hex near miss; the valid token sits only in the untaken legacy branch -> no ANS token",
+ "generator_cmd": "python3 tests/data/android_fixtures/sdk_src/gen_sdk.py decoy31 tests/data/android_fixtures/sdk_decoy31.apk  # javac --release 8 (Gate + android.os.Build/VERSION/VERSION_CODES, Context, ApplicationInfo stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "aapt dump badging sdk_decoy31.apk -> targetSdkVersion 31; then java -Dsdk=34 -Drelease=14 -Dcodename=REL -cp <javac out> com.huntress.mobile.d29.platform.Probe 31 (host-JVM CALLER of Gate.code(Context) with ApplicationInfo.targetSdkVersion = the aapt value, pinned emulator API 34 / RELEASE 14) prints 'ANS-8a1f4c0e9d3b7e2' (15-hex near miss)",
+ "decoy": true
+}

@@ -1,0 +1,8 @@
+{
+ "field": "xfs.volume_label",
+ "expected": "xfsdata",
+ "generator_cmd": "mkfs.xfs -q -L xfsdata -m uuid=6b1c2d3e-4f50-4617-8899-aabbccddeeff x.img (320M, xfsprogs 6.18.0); head -c 4096",
+ "oracle_cmd": "xfs_db -r -c 'sb 0' -c 'p fname' x.img (NUL-trimmed)",
+ "decoy": false,
+ "member": "data.xfs"
+}

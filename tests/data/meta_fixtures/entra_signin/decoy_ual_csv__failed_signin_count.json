@@ -1,0 +1,8 @@
+{
+ "field": "entra_signin.failed_signin_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> ual_classic.csv",
+ "oracle_cmd": "head -1 ual_classic.csv | grep -c 'IP address' || echo none  # UAL export, no sign-in columns -> none",
+ "decoy": true,
+ "member": "ual_classic.csv"
+}

@@ -1,0 +1,105 @@
+# Writes synthetic cloud/identity audit exports with STANDARD writers (csv.writer QUOTE_MINIMAL, json.dumps, gzip).
+# usage: python3 -I GENERATOR_cloud_audit.py.txt OUTDIR
+import csv, gzip, io, json, sys, os, zlib
+out = sys.argv[1]
+def w(name, b):
+    with open(os.path.join(out, name), "wb") as f: f.write(b)
+
+def ad(ts, op, user, wl, rt, **kw):
+    d = {"CreationTime": ts, "Id": "%08x-0000-4000-8000-%012x" % (zlib.crc32((ts + op).encode()), rt),
+         "Operation": op, "OrganizationId": "11111111-2222-3333-4444-555555555555", "RecordType": rt,
+         "ResultStatus": "Succeeded", "UserId": user, "Workload": wl}
+    d.update(kw); return json.dumps(d, separators=(",", ":"))
+
+rows = [
+ ("2024-03-04T09:15:02.0000000Z", "alice@contoso.com", "UserLoggedIn",
+  ad("2024-03-04T09:15:02", "UserLoggedIn", "alice@contoso.com", "AzureActiveDirectory", 15,
+     ClientIP="203.0.113.10", ActorIpAddress="203.0.113.10")),
+ ("2024-03-04T09:20:11.0000000Z", "alice@contoso.com", "MailItemsAccessed",
+  ad("2024-03-04T09:20:11", "MailItemsAccessed", "alice@contoso.com", "Exchange", 50, ClientIPAddress="198.51.100.7",
+     OperationCount=12)),
+ ("2024-03-04T09:22:45.0000000Z", "alice@contoso.com", "New-InboxRule",
+  ad("2024-03-04T09:22:45", "New-InboxRule", "alice@contoso.com", "Exchange", 1, ClientIP="198.51.100.7:51234",
+     Parameters=[{"Name": "AlwaysDeleteOutlookRulesBlob", "Value": "False"}, {"Name": "Name", "Value": "..."},
+                 {"Name": "SubjectContainsWords", "Value": "invoice, \"payment\""},
+                 {"Name": "MoveToFolder", "Value": "RSS Feeds"}])),
+ ("2024-03-04T08:59:30.0000000Z", "bob@contoso.com", "UserLoginFailed",
+  ad("2024-03-04T08:59:30", "UserLoginFailed", "bob@contoso.com", "AzureActiveDirectory", 15, ClientIP="203.0.113.99")),
+ ("2024-03-04T09:25:00.0000000Z", "alice@contoso.com", "MailItemsAccessed",
+  ad("2024-03-04T09:25:00", "MailItemsAccessed", "alice@contoso.com", "Exchange", 50, ClientIPAddress="198.51.100.7")),
+ ("2024-03-04T10:01:13.0000000Z", "svc-backup@contoso.com", "Set-InboxRule",
+  ad("2024-03-04T10:01:13", "Set-InboxRule", "svc-backup@contoso.com", "Exchange", 1, ClientIP="192.0.2.44",
+     Parameters=[{"Name": "Identity", "Value": "svc-backup\\Archive Sync"}, {"Name": "Name", "Value": "Archive Sync"}])),
+]
+s = io.StringIO(); cw = csv.writer(s, lineterminator="\r\n")
+cw.writerow(["CreationDate", "UserIds", "Operations", "AuditData"]); cw.writerows(rows)
+w("ual_classic.csv", b"\xef\xbb\xbf" + s.getvalue().encode())
+
+# Purview "Audit (Standard)" new layout, US-locale dates
+prow = [("aa01", "3/5/2024 1:02:03 PM", "ExchangeItem", "MailItemsAccessed", "carol@fabrikam.com",
+         ad("2024-03-05T13:02:03", "MailItemsAccessed", "carol@fabrikam.com", "Exchange", 50, ClientIPAddress="203.0.113.50")),
+        ("aa02", "3/5/2024 11:40:00 AM", "AzureActiveDirectoryStsLogon", "UserLoggedIn", "dave@fabrikam.com",
+         ad("2024-03-05T11:40:00", "UserLoggedIn", "dave@fabrikam.com", "AzureActiveDirectory", 15, ClientIP="203.0.113.51")),
+        ("aa03", "3/5/2024 2:15:59 PM", "ExchangeAdmin", "New-InboxRule", "carol@fabrikam.com",
+         ad("2024-03-05T14:15:59", "New-InboxRule", "carol@fabrikam.com", "Exchange", 1, ClientIP="203.0.113.50",
+            Parameters=[{"Name": "Name", "Value": "Clean up, now"}, {"Name": "DeleteMessage", "Value": "True"}]))]
+s = io.StringIO(); cw = csv.writer(s, lineterminator="\n")
+cw.writerow(["RecordId", "CreationDate", "RecordType", "Operation", "UserId", "AuditData", "AssociatedAdminUnits"])
+cw.writerows([r + ("",) for r in prow])
+w("ual_purview.csv", s.getvalue().encode())
+
+# Entra sign-ins, Graph JSON
+def si(t, upn, ip, app, code, city, cc):
+    return {"id": "si-" + t, "createdDateTime": t, "userPrincipalName": upn, "userDisplayName": upn.split("@")[0],
+            "ipAddress": ip, "appDisplayName": app, "clientAppUsed": "Browser", "conditionalAccessStatus": "notApplied",
+            "status": {"errorCode": code, "failureReason": "Other." if code else None},
+            "location": {"city": city, "state": None, "countryOrRegion": cc}}
+ent = [si("2024-03-04T08:58:01Z", "bob@contoso.com", "203.0.113.99", "Office 365 Exchange Online", 50126, "Lagos", "NG"),
+       si("2024-03-04T08:58:40Z", "bob@contoso.com", "203.0.113.99", "Office 365 Exchange Online", 50126, "Lagos", "NG"),
+       si("2024-03-04T09:14:55Z", "alice@contoso.com", "203.0.113.10", "OfficeHome", 0, "Seattle", "US"),
+       si("2024-03-04T09:30:12Z", "alice@contoso.com", "198.51.100.7", "Azure Portal", 50074, "Amsterdam", "NL"),
+       si("2024-03-04T09:31:00Z", "alice@contoso.com", "198.51.100.7", "Azure Portal", 0, "Amsterdam", "NL")]
+w("entra_signins.json", json.dumps({"@odata.context": "https://graph.microsoft.com/v1.0/$metadata#auditLogs/signIns",
+                                    "value": ent}, indent=2).encode())
+# Entra portal CSV export
+s = io.StringIO(); cw = csv.writer(s, lineterminator="\r\n")
+cw.writerow(["Date (UTC)", "Request ID", "User", "Username", "User type", "Application", "IP address", "Location",
+             "Status", "Sign-in error code", "Failure reason"])
+cw.writerows([["2024-03-06T07:00:01Z", "r1", "Erin", "erin@contoso.com", "Member", "Microsoft Teams", "192.0.2.10",
+               "Berlin, Berlin, DE", "Failure", "50126", "Invalid username or password"],
+              ["2024-03-06T07:00:30Z", "r2", "Erin", "erin@contoso.com", "Member", "Microsoft Teams", "192.0.2.11",
+               "Berlin, Berlin, DE", "Success", "0", ""],
+              ["2024-03-06T06:59:00Z", "r3", "Frank", "frank@contoso.com", "Member", "OfficeHome", "198.51.100.200",
+               "Paris, Ile-de-France, FR", "Failure", "50053", "Account is locked"]])
+w("entra_signins.csv", s.getvalue().encode())
+
+# CloudTrail, S3 delivery (gzip {"Records": [...]})
+def ct(t, src, name, region, ip, ut, user, **kw):
+    r = {"eventVersion": "1.08", "userIdentity": {"type": ut, "principalId": "AIDAEXAMPLE", "arn":
+         "arn:aws:iam::123456789012:user/" + user, "accountId": "123456789012", "userName": user},
+         "eventTime": t, "eventSource": src, "eventName": name, "awsRegion": region, "sourceIPAddress": ip,
+         "userAgent": "aws-cli/2.15.0", "recipientAccountId": "123456789012"}
+    r.update(kw); return r
+recs = [ct("2024-03-04T10:05:00Z", "sts.amazonaws.com", "GetCallerIdentity", "us-east-1", "198.51.100.7", "IAMUser", "alice"),
+        ct("2024-03-04T10:03:10Z", "signin.amazonaws.com", "ConsoleLogin", "us-east-1", "203.0.113.99", "IAMUser", "bob",
+           responseElements={"ConsoleLogin": "Failure"}, errorMessage="Failed authentication"),
+        ct("2024-03-04T10:07:44Z", "s3.amazonaws.com", "ListBuckets", "us-east-1", "198.51.100.7", "IAMUser", "alice"),
+        ct("2024-03-04T10:09:02Z", "iam.amazonaws.com", "CreateAccessKey", "us-east-1", "198.51.100.7", "IAMUser", "alice"),
+        ct("2024-03-04T10:11:30Z", "ec2.amazonaws.com", "RunInstances", "eu-west-1", "198.51.100.7", "IAMUser", "alice",
+           errorCode="Client.UnauthorizedOperation"),
+        ct("2024-03-04T10:12:00Z", "s3.amazonaws.com", "GetObject", "eu-west-1", "198.51.100.7", "IAMUser", "alice")]
+w("cloudtrail.json.gz", gzip.compress(json.dumps({"Records": recs}).encode(), mtime=0))
+w("cloudtrail_plain.json", json.dumps({"Records": recs[:2]}, indent=1).encode())
+
+# Okta System Log API array
+def ok(t, et, alt, ip, res, cc, reason=None):
+    return {"uuid": "u-" + t, "published": t, "eventType": et, "version": "0", "severity": "INFO" if res == "SUCCESS" else "WARN",
+            "displayMessage": et, "actor": {"id": "00u1", "type": "User", "alternateId": alt, "displayName": alt.split("@")[0]},
+            "client": {"ipAddress": ip, "userAgent": {"rawUserAgent": "Mozilla/5.0"}, "geographicalContext": {"country": cc}},
+            "outcome": {"result": res, "reason": reason}, "target": []}
+okt = [ok("2024-03-04T09:00:01.123Z", "user.session.start", "bob@contoso.com", "203.0.113.99", "FAILURE", "Nigeria", "INVALID_CREDENTIALS"),
+       ok("2024-03-04T09:00:20.456Z", "user.session.start", "bob@contoso.com", "203.0.113.99", "FAILURE", "Nigeria", "INVALID_CREDENTIALS"),
+       ok("2024-03-04T09:01:00.000Z", "user.authentication.auth_via_mfa", "alice@contoso.com", "198.51.100.7", "SUCCESS", "Netherlands"),
+       ok("2024-03-04T09:01:02.000Z", "user.session.start", "alice@contoso.com", "198.51.100.7", "SUCCESS", "Netherlands"),
+       ok("2024-03-04T09:05:44.789Z", "user.account.lock", "bob@contoso.com", "203.0.113.99", "SUCCESS", "Nigeria")]
+w("okta_system_log.json", json.dumps(okt, indent=2).encode())

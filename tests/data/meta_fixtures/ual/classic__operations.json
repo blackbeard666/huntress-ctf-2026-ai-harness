@@ -1,0 +1,8 @@
+{
+ "field": "ual.operations",
+ "expected": "[\"MailItemsAccessed\",\"New-InboxRule\",\"Set-InboxRule\",\"UserLoggedIn\",\"UserLoginFailed\"]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> ual_classic.csv",
+ "oracle_cmd": "python3 -I -c 'import csv,json,sys; print(json.dumps(list(csv.DictReader(open(sys.argv[1],encoding=\"utf-8-sig\")))))' ual_classic.csv | jq -c '[.[].Operations]|unique' -> [\"MailItemsAccessed\",\"New-InboxRule\",\"Set-InboxRule\",\"UserLoggedIn\",\"UserLoginFailed\"]",
+ "decoy": false,
+ "member": "ual_classic.csv"
+}

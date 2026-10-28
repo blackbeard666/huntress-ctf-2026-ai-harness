@@ -1,0 +1,8 @@
+{
+ "field": "disk_image.partition_start_lba_sequence",
+ "expected": "[60,200]",
+ "generator_cmd": "truncate -s 256K g64.img && printf 'label: gpt\\ntable-length: 64\\nstart=60, size=30\\nstart=200, size=30\\n' | sfdisk g64.img (64-entry array)",
+ "oracle_cmd": "sfdisk --json g64.img | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.img"
+}

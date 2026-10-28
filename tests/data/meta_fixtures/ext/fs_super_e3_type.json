@@ -1,0 +1,8 @@
+{
+ "field": "ext.filesystem_type",
+ "expected": "ext3",
+ "generator_cmd": "mkfs.ext4 -q -t ext3 -L jrnl3 -U aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee e3.img (8M, E2FSPROGS_FAKE_TIME=1700000000); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s TYPE e3.img",
+ "decoy": false,
+ "member": "home.img"
+}

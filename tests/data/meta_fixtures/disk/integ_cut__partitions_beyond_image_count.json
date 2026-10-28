@@ -1,0 +1,8 @@
+{
+ "field": "disk.partitions_beyond_image_count",
+ "expected": "1",
+ "generator_cmd": "truncate -s 64K intact.img && sfdisk -q intact.img < g.sf (label gpt; label-id 6B1F0A2C-3D4E-4F50-8A61-72839405A6B7; start=40 size=24 linux 'data'; start=64 size=24 msdata 'spare'; util-linux sfdisk) && printf EVIDENCE-PAYLOAD | dd of=intact.img bs=512 seek=40 conv=notrunc && head -c 40960 intact.img > cut.img",
+ "oracle_cmd": "sfdisk -d intact.img (source: starts 40/64, size 24 each; sfdisk cannot read cut.img's GPT) vs stat -c %s cut.img = 40960 -> 80 sectors: only 64+24-1=87 >= 80; sgdisk -v cut.img -> 'Disk size is smaller than the main header indicates!'",
+ "decoy": false,
+ "member": "cut.img"
+}

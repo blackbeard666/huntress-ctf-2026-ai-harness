@@ -1,0 +1,8 @@
+{
+ "field": "ewf.stored_md5",
+ "expected": "none",
+ "generator_cmd": "printf '\\x89PNG\\r\\n\\x1a\\n' > fake.E01; head -c 2000 media.raw >> fake.E01 (PNG-magic impostor renamed .E01)",
+ "oracle_cmd": "ewfinfo fake.E01 -> unable to open (not an EWF file)",
+ "decoy": true,
+ "member": "fake.E01"
+}

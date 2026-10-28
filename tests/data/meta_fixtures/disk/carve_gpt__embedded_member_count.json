@@ -1,0 +1,7 @@
+{
+ "field": "disk.embedded_member_count",
+ "expected": "5",
+ "generator_cmd": "python3 (Pillow 37x21 PNG panel-001.png, pypdf PdfWriter blank page memo.pdf, sqlite3 notes.db 8192 B) + `zip -X bundle.zip a.txt` + cp /bin/true tool.elf; truncate -s 4M gpt.img && printf 'label: gpt\\nstart=2048, size=2048, name=data\\nstart=4096, size=4062, name=more\\n' | sfdisk gpt.img; dd conv=notrunc seek=: png@1052672 pdf@1069056 db@1114112 elf@2097664 zip@2228324; gzip -9n gpt.img",
+ "oracle_cmd": "binwalk gpt.img (PNG@1052672 PDF@1069056 SQLite@1114112 ELF@2097664 Zip@2228324, offset order) + sfdisk --json gpt.img (p1 2048+2048, p2 4096+4062) + sha256sum/stat of the source files -> 5 top-level members",
+ "decoy": false
+}

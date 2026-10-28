@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=terraform_hcl|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=standalone|obfuscation_profile=gz_b64_rev_hex|stage_profile=single_stage|next_language=powershell|campaign_id=TERRAFORM_HCL-5e1c09aa|url=https://terraform_hcl-5e1c09aa4e.example.invalid/stage",
+ "decoy": false,
+ "target": "descriptor-decode-call-wrapper",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/dcall_gen.py (stdlib gzip -> base64 -> reverse -> hexlify, wrapped in base64)",
+ "oracle_cmd": "sed -n 's/.*= \\(base64decode(\"[^\"]*\")\\).*/\\1/p' tests/data/script_fixtures/dcall_tf_lyr_marker.tf | (cd $(mktemp -d) && terraform console) | tr -d '\"\\n' | xxd -r -p | rev | base64 -d | gunzip"
+}

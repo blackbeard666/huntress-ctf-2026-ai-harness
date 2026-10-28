@@ -1,0 +1,8 @@
+{
+ "field": "disk.primary_header_crc_valid",
+ "expected": "none",
+ "generator_cmd": "truncate -s 64K mbr.img && printf 'label: dos\\nstart=8, size=40, type=83\\n' | sfdisk -q mbr.img",
+ "oracle_cmd": "sgdisk -v mbr.img -> 'Found invalid GPT and valid MBR' (no EFI PART header: field absent)",
+ "decoy": true,
+ "member": "mbr.img"
+}

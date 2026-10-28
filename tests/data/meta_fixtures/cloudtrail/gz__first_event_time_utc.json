@@ -1,0 +1,8 @@
+{
+ "field": "cloudtrail.first_event_time_utc",
+ "expected": "2024-03-04T10:03:10Z",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> cloudtrail.json.gz",
+ "oracle_cmd": "zcat cloudtrail.json.gz | jq -r '[.Records[].eventTime]|min' -> 2024-03-04T10:03:10Z",
+ "decoy": false,
+ "member": "cloudtrail.json.gz"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "image.integrity_status",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"open('notes.img','wb').write(b'EFI PARTITION notes: this is a plain text memo, not a disk image.\\\\n'*40)\" (renamed text impostor)",
+ "oracle_cmd": "sgdisk -v notes.img -> no valid GPT at LBA1 / no MBR (file(1) misreads the leading 'EFI PART' text at offset 0 as a GPT 'at LBA 0' -- nonstandard, not a header at LBA1)",
+ "decoy": true,
+ "member": "notes.img"
+}

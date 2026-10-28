@@ -1,0 +1,8 @@
+{
+ "field": "ntfs.file_names",
+ "expected": "[\"Quarterly Report 2026.docx\",\"secret.bin\"]",
+ "generator_cmd": "PATH=tools/fsroot/usr/sbin:tools/fsroot/usr/bin:$PATH MTOOLS_SKIP_CHECK=1 TZ=UTC truncate -s 8M ntfs.img && mkntfs -q -F -f -L NTVOL ntfs.img && ntfscp -f ntfs.img 'Quarterly Report 2026.docx' 'Quarterly Report 2026.docx' && ntfscp -f ntfs.img secret.bin secret.bin && head -c 86016 ntfs.img",
+ "oracle_cmd": "fls -r ntfs.img (FULL 8 MiB image; TSK refuses the 84 KiB head) -> r/r 64 secret.bin, r/r 65 Quarterly Report 2026.docx (+ $ metafiles)",
+ "decoy": false,
+ "member": "ntfs.img"
+}

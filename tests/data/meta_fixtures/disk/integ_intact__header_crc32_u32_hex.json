@@ -1,0 +1,8 @@
+{
+ "field": "disk.header_crc32_u32_hex",
+ "expected": "0x2b88196f",
+ "generator_cmd": "truncate -s 64K intact.img && sfdisk -q intact.img < g.sf (label gpt; label-id 6B1F0A2C-3D4E-4F50-8A61-72839405A6B7; start=40 size=24 linux 'data'; start=64 size=24 msdata 'spare'; util-linux sfdisk) && printf EVIDENCE-PAYLOAD | dd of=intact.img bs=512 seek=40 conv=notrunc",
+ "oracle_cmd": "python3 -c \"import binascii;b=open('intact.img','rb').read();h=bytearray(b[512:604]);h[16:20]=bytes(4);print('0x%08x'%binascii.crc32(h))\" (== stored u32 @512+16; sgdisk -v 'No problems found')",
+ "decoy": false,
+ "member": "intact.img"
+}

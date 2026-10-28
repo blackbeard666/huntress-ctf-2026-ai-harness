@@ -1,0 +1,8 @@
+{
+ "field": "ewf.segment_count",
+ "expected": "1",
+ "generator_cmd": "TZ=UTC ewfacquire -u -q -t usb -f encase6 -c deflate:best -b 16 -d sha1 -C CASE-2026-0417 -E EV-07 -D \"Suspect USB thumb drive\" -e \"J. Rivera\" -N \"Seized at desk 4B\" -m removable media.raw (ewf-tools 20140816; media.raw = 64x512 B python Random(7) text+noise)",
+ "oracle_cmd": "ls usb.E0* -> single segment usb.E01 (ewfinfo: segment set of 1)",
+ "decoy": false,
+ "member": "usb.E01"
+}

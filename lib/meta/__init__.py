@@ -107,6 +107,9 @@ _BUILTIN = {
     # D27: classic pcap complete packet records (16-byte record headers walked from @24, truncated tail not counted) --
     # prebuilt pcap.pcap_value promoted via pcap.py: 3 single, 32 TT, 17..39 on 11/11 Mastery sets
     ("pcap", "packet_count"): _v("pcap:packet_count", 27),
+    # D28: raw disk image partition StartingLBAs in table order (GPT entry array, else MBR primaries + EBR chain),
+    # compact JSON int list -- [34] single, [60,93,148] TT, 12/12 Mastery sets
+    ("disk", "partition_start_lba_sequence"): _v("disk:partition_start_lba_sequence", 28),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"
@@ -134,10 +137,38 @@ def _fields_fast(src):
     return None
 
 
+_ENTRY_LINE = re.compile(r'\(\s*"([^"\\]*)"\s*,\s*"([^"\\]*)"\s*\)\s*:\s*"([^"\\]*)"\s*,?\s*(?:#.*)?')
+
+
+def _fields_lines(src):
+    """FIELDS as {key: fn} when EVERY line of its block is a plain `("fmt", "field"): "func",` entry (blank/comment
+    lines allowed, no escapes), else None (-> the ast path). ast compile of ~21k entries was ~0.25 s of every lane
+    solver process (D28 12-set Mastery case 1.1 s against the 1 s budget)."""
+    m = _FIELDS_AT.search(src)
+    if m is None or src[m.end():m.end() + 1] not in ("\n", "\r"):
+        return None
+    c = _CLOSE_AT.search(src, m.end())
+    if c is None or src[c.end():].split("\n", 1)[0].strip():
+        return None
+    out = {}
+    for ln in src[m.end():c.start()].splitlines():
+        t = ln.strip()
+        if not t or t.startswith("#"):
+            continue
+        e = _ENTRY_LINE.fullmatch(t)
+        if e is None:
+            return None
+        out[(e.group(1), e.group(2))] = e.group(3)
+    return out
+
+
 def _prebuilt_fields(path):
     """The literal FIELDS dict of a prebuilt module, read with ast (no import), or {}."""
     try:
         src = Path(path).read_text()
+        fast = _fields_lines(src)
+        if fast is not None:
+            return fast
         node = _fields_fast(src)
         if node is not None:
             try:

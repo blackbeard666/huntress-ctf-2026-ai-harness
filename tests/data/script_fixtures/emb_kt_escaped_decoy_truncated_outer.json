@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=1|steps=acquire_remote,dispatch_process|url=https://prior-bash.example.invalid/s|file=/tmp/.prior1",
+ "decoy": true,
+ "target": "embedded-prior-script-dual-plan",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/emb_gen.py  (stdlib base64 / str.join / html.escape writer)",
+ "oracle_cmd": "python3 -I -c \"import re,sys;t=open(sys.argv[1]).read().replace(chr(92)+chr(34),chr(34));m=re.search(r'Material_9c41d2ee=.([0-9,]+)',t);print(bytes((int(x)-9)%256 for x in m.group(1).split(',')).decode())\" tests/data/script_fixtures/emb_kt_escaped_decoy_truncated_outer.kt  (prints only a 40-byte prefix: the inner material is cut to 40 numbers and the outer marker to a 37-char base64 prefix, so neither the full inner plan nor any outer plan may surface)"
+}

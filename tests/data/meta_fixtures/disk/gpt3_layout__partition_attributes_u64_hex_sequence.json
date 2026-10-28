@@ -1,0 +1,8 @@
+{
+ "field": "disk.partition_attributes_u64_hex_sequence",
+ "expected": "[\"0x0000000000000001\",\"0x0000000000000000\",\"0x9000000000000000\"]",
+ "generator_cmd": "truncate -s 64K gpt3.img && sfdisk gpt3.img < gpt3.sf  (label gpt, label-id 3F2504E0-..., start=40 size=8 ESP 'EFI System' attrs=RequiredPartition; start=48 size=30 linux 'rootfs'; start=80 size=6 msdata 'data' attrs=GUID:60,63; util-linux 2.41.3) && head -c 17408 (primary GPT only)",
+ "oracle_cmd": "sgdisk -i N gpt3.img -> 'Attribute flags: 0000000000000001' / '0000000000000000' / '9000000000000000'",
+ "decoy": false,
+ "member": "gpt3.img"
+}

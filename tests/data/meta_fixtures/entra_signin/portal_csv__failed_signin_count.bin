@@ -1,0 +1,4 @@
+Date (UTC),Request ID,User,Username,User type,Application,IP address,Location,Status,Sign-in error code,Failure reason
+2024-03-06T07:00:01Z,r1,Erin,erin@contoso.com,Member,Microsoft Teams,192.0.2.10,"Berlin, Berlin, DE",Failure,50126,Invalid username or password
+2024-03-06T07:00:30Z,r2,Erin,erin@contoso.com,Member,Microsoft Teams,192.0.2.11,"Berlin, Berlin, DE",Success,0,
+2024-03-06T06:59:00Z,r3,Frank,frank@contoso.com,Member,OfficeHome,198.51.100.200,"Paris, Ile-de-France, FR",Failure,50053,Account is locked

@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/multilang_drop/gen.py (stdlib base64/binascii writer, rust D28 layout, marker B64)",
+ "oracle_cmd": "sed -n 1p mld_decoy_rust_1.rs | sed -E 's/.*HUNTRESS_ANALYSIS_V1:B64-//; s/ -->$//' | base64 -d"
+}

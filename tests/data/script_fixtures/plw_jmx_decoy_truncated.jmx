@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Smoke" enabled="true"/>
+    <hashTree>
+      <BeanShellSampler guiclass="BeanShellSamplerGui" testclass="BeanShellSampler" testname="Sampler" enabled="true">
+        <stringProp name="BeanShellSampler.query">String p0 = &quot;646a307a66477868626d64315957646c50574a6c5957357a61475673624878796232786c5057687663335238646d56795a476c6a6444317a64584e7761574e706233567a664746306447466a617a31554d5441314f5878685a47467764475679505739775a584a6864476c76626c396e636d46776148786f62334e305833427962325a7062475539616d316c6447567958324a6c5957357a6147567362487876596d5a3163324&quot;;&#xa;String p1 = &quot;e6864476c76626c3977636d396d6157786c5057686c654639694e6a5238633352685a32566663484a765a6d6c735a54313064323966633352685a3256665a473933626d7876595752665a58686c593356305a5878755a58683058327868626d64315957646c50574a6863326838633352685a32566659323931626e51394d6e787a64475677637a31685933463161584a6c58334a6c625739305a53786b61584e775958526a61&quot;;&#xa;String descriptor_e6d1093a = p0 + p1;&#xa;vars.put(&quot;d&quot;, descriptor_e6d1093a);&#xa;</stringProp>
+        <boolProp name="BeanShellSampler.resetInterpreter">false</boolProp>
+      </BeanShellSampler>
+      <hashTree/>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

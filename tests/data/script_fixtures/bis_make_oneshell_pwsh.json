@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=makefile|role=launcher|verdict=suspicious|attack=T1059.001|next_language=powershell|campaign_id=MAKE-5e6f7081|url=https://make-5e6f7081.example.invalid/ps|file_path=C:\\\\ProgramData\\\\make-5e6f7081.ps1",
+ "decoy": false,
+ "target": "make-recipe-inner-scripts",
+ "generator_cmd": "bash tests/data/script_fixtures/bis_gen.sh  (run inside tests/data/script_fixtures; perl xor, coreutils base64, xxd, bash heredoc writer)",
+ "oracle_cmd": "printf '%s%s' \"$(sed -n 's/^PART_A := //p' tests/data/script_fixtures/bis_make_oneshell_pwsh.mk)\" \"$(sed -n 's/^PART_B := //p' tests/data/script_fixtures/bis_make_oneshell_pwsh.mk)\" | base64 -d | perl -e '$_=join(\"\",<STDIN>); print join(\"\", map { chr(ord($_) ^ 0x33) } split //)'"
+}

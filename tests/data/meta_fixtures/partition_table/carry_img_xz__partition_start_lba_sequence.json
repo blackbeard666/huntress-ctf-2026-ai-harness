@@ -1,0 +1,8 @@
+{
+ "field": "partition_table.partition_start_lba_sequence",
+ "expected": "[300,40,120]",
+ "generator_cmd": "xz -9 -c e256.img > e256.img.xz",
+ "oracle_cmd": "xzcat e256.img.xz > x.raw && sfdisk --json x.raw | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.img.xz"
+}

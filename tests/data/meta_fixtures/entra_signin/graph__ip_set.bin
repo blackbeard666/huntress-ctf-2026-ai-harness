@@ -1,0 +1,100 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#auditLogs/signIns",
+  "value": [
+    {
+      "id": "si-2024-03-04T08:58:01Z",
+      "createdDateTime": "2024-03-04T08:58:01Z",
+      "userPrincipalName": "bob@contoso.com",
+      "userDisplayName": "bob",
+      "ipAddress": "203.0.113.99",
+      "appDisplayName": "Office 365 Exchange Online",
+      "clientAppUsed": "Browser",
+      "conditionalAccessStatus": "notApplied",
+      "status": {
+        "errorCode": 50126,
+        "failureReason": "Other."
+      },
+      "location": {
+        "city": "Lagos",
+        "state": null,
+        "countryOrRegion": "NG"
+      }
+    },
+    {
+      "id": "si-2024-03-04T08:58:40Z",
+      "createdDateTime": "2024-03-04T08:58:40Z",
+      "userPrincipalName": "bob@contoso.com",
+      "userDisplayName": "bob",
+      "ipAddress": "203.0.113.99",
+      "appDisplayName": "Office 365 Exchange Online",
+      "clientAppUsed": "Browser",
+      "conditionalAccessStatus": "notApplied",
+      "status": {
+        "errorCode": 50126,
+        "failureReason": "Other."
+      },
+      "location": {
+        "city": "Lagos",
+        "state": null,
+        "countryOrRegion": "NG"
+      }
+    },
+    {
+      "id": "si-2024-03-04T09:14:55Z",
+      "createdDateTime": "2024-03-04T09:14:55Z",
+      "userPrincipalName": "alice@contoso.com",
+      "userDisplayName": "alice",
+      "ipAddress": "203.0.113.10",
+      "appDisplayName": "OfficeHome",
+      "clientAppUsed": "Browser",
+      "conditionalAccessStatus": "notApplied",
+      "status": {
+        "errorCode": 0,
+        "failureReason": null
+      },
+      "location": {
+        "city": "Seattle",
+        "state": null,
+        "countryOrRegion": "US"
+      }
+    },
+    {
+      "id": "si-2024-03-04T09:30:12Z",
+      "createdDateTime": "2024-03-04T09:30:12Z",
+      "userPrincipalName": "alice@contoso.com",
+      "userDisplayName": "alice",
+      "ipAddress": "198.51.100.7",
+      "appDisplayName": "Azure Portal",
+      "clientAppUsed": "Browser",
+      "conditionalAccessStatus": "notApplied",
+      "status": {
+        "errorCode": 50074,
+        "failureReason": "Other."
+      },
+      "location": {
+        "city": "Amsterdam",
+        "state": null,
+        "countryOrRegion": "NL"
+      }
+    },
+    {
+      "id": "si-2024-03-04T09:31:00Z",
+      "createdDateTime": "2024-03-04T09:31:00Z",
+      "userPrincipalName": "alice@contoso.com",
+      "userDisplayName": "alice",
+      "ipAddress": "198.51.100.7",
+      "appDisplayName": "Azure Portal",
+      "clientAppUsed": "Browser",
+      "conditionalAccessStatus": "notApplied",
+      "status": {
+        "errorCode": 0,
+        "failureReason": null
+      },
+      "location": {
+        "city": "Amsterdam",
+        "state": null,
+        "countryOrRegion": "NL"
+      }
+    }
+  ]
+}

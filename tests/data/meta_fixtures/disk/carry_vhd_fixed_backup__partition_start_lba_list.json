@@ -1,0 +1,8 @@
+{
+ "field": "disk.partition_start_lba_list",
+ "expected": "[100,300,40]",
+ "generator_cmd": "qemu-img convert -f raw -O vpc -o subformat=fixed,force_size=on zero1.img vhdfix.vhd (fixed VHD footer appended; primary GPT zeroed -> backup sits at the last LBA BEFORE the footer)",
+ "oracle_cmd": "qemu-img convert -f vpc -O raw vhdfix.vhd vhdfix.vhd.raw && sfdisk --json vhdfix.vhd.raw | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.vhd"
+}

@@ -669,6 +669,11 @@ def decode(material, rep, transform, key=None):
         return _lin_decode(material, transform, key)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("corpussummary", "corpusaggregate", "corpusstats", "capstone"):   # corpus-aggregate-questions
         return _cs_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("hclgraph", "hclorder", "hclblocks", "terraformgraph", "tfgraph",
+                                              "resourcegraph"):   # hcl-resource-dependency-timeline
+        return _hclg_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("orderanomaly", "orderanomalies", "outoforder", "changeorder"):   # change-order-anomaly
+        return _oa_decode(material, transform, key)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -774,6 +779,8 @@ _BATCH_MAT_RE = re.compile(r"HUNTRESS-MATERIAL:\s*(?P<mat>\S+)")
 # the same data in a `descriptor_<id>` literal; identity transform. FRAG = dot-separated hex fragments.
 _ANALYSIS_RE = re.compile(r"""HUNTRESS_ANALYSIS_V\d+:(?P<tag>[A-Za-z0-9_]+)-(?P<mat>[^\s"'<]+)""")
 _ANALYSIS_TAG_REP = {"B64": "base64_literal", "HEX": "hex_compact", "HB64": "hex_base64", "FRAG": "hex_compact"}
+# a marker whose `LYR-` material is only the layer list (the material lives in the descriptor literal)
+_LYR_TAG_ONLY = re.compile(r"[a-z0-9]{1,8}(?:[_,+|>][a-z0-9]{1,8}){0,5}", re.I)
 
 
 def material_text(src, ident):
@@ -1323,6 +1330,416 @@ def _build_host_codecs(src, budget=0.6):
     except Exception:  # noqa: BLE001 - unknown host -> nothing, never an exception
         return []
     return []
+
+
+# Target make-recipe-inner-scripts: build-file bodies that carry a PRIOR-language script as a handoff, read as the
+# build tool would hand them to the interpreter (never `docker build` / `make`). build_inner_scripts(text) ->
+# [(locus, language, script_text)]: Dockerfile RUN / CMD / ENTRYPOINT shell form, exec form `["pwsh","-c",".."]`,
+# `RUN [python3] <<EOF` heredocs (`<<-` tab-stripped, unquoted tag -> ARG / ENV values substituted), interpreter from
+# `SHELL [..]`, a heredoc shebang or the command head; Makefile target recipes (TAB lines, `\`-continued lines joined as
+# the shell sees them, `@` / `-` / `+` prefixes dropped, `$(X)` expanded from the final make variables, `$$` -> `$`),
+# `SHELL := pwsh`, `.ONESHELL:` (one script per target either way), `$(shell ..)` / `!=` bodies; Terraform
+# `local-exec` / remote-exec bodies through iac_scripts(). Each body's `bash -c '..'` / `python3 -c` / `node -e` /
+# `pwsh -Command` argument and `echo <blob> | base64 -d | sh` (xxd -r -p, gunzip, rev) pipeline is a further inner
+# script. _bis_codecs() runs find_codecs on each; find_codecs() consults it only to fill a gap, or ahead of a reading
+# it strictly extends (a marker cut by a `\`-continued recipe line). Bounded, never raises.
+_BIS_LANG = {"sh": "sh", "bash": "bash", "zsh": "bash", "dash": "sh", "ash": "sh", "ksh": "bash", "busybox": "sh",
+             "pwsh": "powershell", "powershell": "powershell", "python": "python", "python2": "python",
+             "python3": "python", "py": "python", "node": "node", "nodejs": "node", "deno": "node", "bun": "node",
+             "perl": "perl", "ruby": "ruby", "php": "php", "lua": "lua", "cmd": "batch", "tclsh": "tcl"}
+_BIS_FLAG = re.compile(r"(?i)^(?:-c|-e|-command|/c|/k|--eval|-r|-p|--print|-encodedcommand|-enc|-ec|-e?c)$")
+_BIS_TF_FIELD = re.compile(r"(?i)command|inline|script|user_?data")
+_BIS_MKVAR = re.compile(r"\$\$|\$\((?P<p>[A-Za-z_][\w.-]*)\)|\$\{(?P<b>[A-Za-z_][\w.-]*)\}")
+_BIS_DKVAR = re.compile(r"\$\{(?P<b>[A-Za-z_]\w*)(?::?(?P<o>[-+])(?P<d>[^}]*))?\}|\$(?P<s>[A-Za-z_]\w*)")
+_BIS_MAKE = re.compile(r"(?m)^\.ONESHELL[ \t]*:|^\.PHONY[ \t]*:|^SHELL[ \t]*:?=|^(?!(?:else|try|finally|default|do|then|begin|"
+                       r"case|loop|class|struct|public|private|protected|except|with|for|while|if|def)\b)"
+                       r"(?:\$[({][\w.-]+[)}]|[\w./%-])+(?:[ \t]+(?:\$[({][\w.-]+[)}]|[\w./%-])+)*[ \t]*::?(?!=)[^\n]*\n"
+                       r"(?:[ \t]*(?:#[^\n]*)?\n)*\t[^\n]*\S")
+_BIS_TARGET = re.compile(r"(?P<t>[^\s:=#][^:=#\n]*?)[ \t]*::?(?!=)(?P<rest>[^\n]*)\Z")
+
+
+def _bis_lang(head, default="sh"):
+    """Interpreter language of a command head (`/usr/bin/env python3`, `pwsh.exe`, `python3.11`)."""
+    w = [x for x in re.split(r"[ \t]+", (head or "").strip()) if x]
+    if w and re.search(r"(?:^|/)env$", w[0]):
+        w = [x for x in w[1:] if not x.startswith("-")] or w
+    b = re.sub(r"(?i)\.exe$", "", re.split(r"[\\/]", w[0])[-1]).lower() if w else ""
+    return _BIS_LANG.get(b) or _BIS_LANG.get(re.sub(r"[\d.]+$", "", b)) or default
+
+
+def _bis_dk_expand(s, env):
+    """Dockerfile `${X}` / `${X:-d}` / `$X` from ARG / ENV values; unknown references kept for the inner shell."""
+    def rep(m):
+        n = m.group("b") or m.group("s")
+        o, d = m.group("o"), m.group("d") or ""
+        if n in env:
+            v = env[n]
+            return (d if v else "") if o == "+" else (v or d if o == "-" else v)
+        return d if o == "-" else ("" if o == "+" else m.group(0))
+    return _BIS_DKVAR.sub(rep, s) if "$" in s else s
+
+
+def _bis_mk_expand(s, env, depth=0):
+    """GNU make recipe expansion: `$(X)` / `${X}` from the final variables (unknown -> ''), `$$` -> `$`."""
+    def rep(m):
+        if m.group(0) == "$$":
+            return "\0"
+        v = env.get(m.group("p") or m.group("b"), "")
+        return _bis_mk_expand(v, env, depth + 1).replace("$", "\0") if depth < 6 else v
+    return _BIS_MKVAR.sub(rep, s).replace("\0", "$") if depth == 0 else _BIS_MKVAR.sub(rep, s)
+
+
+def _bis_argv(cmd):
+    """POSIX-ish argv of one shell command (quotes removed, `\\`-newline joined); None when unbalanced."""
+    out, cur, i, q, have = [], [], 0, "", False
+    while i < len(cmd):
+        ch = cmd[i]
+        if q == "'":
+            if ch == "'":
+                q = ""
+            else:
+                cur.append(ch)
+        elif q == '"':
+            if ch == '"':
+                q = ""
+            elif ch == "\\" and i + 1 < len(cmd) and cmd[i + 1] in '"\\$`\n':
+                i += 1
+                if cmd[i] != "\n":
+                    cur.append(cmd[i])
+            else:
+                cur.append(ch)
+        elif ch in "'\"":
+            q, have = ch, True
+        elif ch == "\\" and i + 1 < len(cmd):
+            i += 1
+            if cmd[i] != "\n":
+                cur.append(cmd[i])
+                have = True
+        elif ch in " \t\n":
+            if cur or have:
+                out.append("".join(cur))
+            cur, have = [], False
+        else:
+            cur.append(ch)
+        i += 1
+    if q:
+        return None
+    if cur or have:
+        out.append("".join(cur))
+    return out
+
+
+def _bis_split(cmd, seps):
+    """Split a shell text on unquoted separator characters (quotes / backslashes respected)."""
+    parts, cur, q, i = [], [], "", 0
+    while i < len(cmd):
+        ch = cmd[i]
+        if q:
+            if ch == q:
+                q = ""
+            elif ch == "\\" and q == '"' and i + 1 < len(cmd):
+                cur.append(ch)
+                i += 1
+                ch = cmd[i]
+        elif ch in "'\"":
+            q = ch
+        elif ch == "\\" and i + 1 < len(cmd):
+            cur.append(ch)
+            i += 1
+            ch = cmd[i]
+        elif ch in seps:
+            parts.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(ch)
+        i += 1
+    parts.append("".join(cur))
+    return parts
+
+
+def _bis_derived(locus, lang, text, depth=0):
+    """Further inner scripts of one body: `interp -c '..'` arguments and `echo <blob> | decode.. | interp` pipes."""
+    import gzip
+    out = []
+    if depth > 2 or len(text) > (1 << 18):
+        return out
+    for stmt in _bis_split(text, ";\n&")[:400]:
+        segs = [x.strip() for x in _bis_split(stmt, "|")]
+        argvs = [_bis_argv(x) or [] for x in segs]
+        for av in argvs:                                       # interp -c "<script>"
+            av = [a for a in av if a not in ("sudo", "exec", "command", "nohup")]
+            if len(av) >= 3 and _bis_lang(av[0], "") and av[0].lower() not in ("echo", "printf"):
+                for j in range(1, len(av) - 1):
+                    if _BIS_FLAG.match(av[j]):
+                        lg = _bis_lang(av[0])
+                        body = av[j + 1]
+                        if re.match(r"(?i)-e(?:nc(?:odedcommand)?|c)$", av[j]):
+                            try:
+                                body = base64.b64decode(body).decode("utf-16-le")
+                            except Exception:  # noqa: BLE001
+                                continue
+                        out.append((f"{locus}>{lg}-c", lg, body))
+                        out += _bis_derived(f"{locus}>{lg}-c", lg, body, depth + 1)
+                        break
+        if len(segs) < 2 or not argvs[0] or argvs[0][0].split("/")[-1] not in ("echo", "printf"):
+            continue
+        a = [x for x in argvs[0][1:] if not re.match(r"-[neE]+$", x)]
+        if argvs[0][0].endswith("printf") and len(a) > 1 and re.match(r"%[bs](?:\\n)?$", a[0]):
+            a = a[1:]
+        data = " ".join(a).encode("latin-1", "ignore")
+        sink = None
+        for av in argvs[1:]:
+            h = av[0].split("/")[-1] if av else ""
+            fl = " ".join(av[1:])
+            try:
+                if h in ("base64", "openssl") and re.search(r"(?:^|\s)(?:-d|--decode|-D|enc -d|base64 -d|-a -d)\b|^-d", fl):
+                    data = base64.b64decode(re.sub(rb"\s+", b"", data) + b"===")
+                elif h == "base32" and "-d" in fl:
+                    data = base64.b32decode(re.sub(rb"\s+", b"", data).upper() + b"=" * (-len(re.sub(rb"\s+", b"", data)) % 8))
+                elif h == "xxd" and "-r" in fl:
+                    data = bytes.fromhex(re.sub(rb"[^0-9a-fA-F]", b"", data).decode())
+                elif h in ("gunzip", "zcat") or (h == "gzip" and "-d" in fl):
+                    data = gzip.decompress(data)
+                elif h == "rev":
+                    data = b"\n".join(x[::-1] for x in data.split(b"\n"))
+                elif _bis_lang(h, ""):
+                    sink = _bis_lang(h)
+                    break
+                else:
+                    break
+            except Exception:  # noqa: BLE001
+                data = None
+                break
+        if data and sink:
+            t = data.decode("utf-8", "ignore")
+            out.append((f"{locus}>pipe:{sink}", sink, t))
+            out += _bis_derived(f"{locus}>pipe:{sink}", sink, t, depth + 1)
+    return out
+
+
+def _bis_docker(src):
+    import json
+    out, env, shell = [], {}, "sh"
+    m = re.match(r"(?:[ \t]*#[ \t]*\w+[ \t]*=[^\n]*\n)*?[ \t]*#[ \t]*escape[ \t]*=[ \t]*([\\`])", src, re.I)
+    esc = m.group(1) if m else "\\"
+    lines = src.split("\n")
+    k, n_run = 0, 0
+    while k < len(lines):
+        ln = lines[k].rstrip("\r")
+        k += 1
+        if not ln.strip() or ln.lstrip().startswith("#"):
+            continue
+        while ln.endswith(esc) and k < len(lines):                 # `\`-continued instruction
+            nx = lines[k].rstrip("\r")
+            k += 1
+            if re.match(r"[ \t]*#", nx):                          # comment inside a continued instruction
+                continue
+            ln = ln[:-1] + "\n" + nx
+        im = re.match(r"[ \t]*([A-Za-z]+)[ \t]+(.*)\Z", ln, re.S)
+        if not im:
+            continue
+        ins, body = im.group(1).upper(), im.group(2)
+        if ins == "FROM":
+            env = {kk: vv for kk, vv in env.items() if kk.startswith("\0g")}
+            continue
+        if ins in ("ARG", "ENV"):
+            pairs = [(p.group("name"), p.group("val")) for p in _BH_ENV_PAIR.finditer(body)]
+            if not pairs and ins == "ENV":
+                lm = re.match(r"([A-Za-z_]\w*)[ \t]+(.+)", body, re.S)
+                pairs = [(lm.group(1), lm.group(2).strip())] if lm else []
+            for nm, v in pairs:
+                if v[:1] in "\"'" and v[-1:] == v[:1] and len(v) > 1:
+                    v = v[1:-1].replace('\\"', '"') if v[0] == '"' else v[1:-1]
+                env[nm] = _bis_dk_expand(v, env)
+            continue
+        if ins == "SHELL":
+            try:
+                sv = json.loads(body.replace(esc + "\n", "").strip())
+                shell = _bis_lang(sv[0]) if sv else shell
+            except Exception:  # noqa: BLE001
+                pass
+            continue
+        if ins not in ("RUN", "CMD", "ENTRYPOINT", "HEALTHCHECK", "ONBUILD"):
+            continue
+        n_run += 1
+        locus = f"{ins}#{n_run}"
+        body = re.sub(r"^(?:--[\w-]+=\S+[ \t]+)+", "", body.strip())  # RUN --mount=.. --network=..
+        if ins == "HEALTHCHECK":
+            body = re.sub(r"^(?:--\S+[ \t]+)*CMD[ \t]+", "", body)
+        if body.startswith("["):
+            try:
+                av = json.loads(body.replace(esc + "\n", ""))
+            except Exception:  # noqa: BLE001
+                av = None
+            if isinstance(av, list) and av and all(isinstance(a, str) for a in av):
+                lg = _bis_lang(av[0], "")
+                for j in range(1, len(av) - 1):
+                    if lg and _BIS_FLAG.match(av[j]):
+                        out.append((locus + ":exec", lg, av[j + 1]))
+                        out += _bis_derived(locus + ":exec", lg, av[j + 1])
+                        break
+                continue
+        hds = list(re.finditer(r"<<(-?)[ \t]*([\"']?)([A-Za-z_]\w*)\2", body))
+        if hds:
+            for hm in hds:
+                hb = []
+                while k < len(lines) and lines[k].rstrip("\r").strip(" \t" if hm.group(1) else "") != hm.group(3) \
+                        and lines[k].rstrip("\r") != hm.group(3):
+                    hb.append(lines[k].rstrip("\r").lstrip("\t") if hm.group(1) else lines[k].rstrip("\r"))
+                    k += 1
+                k += 1
+                text = "\n".join(hb) + "\n"
+                if not hm.group(2):
+                    text = _bis_dk_expand(text, env)
+                head = body[:hm.start()].strip()
+                head = re.split(r"[;&|]", head)[-1].strip()
+                if hb and hb[0].startswith("#!"):
+                    lg = _bis_lang(hb[0][2:], shell)
+                elif head and not re.match(r"(?i)cat\b|tee\b", head):
+                    lg = _bis_lang(head, shell)
+                else:
+                    lg = shell
+                out.append((f"{locus}:<<{hm.group(3)}", lg, text))
+                out += _bis_derived(f"{locus}:<<{hm.group(3)}", lg, text)
+            body = body[:hds[0].start()]
+            if not body.strip():
+                continue
+        text = _bis_dk_expand(body.replace(esc + "\n", "" if shell != "powershell" else " "), env)
+        out.append((locus, shell, text))
+        out += _bis_derived(locus, shell, text)
+    return out
+
+
+def _bis_make(src):
+    lines = src.split("\n")
+    env, recipes, order, shell_calls = {}, {}, [], []
+    oneshell = bool(re.search(r"(?m)^\.ONESHELL[ \t]*:", src))
+    target, k = None, 0
+    while k < len(lines):
+        ln = lines[k].rstrip("\r")
+        k += 1
+        if ln.startswith("\t") and target is not None:                # recipe line (+ `\` continuations)
+            rl = ln[1:]
+            while rl.endswith("\\") and not rl.endswith("\\\\") and k < len(lines):
+                nx = lines[k].rstrip("\r")
+                k += 1
+                rl += "\n" + (nx[1:] if nx.startswith("\t") else nx)
+            recipes[target].append(rl)
+            continue
+        while ln.endswith("\\") and k < len(lines):
+            ln = ln[:-1] + " " + lines[k].rstrip("\r").lstrip()
+            k += 1
+        st = ln.strip()
+        if not st or st.startswith("#"):
+            continue
+        fm = re.match(r"(?:(?:override|export)[ \t]+)*define[ \t]+([A-Za-z_][\w.-]*)", st)
+        if fm:
+            body = []
+            while k < len(lines) and not re.match(r"[ \t]*endef\b", lines[k]):
+                body.append(lines[k].rstrip("\r"))
+                k += 1
+            k += 1
+            env[fm.group(1)] = "\n".join(body)
+            continue
+        am = _BH_MK_ASSIGN.match(st)
+        if am and not re.match(r"[^=]*:[ \t]*[^=:]", st[:am.start("op")]):
+            nm, op, v = am.group("name"), am.group("op"), re.sub(r"(?<!\\)[ \t]*#.*$", "", am.group("val"))
+            for sc in _bh_shell_calls(v):
+                shell_calls.append((f"$(shell)@{nm}", sc))
+            if op == "!=":
+                shell_calls.append((f"!=@{nm}", v))
+                v = ""
+            elif op == "?=" and nm in env:
+                continue
+            if op == "+=" and nm in env:
+                v = env[nm] + " " + v
+            elif op in (":=", "::=", ":::="):
+                v = _bis_mk_expand(v, env).replace("$", "$$")
+            env[nm] = v
+            continue
+        tm = _BIS_TARGET.match(st)
+        if tm and not st.startswith(("ifeq", "ifneq", "ifdef", "ifndef", "else", "endif", "include", "-include",
+                                     "vpath", "export", "unexport")):
+            target = tm.group("t").strip()
+            if target not in recipes:
+                recipes[target] = []
+                order.append(target)
+            rest = tm.group("rest")
+            if ";" in rest:
+                recipes[target].append(rest.split(";", 1)[1].strip())
+    lang = _bis_lang(_bis_mk_expand(env.get("SHELL", "sh"), env))
+    out = []
+    for loc, sc in shell_calls:
+        t = _bis_mk_expand(sc, env)
+        out.append((loc, lang, t))
+        out += _bis_derived(loc, lang, t)
+    for t in order:
+        if t.startswith(".") or not recipes[t]:
+            continue
+        rl = recipes[t]
+        posix = lang in ("sh", "bash")
+        body = []
+        for i, r in enumerate(rl):
+            if not oneshell or i == 0 or posix:
+                r = re.sub(r"^[ \t]*[@+-]+[ \t]*", "", r)
+            body.append(r)
+        text = _bis_mk_expand("\n".join(body), env)
+        if posix:
+            text = re.sub(r"\\\n[ \t]*", "", text)                   # the shell joins `\`-newline
+        loc = f"{t}:"
+        out.append((loc, lang, text))
+        out += _bis_derived(loc, lang, text)
+    return out
+
+
+def build_inner_scripts(text):
+    """Scripts a build file hands to an interpreter: [(locus, language, script_text)] of a Dockerfile, Makefile or
+    Terraform template (see the section comment). [] when it is none of them. Never raises."""
+    try:
+        if isinstance(text, (bytes, bytearray)):
+            text = bytes(text).decode("utf-8", "ignore")
+        src = (text or "")[:1 << 20].lstrip("\ufeff").replace("\r\n", "\n")
+        out = []
+        docker = bool(_BH_DOCKER.search(src)) and bool(re.search(r"(?im)^[ \t]*(?:FROM|RUN)[ \t]+\S", src))
+        make = bool(_BIS_MAKE.search(src))
+        if docker and not re.search(r"(?m)^\.ONESHELL|^\t[@-]", src):
+            out += _bis_docker(src)
+        elif make:
+            out += _bis_make(src)
+        if re.search(r"""provisioner[ \t]+"(?:local|remote)-exec"|resource[ \t]+"[\w-]+"[ \t]+"[\w-]+\"""", src[:1 << 18]):
+            for s in iac_scripts("", src):
+                if _BIS_TF_FIELD.search(s.get("field") or ""):
+                    loc = f"{s.get('resource')}/{s.get('field')}"
+                    lg = _bis_lang(s.get("lang") or "", "") or s.get("lang") or "sh"
+                    out.append((loc, lg, s["body"]))
+                    out += _bis_derived(loc, lg, s["body"])
+        return [(a, b, c) for a, b, c in out if isinstance(c, str) and c.strip()][:256]
+    except Exception:  # noqa: BLE001 - unknown host -> nothing, never an exception
+        return []
+
+
+_BIS_CUT = re.compile(r"HUNTRESS_ANALYSIS_V\d+:\w+-[A-Za-z0-9+/=_-]*\\\r?\n")
+
+
+def _bis_codecs(src, budget=0.5):
+    """find_codecs readings of every build-file inner script that differs from the raw host text (deduped)."""
+    out, seen = [], set()
+    try:
+        end = time.time() + budget
+        for loc, lang, text in build_inner_scripts(src):
+            if time.time() > end:
+                break
+            if text in src or not _NS_HINT.search(text):
+                continue
+            for c in find_codecs(text, 1):
+                p = c.get("plain")
+                if p and p not in seen:
+                    seen.add(p)
+                    out.append(dict(c, id=f"{c.get('id')}@{loc}", language=lang))
+    except Exception:  # noqa: BLE001
+        return out
+    return out
 
 
 # Target dockerfile-multistage-stage-graph: a multi-stage Dockerfile read as BuildKit scopes it (never built).
@@ -2377,7 +2794,8 @@ def find_codecs(src, _depth=0):
     """Every declared codec in a source text (see _find_codecs_uncached). Nested readings (_depth >= 1) of one inner
     text are memoised: the SaaS JSON-string reader and the nested string-carrier reader can unescape the same text."""
     if _depth < 1 or not isinstance(src, str) or len(src) > (1 << 20):
-        return _find_codecs_uncached(src, _depth)
+        out = _find_codecs_uncached(src, _depth)
+        return _emb_append(src, out) if _depth == 0 else out
     hit = _FC_CACHE.get((src, _depth))
     if hit is None:
         if len(_FC_CACHE) > 64:
@@ -2466,6 +2884,14 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _build_host_codecs(src) if any(c["plain"] != p and c["plain"].startswith(p)
                                                        for p in (o.get("plain") for o in out) if p)]
         out = x + out
+    if _depth < 2 and isinstance(src, str) and (_BH_DOCKER.search(src[:1 << 20]) or _BH_MAKE.search(src[:1 << 20])):
+        # build-file recipe / RUN body handing a prior-language script to its interpreter: a gap, or the full plan
+        # ahead of a marker reading cut by a `\`-continued recipe line
+        have = [c.get("plain") for c in out if c.get("plain")]
+        if not have or _BIS_CUT.search(src[:1 << 20]):
+            x = [c for c in _bis_codecs(src) if c["plain"] not in have and (not have or any(
+                c["plain"] != p and c["plain"].startswith(p) for p in have))]
+            out = x + out
     if _depth < 2 and not any(c.get("plain") for c in out) and _HK_CUE.search((src or "")[:1 << 16]) and \
             re.search(r"<executable>|<exec\b", (src or "")[:1 << 20]):
         out = out + _hook_codecs(src, _depth)            # Maven / Ant build hook: argv split over XML elements
@@ -2695,6 +3121,22 @@ def _find_codecs_text(src):
         # a tag the reps don't name (B32, GZ64, XOR, ROT, A85, URL, UTF16...): peel its layers BEFORE the name-agnostic
         # _fallback, whose transform guesses can turn UTF-16 NULs into a plan-shaped 'v==33||ll..' (known tags unchanged)
         known_tag = am.group("tag").upper() in _ANALYSIS_TAG_REP
+        plain = None
+        if am.group("tag").upper() == "LYR" and _LYR_TAG_ONLY.fullmatch(am.group("mat")):
+            # multi-language-drop-battery: a tag-only marker (`LYR-b64_b32`, material only in the descriptor) -- the
+            # layer list itself must not be read as material (it can peel to a junk `v=P5` prefix); peel the literals
+            for lit in _descriptor_literals(src) + [v for _, v in _descriptor_literals_ext(src)]:
+                plain = lyr_peel("LYR-" + am.group("mat"), lit)
+                if plain:
+                    break
+            if not plain:                                    # descriptor inside a decode call: named decode, then chain
+                dc = _decode_call_plan(src, "LYR-" + am.group("mat"))
+                if dc:
+                    lit, plain = dc[1], dc[2]
+        if plain:
+            out.append({"id": dm.group(1) if dm else "analysis", "rep": rep, "transform": "identity", "key": "",
+                        "material": lit, "plain": plain})
+            return out
         plain = decode(am.group("mat"), rep, "identity") if known_tag else peel_plan(am.group("mat"), am.group("tag"))
         if plain:                                # a wrapped marker whose first line alone peels to a prefix plan
             plain = _marker_extended(src, am, plain)
@@ -2708,6 +3150,9 @@ def _find_codecs_text(src):
                 cont = [("", v) for v in _marker_continued(src, am)]
                 plain = _peel_ext(cont + _ahk_literals(src) + _descriptor_literals_ext(src), am.group("tag"),
                                   tried=_descriptor_literals(src) + [am.group("mat")])[1]
+            if plain is None:                    # descriptor inside the host's decode call (marker material damaged)
+                dc = _decode_call_plan(src, am.group("tag"))
+                plain = dc[2] if dc else None
         mat = am.group("mat")
         if plain is None or (am.string is src and re.match(r"""["'<][^\s;,)\-"'>]""", src[am.end():am.end() + 2])):
             vt = _v3_tag_line(src, budget=0.3)               # v3-tag-vocab-extend: tag table / full marker line (b85/a85 `<"'`)
@@ -2739,6 +3184,11 @@ def _find_codecs_text(src):
             if plain:
                 out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "",
                             "material": dict(lits).get(ident), "plain": plain})
+        if not out:                                              # descriptor inside the host's decode call
+            dc = _decode_call_plan(src or "")
+            if dc:
+                out.append({"id": dc[0], "rep": "descriptor", "transform": "identity", "key": "", "material": dc[1],
+                            "plain": dc[2]})
         if not out and "HUNTRESS_ANALYSIS_V" in (src or ""):     # a marker material _ANALYSIS_RE cannot start (b85 `<`)
             vt = _v3_tag_line(src)
             if vt:
@@ -3608,6 +4058,190 @@ def _peel_ext(lits, tag="", tried=(), budget=1.5):
     return None, None
 
 
+# Descriptor literal wrapped in the host language's own decode call (target descriptor-decode-call-wrapper): HCL
+# `base64decode("..")` / `base64gunzip` / `jsondecode`, Kotlin/Java/BeanShell `Base64.getDecoder().decode("..")`, Swift
+# `Data(base64Encoded: "..")`, Nim `decode("..")`, Rust `STANDARD.decode("..")` / `hex::decode`, Go `DecodeString`,
+# Tcl `[binary decode base64|hex {..}]`, shells `$(print -r -- .. | base64 -d)` / `echo .. | base64 -d` / `<<< ..`,
+# Groovy `.decodeBase64()`. The named decode(s) run first (one layer each), so the inner text is the descriptor
+# material a LYR chain / shape peel expects. Read only after every earlier reading found no plan.
+_DCALL_BIND = re.compile(r"""(?:huntress[_-])?descriptor[_-](?P<id>[\w-]+)["']?(?:[ \t]*,[ \t]*\w+)?(?:[ \t]*:[ \t]*&?[\w.\[\]<>:]+(?=[ \t]*=))?"""
+                         r"""[ \t]*(?:<-|:=|=(?![=~])|[ \t])""", re.I)
+_DCALL_OPEN = (   # (opener regex, decoder): matched in the binding's text before its argument literal
+    (r"\bbase64gunzip[ \t]*\(", "b64gz"), (r"\bjsondecode[ \t]*\(", "json"),
+    (r"\b(?:textdecodebase64|base64decode|b64decode|urlsafe_b64decode|decodebase64|FromBase64String|atob|"
+     r"decode_base64|decode64|base64_decode|base64Decode)[ \t]*\(", "b64"),
+    (r"\bget(?:Mime|Url)?Decoder[ \t]*\([ \t]*\)[ \t]*\.[ \t]*decode[ \t]*\(", "b64"),
+    (r"\bData[ \t]*\([ \t]*base64Encoded[ \t]*:", "b64"),
+    (r"\b(?:Std|URL|RawStd|RawURL)Encoding[ \t]*\.[ \t]*DecodeString[ \t]*\(", "b64"),
+    (r"\b(?:hex[ \t]*\.[ \t]*DecodeString|hex::decode|unhexlify|fromhex|hex2bin|fromHex)[ \t]*\(", "hex"),
+    (r"(?:\b[A-Z][A-Z_]*|\bbase64)[ \t]*(?:\.|::)[ \t]*decode[ \t]*\(", "b64"),
+    (r"(?<![\w.:])decode[ \t]*\(", "b64"),                   # Nim std/base64 `decode(..)`
+    (r"\bbinary[ \t]+decode[ \t]+base64(?:[ \t]+-\w+)*[ \t]+", "b64"),
+    (r"\bbinary[ \t]+decode[ \t]+hex(?:[ \t]+-\w+)*[ \t]+", "hex"),
+)
+_DCALL_OPEN_RE = [(re.compile(rx), d) for rx, d in _DCALL_OPEN]
+_DCALL_ECHO = re.compile(r"""(?:\becho(?:[ \t]+-[neE]+)*|\bprint(?:[ \t]+-[rnR]+)*(?:[ \t]+--)?|\bprintf(?:[ \t]+(?:'%s'|"%s"|%s))?)"""
+                         r"""[ \t]+|<<<[ \t]*""")
+_DCALL_BARE = re.compile(r"[A-Za-z0-9+/=_\-.]{8,}")
+_DCALL_PIPE = re.compile(r"""[ \t]*\|[ \t]*(?:(?P<b64>base64[ \t]+(?:-d|-D|--decode)\b(?:[ \t]+-\w+)*|openssl[ \t]+(?:base64|enc[ \t]+-base64)"""
+                         r"""[ \t]+-d\b(?:[ \t]+-A)?)|(?P<b32>base32[ \t]+(?:-d|--decode)\b)|(?P<hex>xxd[ \t]+-r[ \t]+-p\b|xxd[ \t]+-p[ \t]+-r\b)"""
+                         r"""|(?P<gz>gunzip\b(?:[ \t]+-c)?|gzip[ \t]+-dc?\b|zcat\b)|(?P<rev>rev\b))""")
+_DCALL_SUFFIX = re.compile(r"""[ \t]*(?:\.[ \t]*(?P<g>decodeBase64)[ \t]*\([ \t]*\)|,[ \t]*["'](?P<n>base64|hex)["'][ \t]*\))""")
+
+
+def _dcall_apply(data, name):
+    """bytes after one named decode, else None."""
+    import gzip
+    import json
+    try:
+        if name in ("b64", "b64gz"):
+            s = re.sub(rb"\s+", b"", data)
+            if re.search(rb"[-_]", s):
+                s = s.replace(b"-", b"+").replace(b"_", b"/")
+            s = s.rstrip(b"=")
+            out = base64.b64decode(s + b"=" * (-len(s) % 4), validate=True)
+            return gzip.decompress(out) if name == "b64gz" else out
+        if name == "hex":
+            return bytes.fromhex(re.sub(r"\s+", "", data.decode("ascii")))
+        if name == "b32":
+            s = re.sub(rb"\s+", b"", data).upper().rstrip(b"=")
+            return base64.b32decode(s + b"=" * (-len(s) % 8))
+        if name == "gz":
+            return gzip.decompress(data)
+        if name == "rev":
+            return data.rstrip(b"\r\n")[::-1]
+        if name == "json":
+            t = data.decode("utf-8")
+            for cand in (t, '"' + t + '"'):                     # raw JSON text, or its host-escaped `\"..\"` body
+                try:
+                    v = json.loads(cand)
+                except ValueError:
+                    continue
+                if isinstance(v, str) and len(v) > 1 and v[0] == v[-1] == '"':
+                    v = json.loads(v)
+                return v.encode("utf-8") if isinstance(v, str) else None
+            return None
+    except Exception:  # noqa: BLE001 - this decode does not fit the literal
+        return None
+    return None
+
+
+def _decode_call_literals(src, limit=16):
+    """(id, inner text) of each descriptor bound to a decode call / decode pipeline over a literal: the named decodes
+    applied innermost first (an HCL / JVM string escape read through _read_literal). [] when there is none."""
+    out = []
+    if not src or "descriptor" not in src.lower():
+        return out
+    for m in _DCALL_BIND.finditer(src[:1 << 20]):
+        if len(out) >= limit:
+            break
+        i = m.end()
+        win = src[i:i + (1 << 16)]
+        cut = re.search(r"\n(?![ \t]*[+.|&)\]]|[ \t]*$)", win[:2048])  # the statement head, `+`/`|` continuation lines
+        head = win[:cut.start()] if cut else win[:2048]
+        lq = re.search(r"""["'{]""", head)
+        decs, lit, end = [], None, None
+        em = re.search(r"\becho\b|\bprintf?\b|<<<", head)
+        if em and re.fullmatch(r"""[ \t"'$(`]*(?:(?:base64|base32)[ \t]+(?:-d|-D|--decode)[ \t]*)?""", head[:em.start()]):
+            # shell: `$(echo LIT | base64 -d)`, `(print -r -- LIT | base64 -d)`, `$(base64 -d <<< LIT)`
+            e = _DCALL_ECHO.match(head, em.start())
+            if not e:
+                continue
+            j = e.end()
+            if head[j:j + 1] in "\"'":
+                lit, k = _read_literal(win, j, None)
+            else:
+                b = _DCALL_BARE.match(win, j)
+                lit, k = (b.group(0), b.end()) if b else (None, j)
+            if lit is None:
+                continue
+            pre = head[:em.start()]
+            hs = re.search(r"\b(base64|base32)[ \t]+(?:-d|-D|--decode)\b[^|<]*$", pre) if head[em.start():em.start() + 3] == "<<<" else None
+            if hs:
+                decs.append("b64" if hs.group(1) == "base64" else "b32")
+            while True:
+                p = _DCALL_PIPE.match(win, k)
+                if not p:
+                    break
+                decs.append(next(n for n in ("b64", "b32", "hex", "gz", "rev") if p.group(n)))
+                k = p.end()
+        else:
+            if not lq:
+                continue
+            pre = head[:lq.start()]
+            opens = sorted((om.start(), d) for rx, d in _DCALL_OPEN_RE for om in rx.finditer(pre))
+            seen_at, inner = set(), []
+            for pos, d in opens:                                       # one decoder per opener position
+                if pos not in seen_at:
+                    seen_at.add(pos)
+                    inner.append(d)
+            if lq.group(0) == "{":
+                if not inner or not re.search(r"binary[ \t]+decode[ \t]+\w+(?:[ \t]+-\w+)*[ \t]+$", pre):
+                    continue
+                close = win.find("}", lq.end())
+                if close < 0:
+                    continue
+                lit, k = win[lq.end():close], close + 1
+            else:
+                lit, k = _read_literal(win, lq.start(), None)
+                if lit is None:
+                    continue
+                pieces = [lit]
+                while len(pieces) < 64:                                # "a" + "b" / .. / . / & joined pieces
+                    c = re.match(r"""\s*(?:\+|\.\.?|&|~)\s*(?=["'])""", win[k:k + 200])
+                    if not c:
+                        break
+                    nxt, k2 = _read_literal(win, k + c.end(), None)
+                    if nxt is None:
+                        break
+                    pieces.append(nxt)
+                    k = k2
+                lit = "".join(pieces)
+            sm = _DCALL_SUFFIX.match(win, k)
+            if sm:
+                inner.append("b64" if sm.group("g") or sm.group("n") == "base64" else "hex")
+            decs = inner[::-1]
+        if not decs or not lit:
+            continue
+        data = lit.encode("utf-8", "ignore")
+        for d in decs:
+            data = _dcall_apply(data, d) if data is not None else None
+        if not data:
+            continue
+        try:
+            out.append((m.group("id"), data.decode("utf-8")))
+        except UnicodeDecodeError:
+            for z in (lambda b: _inflate(b, False), lambda b: _inflate(b, True)):
+                try:
+                    t = z(data)
+                except Exception:  # noqa: BLE001
+                    t = None
+                if t and _lyr_v(t):
+                    out.append((m.group("id"), t.decode("utf-8")))
+                    break
+    return out
+
+
+def _decode_call_plan(src, tag="", budget=0.6):
+    """(id, inner, plan) of the first decode-call-wrapped descriptor whose inner text peels (LYR chain from `tag`, else
+    the shape peel) to a `v=` plan, else None."""
+    end = time.time() + budget
+    for ident, inner in _decode_call_literals(src):
+        if time.time() > end:
+            break
+        if _lyr_v(inner.encode("utf-8")):
+            return ident, inner, inner.strip()
+        plain = None
+        if tag and tag.upper().startswith("LYR"):
+            plain = lyr_peel(tag, inner, budget=min(0.3, max(0.05, end - time.time())))
+        if not plain:
+            plain = peel_plan(re.sub(r"\s+", "", inner), "", depth=6, max_nodes=4000,
+                              budget=min(0.3, max(0.05, end - time.time())))
+        if plain and _lyr_v(plain.encode("utf-8")):
+            return ident, inner, plain
+    return None
+
+
 # Game-engine / modding script descriptors (target game-script-language-route), the D23 GDScript siblings. Luau, Ren'Py
 # (`define` / `init python:` / `$ x =`), GML `#macro` / `global.x`, AngelScript `const string`, UnrealScript
 # `defaultproperties`, Unity C# `[SerializeField]` and LÖVE Lua already read through _descriptor_literals_ext; this adds
@@ -4138,6 +4772,15 @@ def _lyr_utf16(s):
     raise ValueError("utf16")
 
 
+def _lyr_utf16_raw(s):
+    """lyr-layer-vocab-extend: a u16 layer over BINARY bytes (latin-1 -> UTF-16LE, e.g. `z_u16_b64`): the code units
+    back to bytes, only when every unit fits one byte."""
+    if len(s) % 2:
+        raise ValueError("utf16")
+    t = s.decode("utf-16-le")
+    return t.encode("latin-1")
+
+
 _LYR_NAMES = (   # (name regex, list of reading builders: key-group -> fn(bytes, last) -> bytes)
     (r"b64u|b64url|base64u|base64url|urlsafe|urlsafeb64|u64|websafe", [lambda k: lambda s, l: _lyr_b64(s, True)]),
     (r"b64|base64|64|bas64", [lambda k: lambda s, l: _lyr_b64(s)]),
@@ -4166,7 +4809,8 @@ _LYR_NAMES = (   # (name regex, list of reading builders: key-group -> fn(bytes,
     (r"url|pct|percent|urlenc|urlencode|uri", [lambda k: lambda s, l: _lyr_url(s)]),
     (r"uu|uue|uuencode", [lambda k: lambda s, l: _lyr_uu(s)]),
     (r"qp|quotedprintable|quopri", [lambda k: lambda s, l: binascii.a2b_qp(s)]),
-    (r"utf16|utf16le|utf16be|u16|wide|unicode|utf_16", [lambda k: lambda s, l: _lyr_utf16(s)]),
+    (r"utf16|utf16le|utf16be|u16|wide|unicode|utf_16", [lambda k: lambda s, l: _lyr_utf16(s),
+                                                        lambda k: lambda s, l: _lyr_utf16_raw(s)]),
     (r"bin|binary|bits", [lambda k: lambda s, l: bytes(int(x, 2) for x in re.findall(rb"[01]{8}", _lyr_ws(s)))]),
     (r"rev|reverse|reversed|flip", [lambda k: lambda s, l: s[::-1]]),
     (r"frag|frags|split|dots|chunks", [lambda k: lambda s, l: s.replace(b".", b""),
@@ -4198,6 +4842,21 @@ def _lyr_readings(name):
             k = m.group(1) if m.groups() else None
             return [f(k) for f in fs]
     return None
+
+
+# lyr-layer-vocab-extend: a layer name no table row knows (`zz`, `b64x`, `sh1ft`, a typo'd alias ...) is read at ITS
+# position by every keyless known decoder (one reading per row, cheap-text decoders first); the dfs accepts only a
+# final `v=`, so a wrong guess costs time, never an answer. Unknown positions are capped so the product stays bounded.
+_LYR_ANY_NAMES = ("b64", "b64u", "b32", "b32hex", "hex", "rev", "frag", "rot13", "url", "b85", "a85", "z85", "b58",
+                  "zlib", "gz", "deflate", "bz2", "xz", "zstd", "br", "lz4", "utf16", "xor", "uu", "bin")
+
+
+def _lyr_any_readings():
+    out = []
+    for n in _LYR_ANY_NAMES:
+        for f in _lyr_readings(n) or ():
+            out.append(f)
+    return out
 
 
 def _lyr_layers(spec):
@@ -4242,6 +4901,8 @@ def lyr_peel(tag, data, budget=0.4):
         end = time.time() + budget
         layers = _lyr_layers(tag)[:6]
         reads = [_lyr_readings(n) for n in layers]
+        if layers and not all(reads) and sum(r is None for r in reads) <= 2 and len(layers) >= 2:
+            reads = [r if r is not None else _lyr_any_readings() for r in reads]     # unknown name: any decoder
         if layers and all(reads):
             chain = list(reversed(reads))
             steps = [0]
@@ -8554,11 +9215,67 @@ def _jc_variants(d):
 # stringProp holds the XML-escaped literal, `${var}` references resolved from the plan's other pairs (JMeter variable
 # expansion) -- while the BeanShell / JSR223 sampler only reads it back with `vars.get("descriptor_x")`. Regex +
 # html.unescape over the text (no DTD / entity resolution), bounded, never raises.
-_JMX_CUE = re.compile(r"<jmeterTestPlan\b|<stringProp\s+name=[\"'](?:Argument|Header|HTTPArgument)\.(?:name|value)[\"']")
+_JMX_CUE = re.compile(r"<jmeterTestPlan\b|<stringProp\s+name=[\"'](?:Argument|Header|HTTPArgument)\.(?:name|value)[\"']"
+                      r"|<stringProp\s+name=[\"'](?:BeanShell\w*\.query|script)[\"']")
 _JMX_ELEM = re.compile(r"<elementProp\b([^>]*?)/?>|</elementProp\s*>")
 _JMX_PROP = re.compile(r"""<stringProp\s+name=(["'])(?P<n>[^"'<>]*)\1\s*(?:/>|>(?P<v>[^<]*)</stringProp\s*>)""")
 _JMX_NAME = re.compile(r"""\bname=(["'])([^"'<>]*)\1""")
 _JMX_VAR = re.compile(r"\$\{([A-Za-z_][\w.-]*)\}")
+# BeanShell / JSR223 sampler bodies (`BeanShellSampler.query`, `script`) and `${__BeanShell(..)}` / `${__groovy(..)}`
+# function arguments, XML-escaped (`&quot;`, `&#xa;`): a `String|def|var x = "a" + y + vars.get("p") + "c"` / `x += ..`
+# concatenation resolved over string literals, earlier assignments and the plan's User Defined Variables.
+_JMX_SCRIPT = re.compile(r"(?i)^(?:[\w]*\.)?(?:query|script)$")
+_JMX_FN = re.compile(r"(?s)^\s*\$\{__(?:BeanShell|groovy|jexl[23]?|javaScript)\((.*)\)\}\s*$")
+_JV_ASSIGN = re.compile(r"(?m)(?:^|[;{])[ \t]*(?:(?:final|static|public|private)[ \t]+)*(?:(?:String|def|var|val|Object|"
+                        r"CharSequence)[ \t]+)?([A-Za-z_]\w*)[ \t]*(\+?=)(?!=)|\breturn\b")
+_JV_LIT = re.compile(r'"((?:[^"\\\n]|\\.)*)"|\'((?:[^\'\\\n]|\\.)*)\'')
+_JV_GET = re.compile(r"""(?:vars|props|ctx\.getVariables\(\))\.get(?:Property|Object)?\(\s*["']([^"'\n]+)["']\s*\)""")
+_JV_IDENT = re.compile(r"([A-Za-z_]\w*)(?:\.toString\(\))?")
+
+
+def _jv_lit(body):
+    """Java / Groovy string-literal body -> text (`\\n`, `\\"`, `\\uXXXX`); unknown escapes keep the character."""
+    m = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "0": "\0"}
+    return re.sub(r"\\(u+[0-9a-fA-F]{4}|.)", lambda r: chr(int(r.group(1).lstrip("u"), 16))
+                  if r.group(1)[0] == "u" and len(r.group(1)) > 1 else m.get(r.group(1), r.group(1)), body)
+
+
+def _jv_concat(s, i, env):
+    """(value, end) of the `+` concatenation of literals / known names / vars.get(..) starting at s[i], else None."""
+    parts, n = [], len(s)
+    while True:
+        while i < n and s[i] in " \t\r\n(":
+            i += 1
+        m = _JV_LIT.match(s, i) or _JV_GET.match(s, i) or _JV_IDENT.match(s, i)
+        if not m:
+            return None
+        if m.re is _JV_LIT:
+            parts.append(_jv_lit(m.group(1) if m.group(1) is not None else m.group(2)))
+        elif m.group(1) in env:
+            parts.append(env[m.group(1)])
+        else:
+            return None
+        i = m.end()
+        while i < n and s[i] in " \t\r\n)":
+            i += 1
+        if i < n and s[i] == "+" and s[i + 1:i + 2] not in ("+", "="):
+            i += 1
+            continue
+        return "".join(parts), i
+
+
+def _jmx_script_env(body, env, budget_end):
+    """Names a BeanShell / Groovy body assigns (resolved left to right over `env`) and its `return` value (key '')."""
+    out = {}
+    for m in list(_JV_ASSIGN.finditer(body[:1 << 18]))[:512]:
+        if time.time() > budget_end:
+            break
+        r = _jv_concat(body, m.end(), dict(env, **out))
+        if r is None or len(r[0]) > (1 << 20):
+            continue
+        name = m.group(1) or ""
+        out[name] = (out.get(name, env.get(name, "")) if m.group(2) == "+=" else "") + r[0]
+    return out
 
 
 def _jmx_codecs(src, depth=0, budget=0.4):
@@ -8584,6 +9301,22 @@ def _jmx_codecs(src, depth=0, budget=0.4):
                 env[name] = props["value"]
                 if re.fullmatch(r"(?i)descriptor[_-][\w-]+", name):
                     descs.append(name)
+        for name, v in list(env.items())[:256]:                 # ${__BeanShell(..)} value: the body's return value
+            fm = _JMX_FN.match(v)
+            if fm and time.time() < end:
+                body = re.split(r"(?<!\\),", fm.group(1))[0].replace("\\,", ",")
+                r = _jmx_script_env(body, env, end).get("")
+                if r is not None:
+                    env[name] = r
+        for p in list(_JMX_PROP.finditer(s))[:256]:              # sampler / pre-processor script bodies
+            if not _JMX_SCRIPT.match(p.group("n")) or not p.group("v") or time.time() > end:
+                continue
+            body = _JMX_VAR.sub(lambda r: env.get(r.group(1), r.group(0)), html.unescape(p.group("v")))
+            for name, v in _jmx_script_env(body, env, end).items():
+                if name and v and name not in env:
+                    env[name] = v
+                    if re.fullmatch(r"(?i)descriptor[_-]?[\w-]+", name):
+                        descs.append(name)
         if not descs:
             return []
         lines = [m.group(0) for m in _CODEC_RE.finditer(html.unescape(s))][:8]
@@ -26115,3 +26848,941 @@ def _cs_decode(material, transform=None, key=None):
     if _cl_norm(transform) in ("json", "summary", "identity"):
         return json.dumps({k: v for k, v in summ.items() if k != "rows"}, sort_keys=True, separators=(",", ":"))
     return corpus_answer(summ, transform or "members", key)
+
+
+# Target embedded-prior-script-dual-plan (D28 "resources, prior scripts, and relationship evidence"): a new-language
+# file carrying a whole PRIOR-language fixture (its own `Codec_<id>`/`Material_<id>` v=1-2 plan) next to its own v=3
+# marker -- Terraform `local-exec` `<<-EOT` heredoc, Makefile recipe (`$$`, `@`, `\` continuation), Kotlin/Groovy/
+# Python `"""` raw string, Rust `r#".."#`, XML `<![CDATA[..]]>` / `&quot;`-escaped attribute, fish `begin; ..; end`,
+# a `\n`/`\"`-escaped one-line string. embedded_scripts() lists the bodies; embedded_plans() keeps the OUTER file's
+# plan (read with every inner body blanked, so an inner Codec_ never answers the outer ids) apart from the inner
+# plans; embedded_answer() routes `-inner-` / `-prior-` / `-embedded-` / `-nested-` / `-next-stage-<field>` ids to an
+# inner plan and everything else to the outer one. find_codecs appends inner-only plans (ids `<id>@inner`) AFTER every
+# outer reading and only when the outer file already read a plan, so the first plain is never an inner one.
+_EMB_HEREDOC = re.compile(r"""<<<?([-~]?)[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_]{0,31})\2[^\n]*\n""")
+_EMB_TRIPLE = re.compile(r'(?<![\w"])([rRbBuUfFs]{0,2})"""(.*?)"""', re.S)
+_EMB_RUSTRAW = re.compile(r'\br(#{1,4})"(.*?)"\1', re.S)
+_EMB_CDATA = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.S)
+_EMB_FISH = re.compile(r"(?m)^[ \t]*begin\s*(?:;|\n)(.*?)(?:;|\n)[ \t]*end\b", re.S)
+_EMB_DQ = re.compile(r'"((?:[^"\\\n]|\\.){40,})"')
+_EMB_XATTR = re.compile(r"""=\s*(["'])([^"'<>]*?(?:&quot;|&#10;|&#xA;|&apos;)[^"'<>]*?)\1""", re.S)
+_EMB_MK_RULE = re.compile(r"(?m)^[^\s#:=][^:=\n]*::?(?![=])[^\n]*\n((?:\t[^\n]*\n?|[ \t]*\n)+)")
+_EMB_CUE = re.compile(r"(?:Codec|CODEC|Material|MATERIAL)_[0-9A-Za-z]|FromBase64String|HUNTRESS[-_](?:CODEC|ANALYSIS)|"
+                      r"descriptor_\w|HUNTRESS_DESCRIPTOR")
+_EMB_LANG = (("powershell", re.compile(r"\[Convert\]::|\$[A-Za-z_]\w*\s*=|-EncodedCommand|Invoke-Expression|"
+                                       r"\bparam\s*\(|Write-Output|\[System\.", re.I)),
+             ("batch", re.compile(r"(?im)^\s*@?echo\s+off|^\s*set\s+\"?\w+=|^\s*rem\s|%~dp0|^\s*goto\s")),
+             ("bash", re.compile(r"(?m)^#!.*\b(?:ba|z|da)?sh\b|^\s*(?:readonly|local|declare|export)\s+\w|\$\{\w+|"
+                                 r"^\s*\w+\(\)\s*\{|\bfi\b|\bdone\b")),
+             ("vbscript", re.compile(r"(?im)^\s*(?:Dim|Const|Set)\s+\w|\bWScript\.|\bEnd\s+(?:Function|Sub)\b")),
+             ("python", re.compile(r"(?m)^\s*(?:import|from)\s+\w|^\s*def\s+\w+\(|\bprint\(")),
+             ("javascript", re.compile(r"\b(?:var|let|const)\s+\w+\s*=|\bfunction\s*\w*\(|=>|\bWScript\b")))
+
+
+def _emb_lang(body):
+    """Best guess of an embedded body's language, or "unknown"."""
+    hits = [(len(rx.findall(body[:1 << 15])), n) for n, rx in _EMB_LANG]
+    best = max(hits, key=lambda t: t[0])
+    return best[1] if best[0] else "unknown"
+
+
+def _emb_dedent(body):
+    lines = body.split("\n")
+    ind = [len(ln) - len(ln.lstrip(" \t")) for ln in lines if ln.strip()]
+    cut = min(ind) if ind else 0
+    return "\n".join(ln[cut:] for ln in lines)
+
+
+def _emb_unescape_c(s):
+    """C-style string escapes (`\\n \\t \\" \\' \\\\ \\$ \\xHH \\uHHHH`) of an escaped one-line literal."""
+    def rep(m):
+        c = m.group(1)
+        if c[0] in "xu":
+            try:
+                return chr(int(c[1:], 16))
+            except ValueError:
+                return m.group(0)
+        return {"n": "\n", "t": "\t", "r": "\r", "0": "\0"}.get(c, c)
+    return re.sub(r"\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)", rep, s, flags=re.S)
+
+
+def _emb_make_recipe(body):
+    """A Makefile recipe -> the shell text it runs: tab stripped, `@`/`-`/`+` prefixes dropped, `\\` joins, `$$`->`$`."""
+    out = []
+    for ln in body.split("\n"):
+        if ln.startswith("\t"):
+            ln = ln[1:]
+        ln = re.sub(r"^[@+-]+", "", ln)
+        out.append(ln)
+    text = re.sub(r"\\\n\t?", "\n", "\n".join(out))
+    return text.replace("$$", "$")
+
+
+def embedded_scripts(text, limit=16):
+    """[(locus, language_guess, inner_text)] of every whole script body embedded in `text` that carries a codec /
+    marker cue (heredoc, `\"\"\"` / `r#"`  raw string, CDATA, `&quot;`-escaped XML attribute, Makefile recipe, fish
+    `begin; ..; end`, `\\n`-escaped string), unescaped. locus = "<kind>@<offset>". [] when none; never raises."""
+    return [(a, b, c) for a, b, c, _ in _emb_raw(text, limit)]
+
+
+def _emb_raw(text, limit=16):
+    """embedded_scripts() with each body's source span: [(locus, lang, body, (start, end))]."""
+    out = []
+    try:
+        if isinstance(text, (bytes, bytearray)):
+            text = bytes(text).decode("utf-8", "replace")
+        if not isinstance(text, str) or not _EMB_CUE.search(text[:1 << 20]):
+            return []
+        text = text[:1 << 20]
+        seen = set()
+
+        def add(kind, pos, body, span):
+            if len(out) >= limit or not body or not _EMB_CUE.search(body):
+                return
+            key = body.strip()
+            if key in seen or len(key) < 24:
+                return
+            seen.add(key)
+            out.append((f"{kind}@{pos}", _emb_lang(body), body, span))
+
+        for m in _EMB_HEREDOC.finditer(text):
+            tag, dash = m.group(3), m.group(1)
+            end = re.compile(r"(?m)^[ \t]*" + re.escape(tag) + r"\b[ \t;)]*$").search(text, m.end())
+            if not end:
+                continue
+            body = text[m.end():end.start()]
+            if dash == "~" or (dash == "-" and "\t" not in body[:1]):
+                body = _emb_dedent(body)
+            elif dash == "-":
+                body = re.sub(r"(?m)^\t+", "", body)
+            if "$$" in body and "provisioner" in text[max(0, m.start() - 400):m.start()]:
+                body = body.replace("$${", "${")        # Terraform template escape `$${x}` -> `${x}`
+            add("heredoc", m.start(), body, (m.end(), end.start()))
+        for m in _EMB_TRIPLE.finditer(text):
+            body = _emb_dedent(m.group(2).lstrip("\r\n"))
+            body = re.sub(r"(?m)^\s*\|", "", body) if ".trimMargin" in text[m.end():m.end() + 20] else body
+            if "r" not in m.group(1).lower():
+                body = body.replace('\\"', '"').replace("\\$", "$").replace("${'$'}", "$")
+            add("raw", m.start(), body, (m.start(2), m.end(2)))
+        for m in _EMB_RUSTRAW.finditer(text):
+            add("raw", m.start(), _emb_dedent(m.group(2).lstrip("\r\n")), (m.start(2), m.end(2)))
+        if "<![CDATA[" in text:
+            for m in _EMB_CDATA.finditer(text):
+                add("cdata", m.start(), _emb_dedent(m.group(1).lstrip("\r\n")), (m.start(1), m.end(1)))
+        if "&quot;" in text or "&#10;" in text or "&#xA;" in text:
+            import html
+            for m in _EMB_XATTR.finditer(text):
+                add("xml-attr", m.start(), html.unescape(m.group(2)), (m.start(2), m.end(2)))
+        if "\t" in text:
+            for m in _EMB_MK_RULE.finditer(text):
+                add("make-recipe", m.start(), _emb_make_recipe(m.group(1)), (m.start(1), m.end(1)))
+        if re.search(r"(?m)^[ \t]*begin\s*(?:;|$)", text):
+            for m in _EMB_FISH.finditer(text):
+                add("fish-begin", m.start(), _emb_dedent(m.group(1).replace("; ", "\n").lstrip("\r\n")),
+                    (m.start(1), m.end(1)))
+        for m in _EMB_DQ.finditer(text):
+            s = m.group(1)
+            if "\\n" in s and len(out) < limit:
+                add("escaped-string", m.start(), _emb_unescape_c(s), (m.start(1), m.end(1)))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _emb_blank(text, spans):
+    """`text` with every span replaced by same-length whitespace (newlines kept), so outer offsets / lines hold."""
+    chars = list(text)
+    for a, b in spans:
+        for i in range(max(0, a), min(len(chars), b)):
+            if chars[i] != "\n":
+                chars[i] = " "
+    return "".join(chars)
+
+
+def embedded_plans(text, budget=0.6):
+    """{"outer": the outer file's plan text (its own marker / descriptor, inner bodies blanked) or None,
+        "inner": [{"locus", "language", "plain", "id"}] the embedded prior scripts' plans, in file order}.
+    The outer plan prefers a v=3 reading. Never raises."""
+    res = {"outer": None, "inner": []}
+    try:
+        if isinstance(text, (bytes, bytearray)):
+            text = bytes(text).decode("utf-8", "replace")
+        if not isinstance(text, str):
+            return res
+        t_end = time.time() + budget
+        raw = _emb_raw(text)
+        outer_src = _emb_blank(text, [sp for *_, sp in raw]) if raw else text
+        plains = [c.get("plain") for c in _find_codecs_uncached(outer_src, 1) if c.get("plain")]
+        v3 = [p for p in plains if str(p).lstrip().startswith("v=3") or '"v": 3' in str(p)[:40]
+              or '"v":3' in str(p)[:40]]
+        res["outer"] = (v3 or plains or [None])[0]
+        for loc, lang, body, _ in raw:
+            if time.time() > t_end:
+                break
+            for c in _find_codecs_uncached(body, 1):
+                p = c.get("plain")
+                if p and p != res["outer"] and all(p != i["plain"] for i in res["inner"]):
+                    res["inner"].append({"locus": loc, "language": lang, "plain": p, "id": c.get("id")})
+                    break
+    except Exception:  # noqa: BLE001
+        pass
+    return res
+
+
+_EMB_ID = re.compile(r"(?:^|[-_.])(inner|prior|embedded|nested|next[-_]stage)(?:[-_](\d{1,2}))?[-_](?P<f>[a-z].*)$",
+                     re.I)
+
+
+def embedded_answer(answer_id, text, q=None, plans=None):
+    """Answer an id from an embedded-prior file: `..-inner-<field>` / `-prior-` / `-embedded-` / `-nested-` /
+    `-next-stage-<field>` (optional `-<n>` 1-based index) read the inner plan, the field through plan_answer; any other
+    id reads the OUTER plan only (an inner plan never answers it). None = cannot answer here. Never raises."""
+    try:
+        plans = plans or embedded_plans(text)
+        aid = str(answer_id or "")
+        m = _EMB_ID.search(aid.rsplit(".", 1)[-1])
+        if m and plans.get("inner"):
+            idx = int(m.group(2)) - 1 if m.group(2) else 0
+            inner = plans["inner"]
+            if 0 <= idx < len(inner):
+                got = plan_answer(m.group("f"), inner[idx]["plain"], q)
+                if got is not None:
+                    return got
+                if m.group("f").lower() in ("language", "lang"):
+                    return inner[idx]["language"]
+            if m.group(1).lower().startswith("next"):
+                return plan_answer(aid, plans.get("outer"), q) if plans.get("outer") else None
+            return None
+        return plan_answer(aid, plans["outer"], q) if plans.get("outer") else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _emb_append(src, out, budget=0.3):
+    """find_codecs depth-0 hook (only for a text whose embedded bodies carry a codec cue): when an embedded prior
+    script's plan would be the first plain, the outer file's own plan (embedded_plans) moves ahead of it; inner-only
+    plans are appended after every outer reading, and only when the outer file read a plan (an unreadable outer marker
+    never surfaces an inner plan first)."""
+    try:
+        if not out or not isinstance(src, str) or not _EMB_CUE.search(src[:1 << 20]):
+            return out
+        raw = _emb_raw(src)
+        if not raw:
+            return out
+        plans = embedded_plans(src, budget)
+        outer, inner = plans.get("outer"), [i["plain"] for i in plans.get("inner") or ()]
+        if not outer:
+            return out
+        first = next((c.get("plain") for c in out if c.get("plain")), None)
+        if first != outer and first in inner and any(c.get("plain") == outer for c in out):
+            out = [c for c in out if c.get("plain") == outer] + [c for c in out if c.get("plain") != outer]
+        have = [c.get("plain") for c in out if c.get("plain")]
+        extra = []
+        for i in plans.get("inner") or ():
+            if i["plain"] not in have:
+                have.append(i["plain"])
+                extra.append({"id": f"{i.get('id')}@inner", "rep": "embedded", "transform": "", "key": "",
+                              "material": "", "plain": i["plain"], "locus": i["locus"], "language": i["language"]})
+        return out + extra
+    except Exception:  # noqa: BLE001
+        return out
+
+
+# --- change-order-anomaly ----------------------------------------------------------------------------------------------
+# "Assemble the timeline and find the change that happened out of order" (D28 prompt; never asked yet). Evidence kinds
+# per member, strongest first: step_order (a plan `steps` token before one of an earlier tier -- tiers mined from every
+# GM plan D20-D28, zero violations over all of them), handoff_backward (next_stage / next_language points at a member of
+# a lower-or-equal `stage`, or one with an older timestamp), timestamp (seq=/created=/.. plan keys or zip member mtimes
+# that go backwards along the stage order; the outlier is the member whose removal makes the series monotonic),
+# stage_count (stage_count != len(steps) -- always equal in GM plans), peer_order (same step multiset as the majority
+# of peers, different order). order_anomalies(plans_by_member, zip_infos=None) -> [(member, kind, evidence)];
+# decode(material=JSON {member: plan|text} | {"plans": {..}, "zip_infos": {member: iso|epoch|[y,m,d,H,M,S]}},
+# rep='order_anomaly', transform=member|step|position|kind|count|members|expected|target|json, key=<kind|member>).
+_OA_TIER = {"profile_host": (0, 0), "enumerate_targets": (0, 0), "locate_local": (0, 1), "collect_local": (0, 0),
+            "select_fixture_files": (0, 0), "recognize_syntax": (0, 0), "decode_configuration": (0, 1),
+            "read_file": (0, 1), "decode_embedded": (1, 1), "acquire_remote": (1, 1), "transform_content": (1, 2),
+            "write_file": (2, 2), "change_mode": (2, 2), "build_schedule": (2, 2), "transform_copy": (2, 2),
+            "encode_archive": (2, 2), "prepare_transfer": (2, 2), "write_recovery_note": (2, 3),
+            "register_descriptor": (3, 3), "transmit_remote": (3, 3), "upload_remote": (3, 3),
+            "reconstruct_intent": (1, 4), "return_configuration": (4, 4), "handoff_script": (4, 4)}
+_OA_KINDS = ("step_order", "handoff_backward", "timestamp", "stage_count", "peer_order")
+_OA_TS_KEYS = ("seq", "sequence", "order", "ordinal", "index", "created", "created_at", "timestamp", "ts", "time",
+               "modified", "mtime", "date", "changed", "updated")
+
+
+def _oa_tier(tok):
+    t = str(tok).strip().lower()
+    if t in _OA_TIER:
+        return _OA_TIER[t]
+    if t.startswith(("dispatch_", "execute_", "launch_", "invoke_", "run_")):
+        return (4, 4)
+    return (0, 4)                                    # unknown token: never violates
+
+
+def _oa_steps(v):
+    if isinstance(v, (list, tuple)):
+        return [str(x).strip() for x in v if str(x).strip()]
+    s = str(v or "").strip()
+    if not s or s.lower() in _LIN_NONE or s == "..":
+        return []
+    return [x.strip() for x in re.split(r"\s*(?:>|,|;|->|\s)\s*", s) if x.strip()]
+
+
+def _oa_violations(steps):
+    return [(i, j) for i in range(len(steps)) for j in range(i + 1, len(steps))
+            if _oa_tier(steps[i])[0] > _oa_tier(steps[j])[1]]
+
+
+def _oa_time(v):
+    """Comparable number from an epoch / ISO date / (y,m,d,H,M,S) / seq integer, else None."""
+    try:
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+        if isinstance(v, (list, tuple)) and 3 <= len(v) <= 6:
+            p = [int(x) for x in v] + [0] * (6 - len(v))
+            return float(((((p[0] * 13 + p[1]) * 32 + p[2]) * 24 + p[3]) * 60 + p[4]) * 60 + p[5])
+        s = str(v).strip()
+        if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
+            return float(s)
+        m = re.fullmatch(r"(\d{4})-(\d\d)-(\d\d)(?:[T ](\d\d):(\d\d)(?::(\d\d))?(?:\.\d+)?)?\s*(Z|[+-]\d\d:?\d\d)?", s)
+        if m:
+            p = [int(x or 0) for x in m.groups()[:6]]
+            t = ((((p[0] * 13 + p[1]) * 32 + p[2]) * 24 + p[3]) * 60 + p[4]) * 60 + p[5]
+            if m.group(7) and m.group(7) != "Z":
+                z = m.group(7).replace(":", "")
+                t -= (1 if z[0] == "+" else -1) * (int(z[1:3]) * 3600 + int(z[3:5]) * 60)
+            return float(t)
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _oa_zip_times(zip_infos):
+    out = {}
+    try:
+        if isinstance(zip_infos, (bytes, bytearray)):
+            import io
+            import zipfile
+            zip_infos = zipfile.ZipFile(io.BytesIO(bytes(zip_infos))).infolist()
+        items = zip_infos.items() if isinstance(zip_infos, dict) else \
+            [(getattr(z, "filename", None), getattr(z, "date_time", None)) for z in (zip_infos or ())]
+        for n, v in items:
+            t = _oa_time(v)
+            if n and t is not None and not str(n).endswith("/"):
+                out[str(n)] = t
+    except Exception:  # noqa: BLE001
+        return {}
+    return out
+
+
+def _oa_outliers(vals):
+    """Indices whose single removal leaves vals non-decreasing (empty when already monotonic or none works)."""
+    if all(a <= b for a, b in zip(vals, vals[1:])):
+        return []
+    return [i for i in range(len(vals)) if all(a <= b for a, b in zip(vals[:i] + vals[i + 1:], (vals[:i] + vals[i + 1:])[1:]))]
+
+
+def _oa_pick(steps, viol):
+    """(position 1-based, token, expected-after token) of the out-of-order step in a violating steps list."""
+    fix = [k for k in range(len(steps)) if not _oa_violations(steps[:k] + steps[k + 1:])]
+    k = fix[0] if len(fix) == 1 else (min(fix) if fix else max(range(len(steps)), key=lambda x: (
+        sum(1 for a, b in viol if x in (a, b)), -x)))
+    # the step it belongs after: the last earlier-tier step that follows it, else the step before it
+    later = [j for i, j in viol if i == k]
+    ref = steps[max(later)] if later else (steps[max(i for i, j in viol if j == k)] if any(j == k for _, j in viol) else "")
+    return k + 1, steps[k], ref, [steps[x] for x in fix]
+
+
+def order_anomalies(plans_by_member, zip_infos=None):
+    """[(member, kind, evidence dict)] for one corpus / Mastery set, strongest kind first. Never raises."""
+    try:
+        import json
+        rows, order = {}, []
+        for n, p in (plans_by_member or {}).items():
+            try:
+                d = _plan_dict(p) if p is not None else {}
+            except Exception:  # noqa: BLE001
+                d = {}
+            if not isinstance(d, dict) or not d:
+                continue
+            d = {str(k).strip().lower(): v for k, v in d.items()}
+            if not any(k in d for k in ("v", "steps", "stage", "next_stage", "next_language", "language", "role")):
+                continue
+            rows[str(n)] = d
+            order.append(str(n))
+        if not rows:
+            return []
+        out = []
+        steps = {n: _oa_steps(d.get("steps")) for n, d in rows.items()}
+
+        def ival(v):
+            try:
+                return int(str(v).strip())
+            except (TypeError, ValueError):
+                return None
+        stage = {n: ival(d.get("stage")) for n, d in rows.items()}
+        # 1. steps against the tier model
+        for n in order:
+            s = steps[n]
+            viol = _oa_violations(s)
+            if viol:
+                pos, tok, ref, cands = _oa_pick(s, viol)
+                out.append((n, "step_order", dict(step=tok, position=pos, expected_after=ref, steps=">".join(s),
+                                                   candidates=cands, violations=len(viol))))
+        # timestamps: plan keys first, zip mtimes second
+        ts = {}
+        for n, d in rows.items():
+            for k in _OA_TS_KEYS:
+                if k in d and _oa_time(d[k]) is not None:
+                    ts[n] = _oa_time(d[k])
+                    break
+        ts_src = "plan"
+        if len(ts) < 2:
+            zt = _oa_zip_times(zip_infos) if zip_infos is not None else {}
+            ts = {}
+            for n in order:
+                hit = [z for z in zt if z == n or _cl_split(z)[1] == _cl_split(n)[1]]
+                if len(hit) == 1:
+                    ts[n] = zt[hit[0]]
+            ts_src = "zip_mtime"
+        # 2. handoff edges pointing backwards (by stage, else timestamp)
+        leaf = {}
+        for n in order:
+            lf = _cl_split(n)[1].lower()
+            for k in dict.fromkeys((lf, lf.rsplit(".", 1)[0] if "." in lf.strip(".") else lf)):
+                leaf.setdefault(k, []).append(n)
+        for n in order:
+            d = rows[n]
+            tgts, via = [], ""
+            ns = str(d.get("next_stage") or "").strip().strip("'\"")
+            if ns and ns.lower() not in _LIN_NONE:
+                tgts, via = [m for m in leaf.get(_cl_split(ns)[1].lower(), []) if m != n], "next_stage"
+                tgts = tgts if len(tgts) == 1 else []
+            nl = str(d.get("next_language") or "").strip()
+            if not tgts and nl and nl.lower() not in _LIN_NONE:
+                tgts = [m for m in order if m != n and _ic_lang_eq(_cs_val(rows[m].get("language")) if
+                        rows[m].get("language") else (_ic_lang_of(m, {}) or ""), nl)]
+                via = "next_language"
+                if len(tgts) != 1:
+                    tgts = []
+            for m in tgts:
+                if stage[n] is not None and stage[m] is not None:
+                    if stage[m] <= stage[n]:
+                        out.append((n, "handoff_backward", dict(target=_cl_split(m)[1], via=via, basis="stage",
+                                                               source_stage=stage[n], target_stage=stage[m])))
+                elif n in ts and m in ts and ts[m] < ts[n]:
+                    out.append((n, "handoff_backward", dict(target=_cl_split(m)[1], via=via, basis=ts_src,
+                                                           source_time=ts[n], target_time=ts[m])))
+        # 3. timestamps along the stage order (members without a stage keep member order, after staged ones)
+        if len(ts) >= 3:
+            seq = sorted((n for n in order if n in ts),
+                         key=lambda n: (stage[n] is None, stage[n] if stage[n] is not None else 0, order.index(n)))
+            if sum(1 for n in seq if stage[n] is not None) >= 2:
+                vals = [ts[n] for n in seq]
+                outl = _oa_outliers(vals)
+                if outl:
+                    # adjacent swap leaves two candidates: the one that breaks against BOTH neighbours wins
+                    def score(i):
+                        return (i > 0 and vals[i] < vals[i - 1]) + (i + 1 < len(vals) and vals[i] > vals[i + 1])
+                    best = max(score(i) for i in outl)
+                    win = [i for i in outl if score(i) == best]
+                    for i in win:
+                        out.append((seq[i], "timestamp", dict(basis=ts_src, value=ts[seq[i]], position=i + 1,
+                                                              stage=stage[seq[i]], candidates=len(win))))
+        # 4. stage_count vs len(steps) (v=3 plans only: v=1/v=2 plans count stages, not steps)
+        for n in order:
+            sc = ival(rows[n].get("stage_count"))
+            if sc is not None and str(rows[n].get("v", "3")).strip() not in ("1", "2") and steps[n] and sc != len(steps[n]):
+                out.append((n, "stage_count", dict(stage_count=sc, steps_len=len(steps[n]), steps=">".join(steps[n]))))
+        # 5. same step multiset as the majority of peers, different order
+        groups = {}
+        for n in order:
+            if len(steps[n]) >= 2:
+                groups.setdefault(tuple(sorted(steps[n])), []).append(n)
+        for g in groups.values():
+            if len(g) < 3:
+                continue
+            cnt = {}
+            for n in g:
+                cnt[tuple(steps[n])] = cnt.get(tuple(steps[n]), 0) + 1
+            top = max(cnt.values())
+            maj = [k for k, v in cnt.items() if v == top]
+            if len(maj) != 1 or top * 2 <= len(g):
+                continue
+            for n in g:
+                s = steps[n]
+                if tuple(s) != maj[0]:
+                    pos = next(i for i in range(len(s)) if s[i] != maj[0][i])
+                    out.append((n, "peer_order", dict(step=s[pos], position=pos + 1, expected=">".join(maj[0]),
+                                                      steps=">".join(s))))
+        rank = {k: i for i, k in enumerate(_OA_KINDS)}
+        out.sort(key=lambda r: (rank.get(r[1], 9), order.index(r[0])))
+        json.dumps([e for _, _, e in out])            # evidence must stay JSON-able
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def order_answer(res, field="member", key=None):
+    """One answer from order_anomalies() output: member (leaf) / step / position / kind / count / members /
+    expected (the step it belongs after) / target (handoff) / stage_count. key filters by kind or member. "none"
+    when the corpus holds no anomaly, None when the anomaly is ambiguous or the field does not apply."""
+    try:
+        f = _cl_norm(field)
+        k = str(key if key is not None else "").strip()
+        rows = list(res or [])
+        if k:
+            kk = _cl_norm(k)
+            kind = next((x for x in _OA_KINDS if _cl_norm(x) == kk or kk.startswith(_cl_norm(x))), None)
+            rows = [r for r in rows if r[1] == kind] if kind else \
+                [r for r in rows if r[0] == k or _cl_split(r[0])[1] == k]
+        if f in ("count", "anomalies", "anomalycount", "membercount"):
+            return str(len({r[0] for r in rows}))
+        if f in ("members", "allmembers"):
+            return ", ".join(sorted({_cl_split(r[0])[1] for r in rows})) or "none"
+        if not rows:
+            return "none"
+        top = [r for r in rows if r[1] == rows[0][1]]
+        if len({r[0] for r in top}) != 1:
+            return None                              # two members tie on the strongest kind: cannot single one out
+        n, kind, ev = top[0]
+        if f in ("member", "file", "filename", "membername", "outoforder", "anomaly"):
+            return _cl_split(n)[1]
+        if f in ("kind", "type", "evidence", "anomalykind"):
+            return kind
+        if f in ("step", "token", "steptoken", "action"):
+            return ev.get("step") or "none"
+        if f in ("position", "index", "stepposition", "stepindex"):
+            return str(ev["position"]) if ev.get("position") is not None else "none"
+        if f in ("expected", "expectedafter", "after", "belongsafter"):
+            return ev.get("expected_after") or "none"
+        if f in ("target", "handofftarget", "points", "pointsto"):
+            return ev.get("target") or "none"
+        if f in ("stagecount",):
+            return str(ev["stage_count"]) if "stage_count" in ev else "none"
+        if f in ("stepslen", "stepcount", "steps"):
+            return str(ev["steps_len"]) if "steps_len" in ev else "none"
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _oa_decode(material, transform=None, key=None):
+    """decode() hook for rep 'order_anomaly': material = JSON {member: plan|script} or {"plans": {..},
+    "zip_infos": {..}}; transform names the answer field."""
+    import json
+    if isinstance(material, (bytes, bytearray)):
+        material = bytes(material).decode("utf-8", "ignore")
+    try:
+        mem = json.loads(material) if isinstance(material, str) else material
+    except ValueError:
+        return None
+    if not isinstance(mem, dict):
+        return None
+    zi = mem.get("zip_infos") if isinstance(mem.get("plans"), dict) else None
+    if isinstance(mem.get("plans"), dict):
+        mem = mem["plans"]
+    plans = {}
+    for n, v in mem.items():
+        p = v
+        if isinstance(v, str) and not _plan_dict(v):
+            try:
+                p = next((c.get("plain") for c in find_codecs(v) if c.get("plain")), None)
+            except Exception:  # noqa: BLE001
+                p = None
+        plans[n] = p
+    res = order_anomalies(plans, zi)
+    if _cl_norm(transform) in ("json", "rows", "identity"):
+        return json.dumps(res, sort_keys=True, separators=(",", ":")) if res else None
+    if not res:
+        return None                                  # nothing out of order: no answer to hand the GM
+    return order_answer(res, transform or "member", key)
+
+
+# ------------------------------------------------------------------------------------------------ HCL resource graph
+# Target hcl-resource-dependency-timeline (D28 Terraform shipped terraform{}/locals{}/output{}; a later delivery may add
+# `resource "terraform_data"` / `null_resource` blocks with `depends_on`, `triggers_replace`, `provisioner "local-exec"`,
+# `lifecycle { create_before_destroy / replace_triggered_by }` and `local.x` / `type.name.id` references).
+# hcl_blocks(text) -> [{type, labels, address, line, attrs, refs, blocks}] (brace-aware, `<<EOT` / `<<-EOT` heredocs,
+# `#` / `//` / `/* */` comments; refs read from code and `${..}` only, never from string text). hcl_order(blocks) ->
+# {order, edges, backward, cycle, ...}: the resource-level graph `terraform graph` draws (locals / variables / outputs
+# collapsed through), a file-order-stable topological order, and the edges whose dependency is declared AFTER its
+# dependent. decode(text, rep='hcl_graph', transform=order|edges|backward|deps|position|local_exec|json, key=address).
+# Never terraform init/plan; bounded; None when the text declares no resource / data / module block.
+_HCLG_ID = re.compile(r"[A-Za-z_][\w-]*")
+_HCLG_HDOC = re.compile(r"<<(-?)([A-Za-z_]\w*)[ \t]*\r?\n")
+_HCLG_HDOC_WRAP = re.compile(r"<<(-?)([A-Za-z_]\w*)(?=[ \t]*[,)\]}])")
+_HCLG_REF = re.compile(r"(?<![\w.\-])(data\.[A-Za-z_][\w-]*\.[A-Za-z_][\w-]*|module\.[A-Za-z_][\w-]*|"
+                       r"local\.[A-Za-z_][\w-]*|var\.[A-Za-z_][\w-]*|resource\.[A-Za-z_][\w-]*\.[A-Za-z_][\w-]*|"
+                       r"[A-Za-z_][\w-]*\.[A-Za-z_][\w-]*)")
+_HCLG_SKIP = {"self", "count", "each", "path", "terraform", "provider", "ephemeral", "action"}
+_HCLG_ESC = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}
+
+
+class _HclgFail(Exception):
+    pass
+
+
+def _hclg_skip_ws(s, i, nl=True):
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if c in " \t\r" or (nl and c == "\n"):
+            i += 1
+        elif c == "#" or s.startswith("//", i):
+            k = s.find("\n", i)
+            i = n if k < 0 else (k + 1 if nl else k)
+        elif s.startswith("/*", i):
+            k = s.find("*/", i + 2)
+            if k < 0:
+                raise _HclgFail
+            i = k + 2
+        else:
+            break
+    return i
+
+
+def _hclg_string(s, i, code):
+    """s[i] == '"': index past the closing quote; appends `${..}` / `%{..}` bodies to `code`, returns (end, text)."""
+    n, j, buf = len(s), i + 1, []
+    while j < n:
+        c = s[j]
+        if c == "\\" and j + 1 < n:
+            buf.append(_HCLG_ESC.get(s[j + 1], s[j + 1]))
+            j += 2
+        elif c == '"':
+            return j + 1, "".join(buf)
+        elif c == "\n":
+            raise _HclgFail
+        elif c in "$%" and s.startswith(c + "{", j + 1):
+            buf.append(c + "{")                      # `$${` / `%%{` escape: literal text
+            j += 3
+        elif c in "$%" and s.startswith("{", j + 1):
+            k = _hclg_expr_end(s, j + 2, "}", code)
+            buf.append(s[j:k + 1])
+            j = k + 1
+        else:
+            buf.append(c)
+            j += 1
+    raise _HclgFail
+
+
+def _hclg_heredoc(s, i, code):
+    """s[i:] starts `<<EOT\\n` / `<<-EOT\\n`: (end, text) with `${..}` bodies appended to `code`."""
+    m = _HCLG_HDOC.match(s, i)
+    strip, tag = m.group(1), m.group(2)
+    end = re.compile(r"(?m)^[ \t]*" + re.escape(tag) + r"[ \t]*\r?$")
+    e = end.search(s, m.end())
+    if not e:
+        raise _HclgFail
+    body = s[m.end():e.start()]
+    for x in re.finditer(r"(?<![$%])[$%]\{", body):
+        try:
+            _hclg_expr_end(body, x.end(), "}", code)
+        except _HclgFail:
+            break
+    lines = body.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if strip:
+        ind = min((len(ln) - len(ln.lstrip(" \t")) for ln in lines if ln.strip()), default=0)
+        lines = [ln[ind:] for ln in lines]
+    body = "\n".join(lines) + ("\n" if lines else "")
+    return e.end(), body.replace("$${", "${").replace("%%{", "%{")
+
+
+def _hclg_expr_end(s, i, stop, code):
+    """Index of the `stop` char (or newline at depth 0 when stop is '\\n') ending the expression at s[i:]; the code
+    text (strings blanked, interpolations kept) is appended to `code`."""
+    n, start = len(s), i
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    want, skip = [], []
+    while i < n:
+        c = s[i]
+        if c == "\n" and skip:
+            code.append(s[start:i])
+            i = start = skip.pop()
+            continue
+        if not want and (c == stop or (stop == "\n" and c in "\n}")):
+            code.append(s[start:i])              # a one-line block `x { a = 1 }` ends the attribute at its `}`
+            return i
+        if c == '"':
+            code.append(s[start:i])
+            i, _ = _hclg_string(s, i, code)
+            start = i
+            continue
+        if c == "<" and s.startswith("<<", i) and _HCLG_HDOC.match(s, i):
+            code.append(s[start:i])
+            i, _ = _hclg_heredoc(s, i, code)
+            start = i
+            continue
+        if c == "<" and s.startswith("<<", i) and _HCLG_HDOC_WRAP.match(s, i):
+            # `f(<<-EOT, "x")`: the call goes on after the marker; its body starts on the next line
+            m = _HCLG_HDOC_WRAP.match(s, i)
+            nl = s.find("\n", m.end())
+            if nl < 0:
+                raise _HclgFail
+            e = re.compile(r"(?m)^[ \t]*" + re.escape(m.group(2)) + r"[ \t]*\r?$").search(s, nl + 1)
+            if not e:
+                raise _HclgFail
+            code.append(s[start:i])
+            for x in re.finditer(r"(?<![$%])[$%]\{", s[nl + 1:e.start()]):
+                _hclg_expr_end(s, nl + 1 + x.end(), "}", code)
+            skip.append(e.end())
+            i = start = m.end()
+            continue
+        if c == "#" or s.startswith("//", i) or s.startswith("/*", i):
+            code.append(s[start:i])
+            if c == "#" or s[i + 1] == "/":
+                k = s.find("\n", i)
+                i = n if k < 0 else k
+            else:
+                k = s.find("*/", i + 2)
+                if k < 0:
+                    raise _HclgFail
+                i = k + 2
+            start = i
+            continue
+        if c in pairs:
+            want.append(pairs[c])
+        elif c in ")]}":
+            if not want or want[-1] != c:
+                raise _HclgFail
+            want.pop()
+        i += 1
+    if stop == "\n" and not want:
+        code.append(s[start:i])
+        return i
+    raise _HclgFail
+
+
+def _hclg_value(raw):
+    """Static string value of a literal / heredoc / list-of-literals expression (interpolations kept as `${..}`)."""
+    t = raw.strip()
+    try:
+        if t.startswith('"'):
+            e, v = _hclg_string(t, 0, [])
+            return v if not t[e:].strip() else None
+        if _HCLG_HDOC.match(t):
+            e, v = _hclg_heredoc(t, 0, [])
+            return v if not t[e:].strip() else None
+    except _HclgFail:
+        return None
+    return None
+
+
+def _hclg_body(s, i, close, depth, out_attrs, out_blocks, code_all, deadline):
+    """Parse a body from s[i] up to `close` ('}' or '' for EOF): fills attrs {name: raw} and nested blocks."""
+    n = len(s)
+    while True:
+        if depth > 16 or time.time() > deadline:
+            raise _HclgFail
+        i = _hclg_skip_ws(s, i)
+        if i >= n:
+            if close:
+                raise _HclgFail
+            return i
+        if s[i] == close:
+            return i + 1
+        m = _HCLG_ID.match(s, i)
+        if not m:
+            raise _HclgFail
+        name, line, j = m.group(0), s.count("\n", 0, i) + 1, _hclg_skip_ws(s, m.end(), nl=False)
+        if j < n and s[j] == "=" and not s.startswith("==", j):
+            code = []
+            k = _hclg_expr_end(s, j + 1, "\n", code)
+            raw = s[j + 1:k]
+            if s[k:k + 1] == "}" and close != "}":
+                raise _HclgFail
+            out_attrs[name] = {"raw": raw.strip(), "code": " ".join(code), "line": line}
+            code_all.append(" ".join(code))
+            i = k
+            continue
+        labels = []
+        while j < n and (s[j] == '"' or _HCLG_ID.match(s, j)):
+            if s[j] == '"':
+                j, lab = _hclg_string(s, j, [])
+            else:
+                mm = _HCLG_ID.match(s, j)
+                lab, j = mm.group(0), mm.end()
+            labels.append(lab)
+            j = _hclg_skip_ws(s, j, nl=False)
+        if j >= n or s[j] != "{":
+            raise _HclgFail
+        blk = {"type": name, "labels": labels, "line": line, "attrs": {}, "blocks": []}
+        code = []
+        i = _hclg_body(s, j + 1, "}", depth + 1, blk["attrs"], blk["blocks"], code, deadline)
+        blk["_code"] = code
+        code_all.extend(code)
+        out_blocks.append(blk)
+
+
+def _hclg_address(b):
+    t, lab = b["type"], b["labels"]
+    if t == "resource" and len(lab) == 2:
+        return "%s.%s" % tuple(lab)
+    if t in ("data", "ephemeral") and len(lab) == 2:
+        return "%s.%s.%s" % (t, lab[0], lab[1])
+    if t in ("module", "variable", "output") and len(lab) == 1:
+        return {"module": "module.", "variable": "var.", "output": "output."}[t] + lab[0]
+    return None
+
+
+def hcl_blocks(text, budget=0.5):
+    """Top-level HCL blocks of a Terraform source: [{type, labels, address, line, attrs {name: raw}, values {name: str},
+    refs [address..], depends_on, provisioners [{type, attrs, values}], lifecycle {..}, count, for_each}]. `locals`
+    blocks expand to one `local.<name>` entry per attribute. [] when the text is not native HCL (never raises)."""
+    try:
+        if isinstance(text, (bytes, bytearray)):
+            text = bytes(text).decode("utf-8", "ignore")
+        if not isinstance(text, str) or len(text) > (1 << 20):
+            return []
+        s = text.lstrip("﻿").replace("\r\n", "\n")
+        top_attrs, top = {}, []
+        _hclg_body(s, 0, "", 0, top_attrs, top, [], time.time() + budget)
+        if top_attrs and not top:
+            return []
+        rtypes = {b["labels"][0] for b in top if b["type"] == "resource" and len(b["labels"]) == 2}
+
+        def refs_of(codes):
+            got = []
+            for c in codes:
+                for m in _HCLG_REF.finditer(c):
+                    r = m.group(1)
+                    head = r.split(".", 1)[0]
+                    if head == "resource":
+                        r = r.split(".", 1)[1]
+                    elif head not in ("data", "module", "local", "var") and (head not in rtypes or head in _HCLG_SKIP):
+                        continue
+                    if r not in got:
+                        got.append(r)
+            return got
+
+        out = []
+        for b in top:
+            if b["type"] == "locals":
+                for k, a in b["attrs"].items():
+                    out.append({"type": "local", "labels": [k], "address": "local." + k, "line": a["line"],
+                                "attrs": {k: a["raw"]}, "values": {k: _hclg_value(a["raw"])},
+                                "refs": refs_of([a["code"]]), "depends_on": [], "provisioners": [], "lifecycle": {},
+                                "count": None, "for_each": None})
+                continue
+            addr = _hclg_address(b)
+            rec = {"type": b["type"], "labels": b["labels"], "address": addr, "line": b["line"],
+                   "attrs": {k: a["raw"] for k, a in b["attrs"].items()},
+                   "values": {k: _hclg_value(a["raw"]) for k, a in b["attrs"].items()},
+                   "refs": [], "depends_on": [], "provisioners": [], "lifecycle": {},
+                   "count": b["attrs"].get("count", {}).get("raw"), "for_each": b["attrs"].get("for_each", {}).get("raw")}
+            if "depends_on" in b["attrs"]:
+                rec["depends_on"] = refs_of([b["attrs"]["depends_on"]["code"]])
+            for nb in b["blocks"]:
+                if nb["type"] == "provisioner":
+                    rec["provisioners"].append({"type": (nb["labels"] or [""])[0], "line": nb["line"],
+                                                "attrs": {k: a["raw"] for k, a in nb["attrs"].items()},
+                                                "values": {k: _hclg_value(a["raw"]) for k, a in nb["attrs"].items()}})
+                elif nb["type"] == "lifecycle":
+                    rec["lifecycle"] = {k: a["raw"] for k, a in nb["attrs"].items()}
+            # provisioner / connection bodies may only use self.*; their refs still count (terraform draws them)
+            rec["refs"] = [r for r in refs_of(b["_code"]) if r != addr]
+            out.append(rec)
+        return out
+    except (_HclgFail, IndexError, AttributeError, ValueError, RecursionError):
+        return []
+
+
+def hcl_order(blocks):
+    """Resource-level dependency graph of hcl_blocks(): {nodes (file order), order (topological, file order breaking
+    ties), edges [[dependent, dependency]] (locals / vars / outputs collapsed through, as `terraform graph`),
+    backward [[dependent, dependency]] (the dependency is declared after its dependent), cycle bool, local_exec [..]}."""
+    try:
+        by = {}
+        for b in blocks or []:
+            if b.get("address") and b["address"] not in by:
+                by[b["address"]] = b
+        res = [a for a, b in by.items() if b["type"] in ("resource", "data", "module", "ephemeral")]
+        rset, pos = set(res), {a: k for k, a in enumerate(res)}
+
+        def resolve(a, seen):
+            if a in rset:
+                return {a}
+            if a in seen or a not in by:
+                return set()
+            seen.add(a)
+            got = set()
+            for r in by[a]["refs"] + by[a]["depends_on"]:
+                got |= resolve(r, seen)
+            return got
+
+        deps = {}
+        for a in res:
+            b, d = by[a], set()
+            for r in b["refs"] + b["depends_on"]:
+                d |= resolve(r, set())
+            d.discard(a)
+            deps[a] = sorted(d, key=pos.get)
+        edges = [[a, d] for a in res for d in deps[a]]
+        backward = [[a, d] for a, d in edges if pos[d] > pos[a]]
+        left, done, order = {a: set(deps[a]) for a in res}, set(), []
+        while len(order) < len(res):
+            nxt = next((a for a in res if a not in done and left[a] <= done), None)
+            if nxt is None:
+                break
+            order.append(nxt)
+            done.add(nxt)
+        cycle = len(order) < len(res)
+        if cycle:
+            order += [a for a in res if a not in done]
+        lex = []
+        for a in res:
+            for p in by[a]["provisioners"]:
+                if p["type"] == "local-exec" and p["values"].get("command") is not None:
+                    lex.append({"address": a, "command": p["values"]["command"],
+                                "interpreter": p["attrs"].get("interpreter"), "when": p["attrs"].get("when")})
+        return {"nodes": res, "order": order, "edges": edges, "backward": backward, "cycle": cycle,
+                "deps": deps, "local_exec": lex}
+    except (KeyError, TypeError, RecursionError):
+        return {"nodes": [], "order": [], "edges": [], "backward": [], "cycle": False, "deps": {}, "local_exec": []}
+
+
+def _hclg_decode(material, transform=None, key=None):
+    """decode() hook for rep 'hcl_graph': material = Terraform text; transform = order (default) | first | last |
+    edges | backward | anomaly | deps (key = address) | dependents (key) | position (key, 1-based) | local_exec |
+    count | json. None when the text declares no resource / data / module block (or the field is empty)."""
+    import json
+    blocks = hcl_blocks(material)
+    g = hcl_order(blocks)
+    if not g["nodes"]:
+        return None
+    t, k = _cl_norm(transform or "order"), (key or "").strip()
+    if t in ("json", "graph", "identity", "rows"):
+        return json.dumps({x: g[x] for x in ("order", "edges", "backward", "cycle", "local_exec")},
+                          sort_keys=True, separators=(",", ":"))
+    if t in ("order", "timeline", "applyorder", "topological", "toposort"):
+        return ",".join(g["order"])
+    if t in ("first", "firstapplied", "root"):
+        return g["order"][0]
+    if t in ("last", "lastapplied"):
+        return g["order"][-1]
+    if t in ("count", "resources", "resourcecount"):
+        return str(len(g["nodes"]))
+    if t in ("edges", "dependencies"):
+        return ",".join("%s->%s" % (a, d) for a, d in g["edges"]) or None
+    if t in ("backward", "anomaly", "anomalies", "outoforder", "contradicts", "forwardref"):
+        if not g["backward"]:
+            return None
+        return ",".join("%s->%s" % (a, d) for a, d in g["backward"]) if t in ("backward", "anomalies") \
+            else g["backward"][0][0]
+    if t in ("cycle", "hascycle"):
+        return "true" if g["cycle"] else "false"
+    if t in ("deps", "dependson", "dependencies_of"):
+        return ",".join(g["deps"].get(k, [])) or ("none" if k in g["deps"] else None)
+    if t in ("dependents", "requiredby"):
+        if k not in g["deps"]:
+            return None
+        return ",".join(a for a, d in g["edges"] if d == k) or "none"
+    if t in ("position", "index", "step"):
+        return str(g["order"].index(k) + 1) if k in g["order"] else None
+    if t in ("localexec", "commands", "command", "provisioner"):
+        cmds = [x["command"] for x in g["local_exec"] if not k or x["address"] == k]
+        return "\n".join(c.rstrip("\n") for c in cmds) if cmds else "none"
+    return None

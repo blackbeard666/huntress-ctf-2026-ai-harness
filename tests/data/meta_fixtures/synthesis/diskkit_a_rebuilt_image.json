@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.rebuilt_image",
+ "expected": "laptop_b.img",
+ "generator_cmd": "disk_integrity fixtures' images (sfdisk GPT intact.img / nobackup.img = backup header zeroed / cut.img = head -c 40960) zipped with stdlib zipfile as laptop_a.img (intact), laptop_b.img (nobackup), laptop_c.img (cut) + README.txt -> kit_a.zip = [laptop_a.img, laptop_b.img, README.txt]",
+ "oracle_cmd": "unzip kit_a.zip; sgdisk -v laptop_a.img -> 'No problems found'; sgdisk -v laptop_b.img -> 'Backup header: ERROR' (the only inconsistent image)",
+ "decoy": false
+}

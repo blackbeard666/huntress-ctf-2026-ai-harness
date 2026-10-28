@@ -1,0 +1,8 @@
+{
+ "field": "okta.client_ips",
+ "expected": "[\"198.51.100.7\",\"203.0.113.99\"]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> okta_system_log.json",
+ "oracle_cmd": "jq -c '[.[].client.ipAddress]|unique' okta_system_log.json -> [\"198.51.100.7\",\"203.0.113.99\"]",
+ "decoy": false,
+ "member": "okta_system_log.json"
+}

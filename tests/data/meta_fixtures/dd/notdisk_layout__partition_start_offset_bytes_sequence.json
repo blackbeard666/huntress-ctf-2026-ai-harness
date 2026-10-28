@@ -1,0 +1,8 @@
+{
+ "field": "dd.partition_start_offset_bytes_sequence",
+ "expected": "none",
+ "generator_cmd": "PNG impostor (tests/data/meta_fixtures/disk/decoy_png__format.bin) renamed disk.img",
+ "oracle_cmd": "sfdisk --json disk.img -> 'does not contain a recognized partition table'",
+ "decoy": true,
+ "member": "disk.img"
+}

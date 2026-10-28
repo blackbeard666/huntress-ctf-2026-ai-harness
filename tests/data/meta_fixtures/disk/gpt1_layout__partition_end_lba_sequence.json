@@ -1,0 +1,8 @@
+{
+ "field": "disk.partition_end_lba_sequence",
+ "expected": "[73]",
+ "generator_cmd": "truncate -s 64K gpt1.img && printf 'label: gpt\\nstart=34, size=40, type=L, name=\"only\"\\n' | sfdisk gpt1.img && head -c 17408 (primary GPT only)",
+ "oracle_cmd": "sfdisk --json gpt1.img -> partitions[].start/size/type/uuid/name (table order) start+size-1",
+ "decoy": false,
+ "member": "gpt1.img"
+}

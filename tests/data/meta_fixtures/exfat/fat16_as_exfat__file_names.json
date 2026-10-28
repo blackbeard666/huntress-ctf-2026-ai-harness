@@ -1,0 +1,8 @@
+{
+ "field": "exfat.file_names",
+ "expected": "none",
+ "generator_cmd": "PATH=tools/fsroot/usr/sbin:tools/fsroot/usr/bin:$PATH MTOOLS_SKIP_CHECK=1 TZ=UTC printf 'hello world\\n' > a.txt; head -c 5000 /dev/urandom > 'Quarterly Report 2026.docx'; printf 'secret payload' > secret.bin; printf nested > notes.md; mkfs.fat -C -F 16 -s 1 -n EVIDENCE -i 1234ABCD fat16.img 16384 && mcopy -i fat16.img -m a.txt 'Quarterly Report 2026.docx' secret.bin ::/ && mmd -i fat16.img ::/docs && mcopy -i fat16.img -m notes.md ::/docs/ && mcopy -i fat16.img a.txt ::/gone.txt && mdel -i fat16.img ::/gone.txt && head -c 155648 fat16.img",
+ "oracle_cmd": "fsstat fat16.img -> FAT16, not exFAT",
+ "decoy": true,
+ "member": "fat16.img"
+}

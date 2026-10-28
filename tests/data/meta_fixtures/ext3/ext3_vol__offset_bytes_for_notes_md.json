@@ -1,0 +1,8 @@
+{
+ "field": "ext3.offset_bytes_for_notes_md",
+ "expected": "315392",
+ "generator_cmd": "mkdir -p extroot/sub && cp a.txt secret.bin extroot/ && cp notes.md extroot/sub/ && mke2fs -q -t ext3 -L lblext3 -d extroot -E root_owner=0:0 ext3.img 4M && head -c 319488 ext3.img",
+ "oracle_cmd": "istat ext3.img 15 -> Direct Blocks: 77; fsstat Block Size 4096 -> 77*4096",
+ "decoy": false,
+ "member": "ext3.img"
+}

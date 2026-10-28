@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.keylog_client_randoms",
+ "expected": "none",
+ "generator_cmd": "sh tests/data/meta_fixtures/sslkeylog/GENERATOR_tls.sh.txt <dir> (OpenSSL req -x509 certs; Python ssl.MemoryBIO genuine TLS 1.2 + 1.3 handshakes, client ctx.keylog_filename = OpenSSL's keylog writer -> keylog.txt; stdlib struct pcap writer GENERATOR_tls.py.txt -> tls.pcap; Wireshark 4.6.4 `editcap -F pcapng --inject-secrets tls,keylog.txt` -> tls_dsb.pcapng, `editcap -F pcapng` -> tls_nodsb.pcapng)",
+ "oracle_cmd": "editcap --extract-secrets tls_nodsb.pcapng nd.txt -> no secrets, no output file",
+ "decoy": true,
+ "member": "tls_nodsb.pcapng"
+}

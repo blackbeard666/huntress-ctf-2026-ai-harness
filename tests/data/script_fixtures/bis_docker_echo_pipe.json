@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=dropper|verdict=malicious|attack=T1027|next_language=bash|campaign_id=DOCK-91a2b3c4|url=https://dock-91a2b3c4.example.invalid/pipe|file_path=/var/tmp/.dock-91a2b3c4",
+ "decoy": false,
+ "target": "make-recipe-inner-scripts",
+ "generator_cmd": "bash tests/data/script_fixtures/bis_gen.sh  (run inside tests/data/script_fixtures; perl xor, coreutils base64, xxd, bash heredoc writer)",
+ "oracle_cmd": "grep -o 'RUN echo [A-Za-z0-9+/=]*' tests/data/script_fixtures/bis_docker_echo_pipe.Dockerfile | cut -d' ' -f3 | base64 -d | sed -n \"s/^Material_91a2='\\(.*\\)'$/\\1/p\" | xxd -r -p | perl -e '$_=join(\"\",<STDIN>); print join(\"\", map { chr(ord($_) ^ 0x21) } split //)'"
+}

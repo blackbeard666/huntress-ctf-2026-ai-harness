@@ -1,0 +1,8 @@
+{
+ "field": "disk.partition_1_offset_bytes_for_a_txt",
+ "expected": "179712",
+ "generator_cmd": "PATH=tools/fsroot/usr/sbin:tools/fsroot/usr/bin:$PATH MTOOLS_SKIP_CHECK=1 TZ=UTC truncate -s 20M mbr.img && printf 'label: dos\\n63,32768,6\\n' | sfdisk -q mbr.img && mkfs.fat -F 16 -s 1 --offset 63 -n PART1 mbr.img 16384 && mcopy -i mbr.img@@32256 -m secret.bin a.txt ::/ && head -c 180224 mbr.img",
+ "oracle_cmd": "fls -r -o 63 mbr.img -> r/r 5 a.txt; istat -o 63 mbr.img 5 -> Sectors: 288 -> (63+288)*512",
+ "decoy": false,
+ "member": "disk.img"
+}

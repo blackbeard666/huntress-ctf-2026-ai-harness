@@ -1,0 +1,8 @@
+{
+ "field": "cloudtrail.record_count",
+ "expected": "6",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> cloudtrail.json.gz",
+ "oracle_cmd": "zcat cloudtrail.json.gz | jq '.Records|length' -> 6",
+ "decoy": false,
+ "member": "cloudtrail.json.gz"
+}

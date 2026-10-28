@@ -1,0 +1,8 @@
+{
+ "field": "ewf.computed_md5",
+ "expected": "df0d7d0f7bc089a6f97ae925a3196f98",
+ "generator_cmd": "TZ=UTC ewfacquire -u -q -t lap -f encase5 -c none -b 16 -C IR-88 -E 1 -D \"laptop disk\" -e \"Analyst Two\" -N \"imaging test\" media.raw (ewf-tools 20140816)",
+ "oracle_cmd": "ewfverify lap.E01 -> MD5 hash calculated over data",
+ "decoy": false,
+ "member": "lap.E01"
+}

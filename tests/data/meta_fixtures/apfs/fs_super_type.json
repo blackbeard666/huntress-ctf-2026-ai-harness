@@ -1,0 +1,8 @@
+{
+ "field": "apfs.filesystem_type",
+ "expected": "apfs",
+ "generator_cmd": "mkapfs -L ApfsVol -U 5c4b3a29-1807-4f6e-9d5c-4b3a29180716 a.img (64M, apfsprogs 0.2.1); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s TYPE a.img",
+ "decoy": false,
+ "member": "container.apfs"
+}

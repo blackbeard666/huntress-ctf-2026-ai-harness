@@ -1,0 +1,7 @@
+{
+ "entry": "context_chain_scan",
+ "expected": "ANS-c60d2e9b7f41a538",
+ "_why": "same dex as target30 but targetSdk 31 -> modern branch; key mixes RELEASE, the SDK_INT bucket and targetSdk itself; the legacy token must NOT appear",
+ "generator_cmd": "python3 tests/data/android_fixtures/sdk_src/gen_sdk.py target31 tests/data/android_fixtures/sdk_target31.apk  # javac --release 8 (Gate + android.os.Build/VERSION/VERSION_CODES, Context, ApplicationInfo stubs) + dex2jar d2j-jar2dex.sh; manifest: apktool-bundled aapt2 link -I prebuilt/android-framework.jar; zipfile",
+ "oracle_cmd": "aapt dump badging sdk_target31.apk -> targetSdkVersion 31; then java -Dsdk=34 -Drelease=14 -Dcodename=REL -cp <javac out> com.huntress.mobile.d29.platform.Probe 31 (host-JVM CALLER of Gate.code(Context) with ApplicationInfo.targetSdkVersion = the aapt value, pinned emulator API 34 / RELEASE 14) prints 'ANS-c60d2e9b7f41a538'"
+}

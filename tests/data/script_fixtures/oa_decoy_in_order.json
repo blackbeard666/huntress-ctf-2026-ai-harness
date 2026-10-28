@@ -1,0 +1,10 @@
+{
+ "material": "{\"plans\": {\"one.plan\": \"v=3|language=powershell|role=loader|stage=1|stage_count=3|steps=acquire_remote>write_file>dispatch_process|next_stage=two\", \"three.plan\": \"v=3|language=bash|role=runner|stage=3|stage_count=3|steps=profile_host>decode_configuration>dispatch_language|next_language=none\", \"two.plan\": \"v=3|language=python|role=stager|stage=2|stage_count=3|steps=decode_embedded>write_file>dispatch_process|next_language=bash\"}, \"zip_infos\": {\"one.plan\": \"2026-01-01T00:00:00\", \"three.plan\": \"2026-01-01T00:00:00\", \"two.plan\": \"2026-01-01T00:00:00\"}}",
+ "rep": "order_anomaly",
+ "transform": "member",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/oa_gen.py $TMPDIR/oagen  (stdlib plan writer; touch -d + Info-ZIP zip; corpus inorder)",
+ "oracle_cmd": "cd $TMPDIR/oagen/inorder && for f in *.plan; do tr '|' '\\n' < \"$f\" | awk -v f=\"$f\" '{i=index($0,\"=\"); print f \"\\t\" substr($0,1,i-1) \"\\t\" substr($0,i+1)}'; done | awk -F'\\t' '$2==\"steps\"{print $1 \"\\t\" $3}' | while IFS=$'\\t' read f s; do grep -qxF \"$s\" gm_steps.txt || echo \"$f\"; done; for f in *.plan; do tr '|' '\\n' < \"$f\" | awk -v f=\"$f\" '{i=index($0,\"=\"); print f \"\\t\" substr($0,1,i-1) \"\\t\" substr($0,i+1)}'; done | awk -F'\\t' '$2==\"stage\"{S[$1]=$3} $2==\"next_stage\"{N[$1]=$3} END{for(f in N) if((N[f]\".plan\") in S && S[N[f]\".plan\"]<=S[f]) print (W==\"target\"?N[f]\".plan\":f)}' W=src"
+}

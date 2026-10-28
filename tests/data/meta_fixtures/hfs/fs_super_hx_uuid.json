@@ -1,0 +1,8 @@
+{
+ "field": "hfs.uuid",
+ "expected": "8429183d-2a40-31bd-a296-6cb2dc51ad6b",
+ "generator_cmd": "mkfs.hfsplus -s -b 8192 -v CaseVol hx.img (16M, case-sensitive HFSX); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s UUID hx.img",
+ "decoy": false,
+ "member": "CaseVol.img"
+}

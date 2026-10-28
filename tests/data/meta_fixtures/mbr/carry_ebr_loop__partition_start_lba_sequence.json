@@ -1,0 +1,8 @@
+{
+ "field": "mbr.partition_start_lba_sequence",
+ "expected": "[10,80,82,140,210]",
+ "generator_cmd": "ext.img (see raw_disk/ebr_chain) then python3 struct patch: last EBR (LBA 209) link entry -> type 05 rel 0 = back to the first EBR (an EBR cycle)",
+ "oracle_cmd": "mmls loop.img (sleuthkit lists each logical once: 10, ext 80, 82, 140, 210); sfdisk --json loops (82,140,210 repeated)",
+ "decoy": false,
+ "member": "disk-001.img"
+}

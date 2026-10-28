@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=launcher|verdict=suspicious|attack=T1059.004|next_language=bash|campaign_id=DOCK-7a1b2c3d|url=https://dock-7a1b2c3d.example.invalid/run|file_path=/tmp/.dock-7a1b2c3d.stage",
+ "decoy": false,
+ "target": "make-recipe-inner-scripts",
+ "generator_cmd": "bash tests/data/script_fixtures/bis_gen.sh  (run inside tests/data/script_fixtures; perl xor, coreutils base64, xxd, bash heredoc writer)",
+ "oracle_cmd": "perl -ne '$h=$1 if /^ARG STAGE_HEAD=(\\S+)/; $t=$1 if /^ARG STAGE_TAIL=(\\S+)/; END { print join(\"\", map { chr(ord($_) ^ 0x5a) } split //, pack(\"H*\", $h.$t)) }' tests/data/script_fixtures/bis_docker_heredoc_args.Dockerfile"
+}

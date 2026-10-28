@@ -1,0 +1,8 @@
+{
+ "field": "disk_image.partition_start_lba_sequence",
+ "expected": "[100,300,40]",
+ "generator_cmd": "gzip -9 -n -c badcrc.img > badcrc.img.gz",
+ "oracle_cmd": "zcat badcrc.img.gz > x.raw && sfdisk --json x.raw | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.img.gz"
+}

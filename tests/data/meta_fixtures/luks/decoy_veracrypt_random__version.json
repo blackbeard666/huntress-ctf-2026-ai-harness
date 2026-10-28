@@ -1,0 +1,8 @@
+{
+ "field": "luks.version",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"import os; open('vc.hc','wb').write(os.urandom(4096))\"  (VeraCrypt-style headerless random volume)",
+ "oracle_cmd": "blkid -p vc.hc -> exit 2 (no signature); file -b vc.hc -> 'data'",
+ "decoy": true,
+ "member": "decoy_veracrypt_random.hc"
+}

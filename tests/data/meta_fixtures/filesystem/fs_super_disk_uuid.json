@@ -1,0 +1,8 @@
+{
+ "field": "filesystem.uuid",
+ "expected": "11111111-2222-4333-8444-555555555555",
+ "generator_cmd": "truncate -s 5M disk.img; sfdisk (dos: p1 start=64 size=64 type=83 empty, p2 start=128 size=8192 type=83); dd e2.img -> LBA 128; head -c 69632",
+ "oracle_cmd": "blkid -p -O $((128*512)) -o value -s UUID disk.img (p1 empty, p2 = ext2)",
+ "decoy": false,
+ "member": "disk.img"
+}

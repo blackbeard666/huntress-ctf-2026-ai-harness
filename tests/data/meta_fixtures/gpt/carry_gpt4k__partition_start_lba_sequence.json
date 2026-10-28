@@ -1,0 +1,8 @@
+{
+ "field": "gpt.partition_start_lba_sequence",
+ "expected": "[10,60]",
+ "generator_cmd": "truncate -s 512K g4k.img && printf 'label: gpt\\nstart=10, size=40\\nstart=60, size=20\\n' | sfdisk --sector-size 4096 g4k.img (EFI PART @4096, LBAs in 4K sectors)",
+ "oracle_cmd": "sfdisk --json --sector-size 4096 g4k.img | jq '[.partitiontable.partitions[].start]'",
+ "decoy": false,
+ "member": "disk-001.img"
+}

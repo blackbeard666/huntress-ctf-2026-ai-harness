@@ -1,0 +1,8 @@
+{
+ "field": "ext2.volume_name",
+ "expected": "lblext2",
+ "generator_cmd": "mkdir -p extroot/sub && cp a.txt secret.bin extroot/ && cp notes.md extroot/sub/ && mke2fs -q -t ext2 -L lblext2 -d extroot -E root_owner=0:0 ext2.img 4M && head -c 319488 ext2.img",
+ "oracle_cmd": "fsstat ext2.img -> Volume Name: lblext2",
+ "decoy": false,
+ "member": "ext2.img"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "hfs.uuid",
+ "expected": "none",
+ "generator_cmd": "mkfs.xfs -q -L xfsdata -m uuid=6b1c2d3e-4f50-4617-8899-aabbccddeeff x.img (320M); head -c 4096",
+ "oracle_cmd": "blkid -p -o value -s TYPE x.img (xfs, no H+/HX @0x400) -> none",
+ "decoy": true,
+ "member": "CaseVol.img"
+}

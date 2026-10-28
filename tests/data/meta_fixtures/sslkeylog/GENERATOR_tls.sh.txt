@@ -1,0 +1,7 @@
+# sh GENERATOR_tls.sh.txt <workdir>   (Wireshark 4.6.4 editcap, OpenSSL CLI)
+set -e; G=$(dirname "$0"); cd "$1"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ka.pem -out ca.pem -days 400 -subj "/O=Fixture Org/CN=tls-a.example" -set_serial 0x0a1b2c3d4e5f60718293 2>/dev/null
+openssl req -x509 -newkey rsa:2048 -nodes -keyout kb.pem -out cb.pem -days 30 -subj "/CN=tls-b.example" -set_serial 77 2>/dev/null
+python3 -I "$G/GENERATOR_tls.py.txt" tls.pcap keylog.txt ca.pem ka.pem cb.pem kb.pem
+editcap -F pcapng --inject-secrets tls,keylog.txt tls.pcap tls_dsb.pcapng
+editcap -F pcapng tls.pcap tls_nodsb.pcapng

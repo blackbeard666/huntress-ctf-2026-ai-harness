@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=tcl|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_rev_b64|stage_profile=three_stage_decode_write_launch|next_language=batch|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=TCL-6a711c09|url=https://tcl-6a711c090a.example.invalid/stage|file_path=/tmp/huntress-tcl/.6a711c090ac747f4.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/multilang_drop/gen.py (stdlib base64/binascii writer, tcl D28 layout, marker LYR-hex_rev_b64)",
+ "oracle_cmd": "sed -n 1p mld_29666c.tcl | sed -E 's/.*HUNTRESS_ANALYSIS_V1:LYR-[a-z0-9_]+-//; s/ -->$//' | base64 -d | rev | tr -d '\\n' | xxd -r -p"
+}

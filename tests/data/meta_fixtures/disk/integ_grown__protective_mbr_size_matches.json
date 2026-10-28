@@ -1,0 +1,8 @@
+{
+ "field": "disk.protective_mbr_size_matches",
+ "expected": "false",
+ "generator_cmd": "truncate -s 64K intact.img && sfdisk -q intact.img < g.sf (label gpt; label-id 6B1F0A2C-3D4E-4F50-8A61-72839405A6B7; start=40 size=24 linux 'data'; start=64 size=24 msdata 'spare'; util-linux sfdisk) && printf EVIDENCE-PAYLOAD | dd of=intact.img bs=512 seek=40 conv=notrunc && cp intact.img grown.img && truncate -s 96K grown.img (image grown, GPT not moved)",
+ "oracle_cmd": "fdisk -l -t dos grown.img -> 0xEE entry Sectors 127 vs disk 192 sectors (191 expected)",
+ "decoy": false,
+ "member": "grown.img"
+}

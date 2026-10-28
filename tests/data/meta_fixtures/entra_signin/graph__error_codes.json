@@ -1,0 +1,8 @@
+{
+ "field": "entra_signin.error_codes",
+ "expected": "[0,50074,50126]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> entra_signins.json",
+ "oracle_cmd": "jq -c '[.value[].status.errorCode]|unique' entra_signins.json -> [0,50074,50126]",
+ "decoy": false,
+ "member": "entra_signins.json"
+}

@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=nim|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=hex_rev_b64|stage_profile=three_stage_decode_write_launch|next_language=jscript|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=NIM-a2401af9|url=https://nim-a2401af98a.example.invalid/stage|file_path=/tmp/huntress-nim/.a2401af98a87d483.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/multilang_drop/gen.py (stdlib base64/binascii writer, nim D28 layout, marker LYR-hex_rev_b64)",
+ "oracle_cmd": "grep -oE 'huntress_descriptor_[0-9a-f]{8}[^\"]*\"[^\"]+' mld_df231c.nim | cut -d'\"' -f2 | base64 -d | rev | tr -d '\\n' | xxd -r -p"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "xfs.uuid",
+ "expected": "none",
+ "generator_cmd": "mkfs.ext4 -q -L evidence-root -U 3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b e4.img (8M, E2FSPROGS_FAKE_TIME=1700000000, e2fsprogs 1.47.2); debugfs -w -R \"ssv last_mounted /srv/evidence\" -R \"ssv mtime @1704164645\" -R \"ssv mnt_count 7\"; head -c 4096",
+ "oracle_cmd": "xfs_db -r -c 'sb 0' e4.img 2>&1 | grep -q 'bad magic' && echo none",
+ "decoy": true,
+ "member": "data.xfs"
+}

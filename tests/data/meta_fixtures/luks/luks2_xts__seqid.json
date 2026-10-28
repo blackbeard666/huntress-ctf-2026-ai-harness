@@ -1,0 +1,8 @@
+{
+ "field": "luks.seqid",
+ "expected": "3",
+ "generator_cmd": "truncate -s 4M l2.img; printf pw | LD_LIBRARY_PATH=<cs>/usr/lib/x86_64-linux-gnu <cs>/usr/sbin/cryptsetup --disable-locks --batch-mode (cryptsetup-bin 2:2.8.4-1ubuntu4 via apt-get download + dpkg-deb -x) luksFormat --type luks2 --cipher aes-xts-plain64 --key-size 512 --hash sha256 --sector-size 4096 --label EVIDENCE-VOL --subsystem huntress --uuid 0b8e2d41-c5f6-4a7b-8c9d-0e1f2a3b4c5d --pbkdf pbkdf2 --pbkdf-force-iterations 1000 --luks2-keyslots-size 1m --key-file - l2.img; head -c 32768 l2.img > luks2_xts.bin",
+ "oracle_cmd": "file -b luks2_xts.bin -> 'ID 3'; luksDump 'Epoch: 3'",
+ "decoy": false,
+ "member": "luks2_xts.bin"
+}

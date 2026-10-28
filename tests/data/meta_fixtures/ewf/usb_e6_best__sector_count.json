@@ -1,0 +1,8 @@
+{
+ "field": "ewf.sector_count",
+ "expected": "64",
+ "generator_cmd": "TZ=UTC ewfacquire -u -q -t usb -f encase6 -c deflate:best -b 16 -d sha1 -C CASE-2026-0417 -E EV-07 -D \"Suspect USB thumb drive\" -e \"J. Rivera\" -N \"Seized at desk 4B\" -m removable media.raw (ewf-tools 20140816; media.raw = 64x512 B python Random(7) text+noise)",
+ "oracle_cmd": "pyewf (libewf-python 20260924): h=pyewf.handle(); h.open([f]); h.number_of_sectors",
+ "decoy": false,
+ "member": "usb.E01"
+}

@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-28-protocol-reconstruction",
+  "lane": "mobile-android",
+  "name": "📱 Protocol Reconstruction",
+  "ids": {
+    "single_solve": "mobile-android-day-28-protocol-reconstruction",
+    "time_trial": "mobile-android-day-28-protocol-reconstruction/time_trial",
+    "mastery": "mobile-android-day-28-protocol-reconstruction/mastery"
+  }
+}

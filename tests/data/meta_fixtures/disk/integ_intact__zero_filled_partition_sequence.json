@@ -1,0 +1,8 @@
+{
+ "field": "disk.zero_filled_partition_sequence",
+ "expected": "[false,true]",
+ "generator_cmd": "truncate -s 64K intact.img && sfdisk -q intact.img < g.sf (label gpt; label-id 6B1F0A2C-3D4E-4F50-8A61-72839405A6B7; start=40 size=24 linux 'data'; start=64 size=24 msdata 'spare'; util-linux sfdisk) && printf EVIDENCE-PAYLOAD | dd of=intact.img bs=512 seek=40 conv=notrunc",
+ "oracle_cmd": "dd if=intact.img bs=512 skip=40 count=24 | tr -d '\\0' | wc -c -> 16 ; skip=64 count=24 -> 0 (sfdisk -d gives the start/size)",
+ "decoy": false,
+ "member": "intact.img"
+}

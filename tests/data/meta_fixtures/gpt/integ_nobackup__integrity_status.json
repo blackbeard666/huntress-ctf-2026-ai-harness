@@ -1,0 +1,8 @@
+{
+ "field": "gpt.integrity_status",
+ "expected": "rebuilt",
+ "generator_cmd": "truncate -s 64K intact.img && sfdisk -q intact.img < g.sf (label gpt; label-id 6B1F0A2C-3D4E-4F50-8A61-72839405A6B7; start=40 size=24 linux 'data'; start=64 size=24 msdata 'spare'; util-linux sfdisk) && printf EVIDENCE-PAYLOAD | dd of=intact.img bs=512 seek=40 conv=notrunc && cp intact.img nobackup.img && dd if=/dev/zero of=nobackup.img bs=512 seek=127 count=1 conv=notrunc (backup header zeroed)",
+ "oracle_cmd": "sgdisk -v nobackup.img -> 'Main header: OK / Backup header: ERROR / Main partition table: OK'",
+ "decoy": false,
+ "member": "nobackup.img"
+}

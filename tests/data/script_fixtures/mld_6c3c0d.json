@@ -1,0 +1,6 @@
+{
+ "expected_plain": "v=3|language=gnu_awk|role=launcher|verdict=suspicious|attack=T1059|adapter=process_builder|host_profile=standalone|obfuscation_profile=b64_rev|stage_profile=three_stage_decode_write_launch|next_language=vbscript|stage_count=3|steps=decode_embedded,write_file,dispatch_process|campaign_id=GNU_AWK-c4fedd74|url=https://gnu_awk-c4fedd7429.example.invalid/stage|file_path=/tmp/huntress-gnu_awk/.c4fedd7429362edc.stage",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/multilang_drop/gen.py (stdlib base64/binascii writer, gnu_awk D28 layout, marker LYR-b64_rev)",
+ "oracle_cmd": "sed -n 1p mld_6c3c0d.awk | sed -E 's/.*HUNTRESS_ANALYSIS_V1:LYR-[a-z0-9_]+-//; s/ -->$//' | rev | tr -d '\\n' | base64 -d"
+}

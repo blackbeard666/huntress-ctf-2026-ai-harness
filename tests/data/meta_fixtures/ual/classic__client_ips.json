@@ -1,0 +1,8 @@
+{
+ "field": "ual.client_ips",
+ "expected": "[\"192.0.2.44\",\"198.51.100.7\",\"203.0.113.10\",\"203.0.113.99\"]",
+ "generator_cmd": "python3 -I GENERATOR_cloud_audit.py.txt OUT (stdlib csv.writer / json.dumps / gzip.compress writers; tests/data/meta_fixtures/ual/) -> ual_classic.csv",
+ "oracle_cmd": "python3 -I -c 'import csv,json,sys; print(json.dumps(list(csv.DictReader(open(sys.argv[1],encoding=\"utf-8-sig\")))))' ual_classic.csv | jq -c '[.[].AuditData|fromjson|(.ClientIP // .ClientIPAddress // .ActorIpAddress)|sub(\":[0-9]+$\";\"\")]|unique' -> [\"192.0.2.44\",\"198.51.100.7\",\"203.0.113.10\",\"203.0.113.99\"]",
+ "decoy": false,
+ "member": "ual_classic.csv"
+}

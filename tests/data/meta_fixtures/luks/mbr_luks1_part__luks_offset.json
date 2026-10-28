@@ -1,0 +1,8 @@
+{
+ "field": "luks.luks_offset",
+ "expected": "32768",
+ "generator_cmd": "truncate -s 69632 disk.img; printf 'label: dos\\nlabel-id: 0x1badc0de\\nstart=64, size=72, type=83\\n' | sfdisk -q disk.img; dd if=luks1_essiv.bin of=disk.img bs=512 seek=64 conv=notrunc  (luks1_essiv.bin from the cryptsetup luksFormat above)",
+ "oracle_cmd": "sfdisk -d disk.img -> 'start=64' (x512 = 32768); blkid -p --offset 32768 finds crypto_LUKS",
+ "decoy": false,
+ "member": "mbr_luks1_part.img"
+}
