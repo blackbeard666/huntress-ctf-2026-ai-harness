@@ -283,6 +283,18 @@ EVIDENCE_MAX_FIELDS = int(os.environ.get("HCTF_EVIDENCE_MAX_FIELDS", "120"))
 # being cracked by hand again. It runs beside the Time Trial; HOLD > 0 makes the first web TT attempt wait up to that
 # many seconds for the plugin (measure first: the TT's own path is a 12 s capped race + a hot live answer).
 WEB_CODIFY = os.environ.get("HCTF_WEB_CODIFY", "1") != "0"
+# D27 self-heal: a live web single that produced no proof on a ONE-SHOT credit kit (Double Spent) whose one credit is
+# spent/burned -> reset the target (arena stop->start = fresh target + fresh credit, the organizer's sanctioned recovery;
+# there is no in-app reset route) and re-run the deterministic solver ONCE on the fresh target before escalating to help.
+WEB_CREDIT_SELFHEAL = os.environ.get("HCTF_WEB_CREDIT_SELFHEAL", "1") != "0"
+CREDIT_SELFHEAL_MAX = int(os.environ.get("HCTF_WEB_CREDIT_SELFHEAL_MAX", "2"))   # arena resets per chain before giving up
+# P1-E straggler escalation: when the normal run finishes with modes still unsolved, spend the now-free worker slots on
+# the stragglers -- re-launch each unsolved chain (Chain.run is re-entrant: it skips already-solved modes; web chains
+# re-attempt through webtarget.slot, slot-safe, never a blind resume). Bounded by rounds + wall-clock. DEFAULT OFF
+# (HCTF_STRAGGLER_ESCALATE=1) -- shipped on a drop day, validate on the rehearsal replay first.
+STRAGGLER_ESCALATE = os.environ.get("HCTF_STRAGGLER_ESCALATE", "0") != "0"
+STRAGGLER_ROUNDS = int(os.environ.get("HCTF_STRAGGLER_ROUNDS", "2"))
+STRAGGLER_WALL_S = float(os.environ.get("HCTF_STRAGGLER_WALL_S", str(20 * 60)))
 WEB_CODIFY_TIMEOUT = float(os.environ.get("HCTF_WEB_CODIFY_TIMEOUT", "300"))
 WEB_CODIFY_HOLD = float(os.environ.get("HCTF_WEB_CODIFY_HOLD", "0"))
 # D24 #11 (D24 fetch-quest TT: solver 41 s -> blocked -> live answer 26 s; codify plugin landed 17 s after the block):
@@ -1153,6 +1165,14 @@ _CLOCKED_PRESTART = []   # a pre-start came back CLOCKED this run -> no untimed 
 # 30 s window left). A clocked body latches it off for the run; hb_timed trusts a pre-start for 300 s
 # (HCTF_PRESTART_TRUST_S), then simply reconnects.
 PRESTART_AT_CORRECT = os.environ.get("HCTF_PRESTART_AT_CORRECT", "1") != "0"
+# D27 web speedup: a web chain's Time Trial target is the slowest thing on the board (~50 s to provision), but it is only
+# requested at the single's CORRECT -- so the chain sits idle through its provisioning. Fire the TT kick at CHAIN START
+# instead, so the ~50 s provisioning overlaps the single + the standard lanes (web now allows several live targets per
+# team, so the single + TT targets coexist). Background, reconnect-safe, logs-on-error (falls back to the normal kick).
+# DEFAULT ON (user-enabled 2026-10-28; HCTF_WEB_PREPROVISION=0 to disable) -- adds a concurrent live target per web chain
+# (GM allows ~10/team; a day has <=3 web chains, so single+TT = ~6, within limit). Graceful: the kick is background and
+# logs-on-error, and the timed stage's own start still provisions normally if the early kick was rejected/failed.
+WEB_PREPROVISION = os.environ.get("HCTF_WEB_PREPROVISION", "1") != "0"
 # The single's solver on its OWN case must beat this (local s) or a speed generalize runs BEFORE the first timed attempt:
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
@@ -4796,6 +4816,14 @@ class Chain:
                 self._start_today_pre(cid)
                 self._start_baseline_pre(cid)
                 return True
+            if self._web_credit_kit_selfheal(cid):
+                self._record_labels(cid)
+                self._start_family_pre(cid)
+                self._start_mutation_pre(cid)
+                self._start_compound_pre(cid)
+                self._start_today_pre(cid)
+                self._start_baseline_pre(cid)
+                return True
             if (cli.cdir(cid) / "HELP.md").exists():
                 set_state(self.base, stage="single:help", help=(cli.cdir(cid) / "HELP.md").read_text()[:1500])
                 return False
@@ -4868,6 +4896,51 @@ class Chain:
         self._start_today_pre(cid)
         self._start_baseline_pre(cid)
         return True
+
+    def _web_credit_kit_selfheal(self, cid):
+        """A live web single that produced no proof: if the target is a ONE-SHOT credit kit (D27 Double Spent) whose one
+        credit is spent/burned, RESET it (arena stop->start = a fresh target + fresh credit; the organizer's sanctioned
+        recovery, there is no in-app reset route) and re-run the deterministic web solver ONCE on the fresh target, then
+        submit. Returns True iff that reached GM CORRECT. Bounded, web-only, never raises -- a miss falls through to help."""
+        from . import webtarget
+        if not (WEB_CREDIT_SELFHEAL and webtarget.is_live_lane(self.lane)):
+            return False
+        try:
+            import lib.web as libweb
+            from lib import websolve
+            contract = dict(cli.load(cid, "start.json") or {})
+            urls = webtarget.target_urls(contract)
+            if not urls:
+                return False
+
+            def _is_credit_kit(u):
+                base = u if u.endswith("/") else u + "/"
+                clues_json, key = websolve.clues(base)
+                return bool(libweb.handlers.run_alone_handlers(key, clues_json)) \
+                    or libweb._credit_kit_probe(base, clues_json)
+            if not any(_is_credit_kit(u) for u in urls):
+                return False   # not a credit kit: resetting would needlessly re-roll a target of another class
+            if getattr(self, "_credit_selfheal_tries", 0) >= CREDIT_SELFHEAL_MAX:
+                return False   # already reset-and-retried; a deterministic re-solve that missed won't change across resets
+            self._credit_selfheal_tries = getattr(self, "_credit_selfheal_tries", 0) + 1
+            say(f"[{cid}] web one-shot credit kit, no proof -> arena reset (stop->start) for a fresh target + credit")
+            webtarget.arena_stop(cid)
+            fresh = webtarget.wait_ready(cid, webtarget.arena_start(cid), log=say)
+            if not webtarget.ready(fresh):
+                say(f"[{cid}] credit-kit reset: fresh target not ready -> escalating to help")
+                return False
+            contract["targets"] = fresh.get("targets") or contract.get("targets")
+            proofs = {k: v for k, v in (libweb.solve(contract) or {}).items() if v}
+            if not proofs:
+                say(f"[{cid}] credit-kit reset: re-solve on the fresh target produced no proof -> escalating to help")
+                return False
+            cli.submit(cid, proofs)
+            ok = bool(cli.is_complete(cid) or cli.gm_solved(cid))
+            say(f"[{cid}] credit-kit reset + re-solve on fresh target: {'CORRECT' if ok else 'still not solved'}")
+            return ok
+        except Exception as e:  # noqa: BLE001 - a failed self-heal just escalates to help, as before
+            say(f"[{cid}] credit-kit self-heal note: {e!r}")
+            return False
 
     def _live_target_accept(self, cid, res):
         """Web single gate: the GM judged it CORRECT but its case can't be replayed (target 410 once solved; D19: chain
@@ -7192,6 +7265,9 @@ class Chain:
                 # web: hold one of the team's target slots for the whole chain (re-entrant: each stage's _web_slot nests
                 # in it), so the Time Trial requested at the single's CORRECT (_web_tt_kick) never pushes the team past
                 # SLOTS
+                if WEB_PREPROVISION:
+                    # P2: provision the slow TT target now so its ~50 s prep overlaps the single, not after it (default off)
+                    self._web_tt_kick()
                 with webtarget.slot(self.base, log=say):
                     return self._run_modes(modes)
             return self._run_modes(modes)
@@ -7712,8 +7788,45 @@ def _hb_race_predrop(log=say, wait_s=900):
         log(f"[hb-race] pre-drop prepare note: {str(e)[:200]}")
 
 
+def _straggler_escalation(day, groups, pools, gov, modes):
+    """P1-E: after the normal run, re-launch any still-unsolved chain on the freed worker slots (Chain.run skips solved
+    modes; web chains re-attempt slot-safely and self-heal a burned credit kit via P0-B). Bounded by STRAGGLER_ROUNDS /
+    STRAGGLER_WALL_S. DEFAULT OFF. Never raises -- a failure just leaves the holdouts to the drift watcher + post-run gate."""
+    if not STRAGGLER_ESCALATE or day is None:
+        return
+    from . import driftwatch
+    deadline = time.time() + STRAGGLER_WALL_S
+    for rnd in range(max(1, STRAGGLER_ROUNDS)):
+        try:
+            holds = driftwatch.unsolved(day, include_web=True)
+        except Exception as e:  # noqa: BLE001 - advisory
+            say(f"[straggler] unsolved check failed ({e}); stopping")
+            return
+        if not holds:
+            if rnd:
+                say("[straggler] board complete after escalation")
+            return
+        if time.time() >= deadline:
+            say(f"[straggler] wall-clock budget spent; {len(holds)} mode(s) still unsolved -> drift watch + post-run gate")
+            return
+        bases = sorted({b for b, _c in holds if b in groups})
+        if not bases:
+            say(f"[straggler] {len(holds)} unsolved mode(s) have no re-runnable chain; leaving to the drift watcher")
+            return
+        say(f"[straggler] round {rnd + 1}/{STRAGGLER_ROUNDS}: re-attempting {len(bases)} unsolved chain(s) on freed "
+            f"slots: {', '.join(bases[:8])}" + (" ..." if len(bases) > 8 else ""))
+        try:
+            with ThreadPoolExecutor(max_workers=max(1, len(bases))) as ex:
+                for b in bases:
+                    ex.submit(Chain(b, groups[b], pools, gov, modes).run)
+        except Exception as e:  # noqa: BLE001 - one bad round must not sink the post-run
+            say(f"[straggler] round {rnd + 1} error ({e}); stopping")
+            return
+    say(f"[straggler] {STRAGGLER_ROUNDS} round(s) exhausted; remaining holdouts left to the drift watcher + post-run gate")
+
+
 def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_homebase=None, keep_homebase=None,
-        scout_rounds=None, wait_release=False):
+        scout_rounds=None, wait_release=False, no_postrun=False):
     global SCOUT_ROUNDS
     if scout_rounds is not None:
         SCOUT_ROUNDS = scout_rounds
@@ -7817,13 +7930,34 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
             compound.web_live_restore(log=say)
     except Exception as e:  # noqa: BLE001 - best-effort
         say(f"[web] live compound restore note: {e}")
+    try:   # P1-E: reallocate the freed worker slots to any still-unsolved chain before giving up to drift watch (default off)
+        _straggler_escalation(day, groups, pools, gov, modes)
+    except Exception as e:  # noqa: BLE001 - never block post-run
+        say(f"[straggler] escalation note: {e}")
     if day is not None:
         try:   # unsolved modes: watch their contracts for an in-place GM rewrite and resume (D17 binary, ~4 h later)
             from . import driftwatch
             driftwatch.start_watch(day, log=say)
         except Exception as e:  # noqa: BLE001 - best-effort
             say(f"[drift] watch not launched ({e})")
-    if RATCHET and day is not None:
+    # Post-run (ratchet -> prebuild) only once the WHOLE board is GM-solved. Day 27 escalated web-double-spent to help,
+    # declared "all chains finished" at 21/24, and started post-run while 3 modes were still unsolved -- post-run burns
+    # CPU/time and is pointless until the board is complete (user rule, 2026-10-27). --no-postrun / HCTF_RATCHET=0 suppress.
+    holdouts = []
+    if day is not None and not no_postrun:
+        try:
+            from . import driftwatch
+            holdouts = driftwatch.unsolved(day, include_web=True)
+        except Exception as e:  # noqa: BLE001 - if the check itself fails, fall back to the old behaviour (run post-run)
+            say(f"[postrun] all-solved check failed ({e}); proceeding")
+            holdouts = []
+    if no_postrun:
+        say("[postrun] skipped (--no-postrun)")
+    elif holdouts:
+        say(f"[postrun] HELD: {len(holdouts)} mode(s) not yet GM-solved -- post-run waits for a complete board. "
+            f"Holdouts: {', '.join(c for _b, c in holdouts[:8])}" + (" ..." if len(holdouts) > 8 else "")
+            + ". The drift watcher resumes non-web holdouts; re-run `hctf postrun --day N` once the board is 24/24.")
+    if RATCHET and day is not None and not no_postrun and not holdouts:
         from . import postrun
         ratchet(day)
         if PREBUILD_AFTER_RATCHET:
@@ -8127,7 +8261,11 @@ def _restore_tests(snap):
 
 
 RATCHET_LOGS = os.environ.get("HCTF_RATCHET_LOGS", "1") != "0"   # per-lane technique-log workers beside the lib ratchet
-RATCHET_LOG_TIMEOUT = float(os.environ.get("HCTF_RATCHET_LOG_TIMEOUT", str(10 * 60)))
+# D27: ratchet_log (one opus worker per lane writing the technique log + coverage forecast) was the day's cost hog --
+# $12.92 / 2265 s / 6 procs, one hitting max_turns. It is pure documentation, off the critical path, so bound the tail:
+# 8 min wall-clock (was 10). The turn cap is trimmed to 34 in workers.MAX_TURNS. Both override via env if a log comes back
+# truncated (HCTF_RATCHET_LOG_TIMEOUT / HCTF_MAX_TURNS_RATCHET_LOG).
+RATCHET_LOG_TIMEOUT = float(os.environ.get("HCTF_RATCHET_LOG_TIMEOUT", str(8 * 60)))
 
 
 def _ratchet_logs(tag, digest):

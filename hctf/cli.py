@@ -347,7 +347,10 @@ def c_start(a, op="start"):
 
 
 def c_arena(a):
-    """`hctf arena start|stop|status <id>` (operators; workers never need it: `hctf start` waits/revives itself)."""
+    """`hctf arena start|stop|status <id>` (operators; workers never need it: `hctf start` waits/revives itself). Also the
+    sanctioned reset for a BURNED one-shot credit kit (D27 Double Spent): `stop` then `start` gives a fresh target +
+    fresh credit (there is no in-app reset route). The orchestrator does this automatically on a burn (see
+    orchestrate/webtarget self-heal); a codify verify worker may do it too (its target is private)."""
     from . import webtarget
     a.id = paths.resolve_id(a.id)
     body = webtarget.arena(a.id, a.op)
@@ -1195,7 +1198,8 @@ def c_run(a):
         pre = False
     orchestrate.run(day=a.day, only=a.only, local_slots=a.local, hb_slots=a.homebase, modes=a.modes,
                     prewarm_homebase=pre, keep_homebase=getattr(a, "keep_homebase", False),
-                    scout_rounds=getattr(a, "scout", None), wait_release=getattr(a, "wait_release", False))
+                    scout_rounds=getattr(a, "scout", None), wait_release=getattr(a, "wait_release", False),
+                    no_postrun=getattr(a, "no_postrun", False))
     # Clean exit: the run spawns many ThreadPoolExecutors that are never shut down, so concurrent.futures' atexit
     # handler joins their worker threads at interpreter exit -- a stuck background probe there HANGS the process after
     # the run has already finished (observed on live runs: needed a manual reap). Results + post-run are done and
@@ -1649,6 +1653,9 @@ def main(argv=None):
                      help="boot+provision Homebase at run start (in the background) so tight timed windows don't "
                           "wait for a cold VM; powers off at run end. Also via HCTF_PREWARM_HOMEBASE=1")
     pr2.add_argument("--modes", nargs="*", choices=list(paths.MODES))
+    pr2.add_argument("--no-postrun", action="store_true",
+                     help="skip post-run (ratchet/prebuild/coverage) after the board is done. Post-run is also held "
+                          "automatically while any mode is still unsolved, and suppressed by HCTF_RATCHET=0")
     pr2.add_argument("--scout", type=int, default=None, metavar="N",
                      help="Time Trial scout rounds before Mastery (learn label spellings on the cheap clock); "
                           "0 = off (default HCTF_SCOUT_ROUNDS)")

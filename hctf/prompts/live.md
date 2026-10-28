@@ -21,4 +21,6 @@ Do this, fast:
 3. Stop as soon as a submit returns CORRECT or every listed field has been accepted.
 
 Never start or retry the mode, never submit fields that are not listed, never edit the solver, `lib/`, `hctf/` or
-`skills/`. Work only inside `{chal_dir}`, `{art_dir}` and `$TMPDIR`.
+`skills/`. Work only inside `{chal_dir}`, `{art_dir}` and `$TMPDIR`. A web one-shot credit kit whose single credit is
+already spent (409 `credit_unavailable` / `credits:0`) is NOT unsolvable — the harness resets the target (arena
+stop→start) and retries automatically; report it as blocked-on-reset, don't give up on the field.

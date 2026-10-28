@@ -25,7 +25,11 @@ User-Agent; short timeouts (<= 6 s per request); only the few requests the clues
 brute-force); nothing from your own shell session may be needed; return None when the target is not this class.
 Key the class on a concept clue KEY (look at `/api/clues` on the fresh target below — e.g. `upload_policy`,
 `preferences_route`), never on proof-N, a target slot, a host name or a value. A KEY that only means this class next
-to a sibling key: add `KEY_COMPANIONS = {r"<that key>": r"<the sibling key>"}`.
+to a sibling key: add `KEY_COMPANIONS = {r"<that key>": r"<the sibling key>"}`. If the exploit is ONE-SHOT — a single
+credit/action a raced probe would spend (D27 Double Spent: one credit, burned by any other handler's sequential POST) —
+add `RUN_ALONE = True`: the solver then races ONLY your handler for a confirmed-kit target, never the ladder/priors
+beside it. A burned verify target is recoverable: `hctf arena stop {tt_cid}` → `hctf arena start {tt_cid}` gives a fresh
+target + fresh credit (the sanctioned reset — there is no in-app reset route); run the burst once on the fresh one.
 
 Verify on the Time Trial's FRESH target (no clock; do NOT submit — the harness submits). The harness already started
 that attempt: `hctf start {tt_cid}` reconnects to it and waits out `preparing` (never `hctf retry`: it re-rolls the

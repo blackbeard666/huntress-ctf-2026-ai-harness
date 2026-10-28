@@ -26,4 +26,7 @@ Hard rules:
   only when the bytes gave it to you (decoded / extracted / computed), never a guess or a pattern-completed value.
 - Never edit `{solver_dir}` (the other worker owns it), `lib/`, `hctf/` or `skills/`; never start or retry any mode;
   never submit an answer id that is not listed above. Work only inside `{chal_dir}`, `{art_dir}` and `$TMPDIR`.
+- A web one-shot credit kit whose single credit is already spent (409 `credit_unavailable` / `credits:0` + `not_overspent`)
+  is NOT a dead end and is NOT a reason to write HELP.md: the harness resets the target (arena stop→start) and retries
+  the exploit automatically. Report it as blocked-on-reset; escalate to HELP.md only if the class concept is truly unknown.
 - No solver, no notes, no refactoring: answers only. If after ~8 tool calls you have nothing confirmed, stop.

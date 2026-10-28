@@ -235,13 +235,19 @@ def _gm_public(args, timeout):
         # covered Singles only -- script Mastery's 9.5 MB start took 59.6 s on the daemon (GM 1.75 s) and binary's TT
         # start sat 40 s queued behind it.
         return _gm_local(args, timeout)
+    if args and args[0] == "submit" and len(args) > 1 and _public_gm() and _submit_off_hb(str(args[1])):
+        # This lane+mode's last submit reply was large (D27: 831 KB / 11.7 s on the daemon): keep it public (P2-H).
+        return _gm_local(args, timeout)
     if args and args[0] in ("start", "submit") and GM_VIA_DAEMON and _public_gm():
         env = _gm_via_daemon(args, timeout)      # the run's warm Homebase daemon, when this process has one
         if env is not None:
+            if args[0] == "submit":
+                note_big_submit(str(args[1]), _reply_size(env))
             return env
     if args and args[0] == "submit" and SUBMIT_VIA_HB and _public_gm() and _master_alive():
         env = _gm_submit_hb(args, timeout)
         if env is not None:
+            note_big_submit(str(args[1]), _reply_size(env))
             return env
     if args and args[0] == "start" and START_VIA_HB and _public_gm() and _master_alive():
         try:
@@ -305,6 +311,42 @@ def _start_off_hb(cid):
     if n is None:
         n = gmroute._earlier_start_bytes(cid)
     return n > START_VIA_HB_MAX_KB * 1024
+
+
+# D27 (plan P2-H): the start-side >200 KB->public guard above is start-only, but a SUBMIT reply can be large too (D27:
+# an 831 KB script submit reply took 11.7 s on the hb-daemon's one stdio channel). This learns a lane+mode's submit reply
+# size from `gmroute.note_slow` / the submit path and routes a later likely-large submit public instead of via daemon/hb.
+# DEFAULT OFF (HCTF_SUBMIT_REPLY_ROUTE=1 to enable) -- shipped on a drop day, validate on the rehearsal replay first.
+SUBMIT_REPLY_ROUTE = os.environ.get("HCTF_SUBMIT_REPLY_ROUTE", "0") != "0"
+SUBMIT_OFF_HB_MAX_KB = float(os.environ.get("HCTF_SUBMIT_OFF_HB_MAX_KB", "200"))
+_BIG_SUBMIT = {}   # gmroute shape ("<lane>[/mode]") -> largest submit reply bytes seen
+
+
+def _reply_size(env):
+    from . import gmroute
+    try:
+        return gmroute._reply_bytes(env)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def note_big_submit(cid, nbytes):
+    """Record a submit reply's size for `cid`'s lane+mode (called by gmroute.note_slow and the submit path). The next
+    submit on that shape then routes public when it exceeds SUBMIT_OFF_HB_MAX_KB. No-op unless the routing is enabled."""
+    if not SUBMIT_REPLY_ROUTE or not nbytes:
+        return
+    from . import gmroute
+    k = gmroute._shape(str(cid))
+    _BIG_SUBMIT[k] = max(_BIG_SUBMIT.get(k, 0), int(nbytes))
+
+
+def _submit_off_hb(cid):
+    """True when this lane+mode's last submit reply exceeded SUBMIT_OFF_HB_MAX_KB -> keep the submit on the public path
+    (a big reply crossing the daemon's one channel holds up everything queued behind it)."""
+    if not SUBMIT_REPLY_ROUTE or SUBMIT_OFF_HB_MAX_KB <= 0:
+        return False
+    from . import gmroute
+    return _BIG_SUBMIT.get(gmroute._shape(str(cid)), 0) > SUBMIT_OFF_HB_MAX_KB * 1024
 _EXEC_MARK = "HCTF-EXEC"
 # Single Solve start / submit over the run's long-lived Homebase daemon (warm GM pool, one stdio channel) instead of an
 # ssh exec + `python3 gm.py` per call: D12's five drop-time starts went out 2-6 s late on the busy 2-vCPU VM. Only in the

@@ -29,6 +29,24 @@ _KEY_MAP = [
 # always ships `inventory_route` with it) -> its 20 s known-class race ran on a target it can never solve.
 _COMPANIONS = {}
 
+# D27 "Double Spent": a ONE-SHOT handler whose class is burned by any other probe's sequential POST (a single POST to
+# feature_route spends the one credit before the race burst). A plugin declares `RUN_ALONE = True` (or a list of its
+# handler names); lib.web.solve_target then races ONLY these handlers for a matching target -- never the default ladder
+# or prior-day solvers beside them. The generated plugin template inherits the flag so future credit kits get it free.
+_RUN_ALONE = set()
+
+
+def run_alone_handlers(key, clues):
+    """The for_key(...) handlers that must run ALONE (declared RUN_ALONE). The caller (lib.web.solve_target) races ONLY
+    these for a matching target -- not the default ladder, prior solvers, OR the other furniture-key handlers an
+    all-furniture kit also matches (a day23/24 handler's sequential POST would burn the one credit just like the ladder)."""
+    return [(name, fn) for name, fn in for_key(key, clues) if name in _RUN_ALONE]
+
+
+def run_alone(key, clues):
+    """True when the clue keys match a handler that must run ALONE (a one-shot kit a raced probe would burn)."""
+    return bool(run_alone_handlers(key, clues))
+
 
 def _companion_ok(pat, name, keys):
     need = _COMPANIONS.get((pat, name))
@@ -394,6 +412,8 @@ def _load_plugins():
             mod = importlib.import_module(modname)
             hs = dict(getattr(mod, "HANDLERS", None) or {})
             comp = dict(getattr(mod, "KEY_COMPANIONS", None) or {})
+            ra = getattr(mod, "RUN_ALONE", False)   # True = every handler this plugin registers; or a list of names
+            ra_names = set(hs) if ra is True else {n for n in (ra or []) if isinstance(n, str)}
             for pat, name in list(getattr(mod, "KEY_MAP", None) or []):
                 # a built-in keeps its name; the same plugin may map several clue-key patterns to one handler
                 if name in hs and callable(hs[name]) and _HANDLERS.get(name, hs[name]) is hs[name]:
@@ -404,6 +424,8 @@ def _load_plugins():
                     if comp.get(pat):
                         re.compile(comp[pat])
                         _COMPANIONS[(pat, name)] = comp[pat]
+                    if name in ra_names:
+                        _RUN_ALONE.add(name)
         except Exception as e:  # noqa: BLE001 - one bad plugin must not sink the dispatch
             print(f"web handler plugin {p.name}: {e!r}", file=sys.stderr)
 

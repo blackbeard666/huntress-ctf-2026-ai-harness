@@ -173,8 +173,15 @@ def note_slow(op, cid, env):
     except (TypeError, ValueError):
         return
     if gap > SLOW_S:
+        nbytes = _reply_bytes(env)
         _say(f"!!! [gmroute] slow transport: {op} {cid} took {env.get('client_elapsed')}s on {env.get('transport')} "
-             f"for a {env.get('elapsed')}s GM call ({_reply_bytes(env) // 1024} KB reply)")
+             f"for a {env.get('elapsed')}s GM call ({nbytes // 1024} KB reply)")
+        if op == "submit":   # P2-H: a slow submit is usually a large reply on the daemon's one channel -> route the
+            try:             # NEXT submit on this lane+mode public (remote._submit_off_hb). No-op unless enabled.
+                from . import remote
+                remote.note_big_submit(cid, nbytes)
+            except Exception:  # noqa: BLE001 - learning only
+                pass
 
 
 def _relay_call(chan, args, timeout):

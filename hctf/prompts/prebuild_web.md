@@ -15,6 +15,7 @@ Write ONE module `lib/web/handlers/prebuilt/prebuilt_<target id with _>.py`:
 KEY_MAP = [(r"<regex on a CONCEPT /api/clues key of this class>", "prebuilt_<id>")]
 HANDLERS = {"prebuilt_<id>": exploit}           # exploit(base, clues) -> "proof_..." or None
 KEY_COMPANIONS = {}                             # optional {pattern: sibling-key regex}: the pattern only counts beside it
+RUN_ALONE = False                               # True if ONE-SHOT (a credit/action a raced probe would spend): race it alone
 ```
 - `exploit` re-runs the WHOLE class end to end against `base` with the clues dict: recon what is per-target (the clue
   routes, the bare routes' JSON errors -- `<name>_required`, `post_required` 405 ... --, a guide/inventory JSON the

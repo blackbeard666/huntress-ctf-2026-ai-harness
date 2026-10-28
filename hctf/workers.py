@@ -41,7 +41,7 @@ def _logfile(chal_dir, stage, pool):
 # ilio-style bounds: cap each worker's turns so a stuck agent can't grind up cost. Wall-clock timeout
 # is passed in; turns are a second, independent ceiling. Override via HCTF_MAX_TURNS_<STAGE>.
 MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 110,  # ratchet: D15 used 78, D14 hit the 80 cap (exit 1); D8/D10 cut at 40
-             "ratchet_log": 40,  # one lane's technique log + coverage atlas forecast (split out of the ratchet after D14)
+             "ratchet_log": 34,  # one lane's technique log + coverage atlas forecast (split out of the ratchet after D14); D27 cost hog, trimmed 40->34
              "live": 60,         # live-answer worker on an open untimed attempt (orchestrate.LiveAnswer)
              "prebuild": 40}   # off-peak breadth worker (hctf/prebuild.py): one module + fixtures
 

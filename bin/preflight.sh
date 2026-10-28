@@ -101,13 +101,19 @@ if ip -brief addr show $VPN_DEV >/dev/null 2>&1; then
     # 3a) Path MTU (D24 #12): tun0 says 1500 but the path carried ~1200 (10-21, 10-25) and "frag needed" is filtered ->
     # the SSH handshake blackholes. DF pings at 1400 / 1200 bytes; never a FAIL (Homebase is optional).
     tun_mtu="$(cat /sys/class/net/$VPN_DEV/mtu 2>/dev/null)"
+    # The hctf-vpn unit now clamps tun0 at bringup (--tun-mtu 1200 + ExecStartPost); verify it took, so no manual sudo.
+    if [ -n "$tun_mtu" ] && [ "$tun_mtu" -le 1200 ] 2>/dev/null; then
+      ok "$VPN_DEV mtu $tun_mtu (clamped by the hctf-vpn unit; no manual sudo needed)."
+    elif [ -n "$tun_mtu" ]; then
+      warn "$VPN_DEV mtu $tun_mtu > 1200: the hctf-vpn unit isn't clamping it (stale unit?). Reinstall: sudo cp setup/hctf-vpn.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart hctf-vpn"
+    fi
     if ping -M do -s 1372 -c 2 -i 0.3 -W 2 "$HB_HOST" >/dev/null 2>&1; then
       ok "path MTU to $HB_HOST >= 1400 ($VPN_DEV mtu ${tun_mtu:-?})."
     elif ping -M do -s 1172 -c 2 -i 0.3 -W 2 "$HB_HOST" >/dev/null 2>&1; then
       if [ "${HCTF_SSH_MSS-1100}" != "" ] && [ "${HCTF_SSH_MSS-1100}" != 0 ]; then
         ok "path MTU to $HB_HOST < 1400 ($VPN_DEV mtu ${tun_mtu:-?}): covered by the SSH MSS clamp (HCTF_SSH_MSS=${HCTF_SSH_MSS-1100})."
       else
-        warn "path MTU to $HB_HOST < 1400 but $VPN_DEV mtu ${tun_mtu:-?} and the SSH MSS clamp is off (HCTF_SSH_MSS=0): the SSH handshake can blackhole. Unset HCTF_SSH_MSS, or: sudo ip link set $VPN_DEV mtu 1200"
+        warn "path MTU to $HB_HOST < 1400 but $VPN_DEV mtu ${tun_mtu:-?} and the SSH MSS clamp is off (HCTF_SSH_MSS=0): the SSH handshake can blackhole. Unset HCTF_SSH_MSS, or reinstall the hctf-vpn unit (it clamps $VPN_DEV to 1200)."
       fi
     elif ping -c 2 -i 0.3 -W 2 "$HB_HOST" >/dev/null 2>&1; then
       warn "path MTU to $HB_HOST < 1200 (small pings pass, 1200-byte DF pings don't; $VPN_DEV mtu ${tun_mtu:-?}): lower HCTF_SSH_MSS (e.g. 900) or $VPN_DEV's mtu."

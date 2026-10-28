@@ -7,7 +7,12 @@ Wants=network-online.target
 Type=simple
 # --pull-filter ignore redirect-gateway keeps local worker traffic (Anthropic API) off the tunnel;
 # only the CTF subnet is routed via tun0.
-ExecStart=/usr/sbin/openvpn --config /home/testpwn/huntress-2026/secrets/huntress-ctf-2026-ai-arena.ovpn --pull-filter ignore redirect-gateway --ping 10 --ping-restart 60
+# --tun-mtu 1200 + --mssfix clamp the tunnel at bringup so Homebase SSH KEX never hits the PMTUD blackhole (tun0 came up
+# at 1500 but the path only passed ~1172 -- D20/D21/D27 all needed a manual `ip link set tun0 mtu 1200`). No interactive
+# sudo any more. HCTF_SSH_MSS / hctf/mssproxy.py stays as a second layer.
+ExecStart=/usr/sbin/openvpn --config /home/testpwn/huntress-2026/secrets/huntress-ctf-2026-ai-arena.ovpn --pull-filter ignore redirect-gateway --ping 10 --ping-restart 60 --tun-mtu 1200 --mssfix 1160
+# Belt-and-suspenders: force tun0's MTU to 1200 once the device is up, in case a pushed option re-raises it.
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 30); do ip link show tun0 >/dev/null 2>&1 && { ip link set tun0 mtu 1200; exit 0; }; sleep 1; done'
 Restart=on-failure
 RestartSec=5
 # Give the tunnel a moment to establish before systemd considers it started.

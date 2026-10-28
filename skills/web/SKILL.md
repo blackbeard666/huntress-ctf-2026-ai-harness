@@ -74,4 +74,9 @@ is fetched, not stored.
   mid-edit): every worker (generalize, speed fix, codify) edits a draft and lands it with `lib.web.plugin`. Never put
   class logic in `solve.py` (keep it the generic dispatcher) or `handlers/__init__.py` (two web chains may run at once).
   Key on a concept clue KEY, never on proof-N, a target slot, a host or a value. If the exploit is genuinely one-shot on
-  a fresh target, say so in the plugin's docstring.
+  a fresh target (a single credit / action a raced probe would spend -- D27 Double Spent), say so in the plugin's
+  docstring AND set `RUN_ALONE = True` (or `RUN_ALONE = ["<name>"]`): the generic solver then races ONLY your handler
+  for a confirmed-kit target, never the `default` ladder / prior-day solvers / other furniture-key handlers beside it
+  (their sequential POST would burn the one credit). A burned target is NOT unsolvable -- reset it with `arena stop` ->
+  `arena start` (a fresh target + fresh credit; the organizer's sanctioned recovery, not an in-app reset route) and run
+  the burst once on the fresh one.

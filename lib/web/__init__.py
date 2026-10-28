@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 
@@ -35,6 +36,10 @@ UNKNOWN_KEY_BUDGET = float(os.environ.get("HCTF_WEB_UNKNOWN_KEY_BUDGET", "12"))
 # A known class's race (no explicit budget): every winner on record took <= 6.3 s (.run/web_race.jsonl, D20-D24), so the
 # old 40 s only delayed the handover to a live answer when the known handler missed a variant. 40 = the old behaviour.
 KNOWN_BUDGET = float(os.environ.get("HCTF_WEB_KNOWN_BUDGET", "20"))
+# A RUN_ALONE one-shot kit (D27 Double Spent) races only its own handler -- no ladder to cap it -- but needs room for the
+# barrier-synced POST burst (8 s barrier) + two audit rounds; the all-furniture kit reads class_known=False, whose 12 s
+# would clip the second round.
+RUN_ALONE_BUDGET = float(os.environ.get("HCTF_WEB_RUN_ALONE_BUDGET", "25"))
 # class_known counts only handlers a CONCEPT clue key names (handlers.concept_handlers); 0 = any for_key match (old).
 CONCEPT_KNOWN = os.environ.get("HCTF_WEB_CONCEPT_KNOWN", "1") != "0"
 # Clue keys class_known never counts through the earlier solvers' SOURCE TEXT: plain words those solvers parse as data
@@ -86,6 +91,21 @@ def candidates(base, clues_json, dispatch_key, question=None, contract=None):
     return out
 
 
+def _credit_kit_probe(base, clues_json):
+    """One side-effect-free GET of the audit (`secondary_route`): True when the target looks like a one-credit overspend
+    kit (a credit audit not yet overspent). For an UNFLAGGED future credit kit (no RUN_ALONE plugin yet) this still
+    forces the solo path BEFORE the default ladder's sequential POST burns the one credit. GET only -- never spends it;
+    skipped once the proof is already present (then the normal path returns it)."""
+    if not isinstance(clues_json, dict):
+        return False
+    audit = clues_json.get("secondary_route")
+    if not (isinstance(audit, str) and audit.startswith("/")):
+        return False
+    _, body, _ = websolve.fetch(urllib.parse.urljoin(base, audit))
+    b = (body or "").lower()
+    return ("credit" in b or "overspent" in b or "overspend" in b) and "proof_" not in b
+
+
 def _safe_answer(mod, question, contract):
     try:
         v = mod.answer(None, question, None, contract)
@@ -110,13 +130,33 @@ def solve_target(question, contract, budget=None, clues=None):
             and not 200 <= websolve.fetch(base)[0] < 400:
         return None
     known = class_known(clues_json, key)
+    # D27: a one-shot credit kit must race its handler ALONE -- the default ladder / prior solvers each do a sequential
+    # POST to feature_route that spends the single credit before the burst (Day-27 burn). Detected by the plugin's
+    # RUN_ALONE flag, or (for an unflagged future kit) a side-effect-free audit probe, done only for an unknown class so
+    # it never adds a GET to a recognised target's hot path.
+    ra = handlers.run_alone_handlers(key, clues_json)
+    # Credit kit? The RUN_ALONE handler keys on `secondary_route`, which is kit furniture many non-credit kits also ship,
+    # so the flag alone over-triggers -- a side-effect-free audit probe (GET the audit route, see `credit`/`overspent`)
+    # is the authority. We probe when a run-alone handler matched OR the class is unknown (which also catches an UNFLAGGED
+    # future credit kit before the ladder burns its one credit); the probe no-ops when there is no audit route.
+    solo = (bool(ra) or not known) and _credit_kit_probe(base, clues_json)
+    if solo:
+        # ONLY the run-alone handler(s) -- never the default ladder, prior solvers, or the other furniture-key handlers
+        # an all-furniture kit also matches (their sequential POST would burn the one credit). A probe-confirmed but
+        # UNFLAGGED kit has no run-alone handler -> probes empty -> return None without ever POSTing (no burn): the
+        # adaptive worker then writes the plugin on a fresh/reset target.
+        probes = [(name, (lambda fn=fn: fn(base, clues_json))) for name, fn in ra]
+    else:
+        probes = candidates(base, clues_json, key, question, contract)
     if budget is None:
         budget = KNOWN_BUDGET
-    if not known and UNKNOWN_KEY_BUDGET > 0:
+    if solo:
+        budget = max(budget, RUN_ALONE_BUDGET)      # no ladder to cap: give the burst + audit room
+    elif not known and UNKNOWN_KEY_BUDGET > 0:
         budget = min(budget, UNKNOWN_KEY_BUDGET)
     rep = {}
-    v = websolve.race(candidates(base, clues_json, key, question, contract), budget=budget, report=rep)
-    _log_race({"qid": (question or {}).get("id"), "key": key, "known": known, "budget": budget,
+    v = websolve.race(probes, budget=budget, report=rep)
+    _log_race({"qid": (question or {}).get("id"), "key": key, "known": known, "solo": bool(solo), "budget": budget,
                "winner": rep.get("winner"), "elapsed": rep.get("elapsed"), "timed_out": rep.get("timed_out"),
                "keys": sorted(clues_json)[:12]})
     return v
@@ -179,13 +219,58 @@ def _jobs(contract):
     return [(aid, q, contract) for aid, q in _iter_pairs(contract)]
 
 
+# D27 web Mastery tail: the untimed solve has a ~60 s budget (hb_timed._solve_budget) but each target got ONE solve pass.
+# A target still PROVISIONING during that pass returns a transient response and the handler gives up (None); the field is
+# then handed to a ~2-min generalize/live-answer worker, though the target is solvable seconds later -- which is exactly
+# how that worker got it. Re-attempt the missed targets within the remaining budget instead (deterministic, seconds not
+# minutes). One-shot credit kits are NOT retried (a miss there is a real burn, not a not-ready race). HCTF_WEB_MISS_RETRY=0 off.
+WEB_MISS_RETRY = int(os.environ.get("HCTF_WEB_MISS_RETRY", "4"))
+WEB_MISS_RETRY_DELAY = float(os.environ.get("HCTF_WEB_MISS_RETRY_DELAY", "2.5"))
+WEB_MISS_RETRY_MIN_LEFT = float(os.environ.get("HCTF_WEB_MISS_RETRY_MIN_LEFT", "4"))
+
+
+def _deadline_left():
+    try:
+        return float(os.environ["HCTF_SOLVE_DEADLINE"]) - time.time()
+    except (KeyError, ValueError):
+        return 9e9
+
+
+def _is_one_shot(q, contract):
+    """A target whose class must run alone (a one-shot credit kit): never retried on a miss (that is a burn, not a race)."""
+    try:
+        base = websolve.base_of(q, contract)
+        if not base:
+            return False
+        cj, key = websolve.clues(base)
+        return bool(handlers.run_alone_handlers(key, cj))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _solve_into(contract, out, pool):
+    """First parallel pass over every target, then bounded re-attempts of the misses (a still-provisioning target) while
+    budget remains -- so a slow-to-ready Mastery field is caught deterministically instead of by a 2-min worker."""
+    jobs = _jobs(contract)
+    solverrt.run_sets(jobs, _run_target, out, pool, io_bound=True)
+    for _ in range(max(0, WEB_MISS_RETRY)):
+        if _deadline_left() < WEB_MISS_RETRY_MIN_LEFT:
+            break
+        missing = [(aid, q, c) for (aid, q, c) in jobs if not out.get(aid) and not _is_one_shot(q, c)]
+        if not missing:
+            break
+        _log_race({"miss_retry": [aid for aid, _q, _c in missing], "left": round(_deadline_left(), 1)})
+        time.sleep(min(WEB_MISS_RETRY_DELAY, max(0.0, _deadline_left() - WEB_MISS_RETRY_MIN_LEFT)))
+        solverrt.run_sets(missing, _run_target, out, pool, io_bound=True)
+    return out
+
+
 def solve(contract, artifacts=None):
     """{answer_id: proof} for every target in the contract. Targets run in parallel (I/O bound); partials are emitted
-    at the deadline by the caller's emit path."""
+    at the deadline by the caller's emit path. Misses (a not-ready target) are re-attempted within the budget."""
     out, pool = {}, []
     solverrt.arm_deadline(out, pool)
-    solverrt.run_sets(_jobs(contract), _run_target, out, pool, io_bound=True)
-    return out
+    return _solve_into(contract, out, pool)
 
 
 def main():
@@ -197,8 +282,8 @@ def main():
     contract = json.loads(Path(a.contract).read_text())
     out, pool = {}, []
     solverrt.arm_deadline(out, pool)
-    # targets in parallel (D22: serial targets ran 40-47 s on a 3-target Mastery)
-    solverrt.run_sets(_jobs(contract), _run_target, out, pool, io_bound=True)
+    # targets in parallel (D22: serial targets ran 40-47 s on a 3-target Mastery); misses re-attempted within budget (D27)
+    _solve_into(contract, out, pool)
     solverrt.emit_and_exit(out, pool)
 
 
