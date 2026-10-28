@@ -172,7 +172,7 @@ R = TMP / "chain"
 (R / "solver" / "solve.py").write_text("v = 1\n")
 shutil.copytree(R / "solver", R / ".solver-snapshot")
 replays = []
-with patched({**QUIET, (orchestrate, "ROOT"): TMP}):
+with patched({**QUIET, (orchestrate, "ROOT"): TMP, (orchestrate, "LIVE_ACCEPT_BG"): False}):  # D28 #5: bg accept
     ch = live_chain(R)
     ch._accept_or_restore = lambda cid, case_timeout=None: replays.append(case_timeout)
     ch._prefetch_mastery_start = lambda: replays.append("prefetch")

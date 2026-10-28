@@ -1,5 +1,5 @@
 {
- "_doc": "Ranked prebuild targets for `hctf prebuild --lane binary`: HCFG storage encodings NOT yet in lib.binary.hcfg_scan (it already covers raw, base64/url, separated hex, base32/85/a85, UTF-16LE/BE, reversed, single-byte xor, zlib/gzip/deflate). Offsets of new encodings are speculative (first byte of the stored form).",
+ "_doc": "Ranked prebuild targets for `hctf prebuild --lane binary`: HCFG storage encodings NOT yet in lib.binary.hcfg_scan (it already covers raw, base64/url, separated hex, base32/85/a85, UTF-16LE/BE, reversed, single-byte xor, zlib/gzip/deflate). Offsets of new encodings are speculative (first byte of the stored form). Entries with kind=generic_field are the second target kind (D28 item 13): one lib.binary.register_generic rule + tests/data/binary_fixtures/generic/ fixtures each, ranked by priority; see hctf/prompts/prebuild_binary.md.",
  "targets": [
   {
    "id": "multibyte-xor",
@@ -36,6 +36,42 @@
   {
    "id": "strided",
    "goal": "interleaved/strided bytes (every 2nd/4th byte, two halves interleaved) and wide-char variants beyond UTF-16"
+  },
+  {
+   "id": "gf-func-body",
+   "kind": "generic_field",
+   "priority": 1,
+   "goal": "generic field: symbol-addressed function-body facts for ANY FUNC symbol the question names -- 'decode <sym>'s bytes as mov eax, imm32 followed by ret' (unsigned base-10 imm), '<sym>' disassembly as a JSON array (capstone intel, DECIMAL immediates, up to ret: GM D1), <sym>_size / <sym>_address; .symtab FUNC lookup, vaddr->file offset via the containing section/segment; stripped (no .symtab) -> 'none' / [] exactly as the D1 questions say. The only cells generic_field leaves empty on the D28 corpus (disassembly 149, recover_code 102)."
+  },
+  {
+   "id": "gf-pe-conventions",
+   "kind": "generic_field",
+   "priority": 2,
+   "goal": "generic field: PE conventions the GM has not confirmed yet -- section_names with '/N' long names (generic_field resolves them via the COFF string table like objdump; raw pefile keeps '/4'), the .text byte extent for byte-scan counts (min(VirtualSize, SizeOfRawData) vs SizeOfRawData), COFF symbol_count (aux records skipped). D28 TT/Mastery already swap ELF members for MinGW/Zig PE twins (d02/d04/d10). Fixtures: x86_64-w64-mingw32-gcc builds (install it) with objdump -h / -t and pefile one-liners as oracles; keep the GM-confirmed d02 vtable_symbol and d10 section_count behaviour."
+  },
+  {
+   "id": "gf-predicate-grammar",
+   "kind": "generic_field",
+   "priority": 2,
+   "goal": "generic field: extend lib.binary's GM spec grammar (_gf_predicate / _gf_count) with conjunctions ('... and any ...'), negation ('no symbol name ...', 'none of'), 'every' / 'at least N' quantifiers, and counts over imports/exports/DT_NEEDED ('Count the DT_NEEDED entries', 'imported DLL count', 'exported symbol count') for ELF/PE/Mach-O. Today an unparsed clause returns None (unsure); keep that for anything still outside the grammar."
+  },
+  {
+   "id": "gf-dotnet-counts",
+   "kind": "generic_field",
+   "priority": 3,
+   "goal": "generic field: .NET (pe_cli) metadata counts and sets -- typedef/class/method/field counts (decide and document <Module> / nested / compiler-generated types), has_<x>_type predicates, sha256 of sorted type/method name sets, user-string (#US) predicates -- for the d03/d22/d23 families (C#/F#/VB.NET) via dnfile. Fixtures: dotnet/mcs-built assemblies, oracle monodis/ilspycmd or a dnfile one-liner in a different code path."
+  },
+  {
+   "id": "gf-runtime-markers",
+   "kind": "generic_field",
+   "priority": 3,
+   "goal": "generic field: has_<lang>_runtime for runtimes without a GM spec sentence or with format gaps -- the Zig PE twin of d10 carries no 'zig' marker at all (ELF has .comment), OCaml (d21), Haskell/GHC, V (d27 v_*), Odin, Dart, Kotlin/Native, Swift on PE. One small marker set per runtime (bytes and/or symbol prefixes), proven on every corpus family member: true on its own family, false on all others."
+  },
+  {
+   "id": "gf-macho",
+   "kind": "generic_field",
+   "priority": 4,
+   "goal": "generic field: Mach-O rules (no Mach-O member in the corpus yet) -- section_count (sum of nsects over the first slice vs per-segment), symbol_count (LC_SYMTAB nlist, stabs N_STAB entries in or out), segment_count / load_command_count, has_<x>_section (__TEXT,__x), fat binaries (which slice). Fixtures from an independent Mach-O writer (zig cc / clang -target x86_64-apple-macos, or lief's builder) with otool/llvm-objdump --macho or macholib oracles."
   }
  ]
 }

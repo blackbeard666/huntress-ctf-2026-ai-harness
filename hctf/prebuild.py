@@ -80,7 +80,9 @@ LANES = {
         "writable": ("lib/binary.py", "tests/data/binary_fixtures/"),
         "snapshot": ("lib", "tests/data"),
         "targets": "tests/data/binary_fixtures/TARGETS.json",
-        "gate": (),
+        # D28 item 13: "generic field" targets (lib.binary.register_generic + tests/data/binary_fixtures/generic/)
+        # replay their fixtures + the family x format matrix here; HCFG-encoding targets pass it untouched.
+        "gate": ("tests/test_d28_binary_breadth.py",),
         "regress_lane": "binary-reverse-engineering",
         "requires": ("lib/binary.py:hcfg_scan",),
     },
@@ -112,7 +114,7 @@ LANES = {
         "writable": ("lib/web/handlers/prebuilt/", "tests/data/web_fixtures/"),
         "snapshot": ("lib", "tests/data"),
         "targets": "tests/data/web_fixtures/TARGETS.json",
-        "gate": ("tests/test_web_fixtures.py",),
+        "gate": ("tests/test_web_fixtures.py", "tests/test_d28_web.py"),   # D28: clue-less LFI + hot reload
         "requires": ("lib/web/handlers/__init__.py:_load_plugins", "lib/web/handlers/prebuilt/__init__.py"),
     },
 }

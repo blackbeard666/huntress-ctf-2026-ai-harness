@@ -282,20 +282,39 @@ def _big_start(cid):
     lane, day = m.group(1), int(m.group(2))
     if (lane, day) not in _BIG_START:
         size = 0
-        for meta in sorted(ROOT.glob("challenges/day*/*/meta.json"), reverse=True):
-            dm = re.match(r"day(\d+)$", meta.parent.parent.name)
-            st = meta.parent / "single_solve" / "start.json"
-            if not dm or int(dm.group(1)) >= day or not st.exists():
-                continue
-            try:
-                if json.loads(meta.read_text()).get("lane") != lane:
+        from . import gmroute
+        if gmroute.SIZE_MEMO:
+            # the meta rows are read once per process (gmroute.activate prewarms them before the drop): at the drop this
+            # is a stat or two, not ~165 meta.json reads under the GIL convoy (D28: 5-8 s per start, measured)
+            for r in gmroute._meta_rows(ROOT / "challenges"):
+                if r["day"] < 0 or r["day"] >= day or r["lane"] != lane:
                     continue
-            except (OSError, ValueError):
-                continue
-            size = st.stat().st_size
-            break
+                try:
+                    size = (r["dir"] / "single_solve" / "start.json").stat().st_size
+                except OSError:
+                    continue
+                break
+        else:
+            for meta in sorted(ROOT.glob("challenges/day*/*/meta.json"), reverse=True):
+                dm = re.match(r"day(\d+)$", meta.parent.parent.name)
+                st = meta.parent / "single_solve" / "start.json"
+                if not dm or int(dm.group(1)) >= day or not st.exists():
+                    continue
+                try:
+                    if json.loads(meta.read_text()).get("lane") != lane:
+                        continue
+                except (OSError, ValueError):
+                    continue
+                size = st.stat().st_size
+                break
         _BIG_START[(lane, day)] = size > START_VIA_HB_MAX_KB * 1024
     return _BIG_START[(lane, day)]
+
+
+def _meta_rows_prewarm():
+    """gmroute.prewarm_sizes: read this ROOT's challenge meta rows now (before the drop), for _big_start."""
+    from . import gmroute
+    return gmroute._meta_rows(ROOT / "challenges")
 
 
 def _start_off_hb(cid):

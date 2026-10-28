@@ -7,6 +7,7 @@ The GM enforces those prerequisites, so each chain is sequential while all chain
 Worker slots: local `claude -p` (HCTF_LOCAL_SLOTS) + Homebase `codex exec` (HCTF_HB_SLOTS, credit-gated).
 Fix workers racing a deadline skip the slot queue.
 """
+import contextlib
 import datetime
 import json
 import os
@@ -266,6 +267,12 @@ LIVE_SMALL_EFFORT = os.environ.get("HCTF_LIVE_SMALL_EFFORT", "medium").strip()
 LIVE_FIRST = os.environ.get("HCTF_LIVE_FIRST", "1") != "0"
 SKIP_UNCHANGED_RERUN = os.environ.get("HCTF_SKIP_UNCHANGED_RERUN", "1") != "0"
 FAST_LIVE_ACCEPT = os.environ.get("HCTF_FAST_LIVE_ACCEPT", "1") != "0"
+# D28 #5: after a live TT pass the generalize's edits are judged in the BACKGROUND (Mastery starts at once on them);
+# a reject is applied on the chain thread at its next safe point. JOIN_MAX: a new generalize / accept waits this long
+# for a running judgement, then abandons it (pre-worker solver restored); END_WAIT: the chain's end waits this long.
+LIVE_ACCEPT_BG = os.environ.get("HCTF_LIVE_ACCEPT_BG", "1") != "0"
+LIVE_ACCEPT_JOIN_MAX = float(os.environ.get("HCTF_LIVE_ACCEPT_JOIN_MAX", "20"))
+LIVE_ACCEPT_END_WAIT = float(os.environ.get("HCTF_LIVE_ACCEPT_END_WAIT", "300"))
 # #2 contract-ahead: the first timed attempt whose solver leaves >= EARLY_MIN_MISSING fields empty (or whose status-time
 #    contract asks >= AHEAD_MIN_NEW ids new to the lane) starts the generalize the moment its bytes are solved, while
 #    the runner still banks/localizes the answered part (D23 script TT: worker at T+1:55 instead of T+5:08)
@@ -707,6 +714,51 @@ _af_live, _af_lock = set(), threading.Lock()
 _af_chains = set()   # chain bases constructed this run (Chain.__init__): the auto answer-first cap
 
 
+# D28 #1: binary's single had 392 ids, the staged prior solver answered 361 at go time, and answer-first was refused on
+# "392 fields (cap 80)" -> one LLM worker wrote the 31-field patch serially (151 s). Eligibility + field list = the
+# dry-run RESIDUAL; above AF_SHARD_MIN residual fields it is split by dNN_ family into up to AF_SHARDS parallel workers.
+AF_RESIDUAL = os.environ.get("HCTF_AF_RESIDUAL", "1") != "0"
+AF_DRY_WAIT = float(os.environ.get("HCTF_AF_DRY_WAIT", "8"))        # s answer-first waits for the dry run's result
+AF_SHARD_MIN = int(os.environ.get("HCTF_AF_SHARD_MIN", "12"))       # residual > this -> shards (0 = never shard)
+AF_SHARDS = int(os.environ.get("HCTF_AF_SHARDS", "3"))
+# effort of an answer-first worker / shard: "" = HCTF_ANSWER_FIRST_EFFORT (medium: answer-first is an effort-floor
+# exception like duels, user rule 10-09)
+AF_SHARD_EFFORT = os.environ.get("HCTF_AF_SHARD_EFFORT", "").strip()
+
+
+def _family_prefix(aid):
+    """`d10_analysis_section_count` -> `d10`; ids without a dNN_ family prefix share the `today` group."""
+    m = re.match(r"(?:set\d+[_-])?(d\d+)[_-]", str(aid))
+    return m.group(1) if m else "today"
+
+
+def af_shard_count(n):
+    """How many parallel answer-first shards a residual of n fields gets (1 = one worker)."""
+    if AF_SHARD_MIN <= 0 or AF_SHARDS <= 1 or n <= AF_SHARD_MIN:
+        return 1
+    return max(1, min(AF_SHARDS, -(-n // max(1, AF_SHARD_MIN // 2 or 1))))
+
+
+def shard_fields(fields, k):
+    """Split `fields` into <= k shards by dNN_ family (a family stays together unless it alone exceeds an even share;
+    then it is cut into share-sized chunks), largest-first into the lightest shard. Order within a shard = `fields`."""
+    fields = list(dict.fromkeys(fields))
+    if k <= 1 or len(fields) <= 1:
+        return [fields] if fields else []
+    share = -(-len(fields) // k)
+    groups = {}
+    for a in fields:
+        groups.setdefault(_family_prefix(a), []).append(a)
+    chunks = []
+    for g in groups.values():
+        chunks += [g[i:i + share] for i in range(0, len(g), share)] if len(g) > share else [g]
+    bins = [[] for _ in range(k)]
+    for c in sorted(chunks, key=len, reverse=True):
+        min(bins, key=len).extend(c)
+    pos = {a: i for i, a in enumerate(fields)}
+    return [sorted(b, key=pos.get) for b in bins if b]
+
+
 def answer_first_cap():
     """The concurrent answer-first cap now: HCTF_ANSWER_FIRST_MAX when numeric, else max(MIN, chains this run)."""
     if ANSWER_FIRST_MAX > 0:
@@ -759,6 +811,19 @@ def _web_race_seed(lane):
         return None
     d = paths.LANE_SOLVERS / paths.canonical_lane(lane) / "solver"
     return d if (d / "solve.py").exists() else None
+
+
+class _SentWarm:
+    """A WarmWorker whose go was already sent (GO_AT_DL): run_local's send_task is a no-op, everything else delegates."""
+
+    def __init__(self, warm):
+        self._w = warm
+
+    def send_task(self, text):   # noqa: ARG002 - the go went out at the download mark
+        return None
+
+    def __getattr__(self, name):
+        return getattr(self._w, name)
 
 
 class WebParLive:
@@ -824,6 +889,24 @@ def _kick_once(obj, flag):
             return False
         setattr(obj, flag, True)
         return True
+
+
+def _kick_release_if_prereq(obj, flag, state):
+    """D28 #9: a web kick answered `prerequisite_required` (the previous mode is not CORRECT yet) did not provision
+    anything -> give the once-per-chain claim back so the kick at that mode's CORRECT runs. -> True when released."""
+    if not (WEB_KICK_RETRY_PREREQ and "prerequisite" in str(state or "").lower()):
+        return False
+    with _KICK_LOCK:
+        setattr(obj, flag, False)
+    return True
+
+
+def _kick_retry_ok(obj, counter, cap=2):
+    """At most `cap` immediate re-kicks after a released prerequisite_required claim (the GM's scoring can lag)."""
+    with _KICK_LOCK:
+        n = getattr(obj, counter, 0)
+        setattr(obj, counter, n + 1)
+    return n < cap
 
 
 def _codify_modes():
@@ -908,28 +991,41 @@ class AnswerFirst:
     def __init__(self, chain, cid):
         self.chain, self.cid = chain, cid
         contract = cli.load(cid, "start.json") or cli.load(cid, "contract.json") or {}
+        self._contract = contract
         self.ids = list(contract.get("answer_ids") or [])
+        self.fields = list(self.ids)   # what the worker(s) owe: the dry-run residual once _run computed it (D28 #1)
+        self.shards = []               # [(fields, stop event, pool name)] once launched
         self.attempt = cli.attempt_id(contract)
-        qmap = {q.get("id"): q for q in contract.get("questions") or [] if isinstance(q, dict)}
+        self._qmap = {q.get("id"): q for q in contract.get("questions") or [] if isinstance(q, dict)}
+        self.prompt = self._prompt_for(self.ids)
+        self.stop_evt, self.done, self.started = threading.Event(), threading.Event(), threading.Event()
+        self.rc = None
+        self.seen = set()
+
+    def _prompt_for(self, fields, note=""):
+        """The answer-first prompt for `fields` (all ids, the dry-run residual, or one shard of it)."""
+        chain, cid, contract, qmap = self.chain, self.cid, self._contract, self._qmap
         lines = []
-        for a in self.ids:
+        for a in fields:
             q = qmap.get(a) or {}
             fmt = q.get("answer_format") or {}
             lines.append(f"  - `{a}`: {str(q.get('question') or '?')[:220]} | artifact `{q.get('artifact') or '?'}` | "
                          f"format {json.dumps(fmt)[:160]}")
         art = timed.latest_artifacts(cid) or cli.cdir(cid)
         cdir = cli.cdir(cid)
-        self.prompt = workers.render(
+        prompt = workers.render(
             "answer_first", persona=workers.lane_persona(chain.lane), cid=cid, attempt=str(self.attempt)[:8],
-            n=len(self.ids), fields="\n".join(lines), lane=chain.lane,
+            n=len(fields), fields="\n".join(lines), lane=chain.lane,
             contract=(cdir / "start.json").relative_to(ROOT) if (cdir / "start.json").exists()
             else (cdir / "contract.json").relative_to(ROOT),
             art_dir=Path(art).relative_to(ROOT), triage=triage_summary(cid, cap=6000),
             chal_dir=cdir.relative_to(ROOT), solver_dir=chain.sdir.relative_to(ROOT))
+        if note:
+            prompt += "\n\n" + note
         from . import webtarget
         if webtarget.is_live_lane(chain.lane):
             urls = webtarget.target_urls(contract)
-            self.prompt += (
+            prompt += (
                 "\n\nLIVE TARGET (web lane): there are NO bytes -- the artifacts dir is empty on purpose. Each question's "
                 "`artifact` (\"Target N\") is a live site from the contract's `targets[]`: "
                 + (", ".join(f"`{u}`" for u in urls) if urls else "(see `targets` in the contract)")
@@ -939,16 +1035,78 @@ class AnswerFirst:
                 "brute force.")
             if WEB_SINGLE_PLUGIN:
                 plug = web_plugin_path(chain.sdir)
-                self.prompt += (
+                prompt += (
                     "\n\nPLUGIN FIRST (web lane): the Time Trial and Mastery get FRESH targets, so the proof must come "
                     "from CODE the timed solver dispatches to. Once your few curl requests showed the exploit, encode it "
                     "and get the proof BY RUNNING the plugin: " + web_plugin_steps(plug, urls[0] if urls else "<target url>")
                     + " Submit the `PROOF` it prints. The verifier's promote is the ONE write into lib/ you may make. "
                     "If two draft fixes still give no proof, submit the proof you derived by hand (never hold the single "
                     "for the plugin; a codify worker then writes it).")
-        self.stop_evt, self.done, self.started = threading.Event(), threading.Event(), threading.Event()
-        self.rc = None
-        self.seen = set()
+        return prompt
+
+    def _residual(self):
+        """(fields, why): what the answer-first worker(s) should answer. D28 #1: the prior-solver dry run knew at go time
+        that the staged solver answers 361/392 binary fields -- eligibility and the field list are its RESIDUAL (empty
+        fields) minus what the GM already confirmed, not every id. No dry run (non-cumulative lane / error / timeout) ->
+        every id not yet confirmed (the old behaviour)."""
+        try:
+            conf = set(cli.confirmed_answers(self.cid) or {})
+        except Exception:  # noqa: BLE001
+            conf = set()
+        open_ids = [a for a in self.ids if a not in conf]
+        if not AF_RESIDUAL:
+            return list(self.ids), "every field"
+        fut = getattr(self.chain, "_dry_fut", None)
+        if fut is None:
+            return open_ids, "no prior-solver dry run"
+        try:
+            d = fut.result(timeout=AF_DRY_WAIT)
+        except Exception as e:  # noqa: BLE001 - a dry run still running / failed: the old behaviour
+            return open_ids, f"dry run unavailable ({type(e).__name__})"
+        if not d or d.get("timed_out") or d.get("error") or not d.get("total"):
+            return open_ids, "dry run timed out / failed"
+        empty = d.get("empty_all")
+        if empty is None and len(d.get("empty") or []) >= d["total"] - d["answered"]:
+            empty = d.get("empty") or []
+        if empty is None:
+            # solvers.dry_run_diagnostics keeps only the first 15 empty ids: re-derive the full residual (diagnostic
+            # only -- which ids the staged solver leaves EMPTY; never its values)
+            empty = self._empty_rerun()
+            if empty is None:
+                return open_ids, "dry run residual list truncated (re-run failed)"
+        want = set(empty)
+        res = [a for a in self.ids if a in want and a not in conf]
+        return res, f"dry-run residual ({d['answered']}/{d['total']} answered by the staged prior solver)"
+
+    def _empty_rerun(self):
+        """The prior solver's EMPTY ids on today's bytes (full list), or None."""
+        prior = getattr(self.chain, "_dry_prior", None) or prior_solver_dir(self.chain.lane, self.chain.sdir)
+        art = timed.latest_artifacts(self.cid)
+        if not (prior and art and self._contract):
+            return None
+        try:
+            got, err, _secs = solvers.run_solver(prior, self._contract, art, timeout=max(AF_DRY_WAIT, 15),
+                                                 background=True)
+        except Exception:  # noqa: BLE001
+            return None
+        if err and not got:
+            return None
+        return [a for a in self.ids if (got or {}).get(a) in (None, "")]
+
+    def _shard_notes(self, shards, k, residual_why):
+        n_all, mine = len(self.ids), shards[k]
+        note = ""
+        if len(self.fields) < n_all:
+            note += (f"RESIDUAL ONLY: the harness's staged prior solver already answers the other {n_all - len(self.fields)} "
+                     f"field(s) of this attempt ({residual_why}); the reuse race / solver worker submit those. Never "
+                     "derive or submit any id that is not listed above.")
+        if len(shards) > 1:
+            others = sorted({_family_prefix(a) for i, sh in enumerate(shards) if i != k for a in sh})
+            note += ((" " if note else "") + f"PARALLEL SHARD {k + 1}/{len(shards)}: {len(shards) - 1} other answer-first "
+                     f"worker(s) own the rest of the residual ({', '.join(others[:10])}); you own ONLY these {len(mine)} "
+                     "field(s). Stop when each of them is accepted -- if the stop gate lists fields that are not in your "
+                     "list, they are another worker's: do not touch them, just stop again.")
+        return note
 
     def start(self, race_done=None):
         threading.Thread(target=self._run, args=(race_done,), daemon=True, name=f"answer-first-{self.cid}").start()
@@ -963,37 +1121,123 @@ class AnswerFirst:
             if self.stop_evt.is_set() or cli.is_complete(self.cid):
                 say(f"[{self.cid}] no answer-first worker: the single is already complete")
                 return
-            ok, why = answer_first_eligible(self.chain.lane, len(self.ids))
-            if not ok:
-                say(f"[{self.cid}] no answer-first worker: {why}")
+            fields, rwhy = self._residual()
+            if not fields and len(fields) < len(self.ids) and AF_RESIDUAL:
+                say(f"[{self.cid}] no answer-first worker: nothing left to answer by hand ({rwhy})")
                 return
+            ok, why = answer_first_eligible(self.chain.lane, len(fields))
+            if not ok:
+                say(f"[{self.cid}] no answer-first worker: {why}" + (f" [{rwhy}]" if len(fields) < len(self.ids) else ""))
+                return
+            if self.stop_evt.is_set() or cli.is_complete(self.cid):
+                say(f"[{self.cid}] no answer-first worker: the single is already complete")
+                return
+            self.fields = fields
+            want = af_shard_count(len(fields))
+            if want > 1:
+                cap = answer_first_cap()   # takes _af_lock itself
+                with _af_lock:
+                    free = cap - len(_af_live)
+                want = max(1, min(want, free))
+            shards = shard_fields(fields, want)
             with _af_lock:
-                _af_live.add(self.cid)
+                for k in range(len(shards)):
+                    _af_live.add(self.cid if k == 0 else f"{self.cid}#{k + 1}")
             try:   # the Stop gate (.claude/hooks/stop_gate.py, stage live) reads what this worker owes
                 (cli.cdir(self.cid) / ".live_fields.json").write_text(json.dumps({"attempt": self.attempt,
-                                                                                  "fields": self.ids}))
+                                                                                  "fields": fields}))
+                for k, sh in enumerate(shards if len(shards) > 1 else ()):
+                    (cli.cdir(self.cid) / f".live_fields-af{k + 1}.json").write_text(
+                        json.dumps({"attempt": self.attempt, "fields": sh}))
             except OSError:
                 pass
+            self.shards = [(sh, threading.Event(), "answer-first" if k == 0 else f"answer-first-{k + 1}")
+                           for k, sh in enumerate(shards)]
             self.started.set()
-            say(f"[{self.cid}] answer-first worker ({ANSWER_FIRST_EFFORT}) on {len(self.ids)} field(s) beside the "
-                "solver worker")
+            eff = AF_SHARD_EFFORT or ANSWER_FIRST_EFFORT
+            say(f"[{self.cid}] answer-first worker ({eff}) on {len(fields)} field(s) beside the solver worker"
+                + (f" [{rwhy}]" if len(fields) < len(self.ids) else "")
+                + (f" -> {len(shards)} parallel shard(s) by family: "
+                   + "; ".join(f"{len(sh)} ({', '.join(sorted({_family_prefix(a) for a in sh})[:4])})" for sh in shards)
+                   if len(shards) > 1 else ""))
             threading.Thread(target=self._watch, daemon=True, name=f"answer-first-watch-{self.cid}").start()
-            self.rc = self.chain.run_worker(self.cid, "live", self.prompt, ANSWER_FIRST_TIMEOUT, urgent=True,
-                                            stop=self.stop_evt,
-                                            env_extra={"HCTF_X_EFFORT": ANSWER_FIRST_EFFORT,
-                                                       "HCTF_LOG_POOL": "answer-first"})
+            threading.Thread(target=self._link_stop, daemon=True, name=f"answer-first-stop-{self.cid}").start()
+            thr = []
+            for k, (sh, evt, pool) in enumerate(self.shards):
+                note = self._shard_notes(shards, k, rwhy)
+                prompt = self.prompt if (sh == self.ids and not note) else self._prompt_for(sh, note)
+                env = {"HCTF_X_EFFORT": eff, "HCTF_LOG_POOL": pool}
+                if len(self.shards) > 1:   # a per-shard Stop-gate list (honoured once the hook reads it; else the union)
+                    env["HCTF_LIVE_FIELDS_FILE"] = str(cli.cdir(self.cid) / f".live_fields-af{k + 1}.json")
+                if k == 0:
+                    first = (prompt, evt, env)
+                    continue
+                t = threading.Thread(target=self._run_shard, args=(prompt, evt, env), daemon=True,
+                                     name=f"answer-first-{k + 1}-{self.cid}")
+                t.start()
+                thr.append(t)
+            self.rc = self._run_shard(*first)
+            for t in thr:
+                t.join()
         except Exception as e:  # noqa: BLE001 - the chain's own worker is unaffected
             say(f"[{self.cid}] answer-first worker failed: {str(e)[:200]}")
         finally:
             with _af_lock:
                 _af_live.discard(self.cid)
+                for k in range(1, len(getattr(self, "shards", ()))):
+                    _af_live.discard(f"{self.cid}#{k + 1}")
             self.done.set()
+
+    def _run_shard(self, prompt, evt, env):
+        try:
+            return self.chain.run_worker(self.cid, "live", prompt, ANSWER_FIRST_TIMEOUT, urgent=True, stop=evt,
+                                         env_extra=env)
+        except Exception as e:  # noqa: BLE001
+            say(f"[{self.cid}] answer-first shard ({env.get('HCTF_LOG_POOL')}) failed: {str(e)[:200]}")
+            return None
+
+    def _link_stop(self):
+        """stop_evt (the chain's / the watch's end signal) ends every shard."""
+        while not self.done.is_set():
+            if self.stop_evt.wait(0.5):
+                for _sh, evt, _p in getattr(self, "shards", ()):
+                    evt.set()
+                return
+
+    def _narrow_note(self, new, conf):
+        """D28 #1 (LiveAnswer.narrow's rule, fa16eb6f): residual fields the GM confirmed from ANOTHER source (the reuse
+        race's banking, the solver worker) -> tell the answer-first worker(s) to drop them (key live-*: the live
+        workers' inbox filter)."""
+        fields = getattr(self, "fields", None) or []
+        st = getattr(self, "started", None)
+        if not (LIVE_NARROW and st is not None and st.is_set() and new and len(fields) < len(getattr(self, "ids", ()))):
+            return
+        got = [a for a in fields if a in new]
+        if not got:
+            return
+        rest = [a for a in fields if a not in conf]
+        from . import inbox
+        inbox.post(cli.cdir(self.cid), f"The GM already CONFIRMED {len(got)} of your listed field(s) from another source "
+                   f"(the reuse race / solver worker): {got[:20]}. Do not derive or submit them."
+                   + (f" Still open: {rest[:20]}." if rest else " Every listed field is confirmed: stop."),
+                   key="live-af-narrow")
+
+    def _shard_check(self, conf):
+        """A shard whose own fields are all GM-confirmed is ended (its Stop gate may still list the union)."""
+        if len(getattr(self, "shards", ())) < 2:
+            return
+        for sh, evt, pool in self.shards:
+            if not evt.is_set() and set(sh) <= set(conf):
+                say(f"[{self.cid}] answer-first shard {pool}: all {len(sh)} of its field(s) confirmed -> ending it")
+                evt.set()
 
     def _watch(self):
         while not self.done.is_set() and not self.stop_evt.is_set():
             try:
                 conf = cli.confirmed_answers(self.cid)
+                self._shard_check(conf)
                 new = {k: v for k, v in conf.items() if k not in self.seen}
+                self._narrow_note(new, conf)
                 if new:
                     self.seen |= set(new)
                     rest = [a for a in self.ids if a not in conf]
@@ -1068,7 +1312,30 @@ CHAIN_CRASH_RETRIES = int(os.environ.get("HCTF_CHAIN_CRASH_RETRIES", "1"))  # re
 # Early handoff: once the Single Solve is CORRECT and a snapshot of the still-running worker's solver reproduces
 # its confirmed answers, make ONE speculative Time Trial -> Mastery pass from that snapshot instead of idling until
 # the worker exits (rehearsal Day 5: answers CORRECT at T+3:10, worker hardened the solver until T+6:25).
+# D28 hardlink corruption: safe_place never writes into an existing dst; stage_prior_cases skips today's existing names
+SAFE_PLACE = os.environ.get("HCTF_SAFE_PLACE", "1") != "0"
+PRIOR_CASES_SKIP_EXISTING = os.environ.get("HCTF_PRIOR_CASES_SKIP_EXISTING", "1") != "0"
 BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "8"))  # > any 6-7s window  # pre-generalize regression baseline
+# D28 #11: a web case replays a live-target race (12 s+ UNKNOWN_KEY_BUDGET / 14 s lane race) -> 8 s timed every web
+# case out and generalize workers were told "the replay timed out -- usually host load". Web lanes get >= this. 0 = off.
+WEB_BASELINE_CASE_TIMEOUT = float(os.environ.get("HCTF_WEB_BASELINE_CASE_TIMEOUT", "20"))
+
+
+def _offpath(obj, why, stop=None, mode=None):
+    """obj._offpath_wait(...) when the object has it (a Chain), else no wait (test fakes / bare namespaces)."""
+    fn = getattr(obj, "_offpath_wait", None)
+    return fn(why, stop=stop, mode=mode) if fn is not None else 0.0
+
+
+def baseline_case_timeout(lane):
+    """Per-case replay cap for baselines / accept judgements of `lane` (web: >= WEB_BASELINE_CASE_TIMEOUT)."""
+    try:
+        from . import webtarget
+        if WEB_BASELINE_CASE_TIMEOUT > 0 and webtarget.is_live_lane(lane):
+            return max(BASELINE_CASE_TIMEOUT, WEB_BASELINE_CASE_TIMEOUT)
+    except Exception:  # noqa: BLE001
+        pass
+    return BASELINE_CASE_TIMEOUT
 # Owner: earlier days are LEARNING NOTES (reference/techniques/<lane>.md), never "rerun yesterday's solver first" -- the
 # day's challenge may be unrelated (an old solver confidently submitted a wrong value; old warmups/metadata solvers
 # produced nothing). Opt back in with HCTF_REUSE_OLD_SOLVERS=1.
@@ -1118,6 +1385,11 @@ COORDINATOR = os.environ.get("HCTF_COORDINATOR", "1") != "0"
 # The go no longer waits for the prior-solver dry run (binary go came at T+16-22 behind it); the dry-run note follows
 # through the inbox when it finishes. The staged-solver copy is still awaited (the prompt promises it is in place).
 GO_EARLY = os.environ.get("HCTF_GO_EARLY", "1") != "0"
+# D28 #2: the READY warm worker gets its go at the DOWNLOAD mark (after the async solver-staging copy, <= STAGE_WAIT s);
+# triage / timed contracts / the final prior-solver note follow through the inbox. 0 = the go after triage (old).
+GO_AT_DL = os.environ.get("HCTF_GO_AT_DL", "1") != "0"
+GO_AT_DL_STAGE_WAIT = float(os.environ.get("HCTF_GO_AT_DL_STAGE_WAIT", "20"))
+LAUNCH_PREP_ASYNC = os.environ.get("HCTF_LAUNCH_PREP_ASYNC", "1") != "0"   # shadow/duel/answer-first beside the launch
 STOP_WHEN_READY = os.environ.get("HCTF_STOP_WHEN_READY", "1") != "0"  # end the single worker at CORRECT + verified solver
 SPEC_STABLE = float(os.environ.get("HCTF_SPEC_STABLE", "0.75"))  # solver files untouched this long before a snapshot
 WEB_SPEC_STABLE = float(os.environ.get("HCTF_WEB_SPEC_STABLE", "8"))  # web: no replay can verify it
@@ -1173,6 +1445,18 @@ PRESTART_AT_CORRECT = os.environ.get("HCTF_PRESTART_AT_CORRECT", "1") != "0"
 # (GM allows ~10/team; a day has <=3 web chains, so single+TT = ~6, within limit). Graceful: the kick is background and
 # logs-on-error, and the timed stage's own start still provisions normally if the early kick was rejected/failed.
 WEB_PREPROVISION = os.environ.get("HCTF_WEB_PREPROVISION", "1") != "0"
+# D28 #6: off-path work waits (<= WAIT_MAX s) while the chain's timed pre-start downloads; SCOPE chain|all (all = any
+# chain's download holds it). PRESTART_DL_WORKERS = parallel delivery downloads of a pre-start (was hard-coded 8).
+OFFPATH_DL_GATE = os.environ.get("HCTF_OFFPATH_DL_GATE", "1") != "0"
+OFFPATH_DL_WAIT_MAX = float(os.environ.get("HCTF_OFFPATH_DL_WAIT_MAX", "120"))
+OFFPATH_DL_SCOPE = os.environ.get("HCTF_OFFPATH_DL_SCOPE", "chain").strip().lower()
+PRESTART_DL_WORKERS = max(1, int(os.environ.get("HCTF_PRESTART_DL_WORKERS", "8")))
+_DL_ACTIVE, _DL_COND = {}, threading.Condition()
+# D28 #9: a kick answered `prerequisite_required` does not consume the once-per-chain flag (re-kicked at the CORRECT)
+WEB_KICK_RETRY_PREREQ = os.environ.get("HCTF_WEB_KICK_RETRY_PREREQ", "1") != "0"
+# D28 #14: the first web TT waits up to this long for a codify worker still writing the class plugin (0 = no wait);
+# HCTF_WEB_CODIFY_HOLD > 0 (the older fixed hold) takes precedence
+WEB_CODIFY_PENDING_WAIT = float(os.environ.get("HCTF_WEB_CODIFY_PENDING_WAIT", "10"))
 # The single's solver on its OWN case must beat this (local s) or a speed generalize runs BEFORE the first timed attempt:
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
@@ -1673,13 +1957,57 @@ def _link_or_copy(src, dst):
     everything else (contract/expected JSON, code) copied so an in-place edit never reaches the earlier day. D9-D11:
     copying binary's 411-654 MB cases/ stalled EVERY worker's tool calls 6-17 s (probe: trivial jq 0.05 -> 2.2 s
     during the copy, 0.05 s during a 0.04 s hardlink pass). add_case rmtree()s before re-saving: links stay safe."""
-    if "artifacts" in Path(src).parts:
+    return safe_place(src, dst, link="artifacts" in Path(src).parts)
+
+
+def safe_place(src, dst, link=True):
+    """Put `src` at `dst` WITHOUT ever writing into an existing `dst` (D28 incident: os.link hit FileExistsError and the
+    copy2 fallback opened the EXISTING dst for writing -- a dst hardlinked across days / to the rehearsal tree had every other
+    link overwritten with prior-day bytes). New dst: hardlink (`link`), else / on failure a plain copy. Existing dst: the
+    same into a temp file beside it, then os.replace (the old inode -- and every other link to it -- is left untouched).
+    Same inode already: nothing to do. HCTF_SAFE_PLACE=0 = the old link-or-copy2 (unsafe on an existing dst)."""
+    if not SAFE_PLACE:
+        if link:
+            try:
+                os.link(src, dst)
+                return dst
+            except OSError:
+                pass
+        return shutil.copy2(src, dst)
+    dst = os.fspath(dst)
+    if link and not os.path.lexists(dst):
         try:
             os.link(src, dst)
             return dst
-        except OSError:  # cross-device / existing dst / no link support: plain copy
+        except OSError:   # cross-device / no link support / a dst appeared meanwhile: the temp + replace path
             pass
-    return shutil.copy2(src, dst)
+    try:
+        if os.path.lexists(dst) and os.path.samefile(src, dst):
+            return dst
+    except OSError:
+        pass
+    tmp = os.path.join(os.path.dirname(dst) or ".",
+                       f".{os.path.basename(dst)}.place-{os.getpid()}-{threading.get_ident()}")
+    try:
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+        done = False
+        if link:
+            try:
+                os.link(src, tmp)
+                done = True
+            except OSError:
+                pass
+        if not done:
+            shutil.copy2(src, tmp)
+        os.replace(tmp, dst)
+    finally:
+        if os.path.lexists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    return dst
 
 
 def upgrade_solver_main(sdir):
@@ -1840,9 +2168,25 @@ def stage_prior_cases(prior, sdir):
     11.6 s on Day 9's 411 MB cases/ while the code it needs was 1 file. Joined before anything reads cases/.
     Artifacts are hardlinked (_link_or_copy): the copy itself stalled every other worker."""
     src = Path(prior) / "cases"
-    if src.is_dir():
-        shutil.copytree(src, Path(sdir) / "cases", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"),
+    if not src.is_dir():
+        return
+    dst = Path(sdir) / "cases"
+    if not PRIOR_CASES_SKIP_EXISTING:
+        shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"),
                         copy_function=_link_or_copy)
+        return
+    # D28: never let a prior-day case overwrite a same-named case of TODAY (`single_solve` is the one name every day
+    # shares; auto-*/variant-* carry attempt ids). A re-run (resume / relaunch) over an existing corpus copied the prior
+    # single_solve's bytes INTO today's (hardlinked) case files. Existing names are skipped; new ones copied whole.
+    dst.mkdir(parents=True, exist_ok=True)
+    for case in sorted(src.iterdir()):
+        if case.name == "__pycache__" or os.path.lexists(dst / case.name):
+            continue
+        if case.is_dir():
+            shutil.copytree(case, dst / case.name, ignore=shutil.ignore_patterns("__pycache__"),
+                            copy_function=_link_or_copy)
+        elif case.is_file():
+            _link_or_copy(case, dst / case.name)
 
 
 def prior_solver_dir(lane, sdir):
@@ -2225,6 +2569,186 @@ WEB_READY_POLL_MAX = float(os.environ.get("HCTF_WEB_READY_POLL_MAX", "600"))  # 
 MASTERY_GATE_RATIO = float(os.environ.get("HCTF_MASTERY_GATE_RATIO", "2.0"))
 
 
+# D28 #4: the Time Trial missed d10_analysis_section_count -- the single's new handler was ELF-only and the TT's d10 member
+# was a PE. Before the TT (background, bounded) the single's solver runs on prior-case evidence whose member of a family
+# the single asked has ANOTHER format; a field it answers on the single's member but leaves EMPTY there is flagged ->
+# an unverified `xfmt-*` fill case + the pre-TT harden / failure-generalize diag. Off the critical path.
+XFMT_PROBE = os.environ.get("HCTF_XFMT_PROBE", "1") != "0"
+XFMT_LANES = {x.strip() for x in os.environ.get("HCTF_XFMT_LANES", "binary-reverse-engineering").split(",") if x.strip()}
+XFMT_BUDGET = float(os.environ.get("HCTF_XFMT_BUDGET", "30"))       # s for the whole probe
+XFMT_MAX_RUNS = int(os.environ.get("HCTF_XFMT_MAX_RUNS", "4"))      # solver runs (one per chosen prior evidence zip)
+XFMT_HOLD_UNTIMED = os.environ.get("HCTF_XFMT_HOLD_UNTIMED", "1") != "0"   # no clock: no pre-TT generalize on it
+_XFMT_EXT = {".exe": "pe", ".dll": "pe", ".sys": "pe", ".scr": "pe", ".efi": "pe", ".elf": "elf", ".so": "elf",
+             ".ko": "elf", ".o": "elf", ".axf": "elf", ".macho": "macho", ".dylib": "macho", ".bundle": "macho",
+             ".apk": "apk", ".dex": "dex", ".jar": "jar", ".class": "class", ".wasm": "wasm"}
+_XFMT_SKIP_CASES = ("single_solve", "xfmt-", "mutation-", "family-", "rehearsal-")
+
+
+def _member_family(name):
+    m = re.match(r"(?:.*/)?(d\d+)--", str(name))
+    return m.group(1) if m else None
+
+
+def _member_format(z, info):
+    """Executable format of a zip member: by extension, else by its first bytes (None = unknown / unreadable)."""
+    ext = os.path.splitext(info.filename.lower())[1]
+    if ext in _XFMT_EXT:
+        return _XFMT_EXT[ext]
+    try:
+        with z.open(info) as f:
+            head = f.read(4)
+    except Exception:  # noqa: BLE001 - encrypted / broken member
+        return None
+    if head[:4] == b"\x7fELF":
+        return "elf"
+    if head[:2] == b"MZ":
+        return "pe"
+    if head[:4] in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe",
+                    b"\xca\xfe\xba\xbe"):
+        return "macho"
+    if head[:4] == b"dex\n":
+        return "dex"
+    if head[:4] == b"\x00asm":
+        return "wasm"
+    return None
+
+
+def _zip_family_formats(path, deadline=None):
+    """{family: {format}} of the dNN-- members of a zip ({} = not a readable zip)."""
+    import zipfile
+    out = {}
+    try:
+        with open(path, "rb") as f:
+            if f.read(2) != b"PK":
+                return {}
+        with zipfile.ZipFile(path) as z:
+            for info in z.infolist():
+                if deadline is not None and time.time() > deadline:
+                    break
+                fam = _member_family(info.filename)
+                if not fam or info.is_dir():
+                    continue
+                fmt = _member_format(z, info)
+                if fmt:
+                    out.setdefault(fam, set()).add(fmt)
+    except Exception:  # noqa: BLE001 - not a zip / unreadable
+        return {}
+    return out
+
+
+def xfmt_probe(sdir, budget=None, max_runs=None, out_dir=None):
+    """Cross-format check (D28 #4) of `sdir`'s solver against its own cases/ corpus. -> (text, case dirs, summary)."""
+    budget = XFMT_BUDGET if budget is None else budget
+    max_runs = XFMT_MAX_RUNS if max_runs is None else max_runs
+    t0 = time.time()
+    deadline = t0 + budget
+    sdir = Path(sdir)
+    single = sdir / "cases" / "single_solve"
+    summary = {"runs": 0, "pairs": 0, "flagged": 0, "seconds": 0.0, "why": ""}
+    try:
+        contract = json.loads((single / "contract.json").read_text())
+        expected = json.loads((single / "expected.json").read_text())
+    except (OSError, ValueError):
+        summary["why"] = "no single_solve case"
+        return "", [], summary
+    arts = [f for f in (single / "artifacts").iterdir() if f.is_file()] if (single / "artifacts").is_dir() else []
+    zips = [f for f in arts if _zip_family_formats(f)]
+    if len(zips) != 1:
+        summary["why"] = f"{len(zips)} family zip(s) in the single (need exactly 1)"
+        return "", [], summary
+    art_name = zips[0].name
+    mine = _zip_family_formats(zips[0])
+    asked = {}
+    for a in dict.fromkeys(_contract_ids(contract)):
+        fam = _family_prefix(a)
+        if fam in mine and expected.get(a) not in (None, ""):
+            asked.setdefault(fam, []).append(a)
+    if not asked:
+        summary["why"] = "no answered dNN field"
+        return "", [], summary
+    seen_inodes, cands = set(), []
+    for case in sorted((sdir / "cases").iterdir()) if (sdir / "cases").is_dir() else []:
+        if not case.is_dir() or case.name.startswith(_XFMT_SKIP_CASES) or time.time() > deadline:
+            continue
+        for f in sorted((case / "artifacts").iterdir()) if (case / "artifacts").is_dir() else []:
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            key = (st.st_dev, st.st_ino) if st.st_nlink > 1 else (f.name, st.st_size, int(st.st_mtime))
+            if not f.is_file() or key in seen_inodes:
+                continue
+            seen_inodes.add(key)
+            fams = _zip_family_formats(f, deadline)
+            pairs = {(fam, fmt) for fam, fmts in fams.items() if fam in asked for fmt in fmts - mine.get(fam, set())}
+            if pairs:
+                cands.append((f, case.name, pairs))
+    need = set().union(*[c[2] for c in cands]) if cands else set()
+    summary["pairs"] = len(need)
+    chosen = []
+    while need and cands and len(chosen) < max_runs:
+        best = max(cands, key=lambda c: len(c[2] & need))
+        if not best[2] & need:
+            break
+        chosen.append(best)
+        need -= best[2]
+        cands.remove(best)
+    out_root = Path(out_dir) if out_dir else (ROOT / ".run" / "xfmt" / sdir.resolve().parent.name)
+    shutil.rmtree(out_root, ignore_errors=True)   # links + small JSON only (never the cases' own files)
+    flagged, case_dirs = [], []
+    for k, (zp, src_case, pairs) in enumerate(chosen):
+        left = deadline - time.time()
+        if left < 2:
+            break
+        fams = sorted({fam for fam, _f in pairs})
+        ids = [a for fam in fams for a in asked[fam]]
+        sub = dict(contract)
+        idset = set(ids)
+        sub["questions"] = [q for q in contract.get("questions") or [] if isinstance(q, dict) and q.get("id") in idset]
+        sub["answer_ids"] = [a for a in (contract.get("answer_ids") or ids) if a in idset]
+        run_dir = out_root / f"run{k}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        safe_place(zp, run_dir / art_name, link=True)
+        try:
+            got, err, _secs = solvers.run_solver(sdir, sub, run_dir, timeout=max(2.0, left), background=True)
+        except Exception as e:  # noqa: BLE001
+            got, err = {}, str(e)
+        summary["runs"] += 1
+        if err and not got:
+            continue
+        theirs = _zip_family_formats(zp)
+        hit = []
+        for a in ids:
+            fam = _family_prefix(a)
+            other = sorted(theirs.get(fam, set()) - mine.get(fam, set()))
+            if other and (got or {}).get(a) in (None, ""):
+                hit.append((a, fam, other))
+        if not hit:
+            continue
+        for a, fam, other in hit:
+            flagged.append(f"  - `{a}` ({fam}): answered on the single's {'/'.join(sorted(mine.get(fam, ())))} member, "
+                           f"EMPTY on a {'/'.join(other)} {fam}-- member (evidence of prior case `{src_case}`)")
+        cname = f"xfmt-{'-'.join(sorted({f for _a, f, _o in hit}))[:40]}-{src_case}"[:120]
+        cdir = out_root / "cases" / cname
+        (cdir / "artifacts").mkdir(parents=True, exist_ok=True)
+        hit_ids = {a for a, _f, _o in hit}
+        cc = dict(contract)
+        cc["questions"] = [q for q in contract.get("questions") or [] if isinstance(q, dict) and q.get("id") in hit_ids]
+        cc["answer_ids"] = [a for a in (contract.get("answer_ids") or list(hit_ids)) if a in hit_ids]
+        (cdir / "contract.json").write_text(json.dumps(cc, indent=2, ensure_ascii=False))
+        (cdir / "expected.json").write_text("{}")   # unverified: green once every listed field is answered
+        (cdir / "xfmt.json").write_text(json.dumps({"source_case": src_case, "fields": sorted(hit_ids)}))
+        safe_place(zp, cdir / "artifacts" / art_name, link=True)
+        case_dirs.append(cdir)
+    summary.update(flagged=len(flagged), seconds=round(time.time() - t0, 1))
+    if not flagged:
+        return "", [], summary
+    text = (f"cross-format check ({summary['runs']} run(s), {summary['seconds']}s): {len(flagged)} field(s) the "
+            "solver answers on the single's member format but leaves EMPTY on another format of the same family:\n"
+            + "\n".join(flagged[:20]) + ("\n  ..." if len(flagged) > 20 else ""))
+    return text, case_dirs, summary
+
+
 def mutation_probe(sdir, mastery_contract=None, timeout=90):
     """Run hctf/mutate.py under the venv -> (text, [failing HARD mutation case dirs], summary)."""
     out = ROOT / ".run" / "mutation" / Path(sdir).resolve().parent.name
@@ -2417,7 +2941,7 @@ def speed_watch_sets(res, sdir, mode):
 
 
 # diag keys of a probe-driven generalize (no attempt verdict): each one names failing cases the baseline will show
-_GEN_PROBE_KEYS = ("family_pre", "compound_pre", "compound_today", "compound_merge", "mutation_pre", "single_seconds",
+_GEN_PROBE_KEYS = ("family_pre", "compound_pre", "compound_today", "compound_merge", "mutation_pre", "xfmt_pre", "single_seconds",
                    "solver_too_slow", "crash", "parallel_sets")
 
 
@@ -2449,8 +2973,10 @@ class GenBaseline:
     once), `pending` = the case names replaying now. join() -> the full result list (None: the replay failed).
     ready_fn() -> a blocking callable for the watcher / duel threads that applies the results exactly once."""
 
-    def __init__(self, snap, known, pending, full, on_done=None):
+    def __init__(self, snap, known, pending, full, on_done=None, timeout=None, gate=None):
         self.snap, self.known, self.pending, self.full = snap, list(known or []), list(pending or []), full
+        self.timeout = BASELINE_CASE_TIMEOUT if timeout is None else timeout
+        self.gate = gate   # D28 #6: blocks while this chain downloads a timed mode's bytes (Chain._offpath_wait)
         self.res, self.err, self.seconds = None, None, None
         self.done, self.cancelled = threading.Event(), threading.Event()
         self._applied, self._lock = False, threading.Lock()
@@ -2470,9 +2996,14 @@ class GenBaseline:
         return self
 
     def _run(self):
+        if self.gate is not None:
+            try:
+                self.gate("generalize baseline", self.cancelled)
+            except Exception:  # noqa: BLE001 - a gate never stops the replay
+                pass
         t0 = time.time()
         try:
-            fresh = solvers.test_solver(self.snap, timeout=BASELINE_CASE_TIMEOUT,
+            fresh = solvers.test_solver(self.snap, timeout=self.timeout,
                                         cases=None if self.full else self.pending)
             if self.full:
                 self.res = list(fresh)
@@ -2655,6 +3186,98 @@ class Chain:
         say(f"[{cid}] single worker warming up beside start/download/triage")
         return workers.WarmWorker(cli.cdir(cid), "single", text, self._worker_env(cid, "single"))
 
+    def _stage_single_solver(self, cid, welcome):
+        """Put the single's starting solver in place: yesterday's (cumulative lanes, async copy -> its Future), the lane
+        seed (sync), or the harness skeleton. -> the staging Future or None."""
+        staged = None
+        if not welcome and not (self.sdir / "solve.py").exists():
+            prior = prior_solver_dir(self.lane, self.sdir) if PRESTAGE_PRIOR else None
+            seed = lane_seed_dir(self.lane) if not prior else None
+            if prior:
+                # Cumulative lane: copy yesterday's solver (all files, cases/ too) into place NOW, beside triage. Every
+                # D9 worker's first command was that copy: 6.5 s (script) / 15.6 s (binary, 230 MB under 5-lane load).
+                staged = ThreadPoolExecutor(max_workers=1).submit(stage_prior_solver, prior, self.sdir, False)
+            elif seed:
+                # Lane solver seed (metadata): every verified family is already in lib/meta -> the worker adds only today's
+                # field in local_answer(), and the ratchet folds it in tonight. web (B2): the generic /api/clues solver.
+                stage_prior_solver(seed, self.sdir, cases=False)
+                from . import webtarget
+                self._lane_seed_note = (web_seed_note(self.sdir) if webtarget.is_live_lane(self.lane)
+                                        else lane_seed_note(seed, self.sdir))
+            else:
+                # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
+                # artifact lookup incl. Mastery's 'delivery N: x.apk' names) instead of hunting for a template (10-15s
+                # per lane in the replays; mobile's single never handled Mastery naming -> a 2.5-min generalize).
+                self.sdir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / "hctf" / "templates" / "solve_skeleton.py", self.sdir / "solve.py")
+        return staged
+
+    def _early_prior_note(self, staged):
+        prior = prior_solver_dir(self.lane, self.sdir)
+        if prior and staged is not None:
+            return (f"This lane's contract is CUMULATIVE: `{prior.relative_to(ROOT)}` is the latest earlier solver of this "
+                    f"lane and already answers every earlier family. The harness ALREADY copied its code into "
+                    f"`{self.sdir.relative_to(ROOT)}` (its cases/ corpus follows in the background) -- do NOT copy "
+                    "anything again; add only today's new families there. Never use an old solver's output as your "
+                    "answer without today's bytes behind it. Its dry run on today's bytes (which ids it leaves EMPTY = "
+                    "your delta) follows as a HARNESS UPDATE.")
+        if getattr(self, "_lane_seed_note", ""):
+            return self._lane_seed_note
+        return ("`" + str(self.sdir.relative_to(ROOT)) + "/solve.py` is in place (harness skeleton or an earlier "
+                "solver); the final prior-solver note follows as a HARNESS UPDATE.")
+
+    def _early_go(self, cid, welcome, staged, body):
+        """GO_AT_DL: hand the READY warm worker its go at the download mark (background: waits <= GO_AT_DL_STAGE_WAIT s
+        for the solver staging, then send_task). Sets self._early = {"evt", "ok", "t"}; ok False -> the normal go path
+        (the launch loop) runs exactly as before."""
+        warm = getattr(self, "_warm", None)
+        if not (GO_AT_DL and INBOX and not welcome and body is not None and warm is not None and warm.alive()):
+            return None   # (the follow-up needs the inbox: HCTF_INBOX=0 -> the old go after triage)
+        st = self._early = {"evt": threading.Event(), "ok": None, "t": None}
+        self._launch_mtimes = None
+
+        def run():
+            try:
+                if staged is not None:
+                    try:
+                        staged.result(timeout=GO_AT_DL_STAGE_WAIT)
+                    except Exception as e:  # noqa: BLE001 - copy slow / failed: the normal go path decides
+                        st["ok"] = False
+                        say(f"[{cid}] early go skipped: solver staging not done in {GO_AT_DL_STAGE_WAIT:g}s "
+                            f"({type(e).__name__})")
+                        return
+                art = timed.latest_artifacts(cid) or cli.cdir(cid)
+                cdir = cli.cdir(cid)
+                contract = (cdir / "start.json") if (cdir / "start.json").exists() else (cdir / "contract.json")
+                with self._go_lock:
+                    if self._go_sent:
+                        st["ok"] = False
+                        return
+                    from . import inbox
+                    inbox.reset(cdir)   # what the launch loop's reset did: no earlier run's notes for this worker
+                    self._go_sent = True
+                    pending, self._go_pending = list(self._go_pending), []
+                text = ("GO. The artifacts are downloaded: `" + str(Path(art).relative_to(ROOT)) + "/` (contract `"
+                        + str(contract.relative_to(ROOT)) + "`). Everything in your first message stands -- start NOW. "
+                        "The deterministic triage, the Time Trial / Mastery status-time contracts and the prior-solver "
+                        "dry run are still being computed: they reach you as HARNESS UPDATE messages on your next tool "
+                        "calls (seconds). Use them when they arrive; never wait or poll for them.\n\n## Prior-solver "
+                        "note\n" + self._early_prior_note(staged)
+                        + ("\n" + "\n".join(pending) if pending else ""))
+                self._launch_mtimes = self._solver_mtimes()   # RACE_SNAP_FIRST baseline: the code as the worker starts
+                warm.send_task(text)
+                st["ok"], st["t"] = True, time.time()
+                t0 = getattr(self, "_chain_t0", None)
+                say(f"[{cid}] go sent at the download mark" + (f" (+{st['t'] - t0:.1f}s)" if t0 else "")
+                    + ": triage / timed contracts / prior-solver note follow via the inbox")
+            except Exception as e:  # noqa: BLE001 - the warm worker died: the launch loop goes cold
+                st["ok"] = False
+                say(f"[{cid}] early go failed ({str(e)[:120]}): the normal go path runs")
+            finally:
+                st["evt"].set()
+        threading.Thread(target=run, daemon=True, name=f"early-go-{self.base}").start()
+        return st
+
     def _start_prior_dry_run(self, cid):
         """Cumulative lanes: run yesterday's solver once on today's bytes in the background (diagnostics only: speed,
         where it hangs, which ids it leaves empty -- never its values). Joined before the worker's task is sent."""
@@ -2666,6 +3289,7 @@ class Chain:
             return
         ids = contract.get("answer_ids") or contract.get("questions") or []
         secs = max(PRIOR_DRY_RUN_SECONDS, min(PRIOR_DRY_RUN_MAX, len(ids) * PRIOR_DRY_RUN_PER_FIELD))
+        self._dry_prior = prior   # answer-first's residual re-run (D28 #1) runs this same solver
         self._dry_fut = ThreadPoolExecutor(max_workers=1).submit(
             lambda: solvers.dry_run_diagnostics(prior, contract, art, secs,
                                                 known=prior_case_shapes(prior), shape=field_shape))
@@ -2690,6 +3314,12 @@ class Chain:
             return ""
         base = (f"; start+download {pt['dl'] - t0:.1f}s, pre-triage {pt['tri0'] - pt['dl']:.1f}s, "
                 f"triage {pt['tri1'] - pt['tri0']:.1f}s, post-triage {time.time() - pt['tri1']:.1f}s")
+        if {"tp", "dry", "race", "flag", "stage"} <= set(pt):   # D28 #2: the pre-triage window (binary 21.4 s)
+            first = pt["stage"] if pt["stage"] <= pt["tp"] else pt["dl"]   # GO_AT_DL stages first
+            base += (f" {{pre-triage: {'staging ' + format(pt['stage'] - pt['dl'], '.1f') + 's, ' if first != pt['dl'] else ''}"
+                     f"tool-prefetch {pt['tp'] - first:.1f}s, dry-run start {pt['dry'] - pt['tp']:.1f}s, "
+                     f"race start {pt['race'] - pt['dry']:.1f}s, issued-flag {pt['flag'] - pt['race']:.1f}s"
+                     + (f", staging {pt['stage'] - pt['flag']:.1f}s" if first == pt['dl'] else "") + "}")
         if {"retr", "tfetch"} <= set(pt):   # D22 pole #3: where the post-triage seconds actually go (web was ~11.5s)
             base += (f" [retrieval {pt['retr'] - pt['tri1']:.1f}s, timed-prefetch {pt['tfetch'] - pt['retr']:.1f}s, "
                      f"prompt-build {time.time() - pt['tfetch']:.1f}s")
@@ -2787,6 +3417,8 @@ class Chain:
         right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
         worker is told the truth — "timing" only when every field was actually judged correct."""
         self._handoff_join("generalize")   # its case + probes + baseline (D24 #5 async handoff)
+        if getattr(self, "_live_accept", None):   # D28 #5: the post-live judgement is applied before a new snapshot
+            self._live_accept_join("a new generalize")
         if self._racer_passed(cid, live):
             # D23 script Mastery: CORRECT already on the GM, yet 55 s of prep + three workers spawned only to be killed
             say(f"[{cid}] mode already CORRECT on the GM (live answer): no generalize")
@@ -2931,6 +3563,13 @@ class Chain:
                          "Store (obj, value) and check `entry[0] is obj`, key on content, or clear the caches at the start "
                          "of each set's solve; `hctf solver-test` replays multi-set cases on the same 2-process pool.\n"
                          + "\n".join("    " + ln for ln in d["pool_rehearsal"].splitlines()))
+        if d.get("xfmt_pre"):
+            gm_wrong += ("\n  - CROSS-FORMAT GAP (harness check over this lane's earlier evidence): a handler answers only "
+                         "the executable FORMAT the single happened to deliver. Time Trial / Mastery hand out the same "
+                         "family in other formats (D28: an ELF-only e_shnum handler met a PE member). Make each `xfmt-*` "
+                         "case answer every listed field by handling every format the family ships (ELF/PE/Mach-O "
+                         "section tables etc.), not by special-casing the case:\n"
+                         + "\n".join("    " + ln for ln in d["xfmt_pre"].splitlines()))
         if d.get("mutation_pre"):
             gm_wrong += ("\n  - NO TIMED ATTEMPT HAS RUN YET: the single is CORRECT, but the solver breaks on ANSWER-INVARIANT "
                          "mutations of its own case (the `mutation-*` cases: same member bytes and names, same expected "
@@ -3393,7 +4032,7 @@ class Chain:
                     continue
                 if not (snap / "solve.py").exists():
                     break
-                ans, err, secs = solvers.run_solver(snap, body, dst, timeout=BASELINE_CASE_TIMEOUT)
+                ans, err, secs = solvers.run_solver(snap, body, dst, timeout=baseline_case_timeout(getattr(self, "lane", None)))
                 ids = body.get("answer_ids") or [q.get("id") for q in body.get("questions") or [] if q.get("id")]
                 empty = [i for i in ids if ans.get(i) in (None, "")]
                 if err or empty:
@@ -3455,9 +4094,9 @@ class Chain:
             checked = key
             try:
                 # targets / fill first: the whole corpus only once they pass (most edits still fail their target)
-                if not solvers.targets_pass(self.sdir, targets, fill, timeout=BASELINE_CASE_TIMEOUT, reject_free=rfree):
+                if not solvers.targets_pass(self.sdir, targets, fill, timeout=baseline_case_timeout(getattr(self, "lane", None)), reject_free=rfree):
                     continue
-                res = solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
+                res = solvers.test_solver(self.sdir, timeout=baseline_case_timeout(getattr(self, "lane", None)))
             except Exception:  # noqa: BLE001
                 continue
             if self._solver_mtimes() != m:
@@ -3505,7 +4144,10 @@ class Chain:
 
         def body():
             try:
-                res = solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT, parallel=BASELINE_PRE_PAR,
+                _offpath(self, "background baseline")   # D28 #6: not beside the TT pre-start's download
+                if self._solver_mtimes() != m0:
+                    return
+                res = solvers.test_solver(self.sdir, timeout=baseline_case_timeout(getattr(self, "lane", None)), parallel=BASELINE_PRE_PAR,
                                           cases=names0 or None)
                 if self._solver_mtimes() == m0 and getattr(self, "_accepted_res", None) is None:
                     self._accepted_res = (m0, names0, res)
@@ -3529,10 +4171,10 @@ class Chain:
             old = {r.get("case"): r for r in acc[2]}
             names = self._case_names()
             new = [n for n in names if n not in old]
-            fresh = {r["case"]: r for r in (solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT, cases=new)
+            fresh = {r["case"]: r for r in (solvers.test_solver(self.sdir, timeout=baseline_case_timeout(getattr(self, "lane", None)), cases=new)
                                             if new else [])}
             return [fresh.get(n) or old[n] for n in names if n in fresh or n in old]
-        return solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
+        return solvers.test_solver(self.sdir, timeout=baseline_case_timeout(getattr(self, "lane", None)))
 
     def _gen_watch_sets(self, res, d, mode, targets, fill, rfree):
         """watch_sets() merged IN PLACE into the generalize's target / fill / reject-free sets (watcher + duel hold them)."""
@@ -3570,7 +4212,8 @@ class Chain:
                            "every one pass `hctf solver-test` (never edit expected.json):\n"
                            + _cap_lines([f"  - {_case_problem(r)}" for r in bad], PROBS_MAX_CHARS // 4),
                            key="baseline")
-        gb = GenBaseline(self._snap_dir(), known, pending, full, on_done=on_done).start()
+        gb = GenBaseline(self._snap_dir(), known, pending, full, on_done=on_done, timeout=baseline_case_timeout(getattr(self, "lane", None)),
+                         gate=lambda why, stop: _offpath(self, why, stop=stop, mode=solvers.mode_of(cid))).start()
         self._gen_base = gb
         return gb
 
@@ -3583,7 +4226,7 @@ class Chain:
         res = gb.join()
         if res is None and self._snap_dir().exists():
             try:
-                res = solvers.test_solver(self._snap_dir(), timeout=BASELINE_CASE_TIMEOUT)
+                res = solvers.test_solver(self._snap_dir(), timeout=baseline_case_timeout(getattr(self, "lane", None)))
             except Exception:  # noqa: BLE001
                 res = None
         self._baseline = {r.get("case") for r in (res or []) if r.get("ok")}
@@ -3610,7 +4253,7 @@ class Chain:
             # can even start (rehearsal rehearsal: 4 min). A case that slow can't pass a 7s window anyway.
             res = getattr(self, "_pre_res", None)
             if res is None:
-                res = (solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT)
+                res = (solvers.test_solver(self.sdir, timeout=baseline_case_timeout(getattr(self, "lane", None)))
                        if (self.sdir / "solve.py").exists() else [])
             self._pre_res = None
             self._baseline = {r.get("case") for r in (res or []) if r.get("ok")}
@@ -3662,6 +4305,8 @@ class Chain:
     def _accept_or_restore(self, cid, case_timeout=None):
         """After the generalize worker exits for ANY reason: keep its edits only if every case that passed before
         still passes (and the solver still runs at all). `case_timeout`: per-case replay cap (a live pass: short)."""
+        if getattr(self, "_live_accept", None):
+            self._live_accept_join("an accept step")
         snap = self._snap_dir()
         if not snap.exists():
             return
@@ -3719,7 +4364,113 @@ class Chain:
             self._prefetch_mastery_start()   # overlaps the judgement below
         except Exception as e:  # noqa: BLE001 - an optimisation only
             say(f"[{cid}] Mastery pre-start note: {e}")
-        self._accept_or_restore(cid, case_timeout=BASELINE_CASE_TIMEOUT)
+        if LIVE_ACCEPT_BG:
+            self._start_live_accept(cid)
+            return
+        self._accept_or_restore(cid, case_timeout=baseline_case_timeout(getattr(self, "lane", None)))
+
+    def _start_live_accept(self, cid):
+        """D28 #5: the Time Trial passed by the live answer while the generalize's worker had edited the solver. The old
+        path judged those edits HERE (async baseline join 78.7 s + a 27 s replay) and held Mastery ~60 s. Now Mastery
+        starts at once on the edited solver (the GM judges that attempt) and the judgement runs in a background thread,
+        after this chain's timed download (_offpath_wait). It never touches the solver dir: an accept only drops the
+        snapshot; a reject is APPLIED by the chain thread at its next safe point (_live_accept_join: the next mode's
+        start, a generalize, the background-generalize take, the chain's end), never while a runner reads the dir."""
+        snap = self._snap_dir()
+        gb, self._gen_base = getattr(self, "_gen_base", None), None   # the judgement owns the async baseline now
+        st = {"done": threading.Event(), "verdict": None, "why": "", "res": None, "t": time.time(), "cid": cid,
+              "gb": gb, "abandon": threading.Event()}
+        self._live_accept = st
+        tmo = baseline_case_timeout(getattr(self, "lane", None))
+
+        def body():
+            try:
+                _offpath(self, "post-live accept", stop=st["abandon"], mode="time_trial")
+                base = gb.join() if gb is not None else None
+                if st["abandon"].is_set():
+                    return
+                if base is None and snap.exists():
+                    base = solvers.test_solver(snap, timeout=tmo)
+                baseline = {r.get("case") for r in (base or []) if r.get("ok")}
+                m0, n0 = self._solver_mtimes(), self._case_names()
+                res = solvers.test_solver(self.sdir, timeout=tmo) if (self.sdir / "solve.py").exists() else []
+                passed = {r.get("case") for r in (res or []) if r.get("ok")}
+                broken = sorted(baseline - passed)
+                st["res"] = (m0, n0, res)
+                st["baseline"] = baseline
+                if res and not broken:
+                    st["verdict"] = "accept"
+                    st["gained"] = sorted(passed - baseline)
+                else:
+                    st["verdict"] = "reject"
+                    st["why"] = (f"broke previously-passing cases {broken[:6]}" if res else
+                                 "solver no longer runs (no solve.py / no cases)")
+            except Exception as e:  # noqa: BLE001 - unjudged = not kept (applied by _live_accept_join)
+                st["verdict"], st["why"] = "reject", f"judgement failed ({str(e)[:120]})"
+            finally:
+                st["done"].set()
+                if st["verdict"]:
+                    say(f"[{cid}] post-live accept (background, {time.time() - st['t']:.0f}s after the pass): "
+                        + (f"generalize edits ACCEPTED" + (f", now also passes {st.get('gained', [])[:6]}"
+                                                            if st.get("gained") else "") if st["verdict"] == "accept"
+                           else f"edits REJECTED ({st['why']}) -> restored at the chain's next safe point"))
+        threading.Thread(target=procgov.bg_wrap(body, owner_tag=self.base), daemon=True,
+                         name=f"live-accept-{self.base}").start()
+        say(f"[{cid}] live pass: Mastery goes on now on the edited solver; its transactional judgement runs in the "
+            "background (after the Mastery download)")
+
+    def _live_accept_join(self, why, wait=None):
+        """Apply the background post-live judgement (_start_live_accept) on the CHAIN thread. wait: s to wait for a
+        running one (None = LIVE_ACCEPT_JOIN_MAX); 0 = apply only if done. Still running after the wait -> abandoned
+        and the known-good pre-worker solver restored (unjudged edits are never kept). -> the verdict or None."""
+        st = getattr(self, "_live_accept", None)
+        if not st:
+            return None
+        wait = LIVE_ACCEPT_JOIN_MAX if wait is None else wait
+        if not st["done"].is_set():
+            if wait <= 0:
+                return None
+            st["done"].wait(wait)
+        self._live_accept = None
+        snap, cid = self._snap_dir(), st["cid"]
+        if not st["done"].is_set():
+            st["abandon"].set()
+            gb = st.get("gb")
+            if gb is not None:
+                gb.cancel()
+            st["verdict"], st["why"] = "reject", f"judgement still running after {wait:g}s ({why})"
+        if st["verdict"] == "accept":
+            m0, n0, res = st["res"]
+            if m0 == self._solver_mtimes():
+                self._accepted_res = (m0, n0, res)   # next baseline reuses it
+                self._baseline = set(st.get("baseline") or ())
+            shutil.rmtree(snap, ignore_errors=True)
+            say(f"[{self.base}] generalize accepted (post-live, {why})"
+                + (f": now also passes {st.get('gained', [])[:6]}" if st.get("gained") else ""))
+            return "accept"
+        if snap.exists():
+            self._carry_new_cases(snap, since=st["t"])
+            self._restore_snapshot(f"{st['why']} -- post-live judgement, applied at {why}")
+        return "reject"
+
+    def _carry_new_cases(self, snap, since):
+        """Before a restore: case dirs created in the live solver dir after `since` (the next mode's regression case
+        recorded while the judgement ran) move into the snapshot, so the restore keeps them."""
+        src, dst = self.sdir / "cases", Path(snap) / "cases"
+        if not src.is_dir():
+            return 0
+        n = 0
+        dst.mkdir(parents=True, exist_ok=True)
+        for c in src.iterdir():
+            try:
+                if c.is_dir() and not (dst / c.name).exists() and c.stat().st_mtime >= since:
+                    shutil.move(str(c), str(dst / c.name))
+                    n += 1
+            except OSError:
+                continue
+        if n:
+            say(f"[{self.base}] restore keeps {n} case(s) recorded after the live pass")
+        return n
 
     def recover_interrupted_generalize(self):
         """A snapshot left on disk means the orchestrator died mid-generalize (killed run): restore it."""
@@ -4503,8 +5254,20 @@ class Chain:
                 time.sleep(0.25)
         body, err = start_fut.result()
         self._pre_t = {"dl": time.time()}   # prelude timing (go text line): where the single's first seconds go
+        self._early = None
+        early_stage = GO_AT_DL and not REUSE_OLD_SOLVERS
+        staged = None
+        if early_stage:
+            # D28 #2: the go went out at +50.6 s although the bytes were in at +24.4 s and the warm worker was READY at
+            # +12 s. Stage the solver code first (async copy), then hand the READY worker its go NOW; triage, the timed
+            # contracts and the final prior-solver note follow through the inbox (_deliver_note / go-late note).
+            staged = self._stage_single_solver(cid, welcome)
+            self._pre_t["stage"] = time.time()
+            self._early_go(cid, welcome, staged, body)
         self._tool_prefetch(cid, (body or {}))   # the prompt + questions arrive with `start`: before any download
+        self._pre_t["tp"] = time.time()
         self._start_prior_dry_run(cid)
+        self._pre_t["dry"] = time.time()
         if not welcome and REUSE_RACE and not REUSE_OLD_SOLVERS and self.lane in REUSE_RACE_LANES:
             def race():
                 try:
@@ -4514,6 +5277,7 @@ class Chain:
             threading.Thread(target=race, daemon=True, name=f"reuse-race-{self.base}").start()
         else:
             self._race_done.set()
+        self._pre_t["race"] = time.time()
         # The GM sometimes hands the flag back directly (issued_flag, e.g. orientation challenges). Use it instead of
         # solving when there's a single answer_id to put it in — a free first-blood the harness used to discard.
         fb = body or {}
@@ -4523,33 +5287,16 @@ class Chain:
                 say(f"[{cid}] solved via GM issued_flag (no solver needed)")
                 self._cancel_warm()
                 return True
+        self._pre_t["flag"] = time.time()
         # Reuse-first (no model time): a prior solver matched by question text may already solve this. Try it
         # BEFORE triage so a hit skips triage and the LLM worker entirely — the fastest path to first blood.
         if not welcome and REUSE_OLD_SOLVERS and self.try_existing_solvers(cid):
             say(f"[{cid}] solved by existing solver library (no worker needed)")
             self._cancel_warm()
             return True
-        staged = None
-        if not welcome and not (self.sdir / "solve.py").exists():
-            prior = prior_solver_dir(self.lane, self.sdir) if PRESTAGE_PRIOR else None
-            seed = lane_seed_dir(self.lane) if not prior else None
-            if prior:
-                # Cumulative lane: copy yesterday's solver (all files, cases/ too) into place NOW, beside triage. Every
-                # D9 worker's first command was that copy: 6.5 s (script) / 15.6 s (binary, 230 MB under 5-lane load).
-                staged = ThreadPoolExecutor(max_workers=1).submit(stage_prior_solver, prior, self.sdir, False)
-            elif seed:
-                # Lane solver seed (metadata): every verified family is already in lib/meta -> the worker adds only today's
-                # field in local_answer(), and the ratchet folds it in tonight. web (B2): the generic /api/clues solver.
-                stage_prior_solver(seed, self.sdir, cases=False)
-                from . import webtarget
-                self._lane_seed_note = (web_seed_note(self.sdir) if webtarget.is_live_lane(self.lane)
-                                        else lane_seed_note(seed, self.sdir))
-            else:
-                # Nothing reusable: start the worker from the harness skeleton (contract I/O, per-set loop, sha256-paired
-                # artifact lookup incl. Mastery's 'delivery N: x.apk' names) instead of hunting for a template (10-15s
-                # per lane in the replays; mobile's single never handled Mastery naming -> a 2.5-min generalize).
-                self.sdir.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / "hctf" / "templates" / "solve_skeleton.py", self.sdir / "solve.py")
+        if not early_stage:
+            staged = self._stage_single_solver(cid, welcome)
+            self._pre_t["stage"] = time.time()
         self._pre_t["tri0"] = time.time()
 
         def run_triage():
@@ -4671,11 +5418,16 @@ class Chain:
             if delta:
                 prior_note += " " + delta
             pre["pb_delta"] = time.time()
+            early = getattr(self, "_early", None) if n == 0 else None
+            if early is not None:
+                early["evt"].wait(GO_AT_DL_STAGE_WAIT + workers.WARM_TURN_WAIT + 5)
+            early_ok = bool(early and early.get("ok"))
             if INBOX:
                 from . import inbox
                 carried = inbox.texts(cli.cdir(cid))   # a relaunch inherits what the previous worker was told late
-                inbox.reset(cli.cdir(cid))
-                if n and carried:
+                if not early_ok:   # an early go's worker is already reading this inbox: keep what it was sent
+                    inbox.reset(cli.cdir(cid))
+                if (n or early is not None) and carried and not early_ok:
                     extra += "\n" + "\n".join(carried)
             pre["pb_inbox"] = time.time()
             with self._go_lock:
@@ -4683,7 +5435,8 @@ class Chain:
                     extra += "\n" + "\n".join(self._go_pending)
                 self._go_pending, self._go_sent = [], True
             pre["pb_go"] = time.time()
-            say(f"[{cid}] go text ready at +{time.time() - self._chain_t0:.1f}s (launch {n + 1}){self._prelude_split()}"
+            say(f"[{cid}] go text ready at +{time.time() - self._chain_t0:.1f}s (launch {n + 1})"
+                + (" (follow-up: the go went out at the download mark)" if early_ok else "") + self._prelude_split()
                 if getattr(self, "_chain_t0", None) else f"[{cid}] go text ready (launch {n + 1})")
             if delta:
                 say(f"[{cid}] {delta[:200]}")
@@ -4694,46 +5447,88 @@ class Chain:
                                     chal_dir=cli.cdir(cid).relative_to(ROOT), solver_dir=self.sdir.relative_to(ROOT),
                                     timed_contracts="\n".join(timed_info) or "  - (none: Single Solve only)",
                                     subagent_policy=subagent_policy(self.lane), extra=extra)
+            pre["lp_render"] = time.time()
             set_state(self.base, stage="single:solving", launches=n + 1)
             heavy = self.lane in ("binary-reverse-engineering", "binary")
             ready, done_evt, watch = threading.Event(), threading.Event(), None
             self._ready_snap = None
             if STOP_WHEN_READY and not welcome:
-                self._launch_mtimes = self._solver_mtimes()   # RACE_SNAP_FIRST: "the worker hasn't edited" baseline
+                if not (early_ok and getattr(self, "_launch_mtimes", None) is not None):
+                    self._launch_mtimes = self._solver_mtimes()   # RACE_SNAP_FIRST: "the worker hasn't edited" baseline
                 watch = threading.Thread(target=self._watch_ready, args=(cid, ready, done_evt), daemon=True)
                 watch.start()
             self._cur_ready = ready
-            if n == 0 and not welcome and getattr(self, "_shadow_done", None) is None:
-                self._maybe_start_shadow(cid, prompt)
-            if n == 0 and not welcome and getattr(self, "_duel", None) is None:
-                try:
-                    self._maybe_start_duel(cid, prompt)
-                except Exception as e:  # noqa: BLE001 - the duel is optional
-                    say(f"[{cid}] duel launch note: {e}")
-            if n == 0 and not welcome and ANSWER_FIRST and getattr(self, "_af", None) is None:
-                try:
-                    af = AnswerFirst(self, cid)
-                    ok, why = answer_first_eligible(self.lane, len(af.ids))
-                    if ok:
-                        self._af = af.start(race_done=getattr(self, "_race_done", None))
-                    else:
-                        say(f"[{cid}] no answer-first worker: {why}")
-                except Exception as e:  # noqa: BLE001 - optional
-                    say(f"[{cid}] answer-first launch note: {e}")
+            pre["lp_watch"] = time.time()
+            prep_thr = None
+
+            def side_workers(prompt=prompt):
+                """The single's side workers (launch 1): Homebase shadow, duel, answer-first."""
+                if ready.is_set() or cli.is_complete(cid):
+                    return   # (async prep) the single was handed over meanwhile
+                if getattr(self, "_shadow_done", None) is None:
+                    try:
+                        self._maybe_start_shadow(cid, prompt)
+                    except Exception as e:  # noqa: BLE001 - optional
+                        say(f"[{cid}] shadow launch note: {e}")
+                if getattr(self, "_duel", None) is None:
+                    try:
+                        self._maybe_start_duel(cid, prompt)
+                    except Exception as e:  # noqa: BLE001 - the duel is optional
+                        say(f"[{cid}] duel launch note: {e}")
+                if ANSWER_FIRST and getattr(self, "_af", None) is None:
+                    try:
+                        if cli.is_complete(cid) or getattr(self, "_ready_snap", None) is not None:
+                            return   # async prep: the single finished meanwhile
+                        af = AnswerFirst(self, cid)
+                        # D28 #1: with a dry run the field count is judged on its residual inside af._run
+                        n_af = (min(len(af.ids), 1) if AF_RESIDUAL and getattr(self, "_dry_fut", None) is not None
+                                else len(af.ids))
+                        ok, why = answer_first_eligible(self.lane, n_af)
+                        if ok:
+                            self._af = af.start(race_done=getattr(self, "_race_done", None))
+                        else:
+                            say(f"[{cid}] no answer-first worker: {why}")
+                    except Exception as e:  # noqa: BLE001 - optional
+                        say(f"[{cid}] answer-first launch note: {e}")
+            if n == 0 and not welcome:
+                if LAUNCH_PREP_ASYNC:
+                    # D28 #2: shadow eligibility + duel + answer-first construction sat ~6 s between the go text and the
+                    # worker launch; they are side workers -> beside it (joined before the worker's end handling)
+                    prep_thr = threading.Thread(target=side_workers, daemon=True, name=f"launch-prep-{self.base}")
+                    prep_thr.start()
+                else:
+                    side_workers()
+            pre["lp_side"] = time.time()
             warm, self._warm = (self._warm, None) if n == 0 else (None, None)
             warm_task = None
-            if warm is not None:
+            if warm is not None and early_ok:
+                # the go went out at the download mark: the rest goes through the inbox, and run_local only waits
+                from . import inbox
+                inbox.post(cli.cdir(cid), "GO-TEXT FOLLOW-UP (computed after your start; authoritative):\n\n## Triage "
+                           f"(deterministic)\n{triage_summary(cid)}\n\n## Time Trial / Mastery contracts (status-time)\n"
+                           + ("\n".join(timed_info) or "  - (none: Single Solve only)")
+                           + f"\n\n## Prior-solver note (final version)\n{prior_note}\n{extra}", key="go-late")
+                warm = _SentWarm(warm)
+            elif warm is not None:
                 warm_task = ("GO. The artifacts are downloaded and triaged; everything in your first message stands. "
                              "Here are the parts that were pending -- start now.\n\n## Triage (deterministic, already "
                              f"computed)\n{triage_summary(cid)}\n\n## Time Trial / Mastery contracts (status-time)\n"
                              + ("\n".join(timed_info) or "  - (none: Single Solve only)")
                              + f"\n\n## Prior-solver note (final version)\n{prior_note}\n{extra}")
+            if getattr(self, "_chain_t0", None) and n == 0:
+                say(f"[{cid}] launch prep: render {pre.get('lp_render', pre['pb_go']) - pre['pb_go']:.1f}s, watcher "
+                    f"{pre['lp_watch'] - pre.get('lp_render', pre['pb_go']):.1f}s, side workers "
+                    f"{pre['lp_side'] - pre['lp_watch']:.1f}s{' (async)' if prep_thr is not None else ''}")
             try:
                 rc = self.run_worker(cid, "single", prompt, SINGLE_TIMEOUT, prefer_homebase=heavy, stop=ready,
                                      warm=warm, warm_task=warm_task)
                 self._mark("after_worker")
             finally:
                 done_evt.set()
+                if prep_thr is not None:
+                    # _af / _duel are assigned there; at a handoff never hold the timed modes for it (a late answer-first
+                    # start sees the CORRECT / ready snapshot and skips)
+                    prep_thr.join(timeout=0.5 if ready.is_set() else 10)
                 # a verified handoff (ready + snapshot): nothing below may hold the timed modes (D24 plan #5). A still
                 # running watcher can no longer hand over (ready is set); its leftover work ends on done_evt.
                 fast = ASYNC_HANDOFF and ready.is_set() and getattr(self, "_ready_snap", None) is not None
@@ -5032,6 +5827,54 @@ class Chain:
     def _case_names(self):
         return sorted(p.name for p in (self.sdir / "cases").glob("*/"))
 
+    @contextlib.contextmanager
+    def _timed_download(self, mode):
+        """Marks a timed mode's byte download of this chain as running (D28 #6: _offpath_wait defers off-path work)."""
+        key = (getattr(self, "base", None), mode)
+        with _DL_COND:
+            _DL_ACTIVE[key] = _DL_ACTIVE.get(key, 0) + 1
+        try:
+            yield
+        finally:
+            with _DL_COND:
+                _DL_ACTIVE[key] -= 1
+                if _DL_ACTIVE[key] <= 0:
+                    _DL_ACTIVE.pop(key, None)
+                _DL_COND.notify_all()
+
+    def _downloading(self, mode=None):
+        """Modes of this chain with a timed download running now (other than `mode`: work for that very mode waits not)."""
+        base = getattr(self, "base", None)
+        with _DL_COND:
+            return sorted(m for (b, m), n in _DL_ACTIVE.items()
+                          if n > 0 and (OFFPATH_DL_SCOPE == "all" or b == base) and m != mode)
+
+    def _offpath_wait(self, why, stop=None, mode=None):
+        """D28 #6: off-path work (baseline replays, duel / background generalize starts, the post-live accept) waits
+        while this chain downloads a timed mode's bytes (binary Mastery 12 x 17 MB at ~5 MB/s under psi_mem full 0.87),
+        at most OFFPATH_DL_WAIT_MAX s. `mode`: the work's own mode (its own download never holds it). -> seconds waited."""
+        if not OFFPATH_DL_GATE or OFFPATH_DL_WAIT_MAX <= 0:
+            return 0.0
+        t0, end, said = time.time(), time.time() + OFFPATH_DL_WAIT_MAX, False
+        while True:
+            busy = self._downloading(mode)
+            if not busy or (stop is not None and stop.is_set()) or time.time() >= end:
+                break
+            if not said:
+                said = True
+                say(f"[{getattr(self, 'base', '?')}] {why}: deferred while the {'/'.join(busy)} bytes download")
+            with _DL_COND:
+                _DL_COND.wait(timeout=0.5)
+        dt = time.time() - t0
+        if said:
+            say(f"[{getattr(self, 'base', '?')}] {why}: starts after {dt:.1f}s of download deferral")
+        return dt
+
+    def _case_timeout(self):
+        """BASELINE_CASE_TIMEOUT, lane-aware (D28 #11: web >= HCTF_WEB_BASELINE_CASE_TIMEOUT). Call sites use
+        baseline_case_timeout(getattr(self, "lane", None)) directly so fakes without this method still work."""
+        return baseline_case_timeout(getattr(self, "lane", None))
+
     def _solver_mtimes(self):
         if not self.sdir.exists():
             return {}
@@ -5122,8 +5965,51 @@ class Chain:
             return None
         return None if d.get("error") else set(d.get("noise") or [])
 
+    def _start_xfmt_pre(self, cid):
+        """Background, once the single's solver is final: the cross-format check (D28 #4, XFMT_LANES)."""
+        self._xfmt_fut = None
+        if not (XFMT_PROBE and getattr(self, "lane", None) in XFMT_LANES and (self.sdir / "solve.py").exists()):
+            return
+
+        def run():
+            _offpath(self, "cross-format probe")
+            return xfmt_probe(self.sdir)
+        self._xfmt_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(run, owner_tag=self.base))
+
+    def _xfmt_pre_result(self, wait=True):
+        """(text, case dirs) of the cross-format check; wait=False: only if it already finished. Consumed once."""
+        fut = getattr(self, "_xfmt_fut", None)
+        if fut is None or getattr(self, "_xfmt_late_done", False) or (not wait and not fut.done()):
+            return "", []
+        self._xfmt_late_done = True
+        try:
+            txt, cases, summ = fut.result(timeout=XFMT_BUDGET + 30)
+            self._xfmt_summary = summ
+            return txt, cases
+        except Exception as e:  # noqa: BLE001
+            say(f"[{self.base}] cross-format probe note: {e}")
+            return "", []
+
+    def _adopt_xfmt_cases(self, case_dirs):
+        """Copy the cross-format check's unverified xfmt-* cases into cases/ (artifacts hardlinked)."""
+        n = 0
+        for cd in case_dirs:
+            src = Path(cd)
+            if not (src / "contract.json").exists():
+                continue
+            dst = self.sdir / "cases" / src.name
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst, copy_function=_link_or_copy)
+            n += 1
+        return n
+
     def _start_mutation_pre(self, cid):
         """Background, once the single's solver is final: the answer-invariant mutation probe (every lane)."""
+        try:
+            self._start_xfmt_pre(cid)   # D28 #4: beside it (same moment: the single's final solver)
+        except Exception as e:  # noqa: BLE001 - optional
+            say(f"[{cid}] cross-format probe note: {e}")
         self._mut_pre_fut = None
         if not MUTATION_PROBE or not (self.sdir / "solve.py").exists():
             return
@@ -5387,14 +6273,24 @@ class Chain:
         if cli.is_complete(tt["id"]) or os.environ.get("HCTF_RUN_FOR_TIME", "auto") == "1":
             return
         mcid = tt["id"]
+        single = (self.entries.get("single_solve") or {}).get("id")
+        early = bool(single) and not cli.is_complete(single)   # WEB_PREPROVISION at chain start: before the single
 
         def run():
             t0 = time.time()
             with cli.quiet():
                 env = cli.call(mcid, "start", mcid, timeout=60)
             body = env.get("body") or {}
-            say(f"[{mcid}] web TT target requested at the single's CORRECT: "
-                f"{body.get('result') or body.get('error') or env.get('http')} ({time.time() - t0:.1f}s)")
+            state = str(body.get("result") or body.get("error") or env.get("http"))
+            say(f"[{mcid}] web TT target requested " + ("at chain start (pre-provision)" if early else "at the single's CORRECT")
+                + f": {state} ({time.time() - t0:.1f}s)")
+            if _kick_release_if_prereq(self, "_web_kicked", state):
+                # D28 #9: the pre-provision kick hit `prerequisite_required` and used to consume the once-per-chain
+                # flag -> the kick at the single's CORRECT was a no-op and the TT provisioned on the critical path
+                say(f"[{mcid}] web TT kick not consumed (prerequisite_required): re-requested at the single's CORRECT")
+                if single and cli.is_complete(single) and _kick_retry_ok(self, "_web_kick_retries"):
+                    time.sleep(3)   # the single went CORRECT meanwhile (CourseStack scoring may lag a few s)
+                    self._web_tt_kick()
         threading.Thread(target=lambda: _quiet_errors(run, mcid), daemon=True, name=f"web-tt-kick-{self.base}").start()
 
     def _web_mastery_kick(self):
@@ -5418,6 +6314,15 @@ class Chain:
             body = env.get("body") or {}
             state = str(body.get("result") or body.get("error") or env.get("http"))
             say(f"[{mcid}] web Mastery target requested before the pre-Mastery checks: {state} ({time.time() - t0:.1f}s)")
+            tt_ = self.entries.get("time_trial")
+            if _kick_release_if_prereq(self, "_web_m_kicked", state):
+                # D28 #9 (same rule as the TT kick): a Mastery kick ahead of the TT's GM CORRECT keeps no claim, so the
+                # kick at the TT's CORRECT (_tt_on_correct / _tt_pass_kick) really requests the target
+                say(f"[{mcid}] web Mastery kick not consumed (prerequisite_required): re-requested at the TT's CORRECT")
+                if tt_ and cli.is_complete(tt_["id"]) and _kick_retry_ok(self, "_web_m_kick_retries"):
+                    time.sleep(3)
+                    self._web_mastery_kick()
+                return
             # D23 template-temper: the target was `active` at once, yet Mastery sat on the 90 s compound check ->
             # tell timed_stage the moment it is ready (poll while `preparing`)
             end = time.time() + WEB_READY_POLL_MAX
@@ -5502,7 +6407,8 @@ class Chain:
                         f.unlink()
                 (adir / "contract.json").write_text(json.dumps(body))
                 plan = _H._plan(body)
-                with _TPE(max_workers=max(1, min(8, len(plan)))) as ex, cli.quiet():
+                with self._timed_download(mode), _TPE(max_workers=max(1, min(PRESTART_DL_WORKERS, len(plan)))) as ex, \
+                        cli.quiet():
                     envs = list(ex.map(lambda it: cli.call(mcid, "download", it[1], str(adir), "--name", it[0],
                                                            timeout=180), plan))
                 if not plan or not all(e.get("saved") for e in envs):
@@ -5592,6 +6498,18 @@ class Chain:
             elif mtxt:
                 say(f"[{cid}] mutation probe (soft only, no action): {mtxt.splitlines()[0]}")
                 self._mutation_soft = mtxt
+        xtxt, xcases = self._xfmt_pre_result(wait=wait)
+        if xcases:
+            n = self._adopt_xfmt_cases(xcases)
+            if solvers.mode_of(cid) == "time_trial" and self._untimed_evidence() and XFMT_HOLD_UNTIMED:
+                # no clock: a pre-TT generalize is pure wall time (the in-attempt live answer covers the field) -> held
+                # for the TT-failure / Mastery-failure generalize
+                self._late_held = {**(getattr(self, "_late_held", None) or {}), "xfmt_pre": xtxt}
+                say(f"[{cid}] cross-format probe: {len(xcases)} format gap(s) ({n} adopted as xfmt-* cases); the pool "
+                    "has no clock -> held for a failure generalize: " + xtxt.splitlines()[1].strip()[:160])
+            else:
+                say(f"[{cid}] cross-format probe: {len(xcases)} format gap(s) ({n} adopted as xfmt-* cases)")
+                pre["xfmt_pre"] = xtxt
         if solvers.mode_of(cid) == "mastery":
             # today-probe: before Mastery (bounded wait of its own, whatever `wait` says) or a Mastery-failure generalize
             pre.update(self._today_pre_result(cid, wait=wait))
@@ -5818,15 +6736,28 @@ class Chain:
             self._codify = False
             say(f"[{cid}] web codify not started: {e}")
 
-    def _codify_hold(self, cid, poll=2.0):
+    def _codify_hold(self, cid, poll=0.5):
         """HCTF_WEB_CODIFY_HOLD > 0: the first web Time Trial attempt waits up to that long for the codify worker's plugin
         (then the solver dispatches to it first-try) -- returns at once when it lands or the worker ends."""
         c = getattr(self, "_codify", None)
-        if not c or WEB_CODIFY_HOLD <= 0:
+        if not c:
             return
-        t0, end = time.time(), time.time() + WEB_CODIFY_HOLD
+        hold = WEB_CODIFY_HOLD
+        if hold <= 0:
+            # D28 #14: fail-open's codify landed 55 s after its single and the TT ran without it. A codify still writing
+            # the plugin (not a hardening pass over a plugin already in place) gets WEB_CODIFY_PENDING_WAIT s.
+            plug = getattr(c, "plugin", None)
+            if WEB_CODIFY_PENDING_WAIT <= 0 or c.done.is_set() or getattr(c, "prelanded", False) or plug is None:
+                return   # (no plugin path known: nothing to wait for)
+            if plug.exists() and plug.stat().st_mtime >= getattr(c, "t0", 0):
+                return   # promoted already: the runner dispatches to it
+            hold = WEB_CODIFY_PENDING_WAIT
+            say(f"[{cid}] web codify worker still writing {plug.name}: the first TT attempt waits up to "
+                f"{hold:g}s for it")
+        t0, end = time.time(), time.time() + hold
         while time.time() < end:
-            if c.landed():
+            plug = getattr(c, "plugin", None)
+            if (plug is None or (plug.exists() and plug.stat().st_mtime >= getattr(c, "t0", 0))) and c.landed():
                 say(f"[{cid}] web codify plugin landed after {time.time() - t0:.0f}s of hold: first attempt uses it")
                 return
             if c.done.is_set():
@@ -6203,6 +7134,8 @@ class Chain:
             return True
         cid = e["id"]
         self._mark(f"{mode}:stage")
+        if getattr(self, "_live_accept", None):
+            self._live_accept_join(f"the {mode} start", wait=0)   # D28 #5: only if already judged (never waits)
         # This run saw the mode `start_required` minutes ago and nothing else attempts it: skip the GM status call
         # (2-7s per mode on the critical path, replay run 3).
         seen_fresh = getattr(self, "_tstatus", {}).get(mode) == "start_required"
@@ -7013,10 +7946,21 @@ class Chain:
         green = threading.Event()
         d = duel.Duel(self, cid, "generalize", prompt, GENERALIZE_TIMEOUT, cases=True,
                       note_extra=BG_GEN_NOTE.format(target=target, n=len(missing), ids=missing[:12]))
-        d.start(log=say)
-        threading.Thread(target=d.watch_green, name=f"bg-gen-{self.base}", daemon=True,
-                         args=({target}, set(getattr(self, "_baseline", set()) or ()), False, frozenset(), green,
-                               say)).start()
+        st = getattr(self, "_live_accept", None)
+
+        def go():
+            if st is not None:
+                # D28 #5: the copy is taken once the post-live judgement is in; rejected edits are not worth a worker
+                st["done"].wait(LIVE_ACCEPT_END_WAIT)
+                if st.get("verdict") != "accept":
+                    say(f"[{cid}] no background generalize: the post-live judgement did not keep the edits "
+                        f"({st.get('why') or 'unjudged'})")
+                    return
+            if d.stop_evt.is_set():
+                return
+            d.start(log=say)
+            d.watch_green({target}, set(getattr(self, "_baseline", set()) or ()), False, frozenset(), green, say)
+        threading.Thread(target=go, name=f"bg-gen-{self.base}", daemon=True).start()
         self._bg_gen = (d, green)
         say(f"[{cid}] background generalize on a solver copy for {len(missing)} field(s) the solver missed "
             f"(target case {target}); Mastery does not wait for it")
@@ -7025,6 +7969,8 @@ class Chain:
         """Consume the background generalize: adopt its code when it went green and nothing that passes now breaks,
         else end it (unless `only_won`: then a still-running one is left alone). -> True when adopted."""
         self._handoff_join("background generalize take")
+        if getattr(self, "_live_accept", None):
+            self._live_accept_join("the background-generalize take")
         bg = getattr(self, "_bg_gen", None)
         if not bg:
             return False
@@ -7041,7 +7987,7 @@ class Chain:
         before = {r["case"] for r in self._baseline_results() if r.get("ok")}
         try:
             d.adopt_into(self.sdir, log=say)
-            after = {r["case"] for r in solvers.test_solver(self.sdir, timeout=BASELINE_CASE_TIMEOUT) if r.get("ok")}
+            after = {r["case"] for r in solvers.test_solver(self.sdir, timeout=baseline_case_timeout(getattr(self, "lane", None))) if r.get("ok")}
         except Exception as e:  # noqa: BLE001
             after, before = set(), before or {"?"}
             say(f"[{cid}] background generalize adopt note: {e}")
@@ -7284,6 +8230,8 @@ class Chain:
                 self._start_pool_rehearsal((self.entries.get("time_trial") or {}).get("id"))
             if mode in modes and mode in self.entries and not self._web_slot(mode, self.timed_stage, mode):
                 return
+        if getattr(self, "_live_accept", None):
+            self._live_accept_join("the chain's end", wait=LIVE_ACCEPT_END_WAIT)
         self._bg_gen_take(self.base, "chain complete")
         set_state(self.base, stage="done")
         say(f"[{self.base}] chain complete")

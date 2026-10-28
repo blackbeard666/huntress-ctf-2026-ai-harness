@@ -1,0 +1,16 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_events.bin",
+ "field": "has_decoy_branch",
+ "question": "In evidence.zip, Use all d99-- members in ZIP central-directory order. Evaluate this public predicate and submit lowercase true or false: true exactly when the final bytes interpreted as Latin-1 or UTF-16LE contain the case-sensitive text decoy.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "true",
+ "generator_cmd": "gcc -O1 -fno-asynchronous-unwind-tables -o gf_c_events.bin gf_events.c",
+ "oracle_cmd": "grep -qa decoy gf_c_events.bin && echo true || echo false"
+}

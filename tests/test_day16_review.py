@@ -111,7 +111,8 @@ gen = (ROOT / "hctf/prompts/generalize.md").read_text()
 assert "GENERATION SPLIT" in gen and "do NOT re-run the whole suite before your first edit" in gen
 
 # 6) prebuild: only the suites a lane can break
-assert prebuild.gate_suites("binary-reverse-engineering", prebuild.LANES["binary-reverse-engineering"]) == []
+# D28 #13: binary gates on its generic-field breadth suite (lib/binary.generic_field), nothing else
+assert prebuild.gate_suites("binary-reverse-engineering", prebuild.LANES["binary-reverse-engineering"]) == ["tests/test_d28_binary_breadth.py"]
 meta = prebuild.gate_suites("metadata-forensics", prebuild.LANES["metadata-forensics"])
 assert "tests/test_meta_lane.py" in meta and "tests/test_orchestrate.py" not in meta and "tests/test_codec.py" not in meta
 scr = prebuild.gate_suites("script-analysis", prebuild.LANES["script-analysis"])

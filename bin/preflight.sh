@@ -6,7 +6,8 @@
 # Exit 0 = go (no FAILs), 1 = a FAIL that will block solving.
 #
 # Run: cd ~/huntress-2026 && source bin/env.sh && preflight.sh   (or: bash bin/preflight.sh)
-#   --fix   also kill (taskkill) any Windows openvpn.exe connected with our VPN profile (see check 3b).
+#   --fix   also kill (taskkill) any Windows openvpn.exe connected with our VPN profile (see check 3b), and pin the
+#           Homebase /32 to tun0 when another tunnel shadows it (check 3; passwordless `sudo -n` only).
 # A passing run writes .run/preflight.ok (epoch); bin/day.sh skips its own pre-flight while that is fresh, so the
 # drop-time launch never re-runs these checks.
 set -uo pipefail
@@ -98,6 +99,11 @@ if ip -brief addr show $VPN_DEV >/dev/null 2>&1; then
   tun_ip="$(ip -brief addr show $VPN_DEV | awk '{print $3}')"
   if ip route get "$HB_HOST" 2>/dev/null | grep -q $VPN_DEV; then
     ok "$VPN_DEV up ($tun_ip); route to $HB_HOST via $VPN_DEV."
+    # D28 #18: an installed unit without the --route-up pin loses this route on the next reconnect while tun1 is up
+    if systemctl cat "${HCTF_VPN_UNIT:-hctf-vpn}" >/dev/null 2>&1 \
+       && ! systemctl cat "${HCTF_VPN_UNIT:-hctf-vpn}" 2>/dev/null | grep -q -- '--route-up'; then
+      warn "installed ${HCTF_VPN_UNIT:-hctf-vpn} unit has no --route-up /32 pin: a reconnect while another tunnel is in 10.200.0.0/16 re-routes $HB_HOST off $VPN_DEV. Reinstall: sudo cp setup/hctf-vpn.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart hctf-vpn"
+    fi
     # 3a) Path MTU (D24 #12): tun0 says 1500 but the path carried ~1200 (10-21, 10-25) and "frag needed" is filtered ->
     # the SSH handshake blackholes. DF pings at 1400 / 1200 bytes; never a FAIL (Homebase is optional).
     tun_mtu="$(cat /sys/class/net/$VPN_DEV/mtu 2>/dev/null)"
@@ -121,7 +127,23 @@ if ip -brief addr show $VPN_DEV >/dev/null 2>&1; then
       warn "$HB_HOST does not answer ping (VM off / ICMP filtered): path MTU unknown."
     fi
   else
-    warn "$VPN_DEV up ($tun_ip) but no route to $HB_HOST via it. Restart: sudo systemctl restart hctf-vpn"
+    # D28 #18: the usual cause is the ALT tunnel, not a dead tun0 -- tun0 and tun1 are both in 10.200.0.0/16, so the
+    # server-pushed 10.1.0.0/16 via 10.200.0.1 binds to tun1 and $HB_HOST leaves on the wrong tunnel. A /32 on tun0 fixes
+    # it (the updated hctf-vpn unit pins it on every reconnect via --route-up setup/hctf-vpn-route.sh).
+    via_dev="$(ip route get "$HB_HOST" 2>/dev/null | grep -o 'dev [^ ]*' | head -1 | cut -d' ' -f2)"
+    if [ -n "$via_dev" ] && [ "$via_dev" != "$VPN_DEV" ]; then
+      cause="$HB_HOST routes via $via_dev, not $VPN_DEV: $via_dev shadows the pushed 10.1.0.0/16 (both tunnels in the same 10.200.0.0/16 -- the rehearsal copy's tunnel?)"
+    else
+      cause="no route to $HB_HOST via $VPN_DEV"
+    fi
+    if [ "$FIX" -eq 1 ] && sudo -n ip route replace "$HB_HOST/32" dev "$VPN_DEV" 2>/dev/null \
+       && ip route get "$HB_HOST" 2>/dev/null | grep -q "dev $VPN_DEV"; then
+      ok "$VPN_DEV up ($tun_ip); $cause -> pinned $HB_HOST/32 to $VPN_DEV (--fix). Make it survive reconnects: reinstall the hctf-vpn unit (sudo cp setup/hctf-vpn.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart hctf-vpn)."
+    elif [ "$FIX" -eq 1 ]; then
+      warn "$VPN_DEV up ($tun_ip) but $cause. --fix could not pin it (no passwordless sudo?): sudo ip route replace $HB_HOST/32 dev $VPN_DEV"
+    else
+      warn "$VPN_DEV up ($tun_ip) but $cause. Fix: bash bin/preflight.sh --fix (or: sudo ip route replace $HB_HOST/32 dev $VPN_DEV); permanent: reinstall the hctf-vpn unit (its --route-up pins the /32 on every reconnect)."
+    fi
   fi
 else
   svc="$(systemctl is-active hctf-vpn 2>/dev/null)"
@@ -303,7 +325,7 @@ if [ "${HCTF_PREFLIGHT_NO_FAULT:-0}" = 1 ]; then
 else
   to_drop_f="$(python3 -c "import datetime as d; n=d.datetime.now(); t=n.replace(hour=${HCTF_DROP_HOUR:-21},minute=0,second=0,microsecond=0); t=t if t>n else t+d.timedelta(days=1); print(int((t-n).total_seconds()//60))")"
   if [ "${to_drop_f:-0}" -le 12 ]; then
-    warn "fault-replay suite skipped: ${to_drop_f} min to the drop (never inside the last 12 min)."
+    warn "fault-replay suite skipped: ${to_drop_f} min to the drop (never inside the last 12 min). Run the warm-up >= 15 min before the drop (by 20:45 for 21:00) so this ~2-3 min suite runs; now, if you have the minutes: python3 tests/test_fault_replay.py"
   else
     fr_t0=$(date +%s)
     fr_out="$(timeout 480 python3 tests/test_fault_replay.py 2>&1)"; fr_rc=$?

@@ -41,13 +41,27 @@ def _logfile(chal_dir, stage, pool):
 # ilio-style bounds: cap each worker's turns so a stuck agent can't grind up cost. Wall-clock timeout
 # is passed in; turns are a second, independent ceiling. Override via HCTF_MAX_TURNS_<STAGE>.
 MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 110,  # ratchet: D15 used 78, D14 hit the 80 cap (exit 1); D8/D10 cut at 40
-             "ratchet_log": 34,  # one lane's technique log + coverage atlas forecast (split out of the ratchet after D14); D27 cost hog, trimmed 40->34
+             # one lane's technique log + coverage atlas forecast (split out of the ratchet after D14); D27 cost hog,
+             # trimmed 40->34; D28 binary/mobile/metadata all hit "Reached maximum number of turns (34)" -> 40
+             "ratchet_log": 40,
              "live": 60,         # live-answer worker on an open untimed attempt (orchestrate.LiveAnswer)
              "prebuild": 40}   # off-peak breadth worker (hctf/prebuild.py): one module + fixtures
+# Per-lane caps that differ from the stage's (lane prefix match). D28: binary's technique log covers the most families
+# (31 residual fields across ELF/PE/Mach-O) and was the furthest from done at the cap.
+MAX_TURNS_LANE = {("ratchet_log", "binary"): 45}
 
 
-def _max_turns(stage):
-    return int(os.environ.get(f"HCTF_MAX_TURNS_{stage.upper()}", MAX_TURNS.get(stage, 60)))
+def _max_turns(stage, lane=None):
+    """Turn cap: HCTF_MAX_TURNS_<STAGE>_<LANE> > HCTF_MAX_TURNS_<STAGE> > MAX_TURNS_LANE > MAX_TURNS > 60."""
+    key = re.sub(r"[^A-Z0-9]+", "_", str(lane or "").upper()).strip("_")
+    if key and f"HCTF_MAX_TURNS_{stage.upper()}_{key}" in os.environ:
+        return int(os.environ[f"HCTF_MAX_TURNS_{stage.upper()}_{key}"])
+    if f"HCTF_MAX_TURNS_{stage.upper()}" in os.environ:
+        return int(os.environ[f"HCTF_MAX_TURNS_{stage.upper()}"])
+    for (st, pre), n in MAX_TURNS_LANE.items():
+        if st == stage and lane and str(lane).startswith(pre):
+            return n
+    return MAX_TURNS.get(stage, 60)
 
 
 # Local `claude -p` workers run Opus 5.5 at high effort by default — these are hard RE/forensics
@@ -278,7 +292,7 @@ def _worker_cmd(stage, lane, prompt=None, model=None, effort=None, stdin_prompt=
     stdin_prompt -> plain-text prompt on stdin (the caller feeds it; too long for argv).
     model/effort: per-launch overrides (the duel worker runs a deliberately different configuration)."""
     cmd = [CLAUDE_BIN, "-p"] + ([prompt] if prompt is not None and not stdin_prompt else []) + [
-           "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)),
+           "--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage, lane)),
            "--model", model or worker_model(lane), "--effort", effort or worker_effort(lane),
            "--output-format", "stream-json", "--verbose",
            # Isolation: no claude.ai MCP connectors (23 connected at every worker start, none used) and no Claude
@@ -946,27 +960,68 @@ LOCALIZE_UNTIMED_MAX = float(os.environ.get("HCTF_LOCALIZE_UNTIMED_MAX", "420"))
 UNTIMED_DL_MBPS = float(os.environ.get("HCTF_UNTIMED_DL_MBPS", "0.5"))   # worst local public-GM download rate seen (D16)
 
 
+# The saved contract's shape, cached by the file's (mtime, size): timed_env / untimed_plan / gm_pool_size / the routing
+# cost model each re-parsed contract.json (script Mastery 12 MB, binary Mastery 4 MB: ~4 parses per attempt kickoff).
+# Under the drop's GIL convoy that was most of D28's t_env 5-15 s. Only the small digest is kept, never the parsed body.
+# HCTF_CONTRACT_DIGEST_CACHE=0 = parse every time.
+CONTRACT_DIGEST_CACHE = os.environ.get("HCTF_CONTRACT_DIGEST_CACHE", "1") != "0"
+_digests = {}   # contract path -> (mtime_ns, size, digest)
+_digests_lock = threading.Lock()
+
+
+def _contract_digest(cid):
+    """{"n_ids", "nb" (artifact sizes listed), "sets", "arts" (artifact list length)} of the mode's saved contract.json,
+    or None when it is missing / unreadable / not a JSON object."""
+    from . import cli
+    p = cli.cdir(cid) / "contract.json"
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    key = str(p)
+    if CONTRACT_DIGEST_CACHE:
+        with _digests_lock:
+            hit = _digests.get(key)
+        if hit is not None and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+            return hit[2]
+    try:
+        c = json.loads(p.read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(c, dict):
+        return None
+    ids = c.get("answer_ids") or [q.get("id") for q in c.get("questions") or [] if isinstance(q, dict)]
+    arts = c.get("artifacts") or []
+    try:
+        nb = sum(int(a.get("size") or 0) for a in arts if isinstance(a, dict)) if isinstance(arts, list) else 0
+    except (TypeError, ValueError):
+        nb = 0
+    d = {"n_ids": len(ids), "nb": nb, "sets": len({str(i).split(".", 1)[0] for i in ids if "." in str(i)}),
+         "arts": len(arts) if isinstance(arts, list) else 0}
+    if CONTRACT_DIGEST_CACHE:
+        with _digests_lock:
+            _digests[key] = (st.st_mtime_ns, st.st_size, d)
+    return d
+
+
 def _contract_shape(cid):
     """(answer ids, delivery bytes, sets) of the mode's saved status-time contract; zeros when unknown."""
-    from . import cli
-    try:
-        c = json.loads((cli.cdir(cid) / "contract.json").read_text())
-    except (OSError, ValueError):
+    d = _contract_digest(cid)
+    if d is None:
         return 0, 0, 0
-    ids = c.get("answer_ids") or [q.get("id") for q in c.get("questions") or [] if isinstance(q, dict)]
-    nb = sum(int(a.get("size") or 0) for a in c.get("artifacts") or [] if isinstance(a, dict))
-    sets = {str(i).split(".", 1)[0] for i in ids if "." in str(i)}
+    nb, nsets = d["nb"], d["sets"]
     if not nb and paths.base_id(cid) != cid:
         # status-time contracts carry no sizes: one delivery per set, each about the size of the single's bytes
         # (D9/D16 binary: 31 MB single, 5 x 31 MB Mastery)
         try:
             from . import timed
             art = timed.latest_artifacts(paths.base_id(cid))
-            one = sum(f.stat().st_size for f in art.rglob("*") if f.is_file()) if art else 0
-            nb = one * max(1, len(sets))
+            one = (_cached_file(("art_bytes", str(art)), art,
+                                lambda a: sum(f.stat().st_size for f in a.rglob("*") if f.is_file())) or 0) if art else 0
+            nb = one * max(1, nsets)
         except (OSError, AttributeError):
             pass
-    return len(ids), nb, len(sets)
+    return d["n_ids"], nb, nsets
 
 
 def untimed_plan(cid):
@@ -986,38 +1041,109 @@ def timed_env(cid):
     """Env for hb_timed (local or over ssh): pipeline knobs from this process + HCTF_EXPECT_BYTES = the delivery bytes
     the saved status-time contract lists (the live start body carries no sizes: the rehearsal's binary Mastery,
     5 x 31 MB, skipped the per-set pipeline on a 0-byte total)."""
-    from . import cli
     env = {k: os.environ[k] for k in TIMED_FWD if k in os.environ}
+    marks = _env_marks[cid] = {"t0": time.time()}
     if "HCTF_RUN_FOR_TIME" not in os.environ:
-        try:   # the GM said no ranked attempt is left: a run_for_time request can only be refused -> plain (regular pool)
-            if json.loads((cli.cdir(cid) / "last_timed.json").read_text()).get("ranked_attempts_remaining") == 0:
-                env["HCTF_RUN_FOR_TIME"] = "0"
-        except (OSError, ValueError, AttributeError):
-            pass
+        # the GM said no ranked attempt is left: a run_for_time request can only be refused -> plain (regular pool)
+        if (_last_timed_digest(cid) or {}).get("ranked") == 0:
+            env["HCTF_RUN_FOR_TIME"] = "0"
     try:
-        c = json.loads((cli.cdir(cid) / "contract.json").read_text())
-        n = sum(int(a.get("size") or 0) for a in c.get("artifacts") or [] if isinstance(a, dict))
-        if n:
-            env["HCTF_EXPECT_BYTES"] = str(n)
-    except (OSError, ValueError, TypeError):
+        from . import procgov
+        procgov.start_lag_probe()   # idempotent; normally already running since gmroute.activate (pre-drop)
+    except Exception:  # noqa: BLE001 - diagnostics only
         pass
+    d = _contract_digest(cid)
+    if d and d["nb"]:
+        env["HCTF_EXPECT_BYTES"] = str(d["nb"])
+    marks["contract"] = time.time()   # incl. last_timed.json
     if GM_POOL_ADAPTIVE and "HCTF_GM_POOL" not in os.environ:
         pool = gm_pool_size(cid)
         if pool:
             env["HCTF_GM_POOL"] = str(pool)
+    marks["pool"] = time.time()
     ov = live_overlay(cid)
     if ov:
         env["HCTF_LIVE_OVERLAY"] = json.dumps(ov, separators=(",", ":"))
+    marks["overlay"] = time.time()
     env.setdefault("HCTF_LOCALIZE_UNTIMED_S", str(untimed_plan(cid)[1]))   # only used on a no-clock attempt
+    marks["plan"] = time.time()
     try:   # every challenge's in-window label fixes (wrong -> right) rank the corrector's alternatives
-        from . import labels
-        h = labels.all_label_hints()
-        js = json.dumps(h, separators=(",", ":")) if h else ""
+        js = _label_hints_json()
         if js and len(js) <= 20000:        # env var size: never a truncated (invalid) JSON
             env["HCTF_LABEL_HINTS"] = js
     except Exception:  # noqa: BLE001 - ranking aid only
         pass
+    marks["hints"] = time.time()
     return env
+
+
+_env_marks = {}   # cid -> timed_env's phase stamps (the last call): run_timed reports them when t_env is slow
+T_ENV_SLOW_S = float(os.environ.get("HCTF_T_ENV_SLOW_S", "1"))
+# labels.all_label_hints() reads every challenge dir's label_hints.json (~160 globbed dirs) on every attempt kickoff;
+# the hints only change when a timed runner learns a fix. Reused for LABEL_HINTS_TTL s (0 = read every time).
+LABEL_HINTS_TTL = float(os.environ.get("HCTF_LABEL_HINTS_TTL", "30"))
+_hints_cache = {"t": 0.0, "js": None, "busy": False}
+_hints_lock = threading.Lock()
+
+
+def _hints_refresh():
+    from . import labels
+    try:
+        h = labels.all_label_hints()
+        _hints_cache.update(t=time.time(), js=json.dumps(h, separators=(",", ":")) if h else "")
+    finally:
+        _hints_cache["busy"] = False
+
+
+def _label_hints_json():
+    """The merged label hints as compact JSON. Stale-while-revalidate: past the TTL the cached value is returned at once
+    and ONE background thread re-reads the files, so an attempt kickoff never waits on the glob (except the very first,
+    which prewarm_kickoff_caches() does before the drop)."""
+    if LABEL_HINTS_TTL <= 0 or _hints_cache["js"] is None:
+        _hints_cache["busy"] = True
+        _hints_refresh()
+        return _hints_cache["js"]
+    js = _hints_cache["js"]
+    if time.time() - _hints_cache["t"] >= LABEL_HINTS_TTL:
+        with _hints_lock:
+            go = not _hints_cache["busy"]
+            _hints_cache["busy"] = True
+        if go:
+            threading.Thread(target=_hints_refresh, daemon=True, name="label-hints-refresh").start()
+    return js
+
+
+def prewarm_kickoff_caches(log=None):
+    """Before the drop (gmroute.activate's thread): what every attempt kickoff / start reads from disk -- the label
+    hints. Best effort."""
+    try:
+        _label_hints_json()
+    except Exception as e:  # noqa: BLE001
+        if log:
+            log(f"[kickoff] cache prewarm note: {str(e)[:120]}")
+
+
+def _env_breakdown(cid):
+    """'contract 0.1s, pool 0.0s, ...' of the last timed_env(cid) call (empty when unknown)."""
+    m = _env_marks.get(cid) or {}
+    prev, parts = m.get("t0"), []
+    for k in ("contract", "pool", "overlay", "plan", "hints"):
+        if k in m and prev is not None:
+            parts.append(f"{k} {m[k] - prev:.2f}s")
+            prev = m[k]
+    return ", ".join(parts)
+
+
+def _lag_note():
+    """'; GIL/CPU lag max X s over the last 10 s' from procgov's probe (empty when it is off / not started)."""
+    try:
+        from . import procgov
+        st = procgov.lag_stats(10)
+    except Exception:  # noqa: BLE001 - diagnostics only
+        return ""
+    if not st:
+        return ""
+    return f"; this process's scheduling lag max {st['max_s']:.2f}s avg {st['avg_s']:.2f}s over the last {st['window_s']:g}s"
 
 
 GM_POOL_ADAPTIVE = os.environ.get("HCTF_GM_POOL_ADAPTIVE", "1") != "0"
@@ -1028,16 +1154,48 @@ def gm_pool_size(cid):
     status-time contract's sets (or its artifact list, if longer). The flat 32 TLS handshakes per mode cost a 1-set Time
     Trial ~1-2 s of CPU + origin latency it never uses (a request past the pool opens its own socket). None (= the runner's
     default 32) when the contract is unknown."""
-    from . import cli
     n, _nb, sets = _contract_shape(cid)
     if not n:
         return None
-    try:
-        arts = json.loads((cli.cdir(cid) / "contract.json").read_text()).get("artifacts") or []
-        arts = len(arts) if isinstance(arts, list) else 0
-    except (OSError, ValueError, AttributeError):
-        arts = 0
+    arts = (_contract_digest(cid) or {}).get("arts") or 0
     return max(4, min(32, 2 * max(1, sets, arts) + 2))
+
+
+def _cached_file(key, path, compute):
+    """compute(path) cached by the file's (mtime_ns, size) under `key` (CONTRACT_DIGEST_CACHE). OSError -> None."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    if CONTRACT_DIGEST_CACHE:
+        with _digests_lock:
+            hit = _digests.get(key)
+        if hit is not None and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+            return hit[2]
+    try:
+        v = compute(path)
+    except OSError:
+        return None
+    if CONTRACT_DIGEST_CACHE:
+        with _digests_lock:
+            _digests[key] = (st.st_mtime_ns, st.st_size, v)
+    return v
+
+
+def _last_timed_digest(cid):
+    """{"ranked": ranked_attempts_remaining, "attempt": attempt_id} of the mode's last_timed.json (script Mastery's is
+    1.5 MB: it was parsed twice per kickoff), or None."""
+    from . import cli
+
+    def compute(p):
+        try:
+            d = json.loads(p.read_text())
+        except ValueError:
+            return None
+        return {"ranked": d.get("ranked_attempts_remaining"), "attempt": d.get("attempt_id")} if isinstance(d, dict) \
+            else None
+    p = cli.cdir(cid) / "last_timed.json"
+    return _cached_file(("last_timed", str(p)), p, compute)
 
 
 def live_overlay(cid, attempt=None):
@@ -1045,29 +1203,36 @@ def live_overlay(cid, attempt=None):
     (the live-answer worker's `hctf submit`), from <mode dir>/submissions.jsonl. hb_timed overlays them on a resumed
     attempt next to its own bank, so a reconnect completes it. None when there are none."""
     from . import cli
-    try:
-        attempt = attempt or json.loads((cli.cdir(cid) / "last_timed.json").read_text()).get("attempt_id")
-    except (OSError, ValueError, AttributeError):
-        return None
+    attempt = attempt or (_last_timed_digest(cid) or {}).get("attempt")
     if not attempt:
         return None
+    p = cli.cdir(cid) / "submissions.jsonl"
+    got = _cached_file(("overlay", str(p), attempt), p, lambda p: _overlay_scan(p, attempt))
+    if got is None:
+        return None
+    got = dict(got)
+    if len(got) > LIVE_OVERLAY_MAX:
+        got = dict(list(got.items())[-LIVE_OVERLAY_MAX:])
+    return {"attempt": attempt, "answers": got} if got else None
+
+
+def _overlay_scan(path, attempt):
     got = {}
-    try:
-        for ln in open(cli.cdir(cid) / "submissions.jsonl"):
+    with open(path) as fh:
+        for ln in fh:
+            if attempt not in ln:      # another attempt's line (script Mastery: 2.3 MB of probe batches): no parse
+                continue
             try:
                 r = json.loads(ln)
             except ValueError:
                 continue
             # only plain submits (the live worker's few fields): harness probe batches can be ~800 fields and an env
             # var that size fails execve (E2BIG) on the local / ssh routes
-            if (r.get("attempt") == attempt and str(r.get("kind", "")).lower() in ("accepted", "correct")
+            if (isinstance(r, dict) and r.get("attempt") == attempt
+                    and str(r.get("kind", "")).lower() in ("accepted", "correct")
                     and not r.get("probe") and not r.get("harness") and len(r.get("answers") or {}) <= 50):
                 got.update({k: v for k, v in (r.get("answers") or {}).items() if v not in (None, "")})
-    except OSError:
-        return None
-    if len(got) > LIVE_OVERLAY_MAX:
-        got = dict(list(got.items())[-LIVE_OVERLAY_MAX:])
-    return {"attempt": attempt, "answers": got} if got else None
+    return got
 
 
 LIVE_OVERLAY_MAX = int(os.environ.get("HCTF_LIVE_OVERLAY_MAX", "200"))
@@ -1114,6 +1279,9 @@ def run_timed(solver_dir, cid, op="start", timeout=60, budget=None, on_event=Non
         return {"result": "exec_error", "detail": (r.stdout + r.stderr)[-500:]}
     if TIMING_MARKS and isinstance(res, dict):
         res["t_env"] = t_env       # timed_env (contract shape, label hints) before the runner even spawned
+        if t_env >= T_ENV_SLOW_S:  # D28: 5-15 s at the drop -- name the phase + whether the whole process was starved
+            res["t_env_parts"] = _env_breakdown(cid) + _lag_note()
+            print(f"{time.strftime('%H:%M:%S')} [{cid}] slow timed_env {t_env}s: {res['t_env_parts']}", flush=True)
     return res
 
 
@@ -1706,9 +1874,44 @@ PREPUSH_WAIT = float(os.environ.get("HCTF_PREPUSH_WAIT", "6"))      # max s a ti
 PREPUSH_SIGNAL_EARLY = os.environ.get("HCTF_PREPUSH_SIGNAL_EARLY", "1") != "0"   # release the kickoff after the push
 
 
+SIG_SKIP_DIRS = frozenset({"cases", "__pycache__"})   # never part of what a timed run needs (cases/: GBs of bytes)
+SIG_PRUNE = os.environ.get("HCTF_SIG_PRUNE", "1") != "0"   # 0 = the old rglob walk (into cases/, then filtered)
+
+
+def _solver_files(solver_dir):
+    """[(relative path, os.stat_result)] of the solver's files, cases/ + __pycache__ pruned DURING the walk. D28: the
+    rglob walked every regression case (~300 entries, 4-5 GB per binary solver) before filtering them out; each entry's
+    syscalls re-acquire the GIL, and with the drop's CPU-bound threads that convoy made hb_race_prepare sit ~29 s."""
+    root = str(solver_dir)
+    out, stack = [], [""]
+    while stack:
+        rel = stack.pop()
+        try:
+            it = os.scandir(os.path.join(root, rel) if rel else root)
+        except OSError:
+            continue
+        with it:
+            for e in it:
+                if e.name in SIG_SKIP_DIRS:   # dir or file of that name (tar_push's --exclude matches both)
+                    continue
+                r = f"{rel}/{e.name}" if rel else e.name
+                try:
+                    if e.is_dir(follow_symlinks=False):
+                        stack.append(r)
+                        continue
+                    st = e.stat()          # follows a symlink to a file, like Path.stat(); a dangling one is skipped
+                except OSError:
+                    continue
+                if e.is_file():
+                    out.append((r, st))
+    return out
+
+
 def _solver_sig(solver_dir):
     """(path, mtime_ns, size) of the files a timed run needs (cases/ and __pycache__ excluded)."""
     solver_dir = Path(solver_dir)
+    if SIG_PRUNE:
+        return tuple(sorted((r, st.st_mtime_ns, st.st_size) for r, st in _solver_files(solver_dir)))
     return tuple(sorted((str(f.relative_to(solver_dir)), f.stat().st_mtime_ns, f.stat().st_size)
                         for f in solver_dir.rglob("*") if f.is_file()
                         and "cases" not in f.relative_to(solver_dir).parts and "__pycache__" not in f.parts))
@@ -1717,8 +1920,7 @@ def _solver_sig(solver_dir):
 def push_solver(src, rel):
     """Solver dir (minus cases/) -> Homebase ~/hw/<rel>: one tar-over-ssh round trip (~0.75 s) for a small tree, rsync
     otherwise or if that fails."""
-    size = sum(f.stat().st_size for f in Path(src).rglob("*")
-               if f.is_file() and "cases" not in f.relative_to(src).parts and "__pycache__" not in f.parts)
+    size = sum(st.st_size for _r, st in _solver_files(src))
     if size <= TAR_PUSH_MAX:
         try:
             remote.tar_push(src, f"{HB_WORK}/{rel}")
@@ -1934,6 +2136,11 @@ def restart_hb_daemon(log=print):
 RELAY_CHANNELS = int(os.environ.get("HCTF_GM_RELAY_CHANNELS", "2"))
 RELAY_PING_S = float(os.environ.get("HCTF_GM_RELAY_PING_S", "2"))
 RELAY_MISSES = 2
+# ...while the channel carries a call: its pings queue behind that reply on the ONE stdio stream (D28 21:00:25: a 10 MB
+# script Mastery status on channel 0 -> two missed pings -> the keeper closed it, killing the call it was carrying).
+# A busy channel is down only after this many misses; gmroute/hb_race_chan route new calls around any channel with a
+# missed ping meanwhile. HCTF_GM_RELAY_BUSY_MISSES=2 = the old rule.
+RELAY_BUSY_MISSES = max(RELAY_MISSES, int(os.environ.get("HCTF_GM_RELAY_BUSY_MISSES", "6")))
 RELAY_RETRY_S = float(os.environ.get("HCTF_GM_RELAY_RETRY_S", "20"))
 _relays = {"chans": [], "thread": None, "failed_at": 0.0}
 _relays_lock = threading.Lock()
@@ -1944,7 +2151,7 @@ class RelayChan:
         self.d, self.k, self.misses, self.up_at, self.busy = d, k, 0, time.time(), 0
 
     def alive(self):
-        return self.misses < RELAY_MISSES and self.d.alive()
+        return self.misses < (RELAY_BUSY_MISSES if self.busy > 0 else RELAY_MISSES) and self.d.alive()
 
     def call(self, op, timeout=60, **kw):
         self.busy += 1
@@ -2022,34 +2229,60 @@ _race_ready = {}   # solver dir -> signature pushed + warmed for the race
 
 
 def hb_race_chan(log=print):
-    """The relay channel the race uses: channel 0 when alive (its zygotes were warmed), else any live one, else None."""
+    """The relay channel the race uses: channel 0 when alive (its zygotes were warmed), else any live one, else None.
+    A channel that missed its last ping (busy carrying a big reply, or dying) only when there is no other."""
     chans = hb_relays(log, start=False)
-    return next((c for c in chans if c.k == 0), chans[0] if chans else None)
+    ok = [c for c in chans if not getattr(c, "misses", 0)] or chans
+    return next((c for c in ok if c.k == 0), ok[0] if ok else None)
+
+
+HB_RACE_PREP_SLOW_S = float(os.environ.get("HCTF_HB_RACE_PREP_SLOW_S", "2"))   # log prepare's phase marks past this
+_ROOT_RESOLVED = []
 
 
 def hb_race_prepare(sdirs, log=print):
-    """Push (minus cases/) + warm each race solver on the race channel; idempotent per code signature. -> [rel] ready."""
+    """Push (minus cases/) + warm each race solver on the race channel; idempotent per code signature. -> [rel] ready.
+    The base sync (a lock + maybe an ssh round trip) runs only when a solver actually needs pushing: at the drop the
+    pre-drop prepare already shipped everything, and this must be a few stat()s (D28: 29 s here = the race lost)."""
+    t0 = time.time()
+    marks = []
     ch = hb_race_chan(log)
+    marks.append(("chan", time.time()))
     if ch is None:
         return []
-    sync_homebase_base()
-    ready = []
+    if not _ROOT_RESOLVED:
+        _ROOT_RESOLVED.append(ROOT.resolve())
+    ready, synced = [], False
     for sd in sdirs:
         sd = Path(sd)
         try:
-            rel = sd.resolve().relative_to(ROOT.resolve())
+            rel = sd.resolve().relative_to(_ROOT_RESOLVED[0])
             sig = _solver_sig(sd)
+            marks.append((f"sig:{sd.parent.name[:24]}", time.time()))
             if _race_ready.get(str(sd)) != sig:
+                if not synced:
+                    sync_homebase_base()
+                    synced = True
+                    marks.append(("base-sync", time.time()))
                 if _pushed.get(str(sd)) != sig:
                     push_solver(sd, rel)
                     _pushed[str(sd)] = sig
+                    marks.append((f"push:{sd.parent.name[:24]}", time.time()))
                 w = ch.call("warm", timeout=60, solver=str(rel))
+                marks.append((f"warm:{sd.parent.name[:24]}", time.time()))
                 _race_ready[str(sd)] = sig
                 log(f"[hb-race] {rel} pushed + warm ({w.get('warm_ms')} ms load"
                     + (f", note: {str(w.get('error'))[:120]}" if w.get("error") else "") + ")")
             ready.append(str(rel))
         except Exception as e:  # noqa: BLE001 - that solver just isn't in the in-network race
             log(f"[hb-race] prepare {sd.parent.name} note: {str(e)[:200]}")
+    took = time.time() - t0
+    if took >= HB_RACE_PREP_SLOW_S:
+        prev, parts = t0, []
+        for name, t in marks:
+            parts.append(f"{name} {t - prev:.1f}s")
+            prev = t
+        log(f"[hb-race] prepare took {took:.1f}s ({', '.join(parts)}){_lag_note()}")
     return ready
 
 
@@ -2446,7 +2679,7 @@ def run_homebase(chal_root, log_dir, stage, prompt, env_extra, timeout):
         remote.rsync_to(pf, f"~/{HB_WORK}/.run/{pf.name}", mkdir=f"~/{HB_WORK}/.run")
         bed = " ".join(f"{k}={shlex.quote(v)}" for k, v in hbshadow.BEDROCK_ENV.items())
         lane = env_extra.get("HCTF_LANE")
-        flags = ["--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage)), "--model", hbshadow.MODEL,
+        flags = ["--dangerously-skip-permissions", "--max-turns", str(_max_turns(stage, lane)), "--model", hbshadow.MODEL,
                  "--effort", worker_effort(lane), "--output-format", "stream-json", "--verbose", "--strict-mcp-config",
                  "--settings", json.dumps(worker_settings(lane)),
                  "--max-budget-usd", str(hbbudget.ai_cap_usd(hbshadow.SHADOW_USD))]

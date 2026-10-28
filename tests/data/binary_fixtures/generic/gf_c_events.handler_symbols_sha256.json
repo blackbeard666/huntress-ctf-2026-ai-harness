@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_events.bin",
+ "field": "handler_symbols_sha256",
+ "question": "In evidence.zip, Use all d99-- members in ZIP central-directory order. Collect every nonempty ELF symbol name matching /event_(success|decoy|failure)/, sort strings by ascending code-unit order, join with one LF byte and no trailing LF, then SHA-256 those UTF-8 bytes.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "exactly 64 lowercase hexadecimal characters; no prefix, whitespace, or explanatory text"
+ },
+ "expected": "0a772bcdf97f3596c146b2bbd99118bc93d38b532ab4142c2a2da6264222381f",
+ "generator_cmd": "gcc -O1 -fno-asynchronous-unwind-tables -o gf_c_events.bin gf_events.c",
+ "oracle_cmd": "printf %s \"$(readelf -W --syms gf_c_events.bin | awk '/Symbol table .\\.symtab./{f=1;next} /Symbol table/{f=0} f && $1 ~ /^[0-9]+:$/ && NF>=8 {print $8}' | grep -E 'event_(success|decoy|failure)' | LC_ALL=C sort)\" | sha256sum | cut -c1-64"
+}

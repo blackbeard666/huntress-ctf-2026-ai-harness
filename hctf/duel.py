@@ -63,6 +63,18 @@ POLL = float(os.environ.get("HCTF_DUEL_POLL", "1.0"))
 STABLE = float(os.environ.get("HCTF_DUEL_STABLE", "0.75"))
 GREEN_CASE_TIMEOUT = float(os.environ.get("HCTF_BASELINE_CASE_TIMEOUT", "8"))
 
+
+def _green_timeout(lane):
+    """GREEN_CASE_TIMEOUT, lane-aware like the chain's baseline (D28 #11: web >= HCTF_WEB_BASELINE_CASE_TIMEOUT)."""
+    try:
+        from .orchestrate import WEB_BASELINE_CASE_TIMEOUT
+        from . import webtarget
+        if WEB_BASELINE_CASE_TIMEOUT > 0 and webtarget.is_live_lane(lane):
+            return max(GREEN_CASE_TIMEOUT, WEB_BASELINE_CASE_TIMEOUT)
+    except Exception:  # noqa: BLE001
+        pass
+    return GREEN_CASE_TIMEOUT
+
 _live = set()
 _live_extra = set()
 _live_lock = threading.Lock()
@@ -149,14 +161,10 @@ def _copy_solver(src, dst, cases):
         return
 
     def link_or_copy(s, d):
-        # case artifacts are big and never written: hard-link them; everything else (expected.json!) is a real copy
-        if "/artifacts/" in s.replace(os.sep, "/"):
-            try:
-                os.link(s, d)
-                return d
-            except OSError:
-                pass
-        return shutil.copy2(s, d)
+        # case artifacts are big and never written: hard-link them; everything else (expected.json!) is a real copy.
+        # Never into an existing d (orchestrate.safe_place: a hardlinked dst would carry the write to every link).
+        from .orchestrate import safe_place
+        return safe_place(s, d, link="/artifacts/" in s.replace(os.sep, "/"))
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"), copy_function=link_or_copy)
 
 
@@ -259,6 +267,12 @@ class Duel:
                     join = getattr(self.chain, "_join_prior_cases", None)
                     if join:
                         join(self.cid)    # the background prior cases/ copy (stage_prior_cases) must be complete
+                gate = getattr(self.chain, "_offpath_wait", None)
+                if gate is not None and self.stage != "single":
+                    # D28 #6: no solver copy + duel worker start while this chain downloads a timed mode's bytes
+                    gate(f"duel {self.stage}", self.stop_evt, mode=solvers.mode_of(self.cid))
+                    if self.stop_evt.is_set():
+                        return
                 _copy_solver(self.src or self.chain.sdir, self.ddir, self.cases)
                 self.copied.set()
                 if self.stop_evt.is_set() or (skip and skip()):
@@ -387,10 +401,10 @@ class Duel:
                     continue
                 checked = m
                 try:
-                    if not solvers.targets_pass(self.ddir, targets, fill, timeout=GREEN_CASE_TIMEOUT,
-                                                reject_free=reject_free):
+                    tmo = _green_timeout(getattr(self.chain, "lane", None))
+                    if not solvers.targets_pass(self.ddir, targets, fill, timeout=tmo, reject_free=reject_free):
                         continue   # target still failing: no full-corpus replay for this edit
-                    res = solvers.test_solver(self.ddir, timeout=GREEN_CASE_TIMEOUT)
+                    res = solvers.test_solver(self.ddir, timeout=tmo)
                 except Exception:  # noqa: BLE001
                     continue
                 if _code_mtimes(self.ddir) != m:

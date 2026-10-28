@@ -569,7 +569,8 @@ check("D5 prebuild has a `web` lane, enabled, writable = prebuilt handlers + web
       and cfg.get("writable") == ("lib/web/handlers/prebuilt/", "tests/data/web_fixtures/")
       and prebuild.lane_key("web-exploitation") == "web", cfg)
 check("D5 its gate is the offline fixture suite (no live-target regress replay)",
-      prebuild.gate_suites("web", cfg) == ["tests/test_web_fixtures.py"] and not cfg.get("regress_lane"),
+      prebuild.gate_suites("web", cfg) == ["tests/test_web_fixtures.py", "tests/test_d28_web.py"]
+      and not cfg.get("regress_lane"),
       prebuild.gate_suites("web", cfg))
 ids = [t["id"] for t in prebuild.targets(cfg)]
 check("D5 targets: the D25 classes' generic forms (cmd injection, GraphQL, reset token) rank before priority-2 gaps",

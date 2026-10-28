@@ -39,6 +39,7 @@ print("ok  walk_files/scan_order: same files and order as rglob + sorted(Path), 
 
 # 3) detect: cached by content + name + detector version; a hit skips the scan, a new detector version rescans
 orig_cache, orig_one = toolchain.DETECT_CACHE, toolchain._detect_one
+toolchain.DETECT_SUBPROC = False   # D28: uncached scans run in a child; this checks the cache with a patched _detect_one
 calls = []
 try:
     with tempfile.TemporaryDirectory() as d:

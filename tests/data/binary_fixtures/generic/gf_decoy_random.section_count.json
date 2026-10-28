@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "section_count",
+ "question": "In evidence.zip, Use all d99-- members in ZIP central-directory order. Read ELF e_shnum and count the corresponding section-header-table entries, including section index 0. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": null,
+ "generator_cmd": "head -c 4096 /dev/urandom > gf_decoy_random.bin",
+ "oracle_cmd": "file gf_decoy_random.bin  # data: no ELF/PE/Mach-O header -> no section table (None)",
+ "decoy": true
+}

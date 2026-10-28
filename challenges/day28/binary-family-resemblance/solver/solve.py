@@ -30,7 +30,7 @@ decodeConfig(): checks 'HCFG', key = b[5], len = b[6]|b[7]<<8, plain[i] = b[12+i
   analysis_hcfg_version    HCFG header version byte (b[4]), base-10
   analysis_format          jar -> JAR_FORMAT (see knowledge.py)
 """
-import argparse, hashlib, io, json, os, re, struct, sys, zipfile, zlib
+import argparse, hashlib, io, json, os, re, struct, sys, time, zipfile, zlib
 from contextlib import nullcontext
 
 from elftools.elf.elffile import ELFFile
@@ -1173,6 +1173,41 @@ def d17_extra(f, group, blob):
     return None
 
 
+def _narrow(field, group, q):
+    """(member group, field suffix, chosen member bytes, its name) for an analysis_<field>: the qualifier tag
+    (_qualified), a member the question names (_named_member), the D28 'do not use X' exclusion; blob = the first
+    binary member in archive order."""
+    f = field[len("analysis_"):] if field.startswith("analysis_") else field
+    group, f = _qualified(group, f)
+    group = _named_member(group, q)
+    excl = re.findall(r"do not use\s+([\w.-]+\.[A-Za-z0-9]+)", q.get("question", ""))   # D28: family consensus
+    if excl and len(group) > 1:
+        keep = [(n, b) for n, b in group if not any(n.lower().endswith(x.lower()) for x in excl)]
+        group = keep or group
+    pick = next(((n, b) for n, b in group if is_binary(b)), group[0] if group else ("", b""))
+    return group, f, pick[1], pick[0]
+
+
+# D28 item 13: a field every handler above left EMPTY (a new question on an earlier family) is answered by the generic
+# lib.binary.generic_field fallback (the GM's spec sentence / the field-name family over the member's real format).
+# It never replaces an answer a handler produced. HCTF_BINARY_GENERIC_FIELDS=0 turns it off; the per-set budget caps
+# its wall time inside the Mastery clock.
+GENERIC = os.environ.get("HCTF_BINARY_GENERIC_FIELDS", "1") != "0"
+GENERIC_BUDGET = float(os.environ.get("HCTF_BINARY_GENERIC_BUDGET", "2.0"))   # seconds per set (per _solve_pairs)
+
+
+def generic_answer(field, group, q, deadline=None):
+    """lib.binary.generic_field for one empty field (same member narrowing as answer()); None when unsure."""
+    from lib.binary import generic_field
+    if field.startswith("analysis_"):
+        group, f, blob, name = _narrow(field, group, q)
+    else:   # group-level (structural_*): the whole day group, its first binary member as the blob
+        f = field
+        name, blob = next(((n, b) for n, b in group if is_binary(b)), group[0] if group else ("", b""))
+    return generic_field(blob, f, q.get("question", ""), member=name, group=group,
+                         answer_format=q.get("answer_format"), deadline=deadline)
+
+
 def answer(field, group, q):
     m = re.fullmatch(r"artifact_sha256_(\d+)", field)
     if m:
@@ -1188,15 +1223,7 @@ def answer(field, group, q):
         return hashlib.sha256(":".join(shas).encode()).hexdigest()
     if not field.startswith("analysis_"):
         return None
-    f = field[len("analysis_"):]
-    group, f = _qualified(group, f)
-    group = _named_member(group, q)
-    excl = re.findall(r"do not use\s+([\w.-]+\.[A-Za-z0-9]+)", q.get("question", ""))   # D28: family consensus
-    if excl and len(group) > 1:
-        keep = [(n, b) for n, b in group if not any(n.lower().endswith(x.lower()) for x in excl)]
-        group = keep or group
-    binaries = [b for _, b in group if is_binary(b)]
-    blob = binaries[0] if binaries else (group[0][1] if group else b"")
+    group, f, blob, _ = _narrow(field, group, q)
     if f.startswith("config_") or f in ("xor_key_hex", "hcfg_version", "hcfg_offset", "hcfg_xor_key_hex", "hcfg_storage"):
         h = None
         mg = overlay_magic(q, group) if re.search(r"\boverlay\b", q.get("question", "")) else None
@@ -1323,7 +1350,7 @@ def _solve_pairs(job):
     for d in (_SHA, _ZIPS, _ISJAR, _FACTS, _CFG):   # a pool worker solves several sets: drop the last set's members
         d.clear()
     _infl_next_set()
-    cache, raw, out = {}, {}, {}
+    cache, raw, out, empty = {}, {}, {}, []
     for aid, q in pairs:
         prefix, _, base = aid.rpartition(".")
         m = re.match(r"(d\d+)_(.+)$", base)
@@ -1359,9 +1386,27 @@ def _solve_pairs(job):
             v = answer(field, group, q)
         except Exception as e:  # noqa: BLE001
             log(f"[!] {aid}: {e!r}")
-            continue
-        if v is not None:
+            v = None
+        if v is not None and v != "":
             out[aid] = v.strip() if q.get("normalization") == "trim" else v
+        else:
+            empty.append((aid, field, group, q))
+    if empty and GENERIC:
+        t0 = time.time()
+        for aid, field, group, q in empty:
+            if time.time() - t0 > GENERIC_BUDGET:
+                log(f"[!] generic fallback budget {GENERIC_BUDGET}s spent; {aid} and later left empty")
+                break
+            try:
+                v = generic_answer(field, group, q, deadline=t0 + GENERIC_BUDGET)
+            except Exception as e:  # noqa: BLE001
+                log(f"[!] generic {aid}: {e!r}")
+                v = None
+            if v:
+                out[aid] = v.strip() if q.get("normalization") == "trim" else v
+                log(f"[*] generic fallback {aid} = {v[:80]}")
+        log(f"[*] generic fallback: {len(empty)} empty field(s), {sum(1 for e in empty if e[0] in out)} filled, "
+            f"{time.time() - t0:.3f}s")
     return out
 
 

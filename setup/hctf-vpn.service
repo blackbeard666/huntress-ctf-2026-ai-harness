@@ -10,13 +10,19 @@ Type=simple
 # --tun-mtu 1200 + --mssfix clamp the tunnel at bringup so Homebase SSH KEX never hits the PMTUD blackhole (tun0 came up
 # at 1500 but the path only passed ~1172 -- D20/D21/D27 all needed a manual `ip link set tun0 mtu 1200`). No interactive
 # sudo any more. HCTF_SSH_MSS / hctf/mssproxy.py stays as a second layer.
-ExecStart=/usr/sbin/openvpn --config /home/testpwn/huntress-2026/secrets/huntress-ctf-2026-ai-arena.ovpn --pull-filter ignore redirect-gateway --ping 10 --ping-restart 60 --tun-mtu 1200 --mssfix 1160
+# --script-security 2 --route-up (D28 #18): after EVERY (re)connect's routes, pin Homebase's /32 to our device. The rehearsal copy
+# account's tun1 is in the same 10.200.0.0/16, so the pushed `10.1.0.0/16 via 10.200.0.1` binds to tun1 whenever the rehearsal copy's
+# tunnel is up, and each reconnect undid a manual `ip route replace`. The script reads OpenVPN's $dev (see its header).
+ExecStart=/usr/sbin/openvpn --config /home/testpwn/huntress-2026/secrets/huntress-ctf-2026-ai-arena.ovpn --pull-filter ignore redirect-gateway --ping 10 --ping-restart 60 --tun-mtu 1200 --mssfix 1160 --script-security 2 --route-up "/bin/sh /home/testpwn/huntress-2026/setup/hctf-vpn-route.sh"
 # Belt-and-suspenders: force tun0's MTU to 1200 once the device is up, in case a pushed option re-raises it.
 ExecStartPost=/bin/sh -c 'for i in $(seq 1 30); do ip link show tun0 >/dev/null 2>&1 && { ip link set tun0 mtu 1200; exit 0; }; sleep 1; done'
+# Backup for the route-up hook (e.g. an OpenVPN build that refuses scripts): the same /32 pin once tun0 has its address.
+# "-": a failure here never fails the unit.
+ExecStartPost=-/bin/sh /home/testpwn/huntress-2026/setup/hctf-vpn-route.sh tun0
 Restart=on-failure
 RestartSec=5
-# Give the tunnel a moment to establish before systemd considers it started.
-TimeoutStartSec=30
+# Give the tunnel a moment to establish before systemd considers it started (two ExecStartPost waits: link, then address).
+TimeoutStartSec=60
 
 [Install]
 WantedBy=multi-user.target

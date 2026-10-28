@@ -662,7 +662,7 @@ _TIMING_MARKS = __import__("os").environ.get("HCTF_TIMING_MARKS", "1") != "0"
 if _TIMING_MARKS:
     # D24 #1: where a mode's pre-clock seconds went (runner spawn / mode lock / GM pool, pre-start reuse or why not,
     # timed_env, the Homebase readiness check)
-    _TIMED_KEYS += ('spawn', 'pool_warm', 'prestart_reused', 'prestart_miss', 'prefetched', 't_env', 't_hb_ready')
+    _TIMED_KEYS += ('spawn', 'pool_warm', 'prestart_reused', 'prestart_miss', 'prefetched', 't_env', 't_env_parts', 't_hb_ready')
 
 
 def process_result(cid, solver_dir, res, log=print):

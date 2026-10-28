@@ -289,6 +289,33 @@ def _detect_one(p):
     return hits
 
 
+# D28: the marker regexes hold the GIL (`re` never releases it): binary's in-process scan took 67 s at the drop and
+# stalled every other orchestrator thread (stat walks 12 ms -> 9.3 s). Run it in a child interpreter instead.
+DETECT_SUBPROC = os.environ.get("HCTF_TOOLCHAIN_SUBPROC", "1") != "0"
+DETECT_SUBPROC_TIMEOUT = float(os.environ.get("HCTF_TOOLCHAIN_SUBPROC_TIMEOUT", "180"))
+
+
+def _detect_many(paths):
+    """[_detect_one hits] for paths, in a child interpreter when DETECT_SUBPROC (GIL-free); in-process on failure."""
+    if DETECT_SUBPROC and paths and os.environ.get("HCTF_TOOLCHAIN_CHILD") != "1":
+        import subprocess
+        import sys
+        try:
+            r = subprocess.run([sys.executable, "-c", "import json, sys; from pathlib import Path; "
+                                "from hctf import toolchain as t; "
+                                "print(json.dumps([t._detect_one(Path(p)) for p in json.load(sys.stdin)]))"],
+                               input=json.dumps([str(x) for x in paths]), capture_output=True, text=True,
+                               timeout=DETECT_SUBPROC_TIMEOUT, cwd=str(ROOT),
+                               env=dict(os.environ, HCTF_TOOLCHAIN_CHILD="1",
+                                        PYTHONPATH=str(ROOT) + os.pathsep + os.environ.get("PYTHONPATH", "")))
+            out = json.loads(r.stdout.strip().splitlines()[-1]) if r.returncode == 0 and r.stdout.strip() else None
+            if isinstance(out, list) and len(out) == len(paths):
+                return out
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+    return [_detect_one(Path(x)) for x in paths]
+
+
 def detect(files):
     """{toolchain id: [file names]} for the given extracted members. Results are cached by content (sha1 + name +
     detector version): cumulative lanes re-deliver every earlier day's specimen byte-identical (D10-D12 binary: d01-d09
@@ -300,7 +327,7 @@ def detect(files):
             cache = json.loads(DETECT_CACHE.read_text())
         except (OSError, ValueError):
             cache = {}
-    ver, fresh, found = _detect_ver(), {}, {}
+    ver, fresh, found, todo = _detect_ver(), {}, {}, []
     for p in files:
         p = Path(p)
         if not p.is_file() or p.stat().st_size < 16:
@@ -313,10 +340,12 @@ def detect(files):
         except OSError:
             continue
         key = f"{ver}:{h.hexdigest()}:{p.name.lower()}"
-        hits = cache.get(key)
-        if hits is None:
-            hits = fresh[key] = _detect_one(p)
-        for tid in hits:
+        todo.append((p, key))
+    miss = [(p, key) for p, key in todo if cache.get(key) is None]
+    for (p, key), hits in zip(miss, _detect_many([p for p, _ in miss])):
+        fresh[key] = hits
+    for p, key in todo:
+        for tid in (fresh.get(key) if key in fresh else cache.get(key)) or []:
             found.setdefault(tid, []).append(p.name)
     if fresh:
         with _detect_lock:

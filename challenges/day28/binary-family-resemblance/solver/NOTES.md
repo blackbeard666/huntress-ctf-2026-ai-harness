@@ -55,3 +55,18 @@ VARIANT AXIS: (speed cycle, D28) the single (392 ids) was flagged at 7.65 s and 
 - lib.common / lib.solverrt: Mastery fork pools should pass a small per-set job, never the whole contract (ProcessPoolExecutor pickles each job: 2.7 MB x 11 sets); keep the contract a module global set before the fork.
 - lib.binary.elf_section_names(data): struct-parsed section-name list matching pyelftools iter_sections() (incl. the NULL ""), None -> fall back to pyelftools; ~10x cheaper per member.
 - lib.binary: `elf_symnames_fast(data, types=(2,), want=None)` (solve.py _fast_symnames) -- struct .symtab reader, == pyelftools names; ~50x faster on large symtabs.
+
+## D28 item 13: generic empty-field fallback (lib.binary.generic_field)
+- After every handler ran, each field still EMPTY (None / "" / handler exception) goes to `generic_answer()` ->
+  `lib.binary.generic_field(blob, suffix, question, member, group=, answer_format=)`, with the same member narrowing
+  as `answer()` (`_narrow`: qualifier tag, question-named member, D28 "do not use X"). A non-empty handler answer is
+  never replaced and the fallback is not even called for it. Flag `HCTF_BINARY_GENERIC_FIELDS=0` turns it off;
+  `HCTF_BINARY_GENERIC_BUDGET` (default 2.0 s per `_solve_pairs` call = per Mastery set) caps its wall time. A
+  summary line `[*] generic fallback: N empty field(s), M filled, T s` goes to stderr.
+- generic_field reads the GM's spec sentence (predicate / count / sorted-set sha256 / first-match symbol / overlay /
+  CLI header / JSON-array / section-string grammar) over the member's REAL format, then the field-name families,
+  then `register_generic` rules (prebuild "generic field" targets). The per-format rules are listed in lib/binary.py.
+- Generic-only replay of all 58 cases here (every handler disabled): 11075 GM-verified non-HCFG fields correct, 0
+  wrong, 251 unanswered (D1 `disassembly` / `recover_code` only). All 24 earlier-family fields this solver left empty
+  on the D28 single come out correct. Cost: 312 emptied fields over the 12-set Mastery took 0.16 s sequential (about
+  14 ms/set). Tests: tests/test_d28_binary_breadth.py.

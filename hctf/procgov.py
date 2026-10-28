@@ -194,3 +194,62 @@ def run(cmd, timeout=None, background=None, env=None, grace=0.0, input=None, **k
 def stats():
     with _stats_lock:
         return dict(_stats)
+
+
+# Scheduling-lag probe (D28 post-mortem #15): the `[res]` sampler ticked every 14-15 s instead of 10 s at T+0:17-0:46,
+# timed_env took 5-15 s for ~20 ms of work and hb_race_prepare 29 s for three stat walks -- the orchestrator's I/O
+# threads waited for the GIL behind CPU-bound threads (each syscall re-acquires it: a convoy). This measures it: a
+# daemon thread sleeps LAG_TICK_S and records how late it woke (expected vs actual tick), in a trailing window.
+# One thread, one sleep per tick: negligible. HCTF_LAG_PROBE=0 = off (lag_stats() -> None).
+LAG_PROBE = os.environ.get("HCTF_LAG_PROBE", "1") != "0"
+LAG_TICK_S = max(0.05, float(os.environ.get("HCTF_LAG_TICK_S", "0.25")))
+LAG_KEEP_S = 120.0
+_lag = {"thread": None, "ticks": None}
+_lag_lock = threading.Lock()
+
+
+def start_lag_probe():
+    """Idempotent. -> True when the probe runs (or already ran)."""
+    if not LAG_PROBE:
+        return False
+    with _lag_lock:
+        if _lag["thread"] is not None:
+            return True
+        import collections
+        import time as _t
+        _lag["ticks"] = collections.deque(maxlen=int(LAG_KEEP_S / LAG_TICK_S) + 1)
+
+        def loop():
+            while True:
+                t0 = _t.monotonic()
+                _t.sleep(LAG_TICK_S)
+                t1 = _t.monotonic()
+                _lag["ticks"].append((t1, max(0.0, t1 - t0 - LAG_TICK_S)))
+        t = threading.Thread(target=loop, daemon=True, name="lag-probe")
+        _lag["thread"] = t
+        t.start()
+    return True
+
+
+def lag_stats(window_s=10.0):
+    """{"max_s", "avg_s", "n", "window_s"} of the probe's wake-up lateness over the trailing window_s, or None (probe off
+    / not started / no tick yet). A tick that is itself late is counted when it lands: a 4 s GIL stall shows as max 4 s."""
+    ticks = _lag.get("ticks")
+    if not ticks:
+        return None
+    import time as _t
+    now = _t.monotonic()
+    # the probe thread may itself be starved right now: the time since its last tick is lag too
+    xs = [d for t, d in list(ticks) if now - t <= window_s]
+    pending = max(0.0, now - ticks[-1][0] - LAG_TICK_S)
+    if pending > 0:
+        xs.append(pending)
+    if not xs:
+        return None
+    return {"max_s": round(max(xs), 3), "avg_s": round(sum(xs) / len(xs), 3), "n": len(xs), "window_s": window_s}
+
+
+def lag_text(window_s=10.0):
+    """' lag max 1.20s avg 0.31s' for the `[res]` line (empty when the probe is off)."""
+    st = lag_stats(window_s)
+    return f" lag max {st['max_s']:.2f}s avg {st['avg_s']:.2f}s" if st else ""

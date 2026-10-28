@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_events.bin",
+ "field": "section_count",
+ "question": "In evidence.zip, Use all d99-- members in ZIP central-directory order. Read ELF e_shnum and count the corresponding section-header-table entries, including section index 0. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "31",
+ "generator_cmd": "gcc -O1 -fno-asynchronous-unwind-tables -o gf_c_events.bin gf_events.c",
+ "oracle_cmd": "readelf -h gf_c_events.bin | awk -F: '/Number of section headers/{gsub(/ /,\"\",$2); print $2}'"
+}

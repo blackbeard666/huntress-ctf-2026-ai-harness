@@ -656,10 +656,30 @@ def adopt_pool(sdir, res):
 
 
 def _link_or_copy(src, dst):
+    """Hardlink (else copy) src -> dst, never writing INTO an existing dst (it may be a hardlink shared with another
+    day / the rehearsal tree: D28 corruption): an existing dst is replaced via a temp file + os.replace."""
+    if os.path.lexists(dst):
+        try:
+            if os.path.samefile(src, dst):
+                return dst
+        except OSError:
+            pass
+        tmp = f"{dst}.place-{os.getpid()}"
+        try:
+            try:
+                os.link(src, tmp)
+            except OSError:
+                shutil.copy2(src, tmp)
+            os.replace(tmp, dst)
+        finally:
+            if os.path.lexists(tmp):
+                os.unlink(tmp)
+        return dst
     try:
         os.link(src, dst)
     except OSError:
         shutil.copy2(src, dst)
+    return dst
 
 
 def main(argv=None):

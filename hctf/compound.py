@@ -9,6 +9,7 @@ cases of the same lane (their own contracts, unchanged) -- local, no GM -- and r
 Used by the orchestrator as a pre-attempt probe (orchestrate.Chain._compound_pre) and by `hctf compound-check`.
 """
 import json
+import os
 import time
 from pathlib import Path
 
@@ -175,6 +176,21 @@ def _live_lock(tt):
     return f
 
 
+FOREIGN_PROMPT = os.environ.get("HCTF_WEB_LIVE_FOREIGN_PROMPT", "1") != "0"
+
+
+def _today_prompt(sdir):
+    """The prompt today's chain runs under (Mastery's, else the Single's) -- what a compounded target is solved with."""
+    for mode in ("mastery", "single_solve"):
+        try:
+            p = json.loads((Path(sdir).parent / mode / "contract.json").read_text()).get("prompt")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if p:
+            return p
+    return None
+
+
 def web_live_check(sdir, timeout=40, parallel=6, deadline=None, log=None):
     """Today's web solver vs a fresh target of every earlier web challenge's Time Trial. Same result dicts as check()
     (+ live=True, cid, attempt); a miss's `path` is a case dir under .run/webcmp/ (contract = the live attempt,
@@ -186,6 +202,7 @@ def web_live_check(sdir, timeout=40, parallel=6, deadline=None, log=None):
     log = log or (lambda m: None)
     run_root = ROOT / ".run" / "webcmp"
     run_root.mkdir(parents=True, exist_ok=True)
+    today_prompt = _today_prompt(sdir)
 
     def one(item):
         day, od, tt = item
@@ -207,6 +224,10 @@ def web_live_check(sdir, timeout=40, parallel=6, deadline=None, log=None):
             if err0 or not exp:
                 log(f"web live check: {tt} own solver gave nothing ({err0 or 'empty'}) -- skipped")
                 return None
+            # in a compounded Mastery the earlier class's target arrives under TODAY's prompt (D27/D28: the day-20 LFI
+            # solver found the proof only when its own prompt named the path) -> today's solver sees today's prompt
+            if FOREIGN_PROMPT and today_prompt:
+                body = dict(body, prompt=today_prompt)
             got, err, dt = solvers.run_solver(sdir, body, empty, timeout)
             wrong = {k: {"expected": v, "got": got.get(k)} for k, v in exp.items() if got.get(k) != v}
             ids = body.get("answer_ids") or list(exp)

@@ -249,7 +249,7 @@ def dry_run_diagnostics(sdir, contract, artifacts, timeout=15, known=None, shape
             new_by_art.setdefault(str((qs.get(i) or {}).get("artifact") or "?"), []).append(i)
     return {"solver": _rel_root(sdir), "seconds": round(dt, 1), "timed_out": timed_out,
             "rc": rc, "frames": frames, "error": last[:200] if (rc and not timed_out) else "",
-            "warnings": warn[:8], "answered": len(ids) - len(empty), "total": len(ids), "empty": empty[:15],
+            "warnings": warn[:8], "answered": len(ids) - len(empty), "total": len(ids), "empty": empty[:15], "empty_all": empty,
             "empty_q": empty_q, "new": len(new), "new_by_art": new_by_art}
 
 

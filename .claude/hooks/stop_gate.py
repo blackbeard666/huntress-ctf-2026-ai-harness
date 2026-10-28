@@ -84,7 +84,8 @@ if stage == "generalize":
 if stage == "live":
     # done = the attempt is CORRECT or every field this worker owes (orchestrate.LiveAnswer) has been ACCEPTED
     try:
-        owe = json.loads((mdir / ".live_fields.json").read_text())
+        # an answer-first shard owes only its own fields (orchestrate.AnswerFirst, D28 #1): HCTF_LIVE_FIELDS_FILE
+        owe = json.loads(Path(os.environ.get("HCTF_LIVE_FIELDS_FILE") or (mdir / ".live_fields.json")).read_text())
     except (OSError, ValueError):
         allow()
     att, fields, acc, correct = owe.get("attempt"), set(owe.get("fields") or []), set(), False

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_events.bin",
+ "field": "symbol_count",
+ "question": "In evidence.zip, Use all d99-- members in ZIP central-directory order. Count ELF symbol-table entries whose resolved name is nonempty, across the parsed symbol tables used by the ELF parser. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "38",
+ "generator_cmd": "gcc -O1 -fno-asynchronous-unwind-tables -o gf_c_events.bin gf_events.c",
+ "oracle_cmd": "readelf -W --syms gf_c_events.bin | awk '/Symbol table .\\.symtab./{f=1;next} /Symbol table/{f=0} f && $1 ~ /^[0-9]+:$/ && NF>=8 {print $8}' | wc -l"
+}

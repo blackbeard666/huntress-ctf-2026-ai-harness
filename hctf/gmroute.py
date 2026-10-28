@@ -11,7 +11,12 @@ Routing (every decision measured, never assumed -- 10-25: status 1.4 s from WSL 
   - the relay is used only if its average < RATIO x today's - MARGIN (0.8 x local - 0.1 s), compared like with like
     (the op's own averages when both exist, else the status calibration's), and the request / the reply expected
     are <= MAX_BYTES (32 KB);
-  - status: hedged -- both paths at once, the first judged reply wins (no side effects);
+  - status: hedged -- both paths at once, the first judged reply wins (no side effects) -- unless the reply is
+    known/predicted > STATUS_HEDGE_MAX (200 KB: this cid's last status reply, else TODAY's <mode>/contract.json, else
+    the lane's earlier start of the mode), which goes today's path alone (D28: a 3.6 MB binary Mastery status held
+    relay1 for 6.4 s; a 10 MB script status starved channel 0's pings until the keeper closed it);
+  - per-channel demotion: a relay call whose client time exceeds the GM's by > SLOW_S (or that timed out) keeps NEW
+    calls off that channel for DEMOTE_S; so does a missed keeper ping; all channels demoted -> today's path;
   - start: hedged too (D25: script Mastery's start sat 38 s on a relay channel that died mid-call) -- `start` RESUMES
     the live attempt (GM: "start always reconnects to the same attempt"), so a second one is safe. The path decide()
     prefers goes first, the other HEDGE_START_S later unless the first already failed (two near-simultaneous FIRST
@@ -30,6 +35,7 @@ import os
 import sys
 import threading
 import time
+from pathlib import Path
 
 RELAY = os.environ.get("HCTF_GM_RELAY", "1") != "0"
 RATIO = float(os.environ.get("HCTF_GM_RELAY_RATIO", "0.8"))
@@ -41,10 +47,22 @@ START_HEDGE = os.environ.get("HCTF_GM_START_HEDGE", "1") != "0"
 HEDGE_START_S = float(os.environ.get("HCTF_GM_START_HEDGE_S", "1.5"))
 ALPHA = 0.3                      # EWMA weight of the newest sample
 OPS = ("status", "start", "submit")
+# D28 #20 relay hygiene. HCTF_GM_STATUS_HEDGE_MAX_KB=0: every status hedged (old). HCTF_GM_RELAY_DEMOTE_S=0: no
+# per-channel demotion (the least-busy live channel, old).
+STATUS_HEDGE_MAX = int(float(os.environ.get("HCTF_GM_STATUS_HEDGE_MAX_KB", "200")) * 1024)
+DEMOTE_S = float(os.environ.get("HCTF_GM_RELAY_DEMOTE_S", "30"))
+# Reply-size predictors read every past challenge's meta.json / start.json: ~0.1 s idle, 5-8 s per start under the drop's
+# GIL convoy (measured with 3 CPU-bound threads). The meta rows are read once (activate() prewarms them before the drop)
+# and each (lane, mode) answer is kept. HCTF_GM_SIZE_MEMO=0 = scan every time (old).
+SIZE_MEMO = os.environ.get("HCTF_GM_SIZE_MEMO", "1") != "0"
 
 _lock = threading.Lock()
 _avg = {}                        # (op, "relay"|"local") -> [ewma seconds, samples]
-_reply = {}                      # (op, shape key) -> last reply bytes (start: predicts the next start's size)
+_reply = {}                      # (op, shape key) -> last reply bytes (start: predicts the next start's size;
+                                 # ("status", cid): that cid's last status reply)
+_demoted = {}                    # relay channel k -> time.time() until which new calls avoid it
+_meta_memo = {}                  # challenges root -> [row] (see _meta_rows)
+_earlier_memo = {}               # (lane shape, mode, excluded base | None) -> bytes
 _state = {"active": False, "log": None, "cal": None, "last_cid": None, "decision": {}}
 
 
@@ -123,27 +141,134 @@ def _contract_bytes(cid):
         return None
 
 
+_meta_lock = threading.Lock()
+
+
+def _meta_rows(root):
+    """[{"day", "lane", "base", "shape", "dir"}] of every <root>/day*/*/meta.json, read once per root (SIZE_MEMO): a
+    past day's meta never changes, and today's dirs (created after the drop) are never an EARLIER day's."""
+    import re
+    root = Path(root)
+    key = str(root)
+    with _meta_lock:
+        if SIZE_MEMO and key in _meta_memo:
+            return _meta_memo[key]
+        rows = []
+        for meta in root.glob("day*/*/meta.json"):
+            dm = re.match(r"day(\d+)$", meta.parent.parent.name)
+            try:
+                m = json.loads(meta.read_text())
+            except (OSError, ValueError):
+                continue
+            if not isinstance(m, dict):
+                continue
+            rows.append({"day": int(dm.group(1)) if dm else -1, "lane": m.get("lane"), "base": str(m.get("base") or ""),
+                         "shape": _shape(m.get("base") or ""), "dir": meta.parent})
+        rows.sort(key=lambda r: (r["day"], str(r["dir"])), reverse=True)
+        if SIZE_MEMO:
+            _meta_memo[key] = rows
+        return rows
+
+
 def _earlier_start_bytes(cid):
     """Size of the newest earlier start.json of the same lane + mode (0 = none seen: assume small)."""
     from . import paths
     shape = _shape(cid)
     mode = paths.mode_of(cid)
     lane = shape.split("/")[0]
-    best = (0, 0)
+    base = paths.base_id(cid)
     try:
-        for meta in paths.CHALLENGES.glob("day*/*/meta.json"):
-            st = meta.parent / mode / "start.json"
-            if not st.exists():
-                continue
-            m = json.loads(meta.read_text())
-            if _shape(m.get("base") or "") != lane or str(m.get("base")) == paths.base_id(cid):
-                continue
-            best = max(best, (st.stat().st_mtime, st.stat().st_size))
-    except (OSError, ValueError):
+        rows = [r for r in _meta_rows(paths.CHALLENGES) if r["shape"] == lane]
+    except OSError:
         return 0
+    excl = base if any(r["base"] == base for r in rows) else None   # today's new base has no row: same answer as None
+    mk = (lane, mode, excl)
     with _lock:
-        _reply[("start", shape)] = best[1]
-    return best[1]
+        hit = _earlier_memo.get(mk) if SIZE_MEMO else None
+    if hit is None:
+        best = (0, 0)
+        for r in rows:
+            if r["base"] == base:
+                continue
+            try:
+                st = (r["dir"] / mode / "start.json").stat()
+            except OSError:
+                continue
+            best = max(best, (st.st_mtime, st.st_size))
+        hit = best[1]
+        with _lock:
+            _earlier_memo[mk] = hit
+    with _lock:
+        _reply[("start", shape)] = hit
+    return hit
+
+
+def prewarm_sizes(log=None):
+    """Before the drop (activate's thread): read the meta rows once and answer _earlier_start_bytes for every lane x
+    mode, so no start / status at the drop scans the challenge tree. Best effort. -> seconds taken."""
+    from . import paths, remote
+    t0 = time.time()
+    try:
+        rows = _meta_rows(paths.CHALLENGES)
+        remote._meta_rows_prewarm()
+        for lane in sorted({r["shape"] for r in rows if r["shape"]}):
+            for mode in ("single_solve", "time_trial", "mastery"):
+                mk = (lane, mode, None)
+                with _lock:
+                    if mk in _earlier_memo:
+                        continue
+                best = (0, 0)
+                for r in rows:
+                    if r["shape"] != lane:
+                        continue
+                    try:
+                        st = (r["dir"] / mode / "start.json").stat()
+                    except OSError:
+                        continue
+                    best = max(best, (st.st_mtime, st.st_size))
+                with _lock:
+                    _earlier_memo[mk] = best[1]
+    except Exception as e:  # noqa: BLE001 - the drop then scans as before
+        if log:
+            log(f"[gmroute] size prewarm note: {str(e)[:120]}")
+    return time.time() - t0
+
+
+def _approx_bytes(env):
+    """_reply_bytes without serializing a multi-MB body: > 2000 questions (D28: ~0.9 KB each) is counted ~1 KB each."""
+    body = env.get("body") if isinstance(env, dict) else None
+    qs = body.get("questions") if isinstance(body, dict) else None
+    if isinstance(qs, list) and len(qs) > 2000:
+        return len(qs) * 1024
+    return _reply_bytes(env) if isinstance(env, dict) else 0
+
+
+def _status_big(args):
+    """True when this status reply is known / predicted > STATUS_HEDGE_MAX: then the relay leg is not sent."""
+    if STATUS_HEDGE_MAX <= 0 or len(args) < 2:
+        return False
+    cid = str(args[1])
+    with _lock:
+        last = _reply.get(("status", cid))
+    if last is not None:
+        return last > STATUS_HEDGE_MAX
+    n = _contract_bytes(cid)
+    if n is not None:
+        return n > STATUS_HEDGE_MAX
+    if "/" not in cid:
+        return False          # a Single's status before its start is a short 409; its contract.json appears with start
+    with _lock:
+        known = _reply.get(("start", _shape(cid)))
+    if known is None:
+        known = _earlier_start_bytes(cid)
+    return known > STATUS_HEDGE_MAX
+
+
+def _note_status_bytes(args, env):
+    if len(args) > 1 and isinstance(env, dict) and env.get("http") not in (0, None):
+        n = _approx_bytes(env)
+        with _lock:
+            _reply[("status", str(args[1]))] = n
 
 
 def decide(op):
@@ -157,23 +282,65 @@ def decide(op):
 
 
 def _chan():
+    """The least-busy live relay channel that is not demoted (recent slow call / timeout) and did not miss its last
+    keeper ping; None (= today's path) when there is none."""
     from . import workers
     chans = workers.hb_relays(start=False)
-    return min(chans, key=lambda c: c.busy) if chans else None
+    if not chans:
+        return None
+    if DEMOTE_S > 0:
+        now = time.time()
+        chans = [c for c in chans if _demoted.get(getattr(c, "k", None), 0.0) <= now and not getattr(c, "misses", 0)]
+        if not chans:
+            return None
+    return min(chans, key=lambda c: c.busy)
+
+
+def demote(chan, why=""):
+    """Keep new calls off `chan` for DEMOTE_S (logged once per demotion)."""
+    if DEMOTE_S <= 0 or chan is None:
+        return
+    k = getattr(chan, "k", None)
+    now = time.time()
+    with _lock:
+        was = _demoted.get(k, 0.0) > now
+        _demoted[k] = now + DEMOTE_S
+    if not was:
+        _say(f"[gmroute] relay channel {k} demoted for {DEMOTE_S:g}s ({why[:120]}) -- new calls take the other "
+             "channel / today's path")
 
 
 SLOW_S = float(os.environ.get("HCTF_GM_SLOW_TRANSPORT_S", "5"))
+START_MARK_S = float(os.environ.get("HCTF_GM_START_MARK_S", "1"))    # log a start's reply-size check past this
+START_SLOW_S = float(os.environ.get("HCTF_GM_START_SLOW_S", "5"))    # log a hedged start's leg timings past this
 
 
-def note_slow(op, cid, env):
-    """Flag a Homebase-carried GM call whose client time exceeds the GM's own by > SLOW_S (D26: 59.6 s vs 1.75 s went
-    unnoticed until the post-mortem read client_elapsed out of log.jsonl)."""
+def _lag_note():
     try:
-        gap = float(env.get("client_elapsed") or 0) - float(env.get("elapsed") or 0)
-    except (TypeError, ValueError):
-        return
-    if gap > SLOW_S:
-        nbytes = _reply_bytes(env)
+        from . import workers
+        return workers._lag_note()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _gap(env):
+    try:
+        return float(env.get("client_elapsed") or 0) - float(env.get("elapsed") or 0)
+    except (TypeError, ValueError, AttributeError):
+        return 0.0
+
+
+def note_slow(op, cid, env, lost_to=None):
+    """Flag a Homebase-carried GM call whose client time exceeds the GM's own by > SLOW_S (D26: 59.6 s vs 1.75 s went
+    unnoticed until the post-mortem read client_elapsed out of log.jsonl). lost_to: the hedge leg that answered first
+    ('local') -- then nothing waited on this one: logged as the losing leg, without the `!!!` alarm (D28 21:00:29)."""
+    if _gap(env) > SLOW_S:
+        nbytes = _approx_bytes(env)
+        if lost_to:
+            _say(f"[gmroute] slow transport on the LOSING hedge leg (the {lost_to} reply was used; nothing waited on "
+                 f"this one): {op} {cid} took {env.get('client_elapsed')}s on {env.get('transport')} for a "
+                 f"{env.get('elapsed')}s GM call ({nbytes // 1024} KB reply)")
+            return
         _say(f"!!! [gmroute] slow transport: {op} {cid} took {env.get('client_elapsed')}s on {env.get('transport')} "
              f"for a {env.get('elapsed')}s GM call ({nbytes // 1024} KB reply)")
         if op == "submit":   # P2-H: a slow submit is usually a large reply on the daemon's one channel -> route the
@@ -184,9 +351,11 @@ def note_slow(op, cid, env):
                 pass
 
 
-def _relay_call(chan, args, timeout):
+def _relay_call(chan, args, timeout, note=True):
     """One GM call over a relay channel -> gm.py-shaped envelope (transport relay). _NotSent when the request never
-    left this process; any other failure raises as is (the caller decides what it means per op)."""
+    left this process; any other failure raises as is (the caller decides what it means per op). A slow transport or
+    a timeout demotes the channel (DEMOTE_S). note=False: the caller (a hedge) logs a slow transport itself, knowing
+    whether this leg's reply was the one used."""
     from . import workers
     kind, kw = str(args[0]), {"kind": str(args[0]), "cid": str(args[1])}
     if kind == "submit":
@@ -200,6 +369,8 @@ def _relay_call(chan, args, timeout):
     except workers.DaemonError as e:
         if str(e).startswith(("daemon not running", "daemon write failed")):
             raise _NotSent(str(e)) from None
+        if "timed out" in str(e):
+            demote(chan, f"{kind} {kw['cid']} timed out after {time.time() - t0:.1f}s")
         raise
     env = {k: res.get(k) for k in ("http", "body", "text", "saved", "content_type", "elapsed", "retries", "slept")}
     env["saved"] = env["saved"] or []
@@ -207,7 +378,10 @@ def _relay_call(chan, args, timeout):
     env["client_elapsed"] = round(time.time() - t0, 3)
     if env.get("http") in (0, None):
         raise RuntimeError(f"relay: GM unreachable from the VM ({str(env.get('body'))[:120]})")
-    note_slow(kind, kw["cid"], env)
+    if _gap(env) > SLOW_S:
+        demote(chan, f"{kind} {kw['cid']}: {env['client_elapsed']}s for a {env.get('elapsed')}s GM call")
+    if note:
+        note_slow(kind, kw["cid"], env)
     return env
 
 
@@ -253,13 +427,30 @@ def call(args, timeout, local_fn, public_fn=None):
     if chan is None or op not in OPS:
         return _timed(local_fn, op, "local")
     if op == "status":
-        return _hedge(args, timeout, chan, local_fn)
+        if _status_big(args):    # a multi-MB contract never rides (and blocks) a relay channel's one stdio stream
+            env = _timed(local_fn, op, "local")
+        else:
+            env = _hedge(args, timeout, chan, local_fn)
+        _note_status_bytes(args, env)
+        return env
     how = decide(op)
     if op == "start" and START_HEDGE:
-        if not _size_ok(args):
+        t_size = time.time()
+        small = _size_ok(args)
+        t_size = time.time() - t_size
+        if t_size >= START_MARK_S:   # D28 #16: ~15 s passed before the breach single's start request left
+            _say(f"[gmroute] start {args[1]}: reply-size check took {t_size:.1f}s before the request{_lag_note()}")
+        if not small:
             return _timed(pub, op, "local")   # a big reply never rides the relay or the daemon (not hedged either)
         _note_decision(op, _how(op))
-        env = _hedge(args, timeout, chan, pub, op="start", first=how, lag=HEDGE_START_S)
+        marks = {}
+        t_h = time.time()
+        env = _hedge(args, timeout, chan, pub, op="start", first=how, lag=HEDGE_START_S, marks=marks)
+        if time.time() - t_h >= START_SLOW_S:   # where a slow start went: which leg, when sent, how long each took
+            legs = ", ".join(f"{k} sent +{v[0]:.1f}s took {v[1]:.1f}s" for k, v in sorted(marks.items()))
+            _say(f"[gmroute] slow start {args[1]}: {time.time() - t_h:.1f}s hedged ({how} first on "
+                 f"relay{getattr(chan, 'k', '?')} busy {getattr(chan, 'busy', '?')}; {legs or 'no leg finished'}; "
+                 f"won by {env.get('transport')}){_lag_note()}")
         if str(env.get("transport") or "").startswith("relay"):
             with _lock:
                 _reply[("start", _shape(args[1]))] = _reply_bytes(env)
@@ -288,13 +479,15 @@ def call(args, timeout, local_fn, public_fn=None):
     return env
 
 
-def _hedge(args, timeout, chan, local_fn, op="status", first=None, lag=0.0):
+def _hedge(args, timeout, chan, local_fn, op="status", first=None, lag=0.0, marks=None):
     """`op` on both paths: the first judged non-404 reply wins; the other still lands in the averages. Idempotent ops
     only (status; start, which resumes the live attempt). lag > 0: the `first` path ('relay' | 'local') goes at once,
-    the other after `lag` s -- or at once when the first one ends without a winner (raised / unjudged / 404)."""
+    the other after `lag` s -- or at once when the first one ends without a winner (raised / unjudged / 404).
+    marks: {path: (sent +s, took s)} filled in as each leg ends (timing attribution)."""
     done, out, lock = threading.Event(), {}, threading.Lock()
     left = [2]
     first_over = threading.Event()
+    t_h0 = time.time()
 
     def run(path, fn, delayed):
         if delayed and lag > 0:
@@ -311,6 +504,8 @@ def _hedge(args, timeout, chan, local_fn, op="status", first=None, lag=0.0):
             err = None
         except Exception as e:  # noqa: BLE001
             env, err = None, e
+        if marks is not None:
+            marks[path] = (t0 - t_h0, time.time() - t0)
         if _judged(env):
             record(op, path, time.time() - t0)
         elif err is not None and path == "relay" and op != "status":
@@ -321,6 +516,7 @@ def _hedge(args, timeout, chan, local_fn, op="status", first=None, lag=0.0):
             # proxy that lags the drop must not mask the other path's 409/200. Both 404 -> 404 once both answered.
             if _judged(env) and env.get("http") != 404 and "win" not in out:
                 out["win"] = env
+                out["win_path"] = path
                 done.set()
             elif _judged(env) and "win" in out and op == "start":
                 a, b = _attempt_of(out["win"]), _attempt_of(env)
@@ -333,11 +529,17 @@ def _hedge(args, timeout, chan, local_fn, op="status", first=None, lag=0.0):
                 out.setdefault(f"{path}_err", err)
             if left[0] == 0:
                 done.set()
+            won = out.get("win") is env
+            winner = out.get("win_path")
+        if path == "relay" and isinstance(env, dict):
+            # only the leg whose reply was used (or that everyone waited on) raises the `!!!` alarm
+            note_slow(op, str(args[1]) if len(args) > 1 else "", env,
+                      lost_to=None if won or winner is None else winner)
         if not delayed:
             first_over.set()
 
     lead = first if first in ("relay", "local") else "relay"
-    fns = {"relay": lambda: _relay_call(chan, args, timeout), "local": local_fn}
+    fns = {"relay": lambda: _relay_call(chan, args, timeout, note=False), "local": local_fn}
     for path in (lead, "local" if lead == "relay" else "relay"):
         threading.Thread(target=run, args=(path, fns[path], path != lead and lag > 0), daemon=True,
                          name=f"gm-hedge-{op}-{path}").start()
@@ -412,15 +614,23 @@ def active():
 def activate(log=None):
     """Called once by orchestrate.run(): this process's own status/start/submit become routable. No-op when the relay
     is off, Homebase is off, or this is a replay (stand-in GM)."""
-    from . import remote, workers
+    from . import procgov, remote, workers
+    procgov.start_lag_probe()   # D28 #15: scheduling-lag probe (cheap; diagnostics for the drop's GIL convoy)
     if not RELAY or _state["active"] or not remote._public_gm() or not workers.AUTO_HOMEBASE:
         return False
     _state.update(active=True, log=log)
+
+    def prewarm():   # before the drop: the reply-size predictors' disk scans + the kickoff's label hints
+        took = prewarm_sizes(log)
+        workers.prewarm_kickoff_caches(log)
+        if took > 2 and log:
+            log(f"[gmroute] reply-size predictors prewarmed in {took:.1f}s")
+    threading.Thread(target=prewarm, daemon=True, name="gm-route-prewarm").start()
     workers.hb_relays(log or print)
     t = threading.Thread(target=_calibrator, daemon=True, name="gm-route-cal")
     _state["cal"] = t
     t.start()
-    _say(f"[gmroute] on: relay channels starting; status hedged, "
+    _say(f"[gmroute] on: relay channels starting; status hedged (not > {STATUS_HEDGE_MAX // 1024} KB), "
          f"{'start hedged (the faster path first, the other ' + format(HEDGE_START_S, 'g') + ' s later), submit' if START_HEDGE else 'start/submit'}"
          f" via the relay only when its average < {RATIO:g} x local - {MARGIN:g}s and <= {MAX_BYTES // 1024} KB "
          "(HCTF_GM_RELAY=0 = off)")

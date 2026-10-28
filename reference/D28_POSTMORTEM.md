@@ -51,7 +51,13 @@ branch `d22-web-critical-path` (prebuild `restore()` reverts lib/hctf/tests edit
 11. Lane-aware baseline case timeout (web ≥20 s; `HCTF_BASELINE_CASE_TIMEOUT`, orchestrate.py:1071).
 
 ## Part B — structural, required for sub-2:00
-12. **In-network bytes for big deliveries (largest single lever).** Tonight: binary single 35.9 MB at 1.7 MB/s (20.8 s),
+12. **MEASURED 10-28 23:55 — premise wrong, Homebase download NOT faster.** Same 35.9 MB binary evidence:
+    Homebase inside proxy 22.5 s (1.6 MB/s) vs local public GM 5.0 s (7.3 MB/s) off-peak; at the drop local was
+    20.8 s (1.7 MB/s). So the drop-time slowness is load (GM-side and/or our own 7 lanes downloading concurrently),
+    not our link. Replacement: at the drop, order downloads by critical-path need (binary single first, defer
+    non-critical prefetches/status polls during the first 30 s), cap our concurrent download streams, and log
+    per-download MB/s so D29 shows whether it's GM-side. Original (superseded) idea kept for reference:
+    **In-network bytes for big deliveries.** Tonight: binary single 35.9 MB at 1.7 MB/s (20.8 s),
     binary Mastery 203 MB at ~5 MB/s (41 s, 3.9 MB start reply 9.7 s), script Mastery 10 MB. Plan: a **Homebase-resident
     timed run for modes whose contract or deliveries exceed a threshold**. Homebase does start → download → solve →
     submit, and only the result (KB) crosses our link. The rule "big start replies never on the HB daemon" stays;

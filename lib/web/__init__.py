@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.parse
 from pathlib import Path
@@ -47,41 +48,84 @@ CONCEPT_KNOWN = os.environ.get("HCTF_WEB_CONCEPT_KNOWN", "1") != "0"
 # in the D02/D03/D20 solvers -> the 20 s known budget on a never-seen class). Comma list; empty = count every key.
 KNOWN_IGNORE_KEYS = frozenset(k.strip().lower() for k in os.environ.get(
     "HCTF_WEB_KNOWN_IGNORE_KEYS", "current_user,note").split(",") if k.strip())
+# D28 post-mortem #7: a clue-less target (no /api/clues) whose home page fingerprints as the lane-day 04 viewer
+# (handlers.lfi_fingerprint: a `?doc=`/`?file=`/`?page=` link, a reader/notes .php page) is a KNOWN class -- the known
+# budget and the traversal probe raced first -- not the 12 s unknown cap: D27 + D28 Target 4 timed out at 12 s every
+# time (the prior day-20 solver keyed on a path the compounded prompt never named; the ladder dropped `?doc=` links).
+# 0 = off (the old unknown-class routing).
+CLUELESS_LFI = os.environ.get("HCTF_WEB_CLUELESS_LFI", "1") != "0"
 
 
 def _prior_web_solvers():
     """(day-id, module) for every earlier web day's solver that exposes answer(), newest first. Loaded once per
-    process (it was re-imported for every target); a compounded Mastery target may be any earlier class, so racing
-    their answer() covers the whole history for free."""
+    process (it was re-imported for every target) and re-loaded only for a solve.py that appeared / changed since
+    (handlers.HOT_RELOAD: one glob + stat per solver; a long-lived process sees a solver promoted mid-run); a
+    compounded Mastery target may be any earlier class, so racing their answer() covers the whole history for free."""
     global _PRIOR
-    if _PRIOR is None:
+    if _PRIOR is None or (handlers.HOT_RELOAD and _prior_sig() != _PRIOR_SIG.get("sig")):
         _PRIOR = _load_prior_web_solvers()
     return _PRIOR
 
 
+_PRIOR_SIG = {}       # "sig": the solve.py set _PRIOR was built from; path -> (mtime_ns, size, entry or None)
+
+
+def _prior_dirs():
+    base = ROOT / "challenges"
+    return sorted((p for p in base.glob("day*/web-*/solver") if (p / "solve.py").exists()),
+                  key=lambda p: p.parts, reverse=True)
+
+
+def _stat_sig(p):
+    try:
+        st = p.stat()
+        return st.st_mtime_ns, st.st_size
+    except OSError:
+        return None
+
+
+def _prior_sig():
+    return tuple((str(d), _stat_sig(d / "solve.py")) for d in _prior_dirs())
+
+
 def _load_prior_web_solvers():
+    import importlib.util
     mods = []
     base = ROOT / "challenges"
-    dirs = sorted((p for p in base.glob("day*/web-*/solver") if (p / "solve.py").exists()),
-                  key=lambda p: p.parts, reverse=True)
-    for d in dirs:
+    sig = _prior_sig()
+    for d, st in sig:
+        d = Path(d)
+        old = _PRIOR_SIG.get(str(d))
+        if old and old[0] == st:            # unchanged since the last load: keep the module (no re-exec)
+            if old[1]:
+                mods.append(old[1])
+            continue
+        entry = None
         try:
-            import importlib.util
             name = "webprior_" + re.sub(r"\W", "_", str(d.relative_to(base)))
             spec = importlib.util.spec_from_file_location(name, d / "solve.py")
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             if hasattr(mod, "answer"):
-                mods.append((str(d.relative_to(base).parent), mod))
+                entry = (str(d.relative_to(base).parent), mod)
+                mods.append(entry)
         except Exception as e:  # noqa: BLE001 - a broken prior solver must not sink the dispatch
             print(f"prior web solver {d}: {e!r}", file=sys.stderr)
+            if old and old[1]:              # caught mid-rewrite: keep racing the last good module until it changes
+                entry = old[1]
+                mods.append(entry)
+        _PRIOR_SIG[str(d)] = (st, entry)
+    _PRIOR_SIG["sig"] = sig
     return mods
 
 
-def candidates(base, clues_json, dispatch_key, question=None, contract=None):
-    """Ordered (name, fn) probes to race for one target: the built-in handler for the clue key first, then the
-    general `default` ladder, then every earlier web day's answer()."""
+def candidates(base, clues_json, dispatch_key, question=None, contract=None, home=None):
+    """Ordered (name, fn) probes to race for one target: the clue-less traversal probe when the home page fingerprints
+    as the lane-day 04 viewer (`home`: its body), the built-in handler for the clue key, then the general `default`
+    ladder, then every earlier web day's answer()."""
     out = []
+    if home is not None and CLUELESS_LFI and handlers.lfi_fingerprint(home):
+        out.append(("lfi", lambda: handlers.lfi(base, clues_json, home=home)))
     for name, fn in handlers.for_key(dispatch_key, clues_json):
         out.append((name, lambda fn=fn: fn(base, clues_json)))
     out.append(("default", lambda: handlers.default(base, clues_json)))
@@ -122,14 +166,20 @@ def solve_target(question, contract, budget=None, clues=None):
     base = websolve.base_of(question, contract)
     if not base:
         return None
+    handlers.refresh()      # a plugin promoted mid-attempt is raced by this very process (D28 TT; HCTF_WEB_HOT_RELOAD)
     if isinstance(clues, dict):
         clues_json, key = clues, websolve.dispatch_key(clues)
     else:
         clues_json, key = websolve.clues(base)
-    if not any(isinstance(v, str) and v.startswith("/") for v in clues_json.values()) \
-            and not 200 <= websolve.fetch(base)[0] < 400:
-        return None
-    known = class_known(clues_json, key)
+    home = None
+    if not any(isinstance(v, str) and v.startswith("/") for v in clues_json.values()):
+        st, home, _ = websolve.fetch(base)
+        if not 200 <= st < 400:
+            _note_state(responded=False, status=st)
+            return None
+    # a clue-less lane-day 04 viewer is a known class (CLUELESS_LFI): known budget, traversal probe first
+    lfi = bool(CLUELESS_LFI and home is not None and handlers.lfi_fingerprint(home))
+    known = lfi or class_known(clues_json, key)
     # D27: a one-shot credit kit must race its handler ALONE -- the default ladder / prior solvers each do a sequential
     # POST to feature_route that spends the single credit before the burst (Day-27 burn). Detected by the plugin's
     # RUN_ALONE flag, or (for an unflagged future kit) a side-effect-free audit probe, done only for an unknown class so
@@ -147,7 +197,7 @@ def solve_target(question, contract, budget=None, clues=None):
         # adaptive worker then writes the plugin on a fresh/reset target.
         probes = [(name, (lambda fn=fn: fn(base, clues_json))) for name, fn in ra]
     else:
-        probes = candidates(base, clues_json, key, question, contract)
+        probes = candidates(base, clues_json, key, question, contract, **({"home": home} if lfi else {}))
     if budget is None:
         budget = KNOWN_BUDGET
     if solo:
@@ -155,11 +205,22 @@ def solve_target(question, contract, budget=None, clues=None):
     elif not known and UNKNOWN_KEY_BUDGET > 0:
         budget = min(budget, UNKNOWN_KEY_BUDGET)
     rep = {}
+    gen = handlers.GENERATION
     v = websolve.race(probes, budget=budget, report=rep)
+    # the target answered (clues JSON or a 2xx/3xx home) and ran its race: what MISS-RETRY needs to tell a real miss
+    # on a live app from a still-provisioning target
+    _note_state(responded=True, timed_out=bool(rep.get("timed_out")), gen=gen)
     _log_race({"qid": (question or {}).get("id"), "key": key, "known": known, "solo": bool(solo), "budget": budget,
                "winner": rep.get("winner"), "elapsed": rep.get("elapsed"), "timed_out": rep.get("timed_out"),
-               "keys": sorted(clues_json)[:12]})
+               "keys": sorted(clues_json)[:12], **({"fp": "lfi"} if lfi else {})})
     return v
+
+
+_TLS = threading.local()    # .state: the last solve_target's readiness on this thread (read by _run_target)
+
+
+def _note_state(**state):
+    _TLS.state = state
 
 
 def _prior_sources():
@@ -208,11 +269,34 @@ def _iter_pairs(contract):
     return [(aid, qs[i] if i < len(qs) else {}) for i, aid in enumerate(ids)]
 
 
+_STATE_KEY = "\0state:"    # _run_target's miss record (readiness) -- split off by _Sink, never an answer
+
+
 def _run_target(job):
-    """run_sets job (module level: the fork pool pickles it by name -- a local closure failed every target)."""
+    """run_sets job (module level: the fork pool pickles it by name -- a local closure failed every target). A miss
+    returns its readiness record (solve_target's _note_state) under a _STATE_KEY key, which _Sink keeps out of `out`."""
     aid, q, contract = job
+    _TLS.state = None
     p = solve_target(q, contract)
-    return {aid: p} if p else {}
+    if p:
+        return {aid: p}
+    st = getattr(_TLS, "state", None)
+    return {_STATE_KEY + str(aid): st} if st else {}
+
+
+class _Sink:
+    """The `out` run_sets merges each finished job into: answers go straight into the real `out` (the deadline
+    watchdog prints that one, partials included); _STATE_KEY records go to `states` instead."""
+
+    def __init__(self, out, states):
+        self.out, self.states = out, states
+
+    def update(self, d):
+        for k, v in (d or {}).items():
+            if isinstance(k, str) and k.startswith(_STATE_KEY):
+                self.states[k[len(_STATE_KEY):]] = v
+            else:
+                self.out[k] = v
 
 
 def _jobs(contract):
@@ -227,6 +311,12 @@ def _jobs(contract):
 WEB_MISS_RETRY = int(os.environ.get("HCTF_WEB_MISS_RETRY", "4"))
 WEB_MISS_RETRY_DELAY = float(os.environ.get("HCTF_WEB_MISS_RETRY_DELAY", "2.5"))
 WEB_MISS_RETRY_MIN_LEFT = float(os.environ.get("HCTF_WEB_MISS_RETRY_MIN_LEFT", "4"))
+# D28 post-mortem #8: the miss-retry re-raced Mastery Target 4 -- a LIVE (HTTP 200) app whose race had run out its
+# budget -- 3x (~16.5 s each, ~45 s of the Mastery). It exists for a target still PROVISIONING (transport error / 5xx /
+# not up during the pass); a target that answered and timed out its whole race is a real miss the same handlers will
+# miss again, so it is skipped -- unless a plugin landed since its race (handlers.GENERATION, hot reload). A target
+# that answered but whose race ended early (a transient response, D27) is still retried. 1 = retry every miss (old).
+WEB_MISS_RETRY_LIVE = os.environ.get("HCTF_WEB_MISS_RETRY_LIVE", "0") == "1"
 
 
 def _deadline_left():
@@ -248,20 +338,39 @@ def _is_one_shot(q, contract):
         return False
 
 
+def _retryable(state):
+    """A missed target worth another pass: not known to be a live app that timed out its whole race (no record =
+    retry, the old behaviour), or one whose race predates a plugin loaded since (handlers.GENERATION)."""
+    if WEB_MISS_RETRY_LIVE or not isinstance(state, dict):
+        return True
+    if not (state.get("responded") and state.get("timed_out")):
+        return True
+    return int(state.get("gen") or 0) < handlers.GENERATION
+
+
 def _solve_into(contract, out, pool):
     """First parallel pass over every target, then bounded re-attempts of the misses (a still-provisioning target) while
-    budget remains -- so a slow-to-ready Mastery field is caught deterministically instead of by a 2-min worker."""
+    budget remains -- so a slow-to-ready Mastery field is caught deterministically instead of by a 2-min worker. A live
+    target that timed out its race is not re-raced (WEB_MISS_RETRY_LIVE); plugins are re-scanned before each pass."""
     jobs = _jobs(contract)
-    solverrt.run_sets(jobs, _run_target, out, pool, io_bound=True)
+    states = {}
+    sink = _Sink(out, states)
+    handlers.refresh()      # before the fork: every pass's children inherit what is on disk now
+    solverrt.run_sets(jobs, _run_target, sink, pool, io_bound=True)
     for _ in range(max(0, WEB_MISS_RETRY)):
         if _deadline_left() < WEB_MISS_RETRY_MIN_LEFT:
             break
-        missing = [(aid, q, c) for (aid, q, c) in jobs if not out.get(aid) and not _is_one_shot(q, c)]
+        handlers.refresh()
+        missed = [(aid, q, c) for (aid, q, c) in jobs if not out.get(aid) and not _is_one_shot(q, c)]
+        missing = [j for j in missed if _retryable(states.get(str(j[0])))]
+        if len(missing) < len(missed):
+            retry_ids = {aid for aid, _q, _c in missing}
+            _log_race({"miss_skip_live": [aid for aid, _q, _c in missed if aid not in retry_ids]})
         if not missing:
             break
         _log_race({"miss_retry": [aid for aid, _q, _c in missing], "left": round(_deadline_left(), 1)})
         time.sleep(min(WEB_MISS_RETRY_DELAY, max(0.0, _deadline_left() - WEB_MISS_RETRY_MIN_LEFT)))
-        solverrt.run_sets(missing, _run_target, out, pool, io_bound=True)
+        solverrt.run_sets(missing, _run_target, sink, pool, io_bound=True)
     return out
 
 

@@ -117,7 +117,17 @@ def line(s, t0):
     el = int(time.time() - t0)
     return (f"[res] T+{el // 60}:{el % 60:02d} mem_avail {s['mem_avail_mb']}MB psi_mem some/full "
             f"{s['psi_mem_some']}/{s['psi_mem_full']} psi_cpu {s['psi_cpu_some']} load {s['load1']:.1f} "
-            f"claude {s['claude']} ({s['claude_mb']}MB) unit {s['cg_mb']}MB high_events +{s['cg_high']}")
+            f"claude {s['claude']} ({s['claude_mb']}MB) unit {s['cg_mb']}MB high_events +{s['cg_high']}"
+            + _lag())
+
+
+def _lag():
+    """Orchestrator wake-up lateness over the last HOT_S (D28: 14-15 s sampler gaps at T+0:17-0:46 = GIL stalls)."""
+    try:
+        from . import procgov
+        return procgov.lag_text(HOT_S)
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def start(log, t0=None):
@@ -125,6 +135,11 @@ def start(log, t0=None):
     if not ON:
         return
     t0 = time.time() if t0 is None else t0
+    try:
+        from . import procgov
+        procgov.start_lag_probe()
+    except Exception:  # noqa: BLE001
+        pass
     cg = _cgroup_dir()
     base = _cg_events(cg)
 
