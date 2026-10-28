@@ -14,7 +14,7 @@ set -uo pipefail
 FIX=0; [ "${1:-}" = "--fix" ] && FIX=1
 
 # --- config you may need to update ---------------------------------------------------------------
-TOKEN_EXPIRY="2026-11-01"   # UPDATE THIS after re-pairing (secrets/gm_pairing_token). See reference/RUNBOOK.md.
+TOKEN_EXPIRY="2026-11-01T14:00:00Z"   # exact (secrets/gm_pairing_token.id). UPDATE after re-pairing; see reference/RUNBOOK.md.
 CTF_DAY1="2026-10-01"       # day 01 release date (day N = October N, 09:00 ET); day 31 = CTF_DAY1 + 30 days.
 CTF_LASTDAY=31
 HB_HOST="${HCTF_HB_HOST:-10.1.50.243}"; VPN_DEV="${HCTF_VPN_DEV:-tun0}"
@@ -45,12 +45,15 @@ else
   # projected final CTF day
   last_epoch="$(date -d "$CTF_DAY1 +$((CTF_LASTDAY-1)) days" +%s 2>/dev/null)"
   last_date="$(date -d "@$last_epoch" +%F 2>/dev/null)"
-  if   [ "$days_left" -lt 0 ]; then fail "token EXPIRED ($TOKEN_EXPIRY). Re-pair now."
-  elif [ "$exp_epoch" -lt "$last_epoch" ]; then
-       warn "token expires $TOKEN_EXPIRY ($days_left d) — BEFORE the CTF's last day ($last_date). Re-pair before then or days 30-31 will fail."
-  elif [ "$days_left" -le 2 ]; then fail "token expires in $days_left d ($TOKEN_EXPIRY): re-pair NOW (reference/RUNBOOK.md), then update TOKEN_EXPIRY here."
-  elif [ "$days_left" -le 5 ]; then warn "token expires in $days_left d ($TOKEN_EXPIRY) — re-pair soon."
-  else ok "token present, expires $TOKEN_EXPIRY ($days_left days left; CTF ends ~$last_date)."
+  # the final drop (09:00 ET = 13:00 UTC on the last day) + a 12 h run/post-run window must fit before the expiry; a
+  # fixed "<= 2 days -> FAIL" blocked the D29 launch for a token (11-01T14:00Z) that outlives the CTF by a day (10-29)
+  last_drop_epoch="$(date -d "$last_date 13:00 UTC" +%s 2>/dev/null)"
+  if   [ "$exp_epoch" -le "$now_epoch" ]; then fail "token EXPIRED ($TOKEN_EXPIRY). Re-pair now."
+  elif [ $(( exp_epoch - now_epoch )) -lt 43200 ]; then
+       fail "token expires within 12 h ($TOKEN_EXPIRY): re-pair NOW (reference/RUNBOOK.md), then update TOKEN_EXPIRY here."
+  elif [ "$exp_epoch" -lt $(( last_drop_epoch + 43200 )) ]; then
+       warn "token expires $TOKEN_EXPIRY ($days_left d) — before the CTF's final drop + 12 h ($last_date). Re-pair before then."
+  else ok "token present, expires $TOKEN_EXPIRY ($days_left d left) — outlives the final drop ($last_date 21:00 Manila)."
   fi
 fi
 
