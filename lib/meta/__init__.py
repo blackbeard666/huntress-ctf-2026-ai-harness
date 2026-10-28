@@ -104,6 +104,9 @@ _BUILTIN = {
     # D26: SCCA header executable name (UTF-16LE @0x10, 60 bytes, NUL-terminated) after MAM\x04 Xpress-Huffman
     # decompression -- prebuilt prefetch.pf_value promoted via prefetch.py: "CMD.EXE" single, TT and 10/10 Mastery
     ("prefetch", "executable_name"): _v("prefetch:executable_name", 26),
+    # D27: classic pcap complete packet records (16-byte record headers walked from @24, truncated tail not counted) --
+    # prebuilt pcap.pcap_value promoted via pcap.py: 3 single, 32 TT, 17..39 on 11/11 Mastery sets
+    ("pcap", "packet_count"): _v("pcap:packet_count", 27),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

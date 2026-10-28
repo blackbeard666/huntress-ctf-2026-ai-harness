@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=just|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=justfile_recipe|obfuscation_profile=base64|stage_profile=single_stage|next_language=sh|campaign_id=JF-2d7c5e94|url=https://jf-2d7c5e94.example.invalid/stage|file_path=/tmp/huntress-jf-2d7c5e94/.stage",
+ "decoy": false,
+ "target": "build-file-host-profiles",
+ "note": "justfile `descriptor := p0 + p1 + ..` with {{descriptor}} in a recipe",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bw_gen.py  (stdlib base64/gzip/json writer, inert source)",
+ "oracle_cmd": "perl -ne 'BEGIN{%v=()} $v{$1}=$2 if /^(p\\d+) := .(.*).$/; if (/^descriptor := (.*)$/){print join(\"\", map {$v{$_}} split / \\+ /, $1)}' tests/data/script_fixtures/bw_just_parts.just | base64 -d"
+}

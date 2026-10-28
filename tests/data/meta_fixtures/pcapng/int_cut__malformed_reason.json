@@ -1,0 +1,7 @@
+{
+ "field": "pcapng.malformed_reason",
+ "expected": "truncated_record",
+ "generator_cmd": "text2pcap -q -t '%H:%M:%S.' in.txt base.pcapng (Wireshark 4.6.4 default pcapng); head -c $((832-30)) base.pcapng > ngcut.pcapng",
+ "oracle_cmd": "capinfos -c ngcut.pcapng -> exit 1 'cut short in the middle of a packet' after 4 packets",
+ "decoy": false
+}

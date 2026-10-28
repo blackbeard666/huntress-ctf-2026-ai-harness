@@ -1,0 +1,6 @@
+; inert analysis fixture
+OutFile "fixture.exe"
+Section
+  StrCpy $0 "H4sIAAAAAAACA0WOSwrDMAxEr9TSD3ThW3RvFFtxRY1kLDkpQYdv6CLdvpk3zBIuXoHLgIKBldS7VAxZVq4CGbsv2DMlCzq0USIZ6mAG6R2e59Pt4ZChGfbQuiRUjdpgZX+JWtzRTPuaGnCGKowu0zw0gZHwEZeNWpxA8X71vVrwLxKXivEHnfFj8fj6BS5Y+w65AAAA"
+  DetailPrint "$0"
+SectionEnd

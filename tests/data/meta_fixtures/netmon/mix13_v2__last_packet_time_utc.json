@@ -1,0 +1,8 @@
+{
+ "field": "netmon.last_packet_time_utc",
+ "expected": "2023-11-15T06:13:26.750000Z",
+ "generator_cmd": "editcap 4.6.4 -F netmon2 mix13.pcap mix13.netmon2  (mix13.pcap = existing fixture tests/data/meta_fixtures/pcap/flows_eth_mix__flow_count.bin)",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e mix13.netmon2 -> 'Latest packet time: 2023-11-15 06:13:26.750000'",
+ "decoy": false,
+ "member": "mix13.netmon2"
+}

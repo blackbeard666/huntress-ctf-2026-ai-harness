@@ -1,0 +1,7 @@
+{
+ "field": "hosts.remote_ips",
+ "expected": "none",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "sed 's/#.*//' tests/data/meta_fixtures/hosts/decoy_fstab__remote_ips.bin | awk 'NF>=2 && $1 ~ /^[0-9.:]+$/{print $1}' | python3 -c 'import sys,json;v=sorted(set(l.strip() for l in sys.stdin.read().splitlines() if l.strip()));print(json.dumps(v,separators=(\",\",\":\")) if v else \"none\")'",
+ "decoy": true
+}

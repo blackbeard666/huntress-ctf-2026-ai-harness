@@ -1,0 +1,7 @@
+{
+ "field": "dns_cache.dns_query_names",
+ "expected": "[\"localhost\",\"login.microsoftonline.com\",\"login.mso.msidentity.com\",\"updates.contoso-cdn.net\"]",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "grep -oP 'Record Name[ .]*: \\K\\S+' tests/data/meta_fixtures/dns_cache/displaydns__dns_query_names.bin | python3 -c 'import sys,json;v=sorted(set(l.strip() for l in sys.stdin.read().splitlines() if l.strip()));print(json.dumps(v,separators=(\",\",\":\")) if v else \"none\")'",
+ "decoy": false
+}

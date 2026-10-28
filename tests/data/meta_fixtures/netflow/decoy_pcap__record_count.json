@@ -1,0 +1,8 @@
+{
+ "field": "netflow.record_count",
+ "expected": "none",
+ "generator_cmd": "copy of tests/data/meta_fixtures/pcap/app_app__http_hosts.bin (Wireshark-written pcap, no NetFlow)",
+ "oracle_cmd": "tshark -r plain.pcap -Y cflow -d udp.port==2055,cflow | wc -l -> 0",
+ "decoy": true,
+ "member": "plain.pcap"
+}

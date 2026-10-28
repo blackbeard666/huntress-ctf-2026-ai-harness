@@ -1,0 +1,7 @@
+{
+ "file": "vif_awk_split3.awk",
+ "expected_plain": "v=3|language=awk|role=launcher|verdict=malicious|attack=T1105|adapter=build_interp|host_profile=ci_runner|obfuscation_profile=split_variables|stage_count=2|steps=resolve_vars,fold_descriptor,dispatch|campaign_id=AWK-7a1c1a|file_path=/tmp/awk7a1c.bin",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/vif_gen.py (hex split 3, d = x y z)",
+ "oracle_cmd": "gawk -f vif_awk_split3.awk | python3 -c 'import sys;print(bytes.fromhex(sys.stdin.read().strip()).decode())'"
+}

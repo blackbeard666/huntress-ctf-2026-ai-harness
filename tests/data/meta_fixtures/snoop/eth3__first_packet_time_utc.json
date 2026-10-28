@@ -1,0 +1,8 @@
+{
+ "field": "snoop.first_packet_time_utc",
+ "expected": "2026-03-14T09:26:53.589793Z",
+ "generator_cmd": "editcap 4.6.4 -F snoop eth3.pcap eth3.snoop  (eth3.pcap = existing fixture tests/data/meta_fixtures/pcap/eth_us__packet_count.bin)",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e eth3.snoop -> 'Earliest packet time: 2026-03-14 09:26:53.589793'",
+ "decoy": false,
+ "member": "eth3.snoop"
+}

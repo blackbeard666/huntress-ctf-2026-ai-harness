@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-21-double-spent",
+  "lane": "web",
+  "name": "🌐 Double Spent",
+  "ids": {
+    "single_solve": "web-exploitation-day-21-double-spent",
+    "time_trial": "web-exploitation-day-21-double-spent/time_trial",
+    "mastery": "web-exploitation-day-21-double-spent/mastery"
+  }
+}

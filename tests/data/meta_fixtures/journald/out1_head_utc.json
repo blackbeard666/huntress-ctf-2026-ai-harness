@@ -1,0 +1,8 @@
+{
+ "field": "journald.head_entry_realtime_utc",
+ "expected": "2023-11-14T22:13:20Z",
+ "generator_cmd": "systemd-journal-remote 259.9 (apt-get download systemd-journal-remote libmicrohttpd12t64; dpkg -x) --split-mode=none -o out1.journal exp1.txt (export-format input); fixture = head -c 4096 of the 8 MiB file (header only)",
+ "oracle_cmd": "TZ=UTC journalctl --file out1.journal --header -> Head realtime timestamp: Tue 2023-11-14 22:13:20 UTC",
+ "decoy": false,
+ "member": "system.journal"
+}

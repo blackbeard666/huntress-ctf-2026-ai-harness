@@ -1,4 +1,5 @@
-"""PCAP / PCAPNG capture-file header fields (prebuilt, SPECULATIVE -- never GM-asked yet). Pure struct.
+"""PCAP / PCAPNG capture-file header fields (prebuilt, SPECULATIVE; pcap.packet_count is GM-verified D27 via
+lib/meta/pcap.py, which calls pcap_value here). Pure struct.
 
 Classic pcap (libpcap file format): 24-byte global header = magic u32 @0, version_major u16 @4, version_minor u16 @6,
 thiszone i32 @8, sigfigs u32 @12, snaplen u32 @16, network (LINKTYPE_*) u32 @20; then records = ts_sec u32,
@@ -20,7 +21,11 @@ not counted. first/last_packet_time_utc: the record timestamp (unix epoch, UTC) 
 the fraction at the file's own resolution (6 digits usec, 9 nsec, as capinfos prints it), dropped when it is zero or
 when the answer_format spells a seconds-only 'HH:MM:SS' pattern; *_unix -> integer epoch seconds.
 if_names = every IDB's if_name in IDB order (all sections; IDBs without one are skipped) -> JSON list.
-Both fmts read both containers (a pcapng asked as "pcap" is still answered from its bytes). Anything else (snoop/ERF/
+Both fmts read both containers (a pcapng asked as "pcap" is still answered from its bytes). A gzip/zstd/lz4/xz-wrapped
+capture (`capture-001.pcap.gz`; capinfos opens it transparently) is decompressed first. Classic-pcap version numbers
+are not checked (AIX 2.2/2.3 and other writers' versions still parse with the magic's record layout); a 0-byte record
+counts. PCAPNG counts EPB 6 + SPB 3 + obsolete PB 2 across every section (each SHB re-sets byte order); IDB/ISB/NRB/
+DSB/custom 0xbad/0x40000bad blocks are not packets. Anything else (snoop/ERF/
 renamed impostor) -> "none"; an option/field the file lacks (if_names of a classic pcap, absent shb_os) -> "none"."""
 import datetime
 import json
@@ -125,7 +130,7 @@ FIELDS = {
     ("pcap", "max_packet_length"): "pcap_value", ("pcapng", "max_packet_length"): "pcap_value",
     ("pcap", "thiszone"): "pcap_value", ("pcap", "this_zone"): "pcap_value", ("pcap", "timezone_offset"): "pcap_value",
     ("pcap", "sigfigs"): "pcap_value", ("pcap", "timestamp_accuracy"): "pcap_value",
-    ("pcap", "packet_count"): "pcap_value", ("pcapng", "packet_count"): "pcap_value",
+    ("pcapng", "packet_count"): "pcap_value",
     ("pcap", "packets"): "pcap_value", ("pcapng", "packets"): "pcap_value",
     ("pcap", "number_of_packets"): "pcap_value", ("pcapng", "number_of_packets"): "pcap_value",
     ("pcap", "num_packets"): "pcap_value", ("pcapng", "num_packets"): "pcap_value",
@@ -296,10 +301,51 @@ def _parse_pcapng(b):
     return p
 
 
+_MAX_UNPACKED = 64 << 20
+
+
+def _unwrap(b):
+    """A compressed capture (Wireshark opens these transparently: `.pcap.gz`, `.pcapng.zst`, `.lz4`, `.xz`) -> its
+    decompressed bytes (bounded); concatenated gzip members are all read; a cut-short stream keeps what inflated."""
+    head = bytes(b[:6])
+    try:
+        if head[:2] == b"\x1f\x8b":
+            import zlib
+            out, rest = b"", bytes(b)
+            while rest[:2] == b"\x1f\x8b" and len(out) < _MAX_UNPACKED:
+                d = zlib.decompressobj(31)
+                try:
+                    out += d.decompress(rest, _MAX_UNPACKED - len(out))
+                except zlib.error:
+                    break
+                if not d.eof:
+                    break
+                rest = d.unused_data
+            return out
+        if head[:4] == b"\x28\xb5\x2f\xfd":
+            import io
+            import zstandard
+            return zstandard.ZstdDecompressor().stream_reader(io.BytesIO(bytes(b))).read(_MAX_UNPACKED)
+        if head[:4] == b"\x04\x22\x4d\x18":
+            import lz4.frame
+            return lz4.frame.decompress(bytes(b))[:_MAX_UNPACKED]
+        if head == b"\xfd7zXZ\x00":
+            import lzma
+            return lzma.LZMADecompressor().decompress(bytes(b), _MAX_UNPACKED)
+    except Exception:     # noqa: BLE001 -- a damaged wrapper is "not a capture", never a raise
+        return None
+    return None
+
+
 def _parse(b):
     if not b:
         return None
-    return _parse_pcapng(b) or _parse_pcap(b)
+    p = _parse_pcapng(b) or _parse_pcap(b)
+    if p is None:
+        inner = _unwrap(b)
+        if inner:
+            p = _parse_pcapng(inner) or _parse_pcap(inner)
+    return p
 
 
 def _iso(t, q):

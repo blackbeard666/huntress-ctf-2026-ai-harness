@@ -1,0 +1,7 @@
+{
+ "entry": "zip_slip_scan",
+ "expected": "ANS-c5d6e7f8091a2b3c",
+ "_why": "zip slip onto the code-cache dex: '../../code_cache/plugin.dex' then 'x/../../../code_cache/./plugin.dex' (x/ created by a directory entry) both land on code_cache/plugin.dex, the later dex's token wins; backslash and absolute names stay inside unpacked/",
+ "generator_cmd": "python3 tests/data/android_fixtures/zsl_src/gen_zsl.py codecache_dex tests/data/android_fixtures/zsl_codecache_dex.apk  # javac --release 8 + d2j-jar2dex classes.dex of zsl_src/Loader.java (ZipInputStream + new File(dir,name) + FileOutputStream, reads code_cache/plugin.dex); assets/bundle.zip by python zipfile with raw ../, absolute, backslash and duplicate names",
+ "oracle_cmd": "sh tests/data/android_fixtures/zsl_src/oracle.sh tests/data/android_fixtures/zsl_codecache_dex.apk plugin  # unzip -p the asset, run Loader.java's own unpack on a desktop JVM (java.util.zip + java.io.File, kernel path walk) in a temp data dir, strings | grep -oE 'ANS-[0-9a-f]{16}' on the file the app reads"
+}

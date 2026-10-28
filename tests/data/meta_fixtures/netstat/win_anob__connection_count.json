@@ -1,0 +1,7 @@
+{
+ "field": "netstat.connection_count",
+ "expected": "3",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "awk '$1 ~ /^(TCP|UDP)$/ && $4 != \"LISTENING\" && $3 !~ /^(\\*:\\*|0\\.0\\.0\\.0:0|\\[::\\]:0)$/' tests/data/meta_fixtures/netstat/win_anob__connection_count.bin | wc -l",
+ "decoy": false
+}

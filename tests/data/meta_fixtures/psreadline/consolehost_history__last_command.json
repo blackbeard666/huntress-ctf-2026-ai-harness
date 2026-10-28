@@ -1,0 +1,7 @@
+{
+ "field": "psreadline.last_command",
+ "expected": "Clear-History",
+ "generator_cmd": "python3 /home/testpwn/huntress-2026/.run/tmp/prebuild-a741ef11/wtd/gen.py (stdlib text writer: open(..., 'w', encoding='utf-16'|'utf-8', newline='\\r\\n') of the literal lines -- see the .bin); PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "tr -d '\\r' < tests/data/meta_fixtures/psreadline/consolehost_history.bin | grep -v '^\\s*$' | tail -1",
+ "decoy": false
+}

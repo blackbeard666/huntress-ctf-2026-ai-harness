@@ -1,8 +1,8 @@
-# Coverage atlas -- binary-reverse-engineering (as of D26 post-run, 2026-10-26)
+# Coverage atlas -- binary-reverse-engineering (as of D27 post-run, 2026-10-27)
 
-Scope: what a D26+ `evidence.zip` group (or backfilled old-group id) could be, how we would recognise it, which standard tool answers it, and how ready we
-are. Grounded in `reference/techniques/binary-reverse-engineering.md` (lane log D1-D26), `challenges/day25/binary-out-of-bounds/solver/` (carried over unchanged since D23),
-`challenges/day26/binary-crash-course/solver/` (same cumulative solver + a crash-sidecar branch), `lib/binary.py` (`hcfg_scan`/`hcfg_find`, `packer_info`, `unpack_upx`, `go_buildinfo`, `go_pclntab_funcs`, `rustfilt`, `macho_facts`,
+Scope: what a D28+ `evidence.zip` group (or backfilled old-group id) could be, how we would recognise it, which standard tool answers it, and how ready we
+are. Grounded in `reference/techniques/binary-reverse-engineering.md` (lane log D1-D27), `challenges/day25/binary-out-of-bounds/solver/` (carried over unchanged since D23),
+`challenges/day26/binary-crash-course/solver/` (same cumulative solver + a crash-sidecar branch), `challenges/day27/binary-compiler-says-what/solver/` (same solver, zero new code), `lib/binary.py` (`hcfg_scan`/`hcfg_find`, `packer_info`, `unpack_upx`, `go_buildinfo`, `go_pclntab_funcs`, `rustfilt`, `macho_facts`,
 `recover_return_constants`, `ghidra_decompile`, `jar_app_classes`, `wasm_layout`) and `tests/data/binary_fixtures/TARGETS.json` (all 9 targets have fixtures).
 
 Progression so far: D1-D14 = one new compiled language per day (container nearly always ELF64 x86-64, HCFG blob re-stored per
@@ -83,17 +83,33 @@ resolved = the Main-Class) + the THEME, ASKED for the first time since D20: `cra
 `crash_frames_match_methods` (every frame in the primary class method-name set -> `true`). Race solver banked 310 ids by T+45 s
 with no new code; a worker added the sidecar branch (~15 lines) -> CORRECT T+76 s, 0 wrong; TT 5.3 s / Mastery 10 sets (3120 ids)
 8.2 s first try. Crash values identical in all 12 deliveries (only config re-rolled).
+**D27 "Compiler Says What" (compiler-attribution)** = a V-language TWIN pair named by COMPILER: `d27--sample-gcc.elf` (member 1,
+108 KB: gcc 12.2.1 20220924 Alpine, `-Os -std=c99 -ffreestanding ... -ffunction-sections -fdata-sections`, LTO -> `.lto_priv.N`/
+`.constprop.N`/`.isra.N` suffixes, ~200 symbols, DWARF 5 with DW_AT_producer, FILE `crtstuff.c`, `.eh_frame_hdr` + `.gnu.hash`) +
+`d27--sample-tcc.elf` (member 2, 462 KB: tcc, STABS `.stab`/`.stabstr` instead of DWARF, `.hash` only, input sections left
+unmerged (`.text._start_c`, `.rodata.str1.1`, `.data.ro`, `.data.rel.ro.local`), 4 separate NT_GNU_PROPERTY notes, ~1900 symbols
+incl. `main__main`, `_vinit`, `tcc_backtrace`/`tcc_state`). Both ELF64 x86-64 ET_EXEC, dynamic musl (`/lib/ld-musl-x86_64.so.1`,
+NEEDED `libc.musl-x86_64.so.1`), Boehm GC bundled, NO `.comment`, NO build-id. HCFG RAW appended exactly at e_shoff+e_shnum*64
+(379-B tail, no overlay magic) in both; question "Scan backward from the end of the member for literal HCFG magic and accept the
+first CRC32-valid". Trace family `v_cross_backend_attribution_trace`/`equivalent_behavior_only`. Prompt: "Every compiler signs
+its work. Compare the runtime and linker fingerprints across builds and name the toolchain -- attribute this binary to its maker."
+324 ids = 312 + 12 with the D24/D25 twin template (roles `gcc`/`tcc`: 2 sha256, `<role>_format` `elf`, `<role>_machine` integer
+62, 4 consensus config_*, 2 `gcc_config_*`). Theme UNASKED. Carried-over solver, ZERO new code -> CORRECT T+56 s, 0 wrong; TT
+5.4 s / Mastery 11 sets (3564 ids) 14.5 s first try.
 Arc since D18 = one structure/behaviour concept per day: call graph -> packing -> resources/overlays -> shared libraries ->
 managed/native bridge -> anti-analysis predicates -> PATCH DIFFING (D24, null deref) -> BOUNDS-ERROR ROOT CAUSE + REACHABILITY
-(D25, OOB read) -> CRASH TRIAGE (D26, synthetic stack trace sidecar + frames-vs-methods predicate, ASKED). Vuln-research arc
-D24-D26 continues into D27-D31 (5 days left): the crash artifact going NATIVE (ELF core NT_PRSTATUS/NT_SIGINFO, Windows
-minidump, sanitizer/ASan or hs_err report) with "faulting instruction" = RIP -> function + capstone decode, stack unwinding
-(RBP chain / .eh_frame CFI / .pdata), exploitability + mitigations (canary/NX/PIE/RELRO), symbolization of stripped frames,
-obfuscated-trace retrace (ProGuard mapping), another bug class (int overflow, UAF, format string, deserialization, race), then a
-capstone/backfill day re-asking themes on old groups. Language track: Groovy closed the obvious JVM list (Scala, Clojure, Groovy
-in a row); next = niche JVM (JRuby/Jython/Ceylon/Frege), C++/CLI, Elixir/BEAM, Haxe->Neko (`neko_bytecode` still unseen).
-**Forward hints still open**: `neko_bytecode` in the format enum (unseen through D26). The d07 "Day 26 ... primary classfile named
-by that unit" leak came true (the Groovy Main-Class). No new magic token / day number in the D20-D26 contracts: next twist
+(D25, OOB read) -> CRASH TRIAGE (D26, synthetic stack trace sidecar + frames-vs-methods predicate, ASKED) -> COMPILER
+ATTRIBUTION (D27, same source via gcc and tcc, "runtime and linker fingerprints", UNASKED). The vuln arc stopped after 3 days
+(no native crash artifact came); D27 opened a PROVENANCE / ATTRIBUTION direction. D28-D31 (4 days left) most plausible, in
+order: (1) the attribution theme deepened or ASKED (per-build compiler/version/linker/libc/debug-format/opt-level fields; a third
+backend: clang, zig cc, MSVC vs MinGW PE via Rich header; cross-compiler function matching), (2) code-similarity / family
+attribution ("which build/family is this": fuzzy hashes, imphash, function-hash overlap, YARA), (3) a native crash/exploit sequel
+of D24-D26 (core/minidump/ASan, exploitability, mitigations), (4) a capstone/backfill re-asking themes on old groups (D31).
+Language track: D22-D26 "new language on an old runtime" 5x; D27 = a TRANSPILE-TO-C language (V, built by two C compilers) --
+next candidates in that family: Vala/Genie (GObject), Cython, Nim-via-clang, hxcpp, Chicken Scheme, Odin/Hare (own backends);
+plus Haxe->Neko (`neko_bytecode` still unseen), Elixir/BEAM, niche JVM.
+**Forward hints still open**: `neko_bytecode` in the format enum (unseen through D27). The d07 "Day 26 ... primary classfile named
+by that unit" leak came true (the Groovy Main-Class). No new magic token / day number in the D20-D27 contracts: next twist
 unannounced.
 Lessons for D21+: (a) read the longest question of each new family first -- it is the layout spec; (b) every `*_size`/`*_offset`/
 `*_sha256` id maps to ONE named header field: parse the spec into a struct and expose every field; (c) grep each contract for
@@ -109,13 +125,18 @@ Scala logic lives in the `$` module class, not the Main-Class forwarder; (k) D25
 language -- and the only failure was SOLVER PLUMBING at 9 Mastery sets (caches keyed on object identity): key per-member state
 on (delivery, member name)/sha256, and treat "wrong value that is a valid answer for another group" as a routing/cache bug;
 (l) D26: the theme CAN be asked, through a small JSON sidecar inside the member (`crash/trace.json`) + a structural cross-check
-(frames vs method_info names) -- list every non-code entry/section/resource of a new member and parse JSON sidecars up front.
+(frames vs method_info names) -- list every non-code entry/section/resource of a new member and parse JSON sidecars up front;
+(m) D27: role tokens can be COMPILER names (`gcc`/`tcc`) -- the generic longest-member-token peel handled them; the HCFG scan
+DIRECTION is in the question ("scan backward from the end") -- honour it per id; theme facts (producer, debug format, linker
+section layout, libc) were unasked but are recorded in Recognition cues.
 Asked field names: config_*, format (enum), machine, architecture, elf_class, elf_type, endianness, entry_point, symbols,
 section_names, disassembly, marker, recover_code, has_symtab, has_cpp_*, has_go_runtime, has_rust_mangled_symbol,
 has_coroutine_runtime, mangled_score_symbol, typeinfo_symbol, methods, access_flags, method_count, has_hcfg_section, hcfg_offset,
 hcfg_version, hcfg_storage (enum), xor_key_hex, metadata_version, compression_methods, overlay_offset, overlay_size,
-hcfg_resource_size, `<role>_machine` (D21 loader/plugin, integer), `<role>_format` + `<role>_config_*` (D24 vulnerable/corrected), `crash_fault_method`, `crash_frames_match_methods` (D26).
-Remaining risks: (00000) a NATIVE crash artifact (core/minidump/sanitizer log) next to an ELF/PE: signal/exception code, faulting
+hcfg_resource_size, `<role>_machine` (D21 loader/plugin, integer), `<role>_format` + `<role>_config_*` (D24 vulnerable/corrected; D27 `<role>_machine` + `<role>_format` + `gcc_config_*`, roles gcc/tcc), `crash_fault_method`, `crash_frames_match_methods` (D26).
+Remaining risks: (000000) the D27 attribution theme ASKED (`<role>_compiler`/`toolchain`/`compiler_version`/`linker`/`libc`/
+`debug_format`/`producer`/`opt_level` per build, or "which member was built by X") -- label spelling unknown (expect an enum like
+D17; lowercase tool names gcc/tcc/clang), facts must come from producer/sections/symbols because `.comment` was stripped; (00000) a NATIVE crash artifact (core/minidump/sanitizer log) next to an ELF/PE: signal/exception code, faulting
 RIP -> function + instruction, frame list by unwinding, fault-address class -- or the D26 sidecar idea in another container
 (ELF section/PE resource/separate member) with frames as `Class.method(File:line)` or addresses; (0000) the twin arc's facts asked as fields on d24/d25 (changed function, bug class/CWE, trigger input, gating
 env vars + values, exception class, guard constant) or a NATIVE twin whose diff needs function matching; (000) the D24 diff asked as fields (changed method name/descriptor, bug class / CWE, trigger input, outcome
@@ -157,7 +178,7 @@ unluac/luajit-decompiler (luac present), blutter, srecord (srec_cat), binutils-m
 | 12 | Objective-C (GNUstep) ELF | seen D14 | `__objc_selectors`/`__objc_classes`, `objc_msg_lookup`, `._OBJC_CLASS_` | [I] `readelf -sW f \| grep -E '_OBJC_CLASS_\|objc_sel_name_'` | high (carry-over) |
 | 13 | Haskell (GHC) | **seen D20** (GHC 9.12.2, 1.2 MB DYNAMIC (libgmp/libm/libc), gold, not stripped, config in the RS20 overlay, not the image) | `Main_main*_closure`/`_info`, z-encoded `ghczminternal_GHCziInternalzi*`, `UnitLinkOpts {hsLibs = ["-lHSbase-4.21...` string, `.debug-ghc-link-info` section, `.note.gnu.gold-version` | [I] `strings -a f \| grep -m2 -E 'GHC [0-9]\|hsLibs'`; `nm f \| grep -c _info$`; [M] ghc, hsdecomp | high (carry-over; its theme facts = backfill candidates) |
 | 14 | OCaml native | **seen D21** (4.02.3: loader PIE 780 KB with debug_info + Dynlink; plugin `.cmxs` ET_DYN 9 KB, HCFG RAW `.data` = `camlPlugin_000__1`) | `caml_startup`, `camlStdlib__`/`camlCamlinternalFormat__`, `caml_main`, `OCAMLRUNPARAM`, version string `4.02.3`; `.cmxs`: `caml_plugin_header`, `Caml2007D002` | [I] `nm f \| grep -m5 '^.* T caml'`; `nm -D --defined-only f.cmxs`; `grep -abo HCFG f.cmxs`; [M] ocaml | high (carry-over; d21 theme facts = backfill candidates) |
-| 15 | V language | gap | `main__main`, `v__`/`builtin__` symbols, compiled via C (`.comment` GCC/tcc) | [I] `nm f \| grep -E 'main__main\|builtin__'` | low-med |
+| 15 | V language | **seen day27** (gcc + tcc builds of one V source, musl-dynamic ELF64; HCFG RAW appended at image_end; no `.comment`) | `main__main`, `_vinit`/`_vcleanup`, `builtin__*`/`strconv__*`/`Array_string_*`, `_const_<mod>__<x>`, `V panic: `, Boehm `GC_*`; gcc LTO build hides most V symbols (~200 syms) | [I] `nm f \| grep -E 'main__main\|builtin__\|_vinit'`; `strings -a f \| grep -m1 'V panic'` | high (carry-over d27 group; attribution facts = backfill candidates) |
 | 16 | Dart AOT (`dart compile exe`) / Flutter `libapp.so` | gap | `_kDartVmSnapshotData`/`_kDartIsolateSnapshotInstructions` symbols, `Dart_` strings, snapshot hash | [I] `readelf -sW f \| grep _kDart`; [M] blutter (`github.com/worawit/blutter`) | low-med (snapshot strings are compressed: HCFG may not be byte-visible) |
 | 17 | Fortran (gfortran) | **seen D18** (16.5 KB dynamic ELF, not stripped, HCFG RAW `.rodata` `encoded_config.4`) | `libgfortran.so.5` NEEDED, `_gfortran_*` imports (get_environment_variable_i4, select_string, st_write), `MAIN__`, FILE sym `variant-000.f90`, internal procs `name.N`, `jumptable.N.M` (select_string case table), `options.N.M` | [I] `readelf -dW f \| grep NEEDED`; `nm -D f \| grep gfortran`; `objdump -d -M intel --disassemble=MAIN__ f` (runtime `libgfortran.so.5` is installed; no gfortran compiler) | high (carry-over from D19; its theme facts = backfill candidates) |
 | 18 | Ada (GNAT) | **seen D17** (1.4 MB dynamic ELF, GNAT 14.2.0, not stripped, DWARF) | `GNAT Version: 14.2.0`, `ada__*`/`system__*`/`__gnat_*` symbols, `ADA.STRINGS.*_ERROR`, `.gcc_except_table`; HCFG RAW in `.rodata` | [I] `strings -a f \| grep -m1 'GNAT Version'`; `grep -abo HCFG f` (crc-gate); Ada names `pkg__sub` -> `pkg.sub`; [M] gnat (no fixture builds) | high (carry-over; a backfill may ask `has_gnat_runtime`/decoder facts) |
@@ -168,7 +189,7 @@ unluac/luajit-decompiler (luac present), blutter, srecord (srec_cat), binutils-m
 | 23 | Legacy Windows: Delphi, VB6, AutoIt | gap (AutoIt tooled) | Delphi `Borland`/`Embarcadero`, `DVCLAL`, `PACKAGEINFO` RCDATA; VB6 `MSVBVM60.DLL`, `VB5!`; AutoIt `AU3!EA06`, RCDATA `SCRIPT` | [I] `bin/autoit-ripper f.exe out/`; python `pefile` resources; [M] IDR/DIE | low (lane is Linux-first; Pascal already done via FPC) |
 | 24 | Niche native langs: Odin, Hare, Vala, Chapel; other GCC front-ends: Modula-2 (gm2), gcobol (GCC 15), Algol 68 (ga68), gccgo | gap (D17 Ada, D18 Fortran, D19 GnuCOBOL = three 'legacy/enterprise' languages in a row) | gm2 `libm2pim.so`/`libm2iso.so`, `_M2_<Mod>_init`/`_M2_<Mod>_fini`; gcobol `libgcobol.so`; gccgo `libgo.so`, `__go_`/`runtime.` with `.go.buildinfo` absent; Odin `runtime.`/`__$startup_runtime`; Vala `g_object_`/GLib | [I] `readelf -dW f \| grep NEEDED`; `nm f \| head` | med (the organizers clearly have a "one more language" list) |
 | 25 | MSVC PE (vs MinGW) | gap (MinGW seen D2) | `Rich`/`DanS` header, `.text$mn`, debug dir RSDS + `.pdb` path, `VCRUNTIME140.dll` | [I] `objdump -x f.exe`; python `pefile` (`RICH_HEADER`, `DIRECTORY_ENTRY_DEBUG`) | low-med |
-| 26 | musl / static linking | seen D4, D5, D8, D12 (static); musl gap | no `.interp`, no `.dynamic`; musl: no `GLIBC_2.` version strings, `__libc_start_main` absent | [I] `readelf -lW f \| grep -c INTERP`; `strings -a f \| grep -c GLIBC_` | med (cheap twist "Static") |
+| 26 | musl / static linking | seen D4, D5, D8, D12 (static); **musl DYNAMIC seen day27** (PT_INTERP `/lib/ld-musl-x86_64.so.1`, NEEDED `libc.musl-x86_64.so.1`, Alpine aports path) | no `.interp`, no `.dynamic`; musl: no `GLIBC_2.` version strings, `__libc_start_main` absent | [I] `readelf -lW f \| grep -c INTERP`; `strings -a f \| grep -c GLIBC_` | med (cheap twist "Static") |
 | 27 | Mach-O thin / fat universal | prebuilt (macho-hcfg-section; never seen) | `cffaedfe`/`cefaedfe` (thin), `cafebabe` + nfat_arch<20 (fat: collides with Java class magic), `__TEXT`/`__DATA_CONST`, `LC_MAIN` | [I] `/usr/lib/llvm-18/bin/llvm-otool -hlv f`; `llvm-lipo -info f`; `rz-bin -I f`; python `lief` | med-high (Swift/ObjC days were ELF, but `macho` already sits in the playbook format law; label presumed `macho`) |
 | 28 | WebAssembly module | **seen D16** (`-compact`/`-direct` pair) | `\0asm` + u32 1, 5-byte padded LEB128 sizes; D16: type/function/memory/export(`memory`,`evaluate`)/code/data, NO import/table/elem; HCFG RAW at data seg 0 (mem 1024) | [I] `lib.binary.wasm_layout(data)`; `wasm-objdump -x f.wasm; wasm2wat f.wasm`; GM: format `wasm`, architecture `wasm32` (exact_text, first try) | high (carry-over; Mastery may re-roll memory64 -> `wasm64`?) |
 | 29 | Relocatable object (ELF ET_REL / COFF .o) | prebuilt (shared-object-relocatable) | ELF e_type 1, `.rela.text`, no program headers, entry 0; COFF: no MZ, Machine u16 at 0 | [I] `readelf -hrW f.o; objdump -r f.o`; `llvm-readobj-18 --file-headers f.obj` | low-med (`elf_type` asked since D8: `ET_REL` would be new value) |
@@ -205,7 +226,7 @@ unluac/luajit-decompiler (luac present), blutter, srecord (srec_cat), binutils-m
 | 60 | Entry point + function constant (`disassembly`, recover_code) | seen D1 (entry), D1/D8/D15 (disassembly), D17 (recover_code re-asked; stripped d01 in TT/Mastery -> `none`) | `e_entry` / `AddressOfEntryPoint`+ImageBase; leaf `b8 imm32 c3` | [I] `readelf -h f \| grep Entry`; `objdump -d -M intel --no-show-raw-insn f`; `lib.binary.recover_return_constants` | high (carry-over fields) |
 | 61 | Imports / NEEDED libs / interpreter | gap -- D21's OWN THEME ("trace the exports, the imports") but unasked (loader NEEDED libm/libdl/libc; plugin NEEDED libc, weak `__cxa_finalize`/`__gmon_start__`); prebuilt native-imports-exports-facts | `.dynsym` UND, `DT_NEEDED`, `.interp`; PE import dir | [I] `readelf -dW f \| grep NEEDED; nm -D --undefined-only f; readelf -p .interp f`; `objdump -p f.exe` | high (backfill of the d21 theme; list order/spelling unknown -> dynsym/DT_NEEDED table order) |
 | 62 | Sections / segments / symbols lists | seen D1, D8 | pyelftools order incl. leading `""`; `.symtab` names, dupes kept | [I] pyelftools; `readelf -SW f; readelf -sW f` | high |
-| 63 | Build provenance: GNU build-id, `.comment` compiler banner, Go buildinfo, rustc commit, PE timestamp/Rich/PDB | gap (Go buildinfo used internally) | `.note.gnu.build-id` (20-byte SHA1), `GCC: (Debian 15...)`, `go1.NN`, `/rustc/<sha>`, `TimeDateStamp`, RSDS | [I] `readelf -nW f`; `readelf -p .comment f`; `go version -m f`; `pefile` `FILE_HEADER.TimeDateStamp` | med (natural "compiler/language" id; label spelling unknown) |
+| 63 | Build provenance: GNU build-id, `.comment` compiler banner, Go buildinfo, rustc commit, PE timestamp/Rich/PDB | **seen day27 as THEME (unasked)**: no `.comment`, no build-id on either build; gcc DW_AT_producer `GNU C99 12.2.1 20220924 ... -Os` + `GNU AS 2.40`; tcc only via STABS + layout (Go buildinfo used internally) | `.note.gnu.build-id` (20-byte SHA1), `GCC: (Debian 15...)`, `go1.NN`, `/rustc/<sha>`, `TimeDateStamp`, RSDS | [I] `readelf -nW f`; `readelf -p .comment f`; `go version -m f`; `pefile` `FILE_HEADER.TimeDateStamp` | med (natural "compiler/language" id; label spelling unknown) |
 | 64 | Demangling + C++ vtable/typeinfo | seen D2, D8 (has_cpp_*) | `_Z`, `_ZTV`, `$s` Swift, `_D` D, Nim `__mod_u`, Rust `_R`/`17h..E` | [I] `c++filt`, `rustfilt`, `swift-demangle`, `nim-demangle`, `llvm-cxxfilt-18`; GM wants MANGLED form | high (carry-over) |
 | 65 | File hashes beyond sha256 (imphash, ssdeep, TLSH, md5) | gap | id names like `imphash`/`ssdeep`; only sha256 asked so far | [I] python `pefile` `get_imphash()`, `md5sum`; [M] ssdeep/tlsh python | low |
 | 66 | Multi-member group, qualifier ids `dNN_analysis_<tag>_<field>` | seen D15 (stripped/symbolized), D16 (compact/direct), **D21 (loader/plugin ROLES: different binaries, HCFG only in the plugin; unqualified ids name the member in the question)**, D22 (unqualified ids, "primary managed assembly" + support members, no tag), **seen day24 (vulnerable/corrected twins; unqualified config_* = consensus of both members)** | two `dNN--variant-XXX-<tag>.<ext>` members, near-identical sizes, same HCFG; sha256_K = archive order (reverse-alpha both days); config asked for one tag only | [I] solver `_qualified` router (file-name token -> member; structural fallback) | med-high (D15-D16 pairs, D17 broke the streak; D17 backfill asked config ids for the other tag too; next tags: static/dynamic, O0/O2, pie/nopie, packed/unpacked, x86_64/aarch64) |
@@ -242,7 +263,7 @@ unluac/luajit-decompiler (luac present), blutter, srecord (srec_cat), binutils-m
 | 97 | Library search path / loader resolution (DT_RPATH/RUNPATH, `$ORIGIN`, interpreter path, DT_FLAGS_1, `dlopen` path string) | gap (D21 trace effects `controlled_library_resolution_only`) | `readelf -dW` RPATH/RUNPATH, `.interp` not ld-linux, relative `./plugin.so` strings | [I] `readelf -dW f; readelf -p .interp f` | med-high |
 | 98 | TLS / IFUNC / constructors as loader handshake (PT_TLS, `.tdata/.tbss`, STT_GNU_IFUNC resolvers, `.init_array` order, DT_INIT) | gap (prebuilt init-time-decoder covers constructors) | `readelf -lW` TLS segment, IFUNC symbol type, IRELATIVE relocs | [I] `readelf -sW f \| grep IFUNC; readelf -x .init_array f` | med |
 | 99 | Cross-language FFI boundary (cgo `_cgo_`, Rust `extern "C"`/`#[no_mangle]` cdylib, JNI `Java_*`, Python `PyInit_*`, OCaml `caml_*` C stubs) | gap (D22's prompt named "P/Invoke and FFI"; only .NET P/Invoke shipped) | C-ABI exports in a non-C binary, `crosscall2`, `JNI_OnLoad` | [I] `nm -D --defined-only f`; GoReSym; `rustfilt` | med ("mind the boundaries") |
-| 100 | DWARF deep facts (CU names/languages, DW_AT_producer, function names + line ranges, type names) | gap (D21 loader shipped `with debug_info`; prebuilt provenance covers producer) | `.debug_info`/`.debug_line` present, `file` says "with debug_info" | [I] `llvm-dwarfdump-18 --debug-info f`; pyelftools DWARF | med |
+| 100 | DWARF deep facts (CU names/languages, DW_AT_producer, function names + line ranges, type names) | gap as answers (D21 loader `with debug_info`; D27 gcc build DWARF 5 producer = compiler + flags; prebuilt provenance covers producer) | `.debug_info`/`.debug_line` present, `file` says "with debug_info" | [I] `llvm-dwarfdump-18 --debug-info f`; pyelftools DWARF | med |
 | 101 | Managed->native bridge: .NET P/Invoke (ImplMap + ModuleRef, `[DllImport]`, `LibraryImport`, `delegate* unmanaged`, `NativeLibrary.Load/GetExport`, `Marshal.GetDelegateForFunctionPointer`) | **seen D22** (2 ImplMap rows: `getpid`@`libc`, `GetCurrentProcessId`@`kernel32.dll`, Winapi, charset not spec; UNASKED) | `DllImportAttribute` string, ModuleRef table, MethodDef with `PinvokeImpl` flag (0x2000) and RVA 0 | [I] python `dnfile` (`md.ImplMap`, `md.ModuleRef`); `ilspycmd f.dll` | high (theme backfill on d22) |
 | 102 | Group with primary + support members (runtimeconfig.json, deps.json, framework/dependency DLLs) | **seen D3, D22** (D22: `FSharp.Core.dll` 5.7 MB, sha256 constant in every set; questions say "delivery support only") | several `.dll`s in one `dNN--` group, one is a stock framework assembly | [I] dnfile AssemblyDef name/version; primary = non-framework name / has HCFG / entry point | high |
 | 103 | Member basename vocabulary change (`dNN--variant-000.*` -> `dNN--sample.*`) | **seen D22** (all groups renamed, questions reworded; inner names keep `variant-000`); **D23 timed modes: VALUE shapes re-rolled too** (campaign `BRNN-<8 uppercase hex>`, d01 marker `BR01-<8hex>`, FILE symbol `sample.c`) | member listing | solver groups by `dNN--` + extension/tag only | med (could change again) |
@@ -272,6 +293,11 @@ unluac/luajit-decompiler (luac present), blutter, srecord (srec_cat), binutils-m
 | 127 | Static stack unwinding (RBP chain over a captured stack, `.eh_frame`/`.debug_frame` CFI -> CFA/return-address slot, PE x64 UNWIND_INFO, frame sizes) | gap | stack bytes in a dump, frame-pointer omitted builds, `.eh_frame_hdr` | [I] pyelftools `CallFrameInfo` (`get_decoded()`), pefile unwind info, unicorn | med-high ("unwind the stack" was literal prompt text) |
 | 128 | Text crash reports: Java stack trace / `Caused by:` / hs_err_pid (`SIGSEGV ... pc=`, `Problematic frame`), .NET `at X.Y() in f:line`, Go `panic:`+goroutine, Rust panic backtrace, Python traceback, ASan/UBSan/MSan reports (`ERROR: AddressSanitizer: heap-buffer-overflow ... READ of size N`, `#0 0x.. in fn file:line`) | gap | the text formats listed; ASan shadow-byte legend; `SUMMARY: AddressSanitizer:` line | [I] regex parsers per format; map bug kind -> CWE (vulnerability-class-classifier) | med-high |
 | 129 | Obfuscated stack trace + mapping (ProGuard/R8 `mapping.txt`, .NET PDB/portable-PDB sequence points, stripped ELF + symbolized twin / build-id debug file) | gap | `a.a.b(Unknown Source)` frames + a `mapping.txt` member; `.pdb` beside a `.dll`; `.debug` file with matching build-id | [I] retrace parser (class/method/line-range maps); `dnfile`/portable-PDB reader; `eu-unstrip`-style symbol transfer by address | med |
+| 130 | Compiler / toolchain attribution across same-source builds (gcc vs tcc; next clang, zig cc, MSVC, MinGW, icx) | **seen day27** (theme UNASKED; roles = compiler names `-gcc.elf`/`-tcc.elf`) | gcc: DW_AT_producer `GNU C..`, IPA suffixes `.lto_priv/.constprop/.isra/.part/.cold`, FILE `crtstuff.c`, DWARF; tcc: `.stab`/`.stabstr`, `tcc_backtrace`, `.hash` w/o `.gnu.hash`, unmerged `.text.<fn>`/`.rodata.str1.1`, FILE `<command line>`; clang: `.llvm_addrsig`, `clang version`; MSVC PE: Rich `DanS` + `.text$mn`, RSDS PDB | [I] `readelf --debug-dump=info f \| grep -m2 producer`; `readelf -SW f`; `nm f \| grep -cE '\.(lto_priv\|constprop\|isra)\.'`; `readelf -nW f`; [M] diec | high (D28 sequel or backfill on d27) |
+| 131 | Linker fingerprint (ld.bfd vs gold vs lld vs mold vs tcc's built-in linker vs MSVC link.exe) | gap (D27 prompt "linker fingerprints"; tcc vs ld.bfd visible in section merging + note count) | gold `.note.gnu.gold-version`; lld `.comment` `Linker: LLD`, 4 PT_LOAD + `-z separate-code`; mold `.comment` `mold`; bfd merges `.text.*`; tcc keeps input section names, one NT_GNU_PROPERTY per object; PE MajorLinkerVersion 14.x / 2.xx (GNU ld) | [I] `readelf -lSnW f`; `readelf -p .comment f`; pefile OPTIONAL_HEADER.MajorLinkerVersion | med-high |
+| 132 | Runtime / libc fingerprint (glibc vs musl vs uClibc vs bionic vs dietlibc; static vs dynamic; crt objects) | gap as answers (musl seen D27) | PT_INTERP path (`ld-linux-x86-64.so.2` vs `ld-musl-x86_64.so.1`), `GLIBC_2.NN` verneeds, musl `_start_c`/`__libc_start_main` w/o versions, `crt1.c`/`crtstuff.c` FILE syms, bundled runtimes (Boehm `GC_*`, V `builtin__`) | [I] `readelf -lW f \| grep interp`; `readelf -V f`; `readelf -sW f \| awk '$4=="FILE"'` | med-high |
+| 133 | Debug-info format as a fact (DWARF 2-5 vs STABS vs CodeView/PDB vs none) and what survives per compiler | gap (D27: gcc DWARF 5, tcc STABS) | `.debug_*` (v5: `.debug_line_str`, `.debug_loclists`), `.stab`/`.stabstr` (N_SO source names, N_FUN functions), PE debug dir RSDS/NB10 | [I] `readelf --debug-dump=info f \| head`; `objdump -G f` (stabs); pefile DIRECTORY_ENTRY_DEBUG | med |
+| 134 | Code-similarity / family attribution (same function across compilers, fuzzy hashes, imphash/telfhash, YARA) | gap ("attribute this binary to its maker" could continue as family attribution) | groups of builds sharing strings/constants but not bytes; ids like `ssdeep`/`tlsh`/`imphash`/`matching_member`/`family` | [I] yara, angr/capstone for per-function normalized hashes; [M] ssdeep/tlsh python libs, BinDiff/Diaphora | med |
 
 ## Recognition cues (worker quick-reference)
 ```
@@ -294,7 +320,7 @@ STEP 2  rz-bin -I F   (or readelf -hlSW F)  -> lang, machine, bits, endian, stat
   no .symtab => stripped (answer [] / none / false); no INTERP => static; ET_DYN+INTERP => PIE; ET_REL => object file
   UPX0/UPX1 sections or "UPX!" or entropy>7.2 => PACKED: upx -t F; cp F /tmp/x; upx -d /tmp/x (fix zeroed UPX! first)
 STEP 3  strings -a -n6 F | grep -m8 -E 'GCC:|clang|rustc|go1\.|GHC |OCaml|caml_|FPC |Crystal|zig|GNAT Version|gfortran|DMD|Nim|
-        swift|_kDart|kfun:|__svm|MEI|nuitka|AU3!|Borland|MSVBVM|libcob|UPX|HCFG|SENGR'   -> toolchain + blob form
+        swift|_kDart|kfun:|__svm|MEI|nuitka|AU3!|Borland|MSVBVM|libcob|V panic|tcc_backtrace|UPX|HCFG|SENGR' -> toolchain+blob
   toolchain -> tool: Go GoReSym | Rust rustfilt | .NET ilspycmd | jar javap -p -c -constants / jadx | Swift swift-demangle | Nim
   nim-demangle | PyInstaller pyinstxtractor+pycdc | AutoIt autoit-ripper | else rizin 'aaa;afl' / Ghidra headless (no exec)
 HCFG (every new member since D2)
@@ -302,7 +328,8 @@ HCFG (every new member since D2)
   raw magic 'HCFG' | b64 'SENGR' | hex '48434647' | rot13 'FRATE' | b64-zlib 'eJ' | b64-gzip 'H4sI' -> covered by hcfg_scan
   accept only crc32(plain)==header crc AND JSON parses; keep scanning past decoys (D9 had two raw-magic decoys)
   ALWAYS check the tail: image_end = e_shoff+e_shnum*e_shentsize (PE: pefile overlay start); len > image_end => OVERLAY with a
-  day magic (PK19 D19, RS20 D20): o = data.rfind(magic); parse EVERY header field the QUESTION lists (size ids = that field,
+  day magic (PK19 D19, RS20 D20; D27 = bare RAW HCFG, no magic, "scan backward from the end" = rfind loop until crc-valid):
+  o = data.rfind(magic); parse EVERY header field the QUESTION lists (size ids = that field,
   hcfg_resource_size = u32@8), verify bounds/sha256, run its transform, HCFG at the stated offset; overlay_size = len-o.
   NOT FOUND => hidden elsewhere: (1) packed? unpack; (2) AES S-box 637c777b / TEA 9e3779b9 / 'expand 32-byte k' => find key+IV
   near the call, decrypt with pycryptodome; (3) runs of mov [rbp-x], imm => stack-built: collect imms with capstone or
@@ -311,26 +338,25 @@ HCFG (every new member since D2)
   (5) .init_array / TLS callback decoder => emulate it. Offsets: raw=the H, base64=the S (GM-confirmed); else first stored byte.
 FIELDS: format = container only (elf/pe/macho?/jar; .NET pe_cli) | machine/architecture = container machine word |
   qualifier ids dNN_analysis_<tag>_<field> -> member whose file name has <tag> (stripped/symbolized, compact/direct, loader/
-  plugin, D24 vulnerable/corrected; LONGEST member-name token); THEN the member the QUESTION names; "decode both role members,
-  require equal" (D24) => decode all, assert equal, answer the common value ; sha256_K = zip archive order | config_* verbatim from HCFG JSON |
+  plugin, vulnerable/corrected, D27 gcc/tcc; LONGEST member-name token); THEN the member the QUESTION names; "decode both role
+  members, require equal" (D24/D25/D27) => decode all, assert equal, use the common value; sha256_K = zip order | config_* verbatim |
   has_<x>_section = literal section name | hex fields lowercase 0x | never chase the prompt's theme: answer only asked ids.
   New-language member = carried-over header ids (post first); twist = the NEW field family: its longest question is the
   spec (rules, offsets, transforms, hashes). `none` only for ABSENT things.
 CRASH (D26, ASKED): sidecar {"schema":"huntress.synthetic_crash.v1","kind":<Exception>,"frames":[innermost..outermost]};
   fault method = frames[0] verbatim; "frames match methods" = every frame in the primary class's method_info names -> true/false.
-  Native sequel: core `readelf -nW` (NT_PRSTATUS signal + RIP, NT_FILE map) / MDMP ExceptionStream -> RIP-base -> symbol
-  (`addr2line -f -e bin`), capstone the insn, unwind via RBP chain / .eh_frame CFI. Static only: never run the sample.
-THEME FACTS (unasked, backfill candidates): every member embeds a huntress.binary.dynamic_trace.v1 template gated on env
-  HUNTRESS_HOST_MODEL (+ HUNTRESS_TRIGGER_FAULT D25-D26). D21 NEEDED/exports; D22 ImplMap; D23 predicates; D24 only
-  `score(String)I` changed (null -> NPE, CWE-476); D25 only `parse-frame` (unguarded `(nth v 4)` -> IOOBE, CWE-125).
-BACKFILL ids on OLD groups (D8, D17) = that day's own facts: marker, recover_code (decimal), mangled_score_symbol/typeinfo_symbol
-  (bare _ZNK/_ZTI; PE .text$/.rdata$), has_* (true/false), methods (Main-Class method_info names incl <init>, JSON), access_flags
-  (decimal 49), method_count (ALL method_info incl <init>/<clinit>/synthetics). Derive from bytes, POST together.
+  Native sequel: core `readelf -nW` NT_PRSTATUS RIP / MDMP ExceptionStream -> `addr2line -f -e bin`, capstone it. Never run it.
+ATTRIBUTION (D27 theme, UNASKED; roles = compiler names): gcc = DW_AT_producer `GNU C99 <ver> <flags>` (`readelf --debug-dump=
+  info F|grep -m2 producer`), `.lto_priv/.constprop/.isra` syms, FILE crtstuff.c, DWARF; tcc = `.stab`/`.stabstr`, `tcc_backtrace`,
+  `.hash` only, unmerged `.text.<x>`/`.rodata.str1.1`, 1 GNU_PROPERTY note per object; libc = PT_INTERP; `.comment` may be ABSENT.
+THEME FACTS (unasked): dynamic_trace.v1 template (family `<lang>_<theme>_trace` names the theme), env HUNTRESS_HOST_MODEL
+  (+TRIGGER_FAULT); D21 NEEDED/exports; D22 ImplMap; D23 predicates; D24 `score` null->NPE; D25 `parse-frame` (nth v 4)->IOOBE.
+BACKFILL ids on OLD groups (D8, D17): marker, recover_code (decimal), mangled_score/typeinfo_symbol (bare _ZNK/_ZTI; PE .text$),
+  has_* true/false, methods (JSON incl <init>), access_flags (decimal), method_count (ALL method_info). Derive from bytes.
 hcfg_storage (enum): base64 carrier -> base64 | literal HCFG in section `.hcfg` -> raw_hcfg_section | in WASM data seg ->
   wasm_data_segment | in another native data section (.data/.rodata) -> raw_const_array | else raw. Stripped d01 => recover_code none.
 UNGUESSABLE label: <=10 probes, HELP.md, re-pull contract. MASTERY: cache per (delivery, member)/sha256, never id(bytes).
-FORWARD HINTS: grep each new contract for tokens/days not today's (open: enum `neko_bytecode`; d07 "Day 26 primary classfile"
-  came true = Main-Class). Basenames renamed (D22), values re-shaped in TT/M (BRNN-<8hex>): key on `dNN--`, copy verbatim.
+FORWARD HINTS: grep each contract for tokens/days not today's (open: enum `neko_bytecode`). Values re-shaped in TT/M: copy verbatim.
 ```
 
 ## Readiness gaps

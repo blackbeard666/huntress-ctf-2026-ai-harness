@@ -320,6 +320,14 @@ def decode_chunk(p, _nested=False):
             cands.append((_ascii(_wc.bf_dec(t).encode()), 0))
         except (ValueError, IndexError, UnicodeDecodeError):
             pass
+    if _max_day() >= 27 and t.startswith("Ook"):
+        # OOK! (warmups Day 27 "Monkey Business": 'Ook. Ook. Ook! Ook. ...' = the D26 Brainfuck, one token pair per
+        # instruction), the whole fragment must be Ook tokens
+        from lib import warmups_codecs as _wc
+        try:
+            cands.append((_ascii(_wc.ook_dec(t).encode()), 0))
+        except (ValueError, IndexError, UnicodeDecodeError):
+            pass
     if _B32S.match(t) and len(t) % 8 == 0:
         try:
             cands.append((_ascii(base64.b32decode(t)), 5))

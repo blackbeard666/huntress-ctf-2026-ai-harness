@@ -1,0 +1,7 @@
+{
+ "field": "zsh_history.remote_ips",
+ "expected": "[\"10.9.8.7\",\"192.0.2.10\"]",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "grep -oE '\\b([0-9]{1,3}\\.){3}[0-9]{1,3}\\b' tests/data/meta_fixtures/zsh_history/zsh_ext__remote_ips.bin | python3 -c 'import sys,json;v=sorted(set(l.strip() for l in sys.stdin.read().splitlines() if l.strip()));print(json.dumps(v,separators=(\",\",\":\")) if v else \"none\")'",
+ "decoy": false
+}

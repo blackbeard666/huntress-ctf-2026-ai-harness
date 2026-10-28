@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-23-forwarded-misgivings",
+  "lane": "web",
+  "name": "🌐 Forwarded Misgivings",
+  "ids": {
+    "single_solve": "web-exploitation-day-23-forwarded-misgivings",
+    "time_trial": "web-exploitation-day-23-forwarded-misgivings/time_trial",
+    "mastery": "web-exploitation-day-23-forwarded-misgivings/mastery"
+  }
+}

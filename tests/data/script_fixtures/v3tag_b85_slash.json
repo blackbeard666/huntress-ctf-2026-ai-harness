@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=typescript|role=stager|verdict=malicious|attack=T1105|obfuscation_profile=base85|campaign_id=TS-10203040|url=https://ts-10203040.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | python3 -I -c 'import sys,base64;sys.stdout.write(base64.b85encode(sys.stdin.buffer.read()).decode())'",
+  "oracle_cmd": "sed -n 's/^\\/\\/ HUNTRESS_ANALYSIS_V1:B85-//p' v3tag_b85_slash.ts | python3 -I -c 'import sys,base64;sys.stdout.buffer.write(base64.b85decode(sys.stdin.read().strip()))'"
+}

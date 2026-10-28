@@ -1364,6 +1364,17 @@ _m26 = "\n".join("%02d\t%s" % (k, _wc.day_codec(k)[1](p)) for k, p in enumerate(
 assert _dec25.decode_chunked(_m26) == _s26, _dec25.decode_chunked(_m26)
 print("ok  warmups_codecs: D26 Brainfuck exact encoder + decode_chunk + Mastery line 26")
 
+# Day 27 "Monkey Business": warmups line codec = the D26 Brainfuck in Ook! token pairs (single spaces), exact encoder;
+# decode_chunk branch; Mastery line 27 through DAYS positionally
+_s27 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: hearty-castle-fern-71"
+_b27 = _wc.day_codec(27)[1](_s27)
+assert _b27.startswith("Ook. Ook. " * 78 + "Ook! Ook. ") and _b27.endswith("Ook! Ook! " * 6 + "Ook! Ook.")
+assert _wc.day_codec(27)[2](_b27) == _s27 and _wc.day_codec(27)[3] is False and _dc(_b27) == _s27
+_c27 = [_s27[i * len(_s27) // 27:(i + 1) * len(_s27) // 27] for i in range(27)]
+_m27 = "\n".join("%02d\t%s" % (k, _wc.day_codec(k)[1](p)) for k, p in enumerate(_c27, 1))
+assert _dec25.decode_chunked(_m27) == _s27, _dec25.decode_chunked(_m27)
+print("ok  warmups_codecs: D27 Ook! exact encoder + decode_chunk + Mastery line 27")
+
 # Day 26 "Split Decision": a split bundle (.apks = base.apk + feature split) -- the base puzzle's `split` parts have an
 # empty slot, the split's json carries `part` + `part_index`; lib.android.puzzle_candidates fills and assembles it
 # (GM-confirmed single ANS-7E37D134754DEA01). v2 (`codec: analysis` base reading the split's huntress_feature.bin)
@@ -1395,3 +1406,11 @@ _pf26[16:16 + 14] = "CMD.EXE".encode("utf-16-le")
 assert _meta14.answer("d26-prefetch-001-prefetch-executable-name", {}, bytes(_pf26)) == ("CMD.EXE", _meta14.VERIFIED)
 assert _meta14.answer("d26-prefetch-001-prefetch-executable-name", {}, b"L\0\0\0" + b"\0" * 200)[0] == "none"
 print("ok  lib.meta: prefetch.executable_name verified D26 (SCCA header name, MAM-compressed too)")
+
+# Day 27 "Packet Loss Prevention": pcap.packet_count = complete classic-pcap records -- prebuilt pcap_value promoted
+assert _meta14.lookup("pcap", "packet_count")[0].days == (27,)
+_pc27 = _st17.pack("<IHHiIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1)
+_pc27 += b"".join(_st17.pack("<IIII", 1, 0, 4, 4) + b"abcd" for _ in range(3)) + _st17.pack("<IIII", 1, 0, 64, 64) + b"x"
+assert _meta14.answer("d27-pcap-001-pcap-packet-count", {}, _pc27) == ("3", _meta14.VERIFIED)
+assert _meta14.answer("d27-pcap-001-pcap-packet-count", {}, b"PK\3\4" + b"\0" * 60)[0] == "none"
+print("ok  lib.meta: pcap.packet_count verified D27 (complete records, truncated tail not counted)")

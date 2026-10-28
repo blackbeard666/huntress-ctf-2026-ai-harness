@@ -1,0 +1,8 @@
+{
+  "field": "har.first_request_url",
+  "expected": "https://portal.example.com/login",
+  "generator_cmd": "python3 -I gen2.py firefox_style.har  (json.dump writer: Firefox-style HAR, 2 pages, 5 entries, mixed +01:00/Z startedDateTime out of stored order, bodySize -1, IPv6/empty serverIPAddress, userinfo+port URL, one string status \"200\")",
+  "oracle_cmd": "jq -r \".log.entries[]|[.startedDateTime,.request.url]|@tsv\" $H | while IFS=$(printf \"\\t\") read t u; do echo \"$(date -u -d \"$t\" +%s.%N) $u\"; done | LC_ALL=C sort -s -n -k1,1 | head -1 | cut -d\" \" -f2",
+  "decoy": false,
+  "member": "firefox_style.har"
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=rust|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=standalone|obfuscation_profile=base64|stage_profile=single_stage|next_language=",
+ "decoy": false,
+ "target": "function-return-literal-battery",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/anylit_gen.py  (stdlib base64 encode, nameless literal, no marker)",
+ "oracle_cmd": "sed 's/let _p = build_plan();/println!(\"{}\", build_plan());/' tests/data/script_fixtures/anylit_rust_fn_raw.rs > /tmp/a.rs && rustc -o /tmp/a /tmp/a.rs && /tmp/a | base64 -d"
+}

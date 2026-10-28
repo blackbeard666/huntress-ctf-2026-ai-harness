@@ -1,0 +1,7 @@
+{
+ "entry": "advisory_match_scan",
+ "expected": "ANS-9b3c7d1e5f0a2468",
+ "_why": "pom.properties versions jsonlite 1.2.10 / imgcodec 1.2.9 / netkit 2.0.0-rc1 vs assets/advisories.json '<1.2.9', '[1.0,1.2.10)', '>=2.0.0': only imgcodec is affected; a lexicographic compare instead flags jsonlite ('1.2.10' < '1.2.9') and netkit ('2.0.0-rc1' >= '2.0.0') and clears imgcodec (row 109)",
+ "generator_cmd": "python3 tests/data/android_fixtures/adv_src/gen_adv.py pom_json_lexi tests/data/android_fixtures/adv_pom_json_lexi.apk  # python zipfile APK (+ javac --release 8 / d8 dex for dex_osv_python), stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "python3 tests/data/android_fixtures/adv_src/oracle.py tests/data/android_fixtures/adv_pom_json_lexi.apk  # unzip/jadx read versions + table; Maven VersionRange (tools/maven-artifact), node semver (tools/npm), python packaging.SpecifierSet judge each row -> AFFECTED rows' tokens"
+}

@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=matlab|role=stager|verdict=malicious|attack=T1105|obfuscation_profile=ascii85|campaign_id=ML-44556677|url=https://ml-44556677.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | python3 -I -c 'import sys,base64;sys.stdout.write(base64.a85encode(sys.stdin.buffer.read()).decode())'",
+  "oracle_cmd": "sed -n 's/^% HUNTRESS_ANALYSIS_V1:A85-//p' v3tag_a85_percent.m | python3 -I -c 'import sys,base64;sys.stdout.buffer.write(base64.a85decode(sys.stdin.read().strip()))'"
+}

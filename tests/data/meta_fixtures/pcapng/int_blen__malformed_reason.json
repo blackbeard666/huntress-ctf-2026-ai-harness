@@ -1,0 +1,7 @@
+{
+ "field": "pcapng.malformed_reason",
+ "expected": "block_length_mismatch",
+ "generator_cmd": "text2pcap -q -t '%H:%M:%S.' in.txt base.pcapng (Wireshark 4.6.4 default pcapng); printf '\\x60\\0\\0\\0' | dd of=blen.pcapng bs=1 seek=456 conv=notrunc (2nd EPB trailing total length 108 -> 96)",
+ "oracle_cmd": "capinfos -c blen.pcapng -> exit 2 'pcapng: total block lengths (first 108 and second 96) don't match'",
+ "decoy": false
+}

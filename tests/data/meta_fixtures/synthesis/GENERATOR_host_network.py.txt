@@ -1,0 +1,120 @@
+"""Generator for the synthesis_network fixtures (host claims vs capture traffic).
+usage: .venv/bin/python -I GENERATOR_host_network.py.txt <outdir>
+Captures are written with the dpkt pcap / pcapng WRITERS (packets built with dpkt.ethernet/ip/tcp/udp/dns);
+host logs are plain text written here (netstat -ano table, W3C pfirewall.log, Zeek conn.log TSV); the Sysmon EVTX member
+is the existing fixture tests/data/meta_fixtures/sysmon/hostnet_sysmon__remote_ips.bin (stdlib BinXML writer,
+GENERATOR_host_net_sysmon.py.txt). Containers: stdlib zipfile."""
+import io
+import os
+import socket
+import sys
+import zipfile
+
+import dpkt
+
+OUT = sys.argv[1]
+HERE = os.path.dirname(os.path.abspath(__file__))
+SYSMON = os.path.join(HERE, "..", "sysmon", "hostnet_sysmon__remote_ips.bin")
+
+
+def eth(src, dst, l4, proto):
+    ip = dpkt.ip.IP(src=socket.inet_aton(src), dst=socket.inet_aton(dst), p=proto, ttl=64)
+    ip.data = l4
+    ip.len = len(ip)
+    return bytes(dpkt.ethernet.Ethernet(src=b"\x02" * 6, dst=b"\x04" * 6, type=0x0800, data=ip))
+
+
+def tcp(src, sp, dst, dp, flags):
+    return eth(src, dst, dpkt.tcp.TCP(sport=sp, dport=dp, flags=flags, seq=1000, off=5), 6)
+
+
+def dnsq(src, sp, dst, name):
+    q = dpkt.dns.DNS(id=0x1234, qd=[dpkt.dns.DNS.Q(name=name, type=1, cls=1)])
+    return eth(src, dst, dpkt.udp.UDP(sport=sp, dport=53, data=bytes(q), ulen=8 + len(bytes(q))), 17)
+
+
+def pcap(pkts, t0=1760000000):
+    bio = io.BytesIO()
+    w = dpkt.pcap.Writer(bio, snaplen=65535, linktype=1)
+    for i, p in enumerate(pkts):
+        w.writepkt(p, ts=t0 + i)
+    return bio.getvalue()
+
+
+def pcapng(pkts, t0=1760000000):
+    bio = io.BytesIO()
+    w = dpkt.pcapng.Writer(bio, snaplen=65535, linktype=1)
+    for i, p in enumerate(pkts):
+        w.writepkt(p, ts=t0 + i)
+    return bio.getvalue()
+
+
+SYN, SYNACK, ACK = 0x02, 0x12, 0x10
+
+# ---- case A: Sysmon EVTX + netstat (consistent) + pfirewall (fabricated) + capture.pcap + broken.pcap (truncated)
+cap_a = pcap([
+    tcp("10.20.30.41", 49733, "203.0.113.45", 443, SYN),
+    tcp("203.0.113.45", 443, "10.20.30.41", 49733, SYNACK),
+    tcp("10.20.30.41", 49733, "203.0.113.45", 443, ACK),
+    tcp("10.20.30.9", 52211, "10.20.30.41", 3389, SYN),
+    dnsq("10.20.30.41", 53000, "10.20.30.1", "updates.contoso-cdn.net"),
+    tcp("10.20.30.41", 51000, "192.0.2.80", 80, SYN),
+])
+broken = pcap([tcp("10.9.9.9", 40000, "10.9.9.10", 8443, SYN), tcp("10.9.9.9", 40001, "10.9.9.10", 8443, SYN)])
+broken = broken[:-10]                                   # cut short in the middle of the last record
+netstat_a = """
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       948
+  TCP    10.20.30.41:49733      203.0.113.45:443       ESTABLISHED     4120
+  TCP    10.20.30.41:3389       10.20.30.9:52211       ESTABLISHED     1100
+"""
+fw_a = """#Version: 1.5
+#Software: Microsoft Windows Firewall
+#Time Format: Local
+#Fields: date time action protocol src-ip dst-ip src-port dst-port size tcpflags tcpsyn tcpack tcpwin icmptype icmpcode info path pid
+2025-10-09 10:00:01 ALLOW TCP 10.20.30.77 45.33.32.156 50111 4444 0 - - - - - - - SEND 4400
+2025-10-09 10:00:05 ALLOW TCP 10.20.30.77 185.199.108.153 50112 22 0 - - - - - - - SEND 4400
+2025-10-09 10:00:09 DROP TCP 10.20.30.77 192.0.2.80 50113 80 0 - - - - - - - SEND 4400
+"""
+with zipfile.ZipFile(os.path.join(OUT, "netsyn_a.zip"), "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("capture.pcap", cap_a)
+    z.writestr("broken.pcap", broken)
+    z.writestr("Sysmon-WKS-FIN-22.evtx", open(SYSMON, "rb").read())
+    z.writestr("netstat_wks22.txt", netstat_a)
+    z.writestr("pfirewall_wks77.log", fw_a)
+
+# ---- case B: pcapng capture + Zeek conn.log (consistent) + netstat (fabricated, all claims absent)
+cap_b = pcapng([
+    tcp("172.16.5.10", 50500, "93.184.216.34", 443, SYN),
+    tcp("93.184.216.34", 443, "172.16.5.10", 50500, SYNACK),
+    tcp("172.16.5.10", 50501, "172.16.5.20", 445, SYN),
+    dnsq("172.16.5.10", 53111, "172.16.5.1", "example.com"),
+])
+zeek_b = "\n".join([
+    "#separator \\x09", "#set_separator\t,", "#empty_field\t(empty)", "#unset_field\t-", "#path\tconn",
+    "#fields\tts\tuid\tid.orig_h\tid.orig_p\tid.resp_h\tid.resp_p\tproto\tservice\tduration\torig_bytes\tresp_bytes"
+    "\tconn_state\torig_pkts\tresp_pkts",
+    "#types\ttime\tstring\taddr\tport\taddr\tport\tenum\tstring\tinterval\tcount\tcount\tstring\tcount\tcount",
+    "1760000000.000000\tC1\t172.16.5.10\t50500\t93.184.216.34\t443\ttcp\tssl\t1.0\t100\t200\tSF\t3\t2",
+    "1760000002.000000\tC2\t172.16.5.10\t50501\t172.16.5.20\t445\ttcp\t-\t-\t-\t-\tS0\t1\t0",
+    "1760000003.000000\tC3\t172.16.5.10\t53111\t172.16.5.1\t53\tudp\tdns\t-\t-\t-\tS0\t1\t0", ""])
+netstat_b = """
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    172.16.5.99:61000      203.0.113.200:8443     ESTABLISHED     5512
+  TCP    172.16.5.99:61001      198.18.0.5:22          ESTABLISHED     5513
+  UDP    0.0.0.0:5353           *:*                                    1800
+"""
+with zipfile.ZipFile(os.path.join(OUT, "netsyn_b.zip"), "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("traffic.pcapng", cap_b)
+    z.writestr("conn.log", zeek_b)
+    z.writestr("host_srv99_netstat.txt", netstat_b)
+
+# ---- decoy: host logs only, no capture member (the join cannot be made) -> "none"
+with zipfile.ZipFile(os.path.join(OUT, "netsyn_decoy.zip"), "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("netstat_wks22.txt", netstat_a)
+    z.writestr("pfirewall_wks77.log", fw_a)
+    z.writestr("capture.pcap", b"this is not a pcap, just a renamed text note\n")

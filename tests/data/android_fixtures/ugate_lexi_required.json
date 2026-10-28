@@ -1,0 +1,7 @@
+{
+ "entry": "update_gate_scan",
+ "expected": "ANS-60011a2b3c4d5e6f",
+ "_why": "manifest versionName 6.0.1 (aapt2 link) vs assets/config/update_policy.json force_update.minVersion 6.0.10 -> 6.0.1 < 6.0.10 under real version order -> on_update_required branch (row 109 regression)",
+ "generator_cmd": "python3 tests/data/android_fixtures/ugate_src/gen_ugate.py lexi_required tests/data/android_fixtures/ugate_lexi_required.apk  # apktool's bundled aapt2 link (binary manifest with versionCode/versionName[/versionCodeMajor]) + python zipfile APK",
+ "oracle_cmd": "python3 tests/data/android_fixtures/ugate_src/oracle.py tests/data/android_fixtures/ugate_lexi_required.apk  # aapt dump xmltree reads the manifest versions, python packaging Version/SpecifierSet judges the policy -> branch token"
+}

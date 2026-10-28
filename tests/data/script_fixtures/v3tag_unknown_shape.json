@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=perl|role=stager|verdict=malicious|attack=T1105|obfuscation_profile=zlib_base32|campaign_id=PL-60708090|url=https://pl-60708090.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | perl -MCompress::Zlib -0777 -ne 'print compress($_)' | base32 -w0",
+  "oracle_cmd": "sed -n 's/^# HUNTRESS_ANALYSIS_V1:QZX9-//p' v3tag_unknown_shape.pl | base32 -d | perl -MCompress::Zlib -0777 -ne 'print uncompress($_)'"
+}

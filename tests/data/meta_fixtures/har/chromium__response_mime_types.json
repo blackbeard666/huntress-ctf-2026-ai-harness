@@ -1,0 +1,8 @@
+{
+  "field": "har.response_mime_types",
+  "expected": "[\"application/json\",\"image/png\",\"text/css\",\"text/html\",\"text/html;charset=utf-8\",\"text/javascript\"]",
+  "generator_cmd": "python3 gen.py chromium.har site/  (Playwright 1.61 Chromium 149 BrowserContext(record_har_path=...) against a loopback http.server: index.html + css/js/png + fetch POST (201, Set-Cookie sessionid) + 404 on localhost; pref cookie pre-set)",
+  "oracle_cmd": "jq -c \"[.log.entries[].response.content.mimeType|select(.!=null and .!=\\\"\\\")]|unique\" $H",
+  "decoy": false,
+  "member": "chromium.har"
+}

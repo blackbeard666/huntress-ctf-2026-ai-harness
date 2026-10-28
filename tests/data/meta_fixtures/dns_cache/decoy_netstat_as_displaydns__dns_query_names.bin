@@ -1,0 +1,18 @@
+
+Active Connections
+
+  Proto  Local Address          Foreign Address        State           PID
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1012
+ [RpcSs]
+ [svchost.exe]
+  TCP    10.20.30.41:49733      203.0.113.45:443       ESTABLISHED     4120
+ [svch0st.exe]
+  TCP    10.20.30.41:49741      198.51.100.7:8080      CLOSE_WAIT      5532
+ [powershell.exe]
+  TCP    10.20.30.41:3389       10.20.30.9:52211       ESTABLISHED     1288
+  TermService
+ [svchost.exe]
+  TCP    [::]:445               [::]:0                 LISTENING       4
+ Can not obtain ownership information
+  UDP    0.0.0.0:5353           *:*                                    2240
+ [chrome.exe]

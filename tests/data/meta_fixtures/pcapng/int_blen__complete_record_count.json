@@ -1,0 +1,7 @@
+{
+ "field": "pcapng.complete_record_count",
+ "expected": "1",
+ "generator_cmd": "text2pcap -q -t '%H:%M:%S.' in.txt base.pcapng (Wireshark 4.6.4 default pcapng); 2nd EPB trailing length corrupted with dd",
+ "oracle_cmd": "capinfos blen.pcapng -> 'An error occurred after reading 1 packets'",
+ "decoy": false
+}

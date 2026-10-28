@@ -1,0 +1,7 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": "ANS-c47a1e93b0d2f586",
+ "_why": "10 dexes: Mixer in classes2.dex (winner) calls util.Hex.wrap in classes7.dex and Key.K in classes.dex; shadow Mixer in classes10.dex (-> ANS-aaaa5555bbbb6666) wins only under lexicographic order",
+ "generator_cmd": "python3 tests/data/android_fixtures/mdx_src/gen_mdx.py numeric10 tests/data/android_fixtures/mdx_numeric10.apk  # javac --release 8 + d8 (tools/r8) per dex group, `zip` APK (zip order classes9..classes2,classes10,classes.dex != load order); stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "sh tests/data/android_fixtures/mdx_src/oracle.sh tests/data/android_fixtures/mdx_numeric10.apk  # dex2jar each classesN.dex, java -cp c1.jar:c2.jar:..:cN.jar (numeric order, first definition wins) com.hctf.mdx.Challenge; prints ANS-c47a1e93b0d2f586"
+}

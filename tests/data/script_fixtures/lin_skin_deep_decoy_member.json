@@ -1,0 +1,10 @@
+{
+ "material": "{\"dropper.vbs.py\": \"import base64\\n# inert analyst fixture\\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXZic2NyaXB0fHJvbGU9ZHJvcHBlcnxzdGFnZT0xfGNhbXBhaWduX2lkPVZCLTlmOGU3ZDZjfG5leHRfbGFuZ3VhZ2U9bm9uZXx1cmw9aHR0cHM6Ly9lZGdlLTlmOGU3ZDZjLmV4YW1wbGUuaW52YWxpZC94').decode()\\n\", \"launcher.ps1.py\": \"import base64\\n# inert analyst fixture\\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXBvd2Vyc2hlbGx8cm9sZT1sYXVuY2hlcnxzdGFnZT0xfGNhbXBhaWduX2lkPVBTLWExYjJjM2Q0fG5leHRfc3RhZ2U9c3RhZ2UyLnB5fG5leHRfbGFuZ3VhZ2U9cHl0aG9ufGhhbmRvZmZfaWQ9aHgtYTFiMmMzZDQtNzd8dXJsPWh0dHBzOi8vY2RuLWExYjJjM2Q0LmV4YW1wbGUuaW52YWxpZC9kcm9w').decode()\\n\", \"mimic.js.py\": \"import base64\\n# inert analyst fixture\\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPWpzY3JpcHR8cm9sZT1jb2xsZWN0b3J8c3RhZ2U9MnxjYW1wYWlnbl9pZD1KUy05ZjhlN2Q2Y3xuZXh0X2xhbmd1YWdlPW5vbmV8dXJsPWh0dHBzOi8vY2RuLWExYjJjM2Q0LmV4YW1wbGUuaW52YWxpZC9zdGFnZQ==').decode()\\n\", \"stage2.py\": \"import base64\\n# inert analyst fixture\\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXB5dGhvbnxyb2xlPXN0YWdlcnxzdGFnZT0yfGNhbXBhaWduX2lkPVBZLWExYjJjM2Q0fG5leHRfbGFuZ3VhZ2U9bm9uZXxoYW5kb2ZmX2lkPWh4LWExYjJjM2Q0LTc3fHVybD1odHRwczovL2Nkbi1hMWIyYzNkNC5leGFtcGxlLmludmFsaWQvc3RhZ2U=').decode()\\n\"}",
+ "rep": "lineage",
+ "transform": "decoy",
+ "key": null,
+ "expected": "mimic.js.py",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/lin_gen.py $TMPDIR/lingen  (stdlib base64 writer; corpus handoff)",
+ "oracle_cmd": "cd $TMPDIR/lingen/handoff && for f in *.py; do sed -n \"s/.*b64decode('\\(.*\\)').*/\\1/p\" \"$f\" | base64 -d | tr '|' '\\n' | awk -v f=\"$f\" '{i=index($0,\"=\"); print f \"\\t\" substr($0,1,i-1) \"\\t\" substr($0,i+1)}'; done | awk -F'\\t' '$2==\"campaign_id\"{n=split($3,p,\"-\"); T[$1]=tolower(p[n])} $2==\"url\"{U[$1]=$3}\n END{for(f in U){h=U[f]; sub(/^[a-z]+:\\/\\//,\"\",h); sub(/\\..*/,\"\",h); n=split(h,q,\"-\"); if(tolower(q[n])!=T[f]) print f}}' | sort | head -1"
+}

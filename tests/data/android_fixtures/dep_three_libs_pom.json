@@ -1,0 +1,7 @@
+{
+ "entry": "dependency_inventory",
+ "expected": "ANS-3c9e1f0a7b62d4e8",
+ "_why": "3 lib packages (com.acme.jsonlite, org.vendor.imgcodec, io.legacy.netkit) + META-INF/maven/**/pom.properties outside app package com.huntress.mobile.d01.v073e9a824e9e; the token is a const-string of org.vendor.imgcodec.Decoder (rows 106-108)",
+ "generator_cmd": "python3 tests/data/android_fixtures/dep_src/gen_dep.py three_libs_pom tests/data/android_fixtures/dep_three_libs_pom.apk  # javac --release 8 + d8 (tools/r8) dex, jar/zip for the asset .aar, gcc -shared fake libcrypto.so, `zip` APK; stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "jadx -q -d o dep_three_libs_pom.apk; grep -rhoE 'ANS-[0-9a-f]{16}' o/sources/org/vendor; unzip -p dep_three_libs_pom.apk 'META-INF/maven/*/pom.properties' | grep version"
+}

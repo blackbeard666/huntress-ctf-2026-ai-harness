@@ -1,0 +1,8 @@
+{
+ "entry": "advisory_match_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout, imgcodec 1.2.10 vs '[1.0,1.2.9)': every lib is patched under real version order, while a string compare still flags jsonlite and netkit -> no affected row, no token",
+ "generator_cmd": "python3 tests/data/android_fixtures/adv_src/gen_adv.py decoy_all_patched tests/data/android_fixtures/adv_decoy_all_patched.apk  # python zipfile APK (+ javac --release 8 / d8 dex for dex_osv_python), stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "python3 tests/data/android_fixtures/adv_src/oracle.py tests/data/android_fixtures/adv_decoy_all_patched.apk  # unzip/jadx read versions + table; Maven VersionRange (tools/maven-artifact), node semver (tools/npm), python packaging.SpecifierSet judge each row -> AFFECTED rows' tokens"
+}

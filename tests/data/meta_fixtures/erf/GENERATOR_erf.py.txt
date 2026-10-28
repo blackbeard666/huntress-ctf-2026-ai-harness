@@ -1,0 +1,11 @@
+# stdlib struct ERF writer: Ethernet (type 2) records, 2-byte pad, rlen padded to 8
+import struct, sys
+out = sys.argv[1]; n = int(sys.argv[2])
+recs = b""
+for i in range(n):
+    frame = bytes.fromhex("ffffffffffff0011223344550800") + bytes(20 + 7 * i)
+    sec, frac = 1700000000 + 2 * i, (i * 0x40000000) & 0xFFFFFFFF   # i/4 s fractions
+    body = b"\x00\x00" + frame
+    rlen = 16 + len(body); pad = (-rlen) % 8; rlen += pad
+    recs += struct.pack("<Q", (sec << 32) | frac) + struct.pack(">BBHHH", 2, 0x04, rlen, 0, len(frame) + 4) + body + bytes(pad)
+open(out, "wb").write(recs)

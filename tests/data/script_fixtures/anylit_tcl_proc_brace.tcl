@@ -1,0 +1,5 @@
+# inert analysis fixture
+proc build_plan {} {
+    return {dj0zfGxhbmd1YWdlPXRjbHxyb2xlPXN0YWdlZF9jaGFpbnx2ZXJkaWN0PXN1c3BpY2lvdXN8YXR0YWNrPVQxMDU5fGFkYXB0ZXI9cHJvY2Vzc19zcGF3bnxob3N0X3Byb2ZpbGU9c3RhbmRhbG9uZXxvYmZ1c2NhdGlvbl9wcm9maWxlPWJhc2U2NHxzdGFnZV9wcm9maWxlPXNpbmdsZV9zdGFnZXxuZXh0X2xhbmd1YWdlPQ==}
+}
+set plan [build_plan]

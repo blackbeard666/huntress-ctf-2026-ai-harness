@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=javascript|role=dropper|verdict=malicious|attack=T1105|obfuscation_profile=zlib_base64|campaign_id=JS-22334455|url=https://js-22334455.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | perl -MCompress::Zlib -0777 -ne 'print compress($_)' | base64 -w0",
+  "oracle_cmd": "sed -n 's/.*ZB64-//p' v3tag_zb64_slash.js | base64 -d | perl -MCompress::Zlib -0777 -ne 'print uncompress($_)'"
+}

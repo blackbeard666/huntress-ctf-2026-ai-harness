@@ -1,0 +1,7 @@
+{
+ "entry": "update_gate_scan",
+ "expected": "ANS-d00dfeed6010abcd",
+ "_why": "versionName 6.0.10 / versionCode 60010 vs minVersionName 6.0.9, minVersionCode 60009, blockedVersions [6.0.1, 6.0.11] -> every check passes -> 'allowed' branch; a lexicographic compare ('6.0.10' < '6.0.9') takes 'required'",
+ "generator_cmd": "python3 tests/data/android_fixtures/ugate_src/gen_ugate.py code_blocked_ok tests/data/android_fixtures/ugate_code_blocked_ok.apk  # apktool's bundled aapt2 link (binary manifest with versionCode/versionName[/versionCodeMajor]) + python zipfile APK",
+ "oracle_cmd": "python3 tests/data/android_fixtures/ugate_src/oracle.py tests/data/android_fixtures/ugate_code_blocked_ok.apk  # aapt dump xmltree reads the manifest versions, python packaging Version/SpecifierSet judges the policy -> branch token"
+}

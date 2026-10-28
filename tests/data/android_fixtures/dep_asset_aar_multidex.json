@@ -1,0 +1,7 @@
+{
+ "entry": "dependency_inventory",
+ "expected": "ANS-e81b4d07c2a6f935",
+ "_why": "lib net.thirdparty.cryptokit only in classes2.dex (static final FLAW + BuildConfig.LIB_VERSION 3.1.0), assets/legacy-xmlkit.aar -> classes.jar -> com.old.xmlkit.Reader (HCTF-DEP-XML-0007), lib/x86_64/libcrypto.so with OpenSSL 1.0.1f",
+ "generator_cmd": "python3 tests/data/android_fixtures/dep_src/gen_dep.py asset_aar_multidex tests/data/android_fixtures/dep_asset_aar_multidex.apk  # javac --release 8 + d8 (tools/r8) dex, jar/zip for the asset .aar, gcc -shared fake libcrypto.so, `zip` APK; stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "unzip -p dep_asset_aar_multidex.apk classes2.dex > c2.dex; jadx -q -d o c2.dex; grep -rhoE 'ANS-[0-9a-f]{16}|LIB_VERSION = \"[^\"]*\"' o/sources/net; unzip -p dep_asset_aar_multidex.apk assets/legacy-xmlkit.aar > x.aar; unzip -p x.aar classes.jar > c.jar; unzip -q c.jar -d cj; javap -constants -cp cj com.old.xmlkit.Reader | grep ID; unzip -p dep_asset_aar_multidex.apk lib/x86_64/libcrypto.so | strings | grep OpenSSL"
+}

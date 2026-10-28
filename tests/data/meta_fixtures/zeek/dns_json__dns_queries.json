@@ -1,0 +1,8 @@
+{
+ "field": "zeek.dns_queries",
+ "expected": "[\"cdn.example.net\",\"evil.example.com\"]",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> dns.log (JSON lines)",
+ "oracle_cmd": "jq -sc '[.[].query]|unique' dns.log",
+ "decoy": false,
+ "member": "dns.log"
+}

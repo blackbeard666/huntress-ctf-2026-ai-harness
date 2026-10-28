@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=nim|role=downloader|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=standalone|obfuscation_profile=base64|stage_profile=single_stage|next_language=",
+ "decoy": false,
+ "target": "function-return-literal-battery",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/anylit_gen.py  (stdlib base64 (60-col wrapped) encode, nameless literal, no marker)",
+ "oracle_cmd": "python3 -I -c \"import re,base64,sys;s=open(sys.argv[1]).read();print(base64.b64decode(re.sub(r'\\s','',re.search(r'\\\"\\\"\\\"(.*?)\\\"\\\"\\\"',s,re.S).group(1))).decode())\" tests/data/script_fixtures/anylit_nim_proc_triple.nim"
+}

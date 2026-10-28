@@ -1,0 +1,8 @@
+{
+  "field": "har.request_urls",
+  "expected": "[\"http://127.0.0.1:46647/api/data.json\",\"http://127.0.0.1:46647/app.js\",\"http://127.0.0.1:46647/img.png\",\"http://127.0.0.1:46647/index.html\",\"http://127.0.0.1:46647/style.css\",\"http://localhost:46647/missing.txt\"]",
+  "generator_cmd": "python3 gen.py chromium.har site/  (Playwright 1.61 Chromium 149 BrowserContext(record_har_path=...) against a loopback http.server: index.html + css/js/png + fetch POST (201, Set-Cookie sessionid) + 404 on localhost; pref cookie pre-set)",
+  "oracle_cmd": "jq -c \"[.log.entries[].request.url]|unique\" $H",
+  "decoy": false,
+  "member": "chromium.har"
+}

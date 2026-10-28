@@ -1,0 +1,7 @@
+{
+ "field": "hosts.entry_count",
+ "expected": "3",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "sed 's/#.*//' tests/data/meta_fixtures/hosts/windows_hosts__entry_count.bin | awk 'NF>=2' | wc -l",
+ "decoy": false
+}

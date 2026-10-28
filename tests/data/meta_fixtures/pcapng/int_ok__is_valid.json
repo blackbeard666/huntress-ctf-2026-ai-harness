@@ -1,0 +1,7 @@
+{
+ "field": "pcapng.is_valid",
+ "expected": "true",
+ "generator_cmd": "text2pcap -q -t '%H:%M:%S.' in.txt base.pcapng (Wireshark 4.6.4 default pcapng)",
+ "oracle_cmd": "capinfos -c base.pcapng -> exit 0, 5 packets",
+ "decoy": false
+}

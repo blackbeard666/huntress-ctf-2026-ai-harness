@@ -1,0 +1,6 @@
+FROM scratch
+ARG P1=dj0zfGxhbmd1YWdlPWRvY2tlcmZpbGV8cm9sZT1sYXVuY2hlcnx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDExMDV8YWRhcHRlcj1idWlsZF9pbnRlcnB8aG9z
+ARG P2="dF9wcm9maWxlPWNpX3J1bm5lcnxvYmZ1c2NhdGlvbl9wcm9maWxlPXNwbGl0X3ZhcmlhYmxlc3xzdGFnZV9jb3VudD0yfHN0ZXBzPXJlc29sdmVfdmFycyxmb2xk"
+ARG P3='X2Rlc2NyaXB0b3IsZGlzcGF0Y2h8Y2FtcGFpZ25faWQ9RE9DS0VSRklMRS03YTFjMjl8ZmlsZV9wYXRoPS90bXAvaHVudHJlc3MtYnVpbGQvLjdhMWMuc3RhZ2U='
+ENV D12=$P1$P2
+LABEL huntress.analysis.descriptor="${D12}${P3}${UNSET_TAIL:-}" stage=analysis

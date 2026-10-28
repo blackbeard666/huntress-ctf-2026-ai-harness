@@ -1,0 +1,7 @@
+{
+ "file": "vif_hcl_join3.tf",
+ "expected_plain": "v=3|language=terraform|role=stager|verdict=malicious|attack=T1105|adapter=build_interp|host_profile=ci_runner|obfuscation_profile=split_variables|stage_count=2|steps=resolve_vars,fold_descriptor,dispatch|campaign_id=TERRAFORM-7a1c26|url=https://tf3-7a1c.example.invalid/s",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/vif_gen.py (dotted hex split 3, join(\"\", [var.a, local.b, local.c]))",
+ "oracle_cmd": "d=$(mktemp -d) && cp vif_hcl_join3.tf $d/main.tf && echo 'local.descriptor' | terraform -chdir=$d console | tr -d '\"' | python3 -c 'import sys;print(bytes.fromhex(sys.stdin.read().replace(\".\",\"\").strip()).decode())'"
+}

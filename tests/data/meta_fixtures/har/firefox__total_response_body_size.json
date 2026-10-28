@@ -1,0 +1,8 @@
+{
+  "field": "har.total_response_body_size",
+  "expected": "5120",
+  "generator_cmd": "python3 -I gen2.py firefox_style.har  (json.dump writer: Firefox-style HAR, 2 pages, 5 entries, mixed +01:00/Z startedDateTime out of stored order, bodySize -1, IPv6/empty serverIPAddress, userinfo+port URL, one string status \"200\")",
+  "oracle_cmd": "jq \"[.log.entries[].response.bodySize|select(.>=0)]|add\" $H",
+  "decoy": false,
+  "member": "firefox_style.har"
+}

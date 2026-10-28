@@ -1,0 +1,7 @@
+{
+ "entry": "zip_slip_scan",
+ "expected": "ANS-6f708192a3b4c5d6",
+ "_why": "zip slip (row 110): extraction dir files/unpacked; three names escape to files/config.json ('../config.json', './sub/../../config.json' after sub/readme.txt made sub/, '/../config.json' re-rooted then escaping) and the LAST wins; 'config.json' stays in-dir, '..\\\\config.json' is a literal backslash name, '/config.json' is re-rooted under unpacked/, '../../config.json' lands one level too high",
+ "generator_cmd": "python3 tests/data/android_fixtures/zsl_src/gen_zsl.py config_three_collide tests/data/android_fixtures/zsl_config_three_collide.apk  # javac --release 8 + d2j-jar2dex classes.dex of zsl_src/Loader.java (ZipInputStream + new File(dir,name) + FileOutputStream, reads files/config.json); assets/bundle.zip by python zipfile with raw ../, absolute, backslash and duplicate names",
+ "oracle_cmd": "sh tests/data/android_fixtures/zsl_src/oracle.sh tests/data/android_fixtures/zsl_config_three_collide.apk config  # unzip -p the asset, run Loader.java's own unpack on a desktop JVM (java.util.zip + java.io.File, kernel path walk) in a temp data dir, strings | grep -oE 'ANS-[0-9a-f]{16}' on the file the app reads"
+}

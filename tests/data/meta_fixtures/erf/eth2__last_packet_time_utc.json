@@ -1,0 +1,8 @@
+{
+ "field": "erf.last_packet_time_utc",
+ "expected": "2023-11-14T22:13:22.250000000Z",
+ "generator_cmd": "python3 tests/data/meta_fixtures/erf/GENERATOR_erf.py.txt eth2.erf 2  (stdlib struct ERF writer, type 2 ETH records)",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e eth2.erf -> 'Latest packet time: 2023-11-14 22:13:22.250000000'",
+ "decoy": false,
+ "member": "eth2.erf"
+}

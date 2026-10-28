@@ -1,0 +1,7 @@
+{
+ "field": "netstat.remote_ips",
+ "expected": "none",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "file -b tests/data/meta_fixtures/netstat/decoy_png_impostor__remote_ips.bin | grep -q '^PNG' && echo none",
+ "decoy": true
+}

@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=loader|verdict=malicious|attack=T1105|adapter=download_exec|host_profile=windows_container|obfuscation_profile=gzip_base64|stage_profile=heredoc|next_language=batch",
+ "decoy": false,
+ "target": "dockerfile-multistage-stage-graph",
+ "generator_cmd": "python3 -I -c 'gzip.compress(plan,mtime=0) -> base64.b64encode, split 48: ARG CHUNK1 / ENV CHUNK2 (backtick-continued) in stage gen under # escape=`; RUN <<EOT heredoc printf|base64 -d|gunzip; stage mid re-ENVs CHUNK2; final COPY --from=0' (stdlib gzip+base64)",
+ "oracle_cmd": "mkdir -p $TMPDIR/ctx && docker build -q --pull=false --output type=local,dest=$TMPDIR/out_ds_escape_backtick_heredoc -f tests/data/script_fixtures/ds_escape_backtick_heredoc.Dockerfile $TMPDIR/ctx && cat $TMPDIR/out_ds_escape_backtick_heredoc/p.txt  (real BuildKit build, local wordpress:cli image, final scratch stage exported)"
+}

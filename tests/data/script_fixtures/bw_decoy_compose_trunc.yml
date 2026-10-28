@@ -1,0 +1,7 @@
+# inert analysis fixture
+services:
+  app:
+    image: alpine:3.19
+    environment:
+      HUNTRESS_DESCRIPTOR: H4sIAAAAAAACA2WPzU4DMQyEn6ibIn4kkHKCR+AeuY67sZpNrNhZKpSHZylo
+    command: sh -c 'echo $$HUNTRESS_DESCRIPTOR | base64 -d | gunzip | sh'

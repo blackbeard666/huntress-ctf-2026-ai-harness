@@ -1,0 +1,29 @@
+{
+ "expected_plain": "v=3|language=terraform_hcl|role=benign_utility|verdict=benign|attack=none|adapter=local_parser|host_profile=standalone|obfuscation_profile=plain_hex|stage_profile=single_descriptor|next_language=powershell|stage_count=2|steps=decode_configuration,return_configuration|campaign_id=TERRAFORM_HCL-492062d5|url=https://terraform_hcl-492062d5e6.example.invalid/stage|file_path=/tmp/huntress-terraform_hcl/.492062d5e6a1dd7c.stage",
+ "decoy": false,
+ "language": "terraform_hcl",
+ "role": "benign-utility",
+ "family": "polyglot-terraform_hcl",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/tfhcl_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "head -n1 tests/data/script_fixtures/polyglot-terraform_hcl-benign-utility.tf | grep -o 'HUNTRESS_ANALYSIS_V1:[^ ]*' | sed -E 's/^HUNTRESS_ANALYSIS_V1:HEX-//' | xxd -r -p",
+ "expected_fields": {
+  "language": "terraform_hcl",
+  "role": "benign_utility",
+  "verdict": "benign",
+  "attack": "none",
+  "adapter": "local_parser",
+  "host_profile": "standalone",
+  "obfuscation_profile": "plain_hex",
+  "stage_profile": "single_descriptor",
+  "next_language": "powershell",
+  "stage_count": "2",
+  "steps": "decode_configuration,return_configuration",
+  "campaign_id": "TERRAFORM_HCL-492062d5",
+  "url": "https://terraform_hcl-492062d5e6.example.invalid/stage",
+  "file_path": "/tmp/huntress-terraform_hcl/.492062d5e6a1dd7c.stage",
+  "url_host": "terraform_hcl-492062d5e6.example.invalid",
+  "file_dir": "/tmp/huntress-terraform_hcl/"
+ },
+ "id_single": "polyglot-terraform_hcl-benign-utility-<field>",
+ "id_timed": "polyglot-terraform_hcl-49c086-<field>"
+}

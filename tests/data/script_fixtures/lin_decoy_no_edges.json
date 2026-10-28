@@ -1,0 +1,10 @@
+{
+ "material": "{\"a.sh\": \"#!/bin/sh\\necho https://example.invalid/x\\n\", \"b.sh\": \"#!/bin/sh\\necho https://example.invalid/x\\n\"}",
+ "rep": "lineage",
+ "transform": "parent",
+ "key": "b.sh",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/lin_gen.py $TMPDIR/lingen  (stdlib base64 writer; corpus benign)",
+ "oracle_cmd": "cd $TMPDIR/lingen/benign && grep -l 'next_stage\\|COPY --from' * || true"
+}

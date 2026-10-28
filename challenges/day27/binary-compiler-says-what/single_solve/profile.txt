@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (1085334 function calls (1070926 primitive calls) in 0.936 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    215/1    0.003    0.000    0.802    0.802 {built-in method builtins.exec}
+      2/1    0.000    0.000    0.795    0.795 solve.py:1(<module>)
+      2/1    0.009    0.005    0.795    0.795 solve.py:1058(main)
+      2/1    0.002    0.001    0.786    0.786 solve.py:1011(_solve_pairs)
+      324    0.003    0.000    0.579    0.002 solve.py:891(answer)
+      324    0.003    0.000    0.483    0.001 solve.py:256(group_members)
+    77/15    0.017    0.000    0.467    0.031 threading.py:323(wait)
+      324    0.001    0.000    0.467    0.001 solve.py:167(resolve)
+      444    0.001    0.000    0.463    0.001 _base.py:428(result)
+     37/1    0.007    0.000    0.426    0.426 thread.py:54(run)
+     2088    0.047    0.000    0.418    0.000 {method 'join' of 'bytes' objects}
+  440/394    0.001    0.000    0.417    0.001 solve.py:298(_memo)
+     37/1    0.001    0.000    0.417    0.417 solve.py:74(_aes_member)
+       85    0.000    0.000    0.389    0.005 solve.py:703(facts)
+   232/19    0.001    0.000    0.335    0.018 <frozen importlib._bootstrap>:1349(_find_and_load)
+   231/19    0.001    0.000    0.335    0.018 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   218/20    0.001    0.000    0.333    0.017 <frozen importlib._bootstrap>:911(_load_unlocked)
+   192/20    0.000    0.000    0.332    0.017 <frozen importlib._bootstrap_external>:993(exec_module)
+   496/37    0.001    0.000    0.310    0.008 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+    51/26    0.000    0.000    0.293    0.011 queue.py:154(get)
+       33    0.000    0.000    0.259    0.008 solve.py:704(<lambda>)
+       33    0.000    0.000    0.259    0.008 solve.py:707(_facts)
+        1    0.000    0.000    0.165    0.165 solve.py:112(sha)
+    77/65    0.152    0.002    0.151    0.002 {method 'decompress' of 'zlib.Decompress' objects}
+       28    0.000    0.000    0.137    0.005 __init__.py:1(<module>)

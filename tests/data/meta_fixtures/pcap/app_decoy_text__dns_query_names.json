@@ -1,0 +1,8 @@
+{
+ "field": "pcap.dns_query_names",
+ "expected": "none",
+ "generator_cmd": "printf 'GET /a HTTP/1.1\\r\\nHost: decoy.example...' > http.txt (plain text renamed .pcap)",
+ "oracle_cmd": "file http.txt -> ASCII text, with CRLF line terminators (not a capture)",
+ "decoy": true,
+ "member": "http.pcap"
+}

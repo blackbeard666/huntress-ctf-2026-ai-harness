@@ -1,0 +1,8 @@
+{
+ "field": "erf.packet_count",
+ "expected": "5",
+ "generator_cmd": "python3 tests/data/meta_fixtures/erf/GENERATOR_erf.py.txt eth5.erf 5  (stdlib struct ERF writer, type 2 ETH records); gzip -9nc eth5.erf > eth5.erf.gz",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e eth5.erf.gz -> 'Endace ERF capture (gzip compressed)', 'Number of packets: 5'",
+ "decoy": false,
+ "member": "eth5.erf.gz"
+}

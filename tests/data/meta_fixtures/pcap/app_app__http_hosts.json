@@ -1,0 +1,8 @@
+{
+ "field": "pcap.http_hosts",
+ "expected": "[\"dl.badcdn.example\",\"panel.badcdn.example:8080\"]",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -subj '/O=Shadow Ops/CN=update.badcdn.example' -keyout k.pem -out c.pem; python3 tests/data/meta_fixtures/pcap/GENERATOR_app.py.txt app.pcap c.pem k.pem (stdlib struct frames + ssl.MemoryBIO OpenSSL TLS1.2 handshake)",
+ "oracle_cmd": "tshark 4.6.4 -r app.pcap -o tcp.desegment_tcp_streams:TRUE -Y http.request -T fields -e http.host -e http.request.uri -e http.user_agent -e http.request.full_uri; -Y http.response -e http.response.code",
+ "decoy": false,
+ "member": "app.pcap"
+}

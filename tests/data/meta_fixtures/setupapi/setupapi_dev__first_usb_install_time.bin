@@ -1,0 +1,28 @@
+[Device Install Log]
+     OS Version = 10.0.19045
+     Service Pack = 0.0
+     Suite = 0x0100
+     ProductType = 1
+     Architecture = amd64
+
+[BeginLog]
+
+>>>  [Device Install (Hardware initiated) - SWD\WPDBUSENUM\_??_USBSTOR#Disk&Ven_SanDisk&Prod_Cruzer_Blade&Rev_1.00#4C530001230607115143&0#{53f56307-b6bf-11d0-94f2-00a0c91efb8b}]
+>>>  Section start 2024/03/11 09:14:02.511
+<<<  Section end 2024/03/11 09:14:03.020
+<<<  [Exit status: SUCCESS]
+
+>>>  [Device Install (Hardware initiated) - USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer_Blade&Rev_1.00\4C530001230607115143&0]
+>>>  Section start 2024/03/11 09:13:58.207
+     ump: Creating Install Process: DrvInst.exe 09:13:58.210
+<<<  Section end 2024/03/11 09:14:01.884
+<<<  [Exit status: SUCCESS]
+
+>>>  [Device Install (DiInstallDriver) - C:\Windows\System32\DriverStore\FileRepository\prnms003.inf_amd64_1b2c\prnms003.inf]
+>>>  Section start 2024/02/01 08:00:10.001
+<<<  Section end 2024/02/01 08:00:11.002
+
+>>>  [Device Install (Hardware initiated) - USBSTOR\Disk&Ven_Kingston&Prod_DataTraveler_3.0&Rev_PMAP\60A44C3FAE22F0B1A9C9&0]
+>>>  Section start 2024/04/02 17:45:31.090
+<<<  Section end 2024/04/02 17:45:33.417
+<<<  [Exit status: SUCCESS]

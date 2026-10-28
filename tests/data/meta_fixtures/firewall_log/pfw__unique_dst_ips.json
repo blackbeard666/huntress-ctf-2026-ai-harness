@@ -1,0 +1,8 @@
+{
+ "field": "firewall_log.unique_dst_ips",
+ "expected": "[\"10.0.0.5\",\"203.0.113.9\",\"8.8.8.8\",\"93.184.216.34\"]",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> pfirewall.log",
+ "oracle_cmd": "grep -v '^#' pfirewall.log | awk 'NF{print $6}' | LC_ALL=C sort -u",
+ "decoy": false,
+ "member": "pfirewall.log"
+}

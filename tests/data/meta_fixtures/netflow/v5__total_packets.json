@@ -1,0 +1,8 @@
+{
+ "field": "netflow.total_packets",
+ "expected": "33",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> v5.bin",
+ "oracle_cmd": "tshark -r v5_in.pcap -d udp.port==2055,cflow -T fields -e cflow.packets -> 11,2,19,1 (sum 33)",
+ "decoy": false,
+ "member": "v5.bin"
+}

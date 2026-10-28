@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=makefile|role=downloader|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=standalone|obfuscation_profile=hex_base64|stage_profile=single_stage|next_language=",
+ "decoy": false,
+ "target": "function-return-literal-battery",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/anylit_gen.py  (stdlib base64(hexlify) encode, nameless literal, no marker)",
+ "oracle_cmd": "make -s -f tests/data/script_fixtures/anylit_make_define.mk --eval 'o: ; @echo $(PLAN_BODY)' o | base64 -d | xxd -r -p"
+}

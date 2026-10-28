@@ -1,0 +1,8 @@
+{
+ "field": "suricata.alert_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> conn.log (Zeek TSV)",
+ "oracle_cmd": "head -1 conn.log -> '#separator \\x09' (Zeek header, no JSON event_type) -> none",
+ "decoy": true,
+ "member": "conn.log"
+}

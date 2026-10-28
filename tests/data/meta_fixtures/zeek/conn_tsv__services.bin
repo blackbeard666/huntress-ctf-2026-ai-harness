@@ -1,0 +1,14 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	conn
+#open	2026-10-27-09-00-00
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	service	duration	orig_bytes	resp_bytes	conn_state	orig_pkts	resp_pkts
+#types	time	string	addr	port	addr	port	enum	string	interval	count	count	string	count	count
+1761555600.101	CAbc1	10.0.0.5	49152	93.184.216.34	80	tcp	http	0.5	420	1520	SF	6	5
+1761555601.200	CAbc2	10.0.0.5	53001	8.8.8.8	53	udp	dns	0.01	38	54	SF	1	1
+1761555602.300	CAbc3	10.0.0.7	49200	203.0.113.9	443	tcp	ssl	2.1	900	4200	SF	10	9
+1761555603.400	CAbc4	10.0.0.7	49201	203.0.113.9	4444	tcp	-	-	-	-	S0	1	0
+1761555604.500	CAbc2	10.0.0.5	53002	8.8.8.8	53	udp	dns	0.01	40	56	SF	1	1
+#close	2026-10-27-09-05-00

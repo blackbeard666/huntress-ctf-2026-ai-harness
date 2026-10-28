@@ -1,0 +1,10 @@
+{
+ "material": "{\"Dockerfile\": \"FROM python:3.12-slim AS builder\\nCOPY gen.py /src/gen.py\\nRUN python3 /src/gen.py > /out/beacon.sh\\nFROM alpine:3.20 AS runtime\\nCOPY --from=builder /out/beacon.sh /opt/beacon.sh\\nCMD [\\\"/bin/sh\\\", \\\"/opt/beacon.sh\\\"]\\n\", \"beacon.sh\": \"#!/bin/sh\\n# inert analyst fixture\\nURL=\\\"https://pkg-3c4d5e6f.example.invalid/b\\\"\\necho \\\"$URL\\\"\\n\", \"gen.py\": \"import base64\\n# inert analyst fixture\\nPLAN = base64.b64decode('dj0zfGxhbmd1YWdlPXB5dGhvbnxyb2xlPWJ1aWxkZXJ8Y2FtcGFpZ25faWQ9R0VOLTNjNGQ1ZTZmfG5leHRfbGFuZ3VhZ2U9YmFzaHx1cmw9aHR0cHM6Ly9wa2ctM2M0ZDVlNmYuZXhhbXBsZS5pbnZhbGlkL2I=').decode()\\n\", \"old_beacon.sh\": \"#!/bin/sh\\n# inert analyst fixture (earlier specimen)\\nURL=\\\"https://pkg-3c4d5e6f.example.invalid/b\\\"\\necho old \\\"$URL\\\"\\n\"}",
+ "rep": "lineage",
+ "transform": "parent",
+ "key": "beacon.sh",
+ "expected": "gen.py",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/lin_gen.py $TMPDIR/lingen  (stdlib base64 writer; corpus docker)",
+ "oracle_cmd": "cd $TMPDIR/lingen/docker && awk -v M=\"beacon.sh\" 'toupper($1)==\"FROM\"{s=tolower($NF)} toupper($1)==\"COPY\" && $2 !~ /^--from=/{n=split($2,a,\"/\"); C[s]=a[n]}\n toupper($1)==\"COPY\" && $2 ~ /^--from=/{split($2,b,\"=\"); n=split($3,a,\"/\"); if(a[n]==M) print C[tolower(b[2])]}' Dockerfile"
+}

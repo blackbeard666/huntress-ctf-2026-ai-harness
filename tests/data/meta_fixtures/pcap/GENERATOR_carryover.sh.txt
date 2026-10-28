@@ -1,0 +1,9 @@
+set -e
+editcap -F modpcap eth_us.pcap kuz_le.pcap
+cp eth_us.pcap aix22.pcap; printf '\002\000' | dd of=aix22.pcap bs=1 seek=6 conv=notrunc 2>/dev/null
+head -c $(( $(stat -c %s eth_us.pcap) - 1 )) eth_us.pcap > short1.pcap
+gzip -9nc eth_us.pcap > eth_us.pcap.gz
+gzip -9nc eth_ng.pcapng > eth_ng.pcapng.gz
+printf 'not a capture, just text\n' | gzip -9nc > decoy_text.pcap.gz
+python3 -I gen_struct.py
+cat eth_ng.pcapng be_sec.pcapng > multisec.pcapng

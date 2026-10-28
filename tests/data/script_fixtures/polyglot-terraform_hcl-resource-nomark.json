@@ -1,0 +1,29 @@
+{
+ "expected_plain": "v=3|language=terraform_hcl|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=TERRAFORM_HCL-dca78ab5|url=https://terraform_hcl-dca78ab5d0.example.invalid/stage|file_path=/tmp/huntress-terraform_hcl/.dca78ab5d0d0a801.stage",
+ "decoy": false,
+ "language": "terraform_hcl",
+ "role": "staged-chain",
+ "family": "polyglot-terraform_hcl",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/tfhcl_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "cat tests/data/script_fixtures/polyglot-terraform_hcl-resource-nomark.tf | grep -o 'input *= *\"[^\"]*\"' | sed -E 's/^[^\"]*\"//; s/\"$//' | tr -d '.\\n ' | xxd -r -p",
+ "expected_fields": {
+  "language": "terraform_hcl",
+  "role": "staged_chain",
+  "verdict": "suspicious",
+  "attack": "T1059",
+  "adapter": "operation_graph",
+  "host_profile": "standalone",
+  "obfuscation_profile": "fragmented_hex",
+  "stage_profile": "cross_language_handoff",
+  "next_language": "vbscript",
+  "stage_count": "3",
+  "steps": "profile_host,decode_configuration,dispatch_language",
+  "campaign_id": "TERRAFORM_HCL-dca78ab5",
+  "url": "https://terraform_hcl-dca78ab5d0.example.invalid/stage",
+  "file_path": "/tmp/huntress-terraform_hcl/.dca78ab5d0d0a801.stage",
+  "url_host": "terraform_hcl-dca78ab5d0.example.invalid",
+  "file_dir": "/tmp/huntress-terraform_hcl/"
+ },
+ "id_single": "polyglot-terraform_hcl-staged-chain-<field>",
+ "id_timed": "polyglot-terraform_hcl-5711dc-<field>"
+}

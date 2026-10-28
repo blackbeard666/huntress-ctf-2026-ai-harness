@@ -1,0 +1,96 @@
+# Fixture writer for pcap_flows: stdlib struct only, independent of lib/meta (hand-built frames).
+import struct, sys
+out = sys.argv[1]
+
+def csum(b):
+    if len(b) % 2: b += b"\0"
+    s = sum(struct.unpack("!%dH" % (len(b)//2), b)); s = (s >> 16) + (s & 0xffff); s += s >> 16
+    return (~s) & 0xffff
+
+def ip4(src, dst, proto, payload, ttl=64):
+    a = bytes(map(int, src.split("."))); b = bytes(map(int, dst.split(".")))
+    h = struct.pack("!BBHHHBBH4s4s", 0x45, 0, 20+len(payload), 1, 0, ttl, proto, 0, a, b)
+    h = h[:10] + struct.pack("!H", csum(h)) + h[12:]
+    return h + payload
+
+def ip4opt(src, dst, proto, payload):   # IHL 6 (4 bytes of NOP options)
+    a = bytes(map(int, src.split("."))); b = bytes(map(int, dst.split(".")))
+    h = struct.pack("!BBHHHBBH4s4s", 0x46, 0, 24+len(payload), 2, 0, 64, proto, 0, a, b) + b"\x01\x01\x01\x00"
+    h = h[:10] + struct.pack("!H", csum(h)) + h[12:]
+    return h + payload
+
+def v6addr(s):
+    import ipaddress; return ipaddress.IPv6Address(s).packed
+
+def ip6(src, dst, nh, payload, hbh=False):
+    if hbh:   # hop-by-hop ext header (8 bytes, PadN) in front of the payload
+        payload = struct.pack("!BB", nh, 0) + b"\x01\x04\0\0\0\0" + payload; nh = 0
+    return struct.pack("!IHBB", 0x60000000, len(payload), nh, 64) + v6addr(src) + v6addr(dst) + payload
+
+def tcp(sp, dp, flags, data=b""):
+    return struct.pack("!HHIIBBHHH", sp, dp, 1000, 0, 0x50, flags, 8192, 0, 0) + data
+
+def tcpopt(sp, dp, flags):   # data offset 6 (MSS option)
+    return struct.pack("!HHIIBBHHH", sp, dp, 1000, 0, 0x60, flags, 8192, 0, 0) + b"\x02\x04\x05\xb4"
+
+def udp(sp, dp, data=b""):
+    return struct.pack("!HHHH", sp, dp, 8+len(data), 0) + data
+
+def icmp(t=8):
+    return struct.pack("!BBHHH", t, 0, 0, 1, 1) + b"ping"
+
+MAC1, MAC2 = bytes.fromhex("020000000001"), bytes.fromhex("020000000002")
+def eth(et, p, vlan=()):
+    h = MAC2 + MAC1
+    for tpid, vid in vlan: h += struct.pack("!HH", tpid, vid)
+    return h + struct.pack("!H", et) + p
+
+def arp():
+    return struct.pack("!HHBBH", 1, 0x0800, 6, 4, 1) + MAC1 + bytes([10,0,0,1]) + b"\0"*6 + bytes([10,0,0,2])
+
+def wpcap(name, lt, pkts, snap=65535, le=True):
+    e = "<" if le else ">"
+    o = struct.pack(e + "IHHiIII", 0xa1b2c3d4, 2, 4, 0, 0, snap, lt)
+    for i, item in enumerate(pkts):
+        ts, d = item if isinstance(item, tuple) else (1700000000 + i, item)
+        sec, usec = int(ts), int(round((ts - int(ts)) * 1e6))
+        o += struct.pack(e + "IIII", sec, usec, min(len(d), snap), len(d)) + d[:snap]
+    open(f"{out}/{name}", "wb").write(o)
+
+# ---- eth_mix: Ethernet, 802.1Q + QinQ, IPv4 TCP/UDP/ICMP, ARP, IPv6 (HBH) UDP + ICMPv6
+P = [
+ (1700000000.0, eth(0x0800, ip4("10.0.0.1", "10.0.0.2", 6, tcp(40000, 80, 0x02)))),           # SYN
+ (1700000000.25, eth(0x0800, ip4("10.0.0.2", "10.0.0.1", 6, tcp(80, 40000, 0x12)))),           # SYN-ACK
+ (1700000000.5, eth(0x0800, ip4("10.0.0.1", "10.0.0.2", 6, tcp(40000, 80, 0x10)))),            # ACK
+ (1700000001.0, eth(0x0800, ip4("10.0.0.1", "10.0.0.2", 6, tcp(40000, 80, 0x18, b"GET / HTTP/1.0\r\n\r\n" + b"x"*120)))),
+ (1700000001.5, eth(0x0800, ip4("10.0.0.1", "10.0.0.10", 6, tcpopt(40001, 443, 0x02)), vlan=[(0x8100, 10)])),
+ (1700000002.0, eth(0x0800, ip4opt("10.0.0.1", "10.0.0.10", 6, tcp(40002, 22, 0x02)), vlan=[(0x88a8, 100), (0x8100, 20)])),
+ (1700000002.5, eth(0x0800, ip4("10.0.0.3", "8.8.8.8", 17, udp(5353, 53, b"\x12\x34" + b"\0"*10)))),
+ (1700000003.0, eth(0x0800, ip4("8.8.8.8", "10.0.0.3", 17, udp(53, 5353, b"\x12\x34" + b"\0"*10)))),
+ (1700000003.5, eth(0x0800, ip4("10.0.0.3", "8.8.8.8", 17, udp(5354, 53, b"\x56\x78" + b"\0"*10)))),
+ (1700000004.0, eth(0x0800, ip4("10.0.0.1", "10.0.0.2", 1, icmp()))),
+ (1700000004.5, eth(0x0806, arp())),
+ (1700000005.0, eth(0x86dd, ip6("fe80::1", "ff02::1:3", 17, udp(5355, 5355, b"\0"*12), hbh=True))),
+ (1700000006.75, eth(0x86dd, ip6("2001:db8::1", "2001:db8:0:0:1::2", 58, icmp(128)))),
+]
+wpcap("eth_mix.pcap", 1, P, snap=96)   # snaplen 96 cuts the 140-byte GET frame (incl 96, orig 168)
+
+# ---- other linktypes, one IPv4 UDP + one IPv6 TCP each (2 unique pairs / 4 IPs)
+def l3s():
+    return [(0x0800, ip4("192.168.1.5", "192.168.1.9", 17, udp(1234, 5678, b"abcd"))),
+            (0x86dd, ip6("2001:db8::a", "2001:db8::b", 6, tcp(1111, 2222, 0x02)))]
+def af(v6): return 30 if v6 else 2
+wpcap("null_le.pcap", 0, [struct.pack("<I", af(et == 0x86dd)) + p for et, p in l3s()])
+wpcap("null_be.pcap", 0, [struct.pack(">I", af(et == 0x86dd)) + p for et, p in l3s()], le=False)
+wpcap("raw101.pcap", 101, [p for et, p in l3s()])
+wpcap("raw228.pcap", 228, [l3s()[0][1]])
+wpcap("sll.pcap", 113, [struct.pack("!HHH8sH", 0, 1, 6, MAC1 + b"\0\0", et) + p for et, p in l3s()])
+wpcap("sll2.pcap", 276, [struct.pack("!HHIHBB8s", et, 0, 2, 1, 0, 6, MAC1 + b"\0\0") + p for et, p in l3s()])
+def dot11(et, p, qos=False):
+    fc = struct.pack("<BB", 0x88 if qos else 0x08, 0x01)  # data (QoS data), ToDS
+    h = fc + b"\0\0" + MAC2 + MAC1 + MAC2 + b"\0\0" + (b"\0\0" if qos else b"")
+    return h + b"\xaa\xaa\x03\0\0\0" + struct.pack("!H", et) + p
+rt = struct.pack("<BBHI", 0, 0, 8, 0)   # minimal radiotap header, no fields
+wpcap("radiotap.pcap", 127, [rt + dot11(et, p, qos=(i == 1)) for i, (et, p) in enumerate(l3s())])
+wpcap("dot11.pcap", 105, [dot11(et, p) for et, p in l3s()])
+wpcap("user0.pcap", 147, [b"\x00" * 30, b"\x01" * 20])

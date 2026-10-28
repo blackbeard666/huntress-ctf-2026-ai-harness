@@ -1,0 +1,8 @@
+{
+ "field": "utmp.user_names",
+ "expected": "none",
+ "generator_cmd": "systemd-journal-remote 259.9 --split-mode=none -o out1.journal exp1.txt; head -c 768 out1.journal > wtmp (2 x 384 bytes, a journal header renamed wtmp)",
+ "oracle_cmd": "PYTHONPATH=pyutmp python3 -c 'import utmp; list(utmp.read(...))' (PyPI utmp 21.10.0) -> UnicodeDecodeError; ut_type bytes 'LP' = 0x504c is no utmp type",
+ "decoy": true,
+ "member": "wtmp"
+}

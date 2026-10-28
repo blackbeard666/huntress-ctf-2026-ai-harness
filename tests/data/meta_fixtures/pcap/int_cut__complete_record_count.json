@@ -1,0 +1,7 @@
+{
+ "field": "pcap.complete_record_count",
+ "expected": "4",
+ "generator_cmd": "text2pcap -q -F pcap -t '%H:%M:%S.' in.txt base.pcap (5 Ethernet frames 60/74/98/54/120 B); head -c 500 base.pcap > cut.pcap",
+ "oracle_cmd": "capinfos -c cut.pcap -> 'Number of packets: 4'",
+ "decoy": false
+}

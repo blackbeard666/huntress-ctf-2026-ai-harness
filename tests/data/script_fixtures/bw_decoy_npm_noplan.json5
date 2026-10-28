@@ -1,0 +1,10 @@
+{
+  "name": "inert-fixture",
+  "config": {
+    "d0": "anVzdCBhIGJlbmlnbiBi",
+    "d1": "YW5uZXIsIA=="
+  },
+  "scripts": {
+    "postinstall": "echo $npm_package_config_d0$npm_package_config_d1 | base64 -d"
+  }
+}

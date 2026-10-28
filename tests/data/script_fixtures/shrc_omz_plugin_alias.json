@@ -1,0 +1,10 @@
+{
+ "expected_plain": "v=3|language=zsh|role=staged_chain|verdict=suspicious|attack=T1546.004|adapter=operation_graph|host_profile=oh_my_zsh_plugin|obfuscation_profile=layered_b64_hex|stage_profile=shell_startup_persistence|next_language=fish|stage_count=2|steps=profile_host,dispatch_language|campaign_id=ZSH-7b6578d1|url=https://zsh-7b6578d10b.example.invalid/stage|file_path=/tmp/huntress-zsh/.7b6578d10b8cf506.stage",
+ "decoy": false,
+ "language": "zsh",
+ "role": "host",
+ "host_profile": "oh_my_zsh_plugin",
+ "marker": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/shrc_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "cat tests/data/script_fixtures/shrc_omz_plugin_alias.zsh | grep -E '^alias hx_' | cut -d'\"' -f2 | base64 -d"
+}

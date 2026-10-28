@@ -1,0 +1,4 @@
+# inert analysis fixture
+FROM alpine:3.19
+LABEL huntress.descriptor="H4sIAAAAAAACA0WOSw7CMAxErwTiI7HILdhHbuIGq5EdxU5ByIensCjbN/NGs4aTV+AyoGDIkhbsM1X0LhVDhcHpgd1X7JmSBR3aKJEMdTCDtIT78XC5OWRohj20LglVozZ4sj9ELW7oOxjUgDNUYXSZ5qEJjIT3uLypxQkUr2ffqgX/InGpGH/QGV8W978fJDs3YL0AAAA="
+RUN true

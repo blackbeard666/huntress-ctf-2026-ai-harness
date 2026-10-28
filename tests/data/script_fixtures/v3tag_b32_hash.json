@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=ruby|role=launcher|verdict=malicious|attack=T1059|obfuscation_profile=base32|campaign_id=RB-11223344|url=https://rb-11223344.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | base32 -w0",
+  "oracle_cmd": "sed -n 's/.*B32-//p' v3tag_b32_hash.rb | base32 -d"
+}

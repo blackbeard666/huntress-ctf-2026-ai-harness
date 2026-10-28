@@ -1,0 +1,7 @@
+{
+ "field": "powershell_history.download_urls",
+ "expected": "[\"http://198.51.100.7/a.ps1\",\"https://evil.example.com/payload.exe\"]",
+ "generator_cmd": "python3 /home/testpwn/huntress-2026/.run/tmp/prebuild-a741ef11/wtd/gen.py (stdlib text writer: open(..., 'w', encoding='utf-16'|'utf-8', newline='\\r\\n') of the literal lines -- see the .bin); PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "tr -d '\\r' < tests/data/meta_fixtures/powershell_history/consolehost_history.bin | grep -oE \"https?://[^ '\\\")]+\" | sort -u | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()],separators=(\",\",\":\")))'",
+ "decoy": false
+}

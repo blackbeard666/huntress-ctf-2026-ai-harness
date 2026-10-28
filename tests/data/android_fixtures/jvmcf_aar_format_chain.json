@@ -1,0 +1,7 @@
+{
+ "entry": "jvm_classfile_scan",
+ "expected": "ANS-8b8b481ae65761ed",
+ "_why": "assets/vendor-mathkit.aar -> classes.jar -> Mix.token(): \"ANS-\" + String.format(\"%016x\", mix(seed())) with Fold.step(4) loop+tableswitch; javac --release 8 (StringBuilder + Long.valueOf boxing); no ANS literal",
+ "generator_cmd": "python3 tests/data/android_fixtures/jvmcf_src/gen_jvmcf.py aar_format_chain tests/data/android_fixtures/jvmcf_aar_format_chain.apk  # javac + jar (+ zip for the .aar) + zip APK",
+ "oracle_cmd": "sh tests/data/android_fixtures/jvmcf_src/oracle.sh tests/data/android_fixtures/jvmcf_aar_format_chain.apk com.vendor.mathkit.Mix  # unzip asset jar/aar->classes.jar, javap -constants, RUN the static String methods on the JVM"
+}

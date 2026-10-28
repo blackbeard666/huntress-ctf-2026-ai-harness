@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-27-dependency-surface",
+  "lane": "mobile-android",
+  "name": "📱 Dependency Surface",
+  "ids": {
+    "single_solve": "mobile-android-day-27-dependency-surface",
+    "time_trial": "mobile-android-day-27-dependency-surface/time_trial",
+    "mastery": "mobile-android-day-27-dependency-surface/mastery"
+  }
+}

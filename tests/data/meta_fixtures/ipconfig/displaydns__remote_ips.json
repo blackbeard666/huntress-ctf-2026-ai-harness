@@ -1,0 +1,7 @@
+{
+ "field": "ipconfig.remote_ips",
+ "expected": "[\"127.0.0.1\",\"20.190.151.6\",\"203.0.113.45\"]",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "grep -oP 'A \\(Host\\) Record[ .]*: \\K\\S+' tests/data/meta_fixtures/ipconfig/displaydns__remote_ips.bin | python3 -c 'import sys,json;v=sorted(set(l.strip() for l in sys.stdin.read().splitlines() if l.strip()));print(json.dumps(v,separators=(\",\",\":\")) if v else \"none\")'",
+ "decoy": false
+}

@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-27-compiler-attribution",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Compiler Says What",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-27-compiler-attribution",
+    "time_trial": "binary-reverse-engineering-day-27-compiler-attribution/time_trial",
+    "mastery": "binary-reverse-engineering-day-27-compiler-attribution/mastery"
+  }
+}

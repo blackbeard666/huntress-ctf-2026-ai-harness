@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.captured_bytes",
+ "expected": "784",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/pcap/GENERATOR_flows.py.txt out (stdlib struct frame/pcap writer); eth_mix_ng = editcap -F pcapng eth_mix.pcap; decoy_snoop = editcap -F snoop eth_mix.pcap; decoy_text = printf HTTP text > .pcap -> eth_mix_ng.pcapng",
+ "oracle_cmd": "tshark 4.6.4 -r eth_mix_ng.pcapng -T fields -e ip.src -e ip.dst -e ipv6.src -e ipv6.dst -e tcp.dstport -e udp.dstport -e tcp.flags -e frame.cap_len; -q -z conv,ip -z conv,ipv6 -z conv,tcp -z conv,udp -z endpoints,ip -z endpoints,ipv6; capinfos -> sum frame.cap_len",
+ "decoy": false,
+ "member": "eth_mix_ng.pcapng"
+}

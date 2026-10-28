@@ -1,0 +1,10 @@
+{
+ "expected_plain": "v=3|language=fish|role=staged_chain|verdict=suspicious|attack=T1546.004|adapter=operation_graph|host_profile=fish_config|obfuscation_profile=layered_b64_hex|stage_profile=shell_startup_persistence|next_language=perl|stage_count=2|steps=profile_host,dispatch_language|campaign_id=FISH-73639660|url=https://fish-736396603f.example.invalid/stage|file_path=/tmp/huntress-fish/.736396603fcb7ca0.stage",
+ "decoy": false,
+ "language": "fish",
+ "role": "host",
+ "host_profile": "fish_config",
+ "marker": false,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/shrc_gen.py  (stdlib base64/binascii encode of the plan)",
+ "oracle_cmd": "cat tests/data/script_fixtures/shrc_fish_confd_event_nomark.fish | grep -E 'set -l descriptor_' | cut -d'\"' -f2 | xxd -r -p"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "classloader_shadow_scan",
+ "expected": "ANS-5e81c0d7a29b4f36",
+ "_why": "lib.Vault.TOKEN literal in classes2.dex and a shadow Vault in classes10.dex (ANS-1234abcd5678ef90): the live copy is the classes2 one",
+ "generator_cmd": "python3 tests/data/android_fixtures/mdx_src/gen_mdx.py literal10 tests/data/android_fixtures/mdx_literal10.apk  # javac --release 8 + d8 (tools/r8) per dex group, `zip` APK (zip order classes9..classes2,classes10,classes.dex != load order); stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "sh tests/data/android_fixtures/mdx_src/oracle.sh tests/data/android_fixtures/mdx_literal10.apk  # dex2jar each classesN.dex, java -cp c1.jar:c2.jar:..:cN.jar (numeric order, first definition wins) com.hctf.mdx.Challenge; prints ANS-5e81c0d7a29b4f36"
+}

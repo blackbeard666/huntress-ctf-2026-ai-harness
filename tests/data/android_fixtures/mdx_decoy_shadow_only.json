@@ -1,0 +1,8 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": null,
+ "_why": "the loaded Mixer (classes2.dex) builds a 15-hex near miss ANS-6b2f0d9e4c1a873; only the shadow Mixer in classes3.dex builds a valid token (ANS-e3d2c1b0a9f8e7d6) -> no answer",
+ "generator_cmd": "python3 tests/data/android_fixtures/mdx_src/gen_mdx.py decoy_shadow_only tests/data/android_fixtures/mdx_decoy_shadow_only.apk  # javac --release 8 + d8 (tools/r8) per dex group, `zip` APK (zip order classes9..classes2,classes10,classes.dex != load order); stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "sh tests/data/android_fixtures/mdx_src/oracle.sh tests/data/android_fixtures/mdx_decoy_shadow_only.apk  # dex2jar each classesN.dex, java -cp c1.jar:c2.jar:..:cN.jar (numeric order, first definition wins) com.hctf.mdx.Challenge; prints ANS-6b2f0d9e4c1a873 (15 hex: not a token)",
+ "decoy": true
+}

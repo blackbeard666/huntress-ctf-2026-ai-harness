@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.host_claims_missing_network_evidence",
+ "expected": "[\"185.199.108.153:22\",\"198.51.100.7:8080\",\"45.33.32.156:4444\"]",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/GENERATOR_host_network.py.txt $T -> netsyn_a.zip (dpkt pcap/pcapng WRITERS, plain-text netstat/pfirewall/Zeek conn.log, Sysmon EVTX from ../sysmon/hostnet_sysmon__remote_ips.bin, stdlib zipfile)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/ORACLE_host_network.py.txt netsyn_a.zip (tshark fields/exit status, python-evtx, str.split text readers; key 'host_claims_missing_network_evidence')",
+ "decoy": false
+}

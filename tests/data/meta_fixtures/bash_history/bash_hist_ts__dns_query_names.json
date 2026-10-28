@@ -1,0 +1,7 @@
+{
+ "field": "bash_history.dns_query_names",
+ "expected": "[\"exfil.example.net\"]",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "grep -oP '@\\K[A-Za-z][A-Za-z0-9.-]+\\.[a-z]+(?=:)' tests/data/meta_fixtures/bash_history/bash_hist_ts__dns_query_names.bin | python3 -c 'import sys,json;v=sorted(set(l.strip() for l in sys.stdin.read().splitlines() if l.strip()));print(json.dumps(v,separators=(\",\",\":\")) if v else \"none\")'",
+ "decoy": false
+}

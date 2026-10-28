@@ -1,0 +1,7 @@
+{
+ "entry": "exported_reachability_scan",
+ "expected": "ANS-a83f0d5c9e1b6274",
+ "_why": "targetSdk 30: PushReceiver has an intent-filter and no exported attr (legacy implicit export) -> new Thread(Worker).start -> org.beta.imgcodec flaw; exported=false AdminActivity -> alpha (entry_reachable_scan picks this decoy); exported PrivService behind a protectionLevel=signature permission -> gamma",
+ "generator_cmd": "python3 tests/data/android_fixtures/erx_src/gen_erx.py legacy_receiver tests/data/android_fixtures/erx_legacy_receiver.apk  # javac --release 8 (android.* stubs classpath-only) + dex2jar d2j-jar2dex + `apktool b` (bundled aapt2/framework compiles the text manifest)",
+ "oracle_cmd": "sh tests/data/android_fixtures/erx_src/oracle.sh tests/data/android_fixtures/erx_legacy_receiver.apk  # `aapt dump xmltree` -> exported components (exported attr / legacy intent-filter < targetSdk 31 / signature-permission guard), d2j-dex2jar + RUN their entry methods on the JVM -> flaws hit: [ANS-a83f0d5c9e1b6274 HCTF-DEP-IMG-0112]"
+}

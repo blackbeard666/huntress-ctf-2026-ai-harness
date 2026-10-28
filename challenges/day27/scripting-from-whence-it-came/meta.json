@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-27-docker-build-attribution",
+  "lane": "script-analysis",
+  "name": "📜 FROM Whence It Came",
+  "ids": {
+    "single_solve": "script-analysis-day-27-docker-build-attribution",
+    "time_trial": "script-analysis-day-27-docker-build-attribution/time_trial",
+    "mastery": "script-analysis-day-27-docker-build-attribution/mastery"
+  }
+}

@@ -146,6 +146,30 @@ def bf_dec(t, max_steps=5_000_000):
     return _t(bytes(out))
 
 
+# D27 "Monkey Business" ("Ook. Ook? Ook! Someone seems chatty."): Ook! = Brainfuck, one token pair per instruction
+_OOK = {">": "Ook. Ook?", "<": "Ook? Ook.", "+": "Ook. Ook.", "-": "Ook! Ook!", ".": "Ook! Ook.", ",": "Ook. Ook!",
+        "[": "Ook! Ook?", "]": "Ook? Ook!"}
+_OOK_INV = {v: k for k, v in _OOK.items()}
+
+
+def ook_enc(s):
+    """D27: the GM's Ook! form -- the D26 one-cell Brainfuck program, each instruction as its `Ook? Ook!` pair, single
+    spaces throughout, no trailing newline."""
+    return " ".join(_OOK[c] for c in bf_enc(s))
+
+
+def ook_dec(t):
+    """D27: Ook! program -> its output text; raises unless the WHOLE text is an even run of Ook./Ook?/Ook! tokens."""
+    toks = re.findall(r"Ook[.?!]", t)
+    if not toks or len(toks) % 2 or re.sub(r"Ook[.?!]|\s", "", t):
+        raise ValueError("not an Ook! program")
+    try:
+        prog = "".join(_OOK_INV[toks[i] + " " + toks[i + 1]] for i in range(0, len(toks), 2))
+    except KeyError as e:
+        raise ValueError("not an Ook! pair") from e
+    return bf_dec(prog)
+
+
 def _gz9f(b):
     """gzip as the GM writes it (D21): zlib wbits 31 (mtime 0, OS 3), level 9 (XFL 2), memLevel 8, Z_FILTERED."""
     c = zlib.compressobj(9, zlib.DEFLATED, 31, 8, zlib.Z_FILTERED)
@@ -224,6 +248,9 @@ DAYS = [
     # the previous byte, then '.', no separators (byte-exact on the Single, TT 2b70c93f and 256/256 Mastery
     # ca7796e4 line 26)
     (26, "brainfuck", bf_enc, bf_dec, False),
+    # D27 "Monkey Business": the D26 Brainfuck program written in Ook! token pairs, single spaces (byte-exact on the
+    # Single, TT e0e29c6f and 133/133 Mastery c6135949 line 27)
+    (27, "ook", ook_enc, ook_dec, False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N

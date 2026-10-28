@@ -1,0 +1,10 @@
+{
+ "material": "{\"hello.py\": \"print('hello world')\\n\", \"notes.md\": \"# notes\\n\", \"readme.txt\": \"nothing to see\\n\"}",
+ "rep": "corpus_summary",
+ "transform": "count",
+ "key": "role=benign_utility",
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/csum_gen.py $TMPDIR/csumgen  (stdlib base64 writer; 12-member corpus decoy)",
+ "oracle_cmd": "cd $TMPDIR/csumgen/decoy && grep -l b64decode * || echo none"
+}

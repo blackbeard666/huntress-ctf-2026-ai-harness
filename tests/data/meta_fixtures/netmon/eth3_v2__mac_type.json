@@ -1,0 +1,8 @@
+{
+ "field": "netmon.mac_type",
+ "expected": "1",
+ "generator_cmd": "editcap 4.6.4 -F netmon2 eth3.pcap eth3.netmon2  (eth3.pcap = existing fixture tests/data/meta_fixtures/pcap/eth_us__packet_count.bin)",
+ "oracle_cmd": "od -A d -t x1 -j 6 -N 2 eth3.netmon2 -> 01 00 (LE MAC type 1 = Ethernet); capinfos 'File encapsulation: Ethernet'",
+ "decoy": false,
+ "member": "eth3.netmon2"
+}

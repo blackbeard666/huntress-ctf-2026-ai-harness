@@ -1,0 +1,8 @@
+{
+ "field": "csv_flows.row_count",
+ "expected": "28",
+ "generator_cmd": "tshark 4.6.4 -r pcap/app_app__http_hosts.bin -T fields -E separator=, -E quote=d -e frame.number -e frame.time_relative -e _ws.col.def_src -e _ws.col.def_dst -e _ws.col.protocol -e frame.len -e _ws.col.info, header \"No.\",\"Time\",\"Source\",\"Destination\",\"Protocol\",\"Length\",\"Info\" prepended",
+ "oracle_cmd": "python3 -I -c \"import csv;print(len(list(csv.DictReader(open('ws.csv')))))\" -> 28",
+ "decoy": false,
+ "member": "ws.csv"
+}

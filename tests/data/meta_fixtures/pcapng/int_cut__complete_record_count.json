@@ -1,0 +1,7 @@
+{
+ "field": "pcapng.complete_record_count",
+ "expected": "4",
+ "generator_cmd": "text2pcap -q -t '%H:%M:%S.' in.txt base.pcapng (Wireshark 4.6.4 default pcapng); head -c 802 base.pcapng > ngcut.pcapng",
+ "oracle_cmd": "capinfos -c ngcut.pcapng -> 'Number of packets: 4'",
+ "decoy": false
+}

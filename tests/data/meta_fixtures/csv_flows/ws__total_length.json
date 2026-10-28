@@ -1,0 +1,8 @@
+{
+ "field": "csv_flows.total_length",
+ "expected": "5452",
+ "generator_cmd": "(as ws__row_count)",
+ "oracle_cmd": "python3 -I -c \"import csv;print(sum(int(r['Length']) for r in csv.DictReader(open('ws.csv'))))\" -> 5452",
+ "decoy": false,
+ "member": "ws.csv"
+}

@@ -1,0 +1,22 @@
+# Independent oracle for host_net EVTX fixtures: pyevtx-rs 0.13.1 (Rust evtx crate) record JSON, not lib.meta.
+# run: .venv/bin/python -I ORACLE_host_net_evtx.py.txt <field> <file.evtx>
+import json
+import sys
+sys.path.insert(0, "tools/pyevtxrs")
+import evtx  # noqa: E402
+
+field, path = sys.argv[1], sys.argv[2]
+R = [json.loads(r["data"])["Event"] for r in evtx.PyEvtxParser(path).records_json()]
+eid = lambda e: e["System"]["EventID"]["#text"] if isinstance(e["System"]["EventID"], dict) else e["System"]["EventID"]  # noqa: E731
+prov = lambda e: e["System"]["Provider"]["#attributes"]["Name"]  # noqa: E731
+N = [e["EventData"] for e in R if eid(e) == 3 and prov(e) == "Microsoft-Windows-Sysmon"]
+D = [e["EventData"] for e in R if eid(e) == 22 and prov(e) == "Microsoft-Windows-Sysmon"]
+side = lambda d: "Source" if d["Initiated"] == "false" else "Destination"  # noqa: E731
+J = lambda v: json.dumps(sorted(set(v)), separators=(",", ":")) if v else "none"  # noqa: E731
+print({"remote_ips": lambda: J([d[side(d) + "Ip"] for d in N]),
+       "remote_endpoints": lambda: J(["%s:%s" % (d[side(d) + "Ip"], d[side(d) + "Port"]) for d in N]),
+       "dns_query_names": lambda: J([d["QueryName"] for d in D]),
+       "connecting_images": lambda: J([d["Image"] for d in N]),
+       "connection_count": lambda: len(N) if N else "none",
+       "first_connection_time_utc": lambda: min(d["UtcTime"][:19].replace(" ", "T") + "Z" for d in N) if N else "none",
+       }[field]())

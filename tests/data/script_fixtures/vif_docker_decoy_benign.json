@@ -1,0 +1,7 @@
+{
+ "file": "vif_docker_decoy_benign.Dockerfile",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/vif_gen.py (base64 of a benign note split 2 (no plan))",
+ "oracle_cmd": "docker build -q -t vif-fixture-vif-docker-decoy-benign -f vif_docker_decoy_benign.Dockerfile . >/dev/null && docker inspect --format '{{index .Config.Labels \"huntress.analysis.descriptor\"}}' vif-fixture-vif-docker-decoy-benign | python3 -c 'import sys,base64;print(base64.b64decode(\"\".join(sys.stdin.read().split())).decode())'  # decoy: folded value is not a v= plan"
+}

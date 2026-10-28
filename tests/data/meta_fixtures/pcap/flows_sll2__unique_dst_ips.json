@@ -1,0 +1,8 @@
+{
+ "field": "pcap.unique_dst_ips",
+ "expected": "[\"192.168.1.9\",\"2001:db8::b\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/pcap/GENERATOR_flows.py.txt out (stdlib struct frame/pcap writer); eth_mix_ng = editcap -F pcapng eth_mix.pcap; decoy_snoop = editcap -F snoop eth_mix.pcap; decoy_text = printf HTTP text > .pcap -> sll2.pcap",
+ "oracle_cmd": "tshark 4.6.4 -r sll2.pcap -T fields -e ip.src -e ip.dst -e ipv6.src -e ipv6.dst -e tcp.dstport -e udp.dstport -e tcp.flags -e frame.cap_len; -q -z conv,ip -z conv,ipv6 -z conv,tcp -z conv,udp -z endpoints,ip -z endpoints,ipv6; capinfos -> tshark ip.dst/ipv6.dst",
+ "decoy": false,
+ "member": "sll2.pcap"
+}

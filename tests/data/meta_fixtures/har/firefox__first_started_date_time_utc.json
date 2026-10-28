@@ -1,0 +1,8 @@
+{
+  "field": "har.first_started_date_time_utc",
+  "expected": "2026-03-01T09:00:00.120Z",
+  "generator_cmd": "python3 -I gen2.py firefox_style.har  (json.dump writer: Firefox-style HAR, 2 pages, 5 entries, mixed +01:00/Z startedDateTime out of stored order, bodySize -1, IPv6/empty serverIPAddress, userinfo+port URL, one string status \"200\")",
+  "oracle_cmd": "jq -r \".log.entries[].startedDateTime\" $H | while read t; do date -u -d \"$t\" +%s.%N; done | LC_ALL=C sort -n | head -1 | xargs -I{} date -u -d @{} +%Y-%m-%dT%H:%M:%S.%N | cut -c1-23 | sed \"s/$/Z/\"",
+  "decoy": false,
+  "member": "firefox_style.har"
+}

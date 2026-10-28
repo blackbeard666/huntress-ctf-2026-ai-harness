@@ -1,0 +1,7 @@
+{
+ "field": "wer.event_time_utc",
+ "expected": "2021-12-21T13:44:50Z",
+ "generator_cmd": "python3 /home/testpwn/huntress-2026/.run/tmp/prebuild-a741ef11/wtd/gen.py (stdlib text writer: open(..., 'w', encoding='utf-16'|'utf-8', newline='\\r\\n') of the literal lines -- see the .bin); PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "date -u -d @$(( $(iconv -f UTF-16 -t UTF-8 tests/data/meta_fixtures/wer/report_bex64.bin | tr -d \"\\r\" | grep -oP '^EventTime=\\K[0-9]+') / 10000000 - 11644473600 )) +%Y-%m-%dT%H:%M:%SZ",
+ "decoy": false
+}

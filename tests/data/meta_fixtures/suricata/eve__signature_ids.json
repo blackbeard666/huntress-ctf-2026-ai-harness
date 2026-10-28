@@ -1,0 +1,8 @@
+{
+ "field": "suricata.signature_ids",
+ "expected": "[2008983,2024217]",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> eve.json",
+ "oracle_cmd": "jq -sc '[.[]|select(.event_type==\"alert\")|.alert.signature_id]|unique' eve.json",
+ "decoy": false,
+ "member": "eve.json"
+}

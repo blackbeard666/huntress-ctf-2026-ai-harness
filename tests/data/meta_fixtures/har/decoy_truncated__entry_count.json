@@ -1,0 +1,8 @@
+{
+  "field": "har.entry_count",
+  "expected": "none",
+  "generator_cmd": "head -c 400 chromium.har > decoy_truncated.har  (HAR cut mid-JSON)",
+  "oracle_cmd": "jq empty $H 2>&1 >/dev/null | grep -q . && echo none",
+  "decoy": true,
+  "member": "decoy_truncated.har"
+}

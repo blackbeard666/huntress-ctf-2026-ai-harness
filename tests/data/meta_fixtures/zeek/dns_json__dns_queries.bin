@@ -1,0 +1,3 @@
+{"ts": 1761555601.2, "uid": "CD1", "id.orig_h": "10.0.0.5", "id.orig_p": 53001, "id.resp_h": "8.8.8.8", "id.resp_p": 53, "proto": "udp", "query": "evil.example.com", "qtype_name": "A"}
+{"ts": 1761555602.2, "uid": "CD2", "id.orig_h": "10.0.0.5", "id.orig_p": 53002, "id.resp_h": "8.8.8.8", "id.resp_p": 53, "proto": "udp", "query": "cdn.example.net", "qtype_name": "AAAA"}
+{"ts": 1761555603.2, "uid": "CD3", "id.orig_h": "10.0.0.7", "id.orig_p": 53003, "id.resp_h": "1.1.1.1", "id.resp_p": 53, "proto": "udp", "query": "evil.example.com", "qtype_name": "TXT"}

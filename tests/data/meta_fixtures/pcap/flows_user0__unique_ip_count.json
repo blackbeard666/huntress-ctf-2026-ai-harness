@@ -1,0 +1,8 @@
+{
+ "field": "pcap.unique_ip_count",
+ "expected": "0",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/pcap/GENERATOR_flows.py.txt out (stdlib struct frame/pcap writer); eth_mix_ng = editcap -F pcapng eth_mix.pcap; decoy_snoop = editcap -F snoop eth_mix.pcap; decoy_text = printf HTTP text > .pcap -> user0.pcap",
+ "oracle_cmd": "tshark 4.6.4 -r user0.pcap -T fields -e ip.src -e ip.dst -e ipv6.src -e ipv6.dst -e tcp.dstport -e udp.dstport -e tcp.flags -e frame.cap_len; -q -z conv,ip -z conv,ipv6 -z conv,tcp -z conv,udp -z endpoints,ip -z endpoints,ipv6; capinfos -> tshark: 2 frames, protocol 'Packet' (USER0), no ip/ipv6",
+ "decoy": false,
+ "member": "user0.pcap"
+}

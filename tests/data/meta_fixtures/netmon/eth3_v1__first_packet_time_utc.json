@@ -1,0 +1,8 @@
+{
+ "field": "netmon.first_packet_time_utc",
+ "expected": "2026-03-14T17:26:53.590Z",
+ "generator_cmd": "editcap 4.6.4 -F netmon1 eth3.pcap eth3.netmon1  (eth3.pcap = existing fixture tests/data/meta_fixtures/pcap/eth_us__packet_count.bin)",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e eth3.netmon1 -> 'Earliest packet time: 2026-03-14 17:26:53.590'",
+ "decoy": false,
+ "member": "eth3.netmon1"
+}

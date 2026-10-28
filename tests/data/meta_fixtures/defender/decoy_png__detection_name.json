@@ -1,0 +1,7 @@
+{
+ "field": "defender.detection_name",
+ "expected": "none",
+ "generator_cmd": "python3 /home/testpwn/huntress-2026/.run/tmp/prebuild-a741ef11/wtd/gen.py (stdlib text writer: open(..., 'w', encoding='utf-16'|'utf-8', newline='\\r\\n') of the literal lines -- see the .bin); PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "strings -el tests/data/meta_fixtures/defender/decoy_png.bin | grep -qP '^\\w+:\\w+/' || echo none",
+ "decoy": true
+}

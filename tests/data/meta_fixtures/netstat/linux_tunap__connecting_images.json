@@ -1,0 +1,7 @@
+{
+ "field": "netstat.connecting_images",
+ "expected": "[\"nc\",\"sshd\"]",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "awk '$1 ~ /^(tcp|udp)6?$/ && $6 !~ /LISTEN/ && $5 !~ /:\\*$/ {split($7,a,\"/\"); sub(/:$/,\"\",a[2]); print a[2]}' tests/data/meta_fixtures/netstat/linux_tunap__connecting_images.bin | python3 -c 'import sys,json;v=sorted(set(l.strip() for l in sys.stdin.read().splitlines() if l.strip()));print(json.dumps(v,separators=(\",\",\":\")) if v else \"none\")'",
+ "decoy": false
+}

@@ -1,0 +1,8 @@
+{
+ "field": "suricata.alert_signatures",
+ "expected": "[\"ET MALWARE Reverse Shell Beacon\",\"ET USER_AGENTS Suspicious User Agent\"]",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> eve.json",
+ "oracle_cmd": "jq -sc '[.[]|select(.event_type==\"alert\")|.alert.signature]|unique' eve.json",
+ "decoy": false,
+ "member": "eve.json"
+}

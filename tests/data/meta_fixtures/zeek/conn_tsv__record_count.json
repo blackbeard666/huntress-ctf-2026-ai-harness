@@ -1,0 +1,8 @@
+{
+ "field": "zeek.record_count",
+ "expected": "5",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> conn.log",
+ "oracle_cmd": "grep -v '^#' conn.log | wc -l -> 5",
+ "decoy": false,
+ "member": "conn.log"
+}

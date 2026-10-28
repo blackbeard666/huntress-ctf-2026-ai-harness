@@ -1,0 +1,8 @@
+{
+ "field": "csv_flows.row_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> users.csv (generic CSV with Source/Destination but no No./Protocol)",
+ "oracle_cmd": "python3 -I -c \"import csv;print(csv.DictReader(open('users.csv')).fieldnames)\" -> no 'No.'/'Protocol' -> not a Wireshark export",
+ "decoy": true,
+ "member": "users.csv"
+}

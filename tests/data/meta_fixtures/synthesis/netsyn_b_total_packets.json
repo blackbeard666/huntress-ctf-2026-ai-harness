@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.total_packets",
+ "expected": "4",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/GENERATOR_host_network.py.txt $T -> netsyn_b.zip (dpkt pcap/pcapng WRITERS, plain-text netstat/pfirewall/Zeek conn.log, Sysmon EVTX from ../sysmon/hostnet_sysmon__remote_ips.bin, stdlib zipfile)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/ORACLE_host_network.py.txt netsyn_b.zip (tshark fields/exit status, python-evtx, str.split text readers; key 'total_packets')",
+ "decoy": false
+}

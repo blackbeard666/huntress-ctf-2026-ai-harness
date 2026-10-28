@@ -1,0 +1,8 @@
+{
+ "field": "utmp.user_names",
+ "expected": "[\"alice\",\"root\"]",
+ "generator_cmd": "python3 -I genutmp.py wtmp1 wtmp (struct utmp per <bits/utmp.h>, appended by glibc updwtmp(3) via ctypes)",
+ "oracle_cmd": "PYTHONPATH=pyutmp python3 -c 'import utmp; utmp.read(...)' (PyPI utmp 21.10.0) + TZ=UTC who -a wtmp1 -> user_process users alice, root, alice",
+ "decoy": false,
+ "member": "wtmp"
+}

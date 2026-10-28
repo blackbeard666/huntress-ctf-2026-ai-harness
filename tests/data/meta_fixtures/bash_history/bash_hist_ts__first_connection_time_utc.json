@@ -1,0 +1,7 @@
+{
+ "field": "bash_history.first_connection_time_utc",
+ "expected": "2024-05-14T13:01:52Z",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "date -u -d @$(grep -B1 -E '^(ssh|scp|curl|wget|nc) ' tests/data/meta_fixtures/bash_history/bash_hist_ts__first_connection_time_utc.bin | grep -m1 -oP '^#\\K[0-9]+') +%Y-%m-%dT%H:%M:%SZ",
+ "decoy": false
+}

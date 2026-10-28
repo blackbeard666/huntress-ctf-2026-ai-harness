@@ -1,0 +1,7 @@
+{
+ "field": "setupapi.usb_serial_numbers",
+ "expected": "[\"4C530001230607115143\",\"60A44C3FAE22F0B1A9C9\"]",
+ "generator_cmd": "python3 /home/testpwn/huntress-2026/.run/tmp/prebuild-a741ef11/wtd/gen.py (stdlib text writer: open(..., 'w', encoding='utf-16'|'utf-8', newline='\\r\\n') of the literal lines -- see the .bin); PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "tr -d '\\r' < tests/data/meta_fixtures/setupapi/setupapi_dev.bin | grep -oP ' - USBSTOR\\\\[^\\\\]+\\\\\\K[^]&]+' | sort -u | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()],separators=(\",\",\":\")))'",
+ "decoy": false
+}

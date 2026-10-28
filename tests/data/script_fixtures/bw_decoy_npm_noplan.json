@@ -1,0 +1,9 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "build-file-host-profiles",
+ "note": "package.json config pieces decode to a benign banner (no plan)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bw_gen.py  (stdlib base64/gzip/json writer, inert source)",
+ "oracle_cmd": "node -e \"const p=JSON.parse(require('fs').readFileSync(process.argv[1]));process.stdout.write(Buffer.from(p.config.d0+p.config.d1,'base64').toString())\" tests/data/script_fixtures/bw_decoy_npm_noplan.json5",
+ "oracle_result": "just a benign banner,"
+}

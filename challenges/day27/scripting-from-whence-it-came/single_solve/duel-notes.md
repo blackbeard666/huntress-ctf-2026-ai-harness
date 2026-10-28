@@ -1,0 +1,1 @@
+- duel: speed fix in analyse_node (direct declared-codec decode before find_codecs peel); single 5.8 s -> ~1.1 s, answers unchanged, suite ok.

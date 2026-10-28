@@ -1,0 +1,7 @@
+{
+ "field": "evtx.connecting_images",
+ "expected": "[\"C:\\\\Users\\\\m.okafor\\\\AppData\\\\Local\\\\Temp\\\\svch0st.exe\",\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\",\"C:\\\\Windows\\\\System32\\\\svchost.exe\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_host_net_sysmon.py.txt <outdir>  (stdlib BinXML EVTX writer: Sysmon EID 3/22 + Security 4624 records)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_host_net_evtx.py.txt connecting_images tests/data/meta_fixtures/evtx/hostnet_sysmon__connecting_images.bin",
+ "decoy": false
+}

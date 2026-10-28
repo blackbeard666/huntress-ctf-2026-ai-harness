@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=node|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=npm_lifecycle|obfuscation_profile=base64|stage_profile=single_stage|next_language=sh|campaign_id=NP-4e6d2b18|url=https://np-4e6d2b18.example.invalid/stage|file_path=/tmp/huntress-np-4e6d2b18/.stage",
+ "decoy": false,
+ "target": "build-file-host-profiles",
+ "note": "package.json `config` pieces joined via $npm_package_config_dN in postinstall",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bw_gen.py  (stdlib base64/gzip/json writer, inert source)",
+ "oracle_cmd": "node -e \"const p=JSON.parse(require('fs').readFileSync(process.argv[1]));const s=p.scripts.postinstall.replace(/[$]npm_package_config_(\\w+)/g,(m,k)=>p.config[k]);process.stdout.write(Buffer.from(s.split(' ')[1],'base64').toString())\" tests/data/script_fixtures/bw_npm_config.json5"
+}

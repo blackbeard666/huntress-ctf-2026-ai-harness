@@ -1,0 +1,8 @@
+{
+ "field": "erf.packet_count",
+ "expected": "1",
+ "generator_cmd": "editcap 4.6.4 -F erf eth3.pcap eth3.erf  (eth3.pcap = existing fixture tests/data/meta_fixtures/pcap/eth_us__packet_count.bin) (writes only an ERF META record; the packets are refused)",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e eth3.erf -> 'Endace ERF capture', 'Number of packets: 1'",
+ "decoy": false,
+ "member": "eth3.erf"
+}

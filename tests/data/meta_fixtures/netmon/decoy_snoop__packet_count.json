@@ -1,0 +1,8 @@
+{
+ "field": "netmon.packet_count",
+ "expected": "none",
+ "generator_cmd": "editcap 4.6.4 -F snoop eth3.pcap eth3.snoop  (eth3.pcap = existing fixture tests/data/meta_fixtures/pcap/eth_us__packet_count.bin)",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e eth3.snoop -> 'File type: Sun snoop' (not NetMon)",
+ "decoy": true,
+ "member": "eth3.snoop"
+}

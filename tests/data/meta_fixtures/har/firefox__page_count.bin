@@ -1,0 +1,232 @@
+{
+  "log": {
+    "version": "1.2",
+    "creator": {
+      "name": "Firefox",
+      "version": "131.0"
+    },
+    "browser": {
+      "name": "Firefox",
+      "version": "131.0"
+    },
+    "pages": [
+      {
+        "startedDateTime": "2026-03-01T10:00:00.000+01:00",
+        "id": "page_1",
+        "title": "Login",
+        "pageTimings": {}
+      },
+      {
+        "startedDateTime": "2026-03-01T10:00:05.000+01:00",
+        "id": "page_2",
+        "title": "Dashboard",
+        "pageTimings": {}
+      }
+    ],
+    "entries": [
+      {
+        "pageref": "page_1",
+        "startedDateTime": "2026-03-01T10:00:00.300+01:00",
+        "time": 12.5,
+        "request": {
+          "method": "GET",
+          "url": "https://cdn.example.net/lib.js",
+          "httpVersion": "HTTP/2",
+          "cookies": [],
+          "headers": [],
+          "queryString": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": "200",
+          "statusText": "",
+          "httpVersion": "HTTP/2",
+          "cookies": [],
+          "headers": [],
+          "content": {
+            "size": 0,
+            "mimeType": "application/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": -1
+        },
+        "cache": {},
+        "timings": {
+          "send": 0,
+          "wait": 10,
+          "receive": 2.5
+        },
+        "serverIPAddress": "2606:4700::6810:85e5"
+      },
+      {
+        "pageref": "page_1",
+        "startedDateTime": "2026-03-01T09:00:00.120Z",
+        "time": 12.5,
+        "request": {
+          "method": "GET",
+          "url": "https://portal.example.com/login",
+          "httpVersion": "HTTP/2",
+          "cookies": [],
+          "headers": [],
+          "queryString": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "",
+          "httpVersion": "HTTP/2",
+          "cookies": [
+            {
+              "name": "JSESSIONID",
+              "value": "v"
+            }
+          ],
+          "headers": [],
+          "content": {
+            "size": 5120,
+            "mimeType": "text/html; charset=utf-8"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 5120
+        },
+        "cache": {},
+        "timings": {
+          "send": 0,
+          "wait": 10,
+          "receive": 2.5
+        },
+        "serverIPAddress": "203.0.113.10"
+      },
+      {
+        "pageref": "page_1",
+        "startedDateTime": "2026-03-01T10:00:01.000+01:00",
+        "time": 12.5,
+        "request": {
+          "method": "POST",
+          "url": "https://admin:pw@portal.example.com:8443/api/auth",
+          "httpVersion": "HTTP/2",
+          "cookies": [
+            {
+              "name": "JSESSIONID",
+              "value": "v"
+            }
+          ],
+          "headers": [],
+          "queryString": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 302,
+          "statusText": "",
+          "httpVersion": "HTTP/2",
+          "cookies": [
+            {
+              "name": "auth_token",
+              "value": "v"
+            },
+            {
+              "name": "JSESSIONID",
+              "value": "v"
+            }
+          ],
+          "headers": [],
+          "content": {
+            "size": 0,
+            "mimeType": ""
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "cache": {},
+        "timings": {
+          "send": 0,
+          "wait": 10,
+          "receive": 2.5
+        },
+        "serverIPAddress": "203.0.113.10"
+      },
+      {
+        "pageref": "page_1",
+        "startedDateTime": "2026-03-01T10:00:02.000+01:00",
+        "time": 12.5,
+        "request": {
+          "method": "GET",
+          "url": "https://portal.example.com/login",
+          "httpVersion": "HTTP/2",
+          "cookies": [
+            {
+              "name": "auth_token",
+              "value": "v"
+            }
+          ],
+          "headers": [],
+          "queryString": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 304,
+          "statusText": "",
+          "httpVersion": "HTTP/2",
+          "cookies": [],
+          "headers": [],
+          "content": {
+            "size": 0,
+            "mimeType": "text/html; charset=utf-8"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": -1
+        },
+        "cache": {},
+        "timings": {
+          "send": 0,
+          "wait": 10,
+          "receive": 2.5
+        },
+        "serverIPAddress": "203.0.113.10"
+      },
+      {
+        "pageref": "page_1",
+        "startedDateTime": "2026-03-01T09:00:03.5Z",
+        "time": 12.5,
+        "request": {
+          "method": "OPTIONS",
+          "url": "https://api.example.org/v1/items?x=1",
+          "httpVersion": "HTTP/2",
+          "cookies": [],
+          "headers": [],
+          "queryString": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 204,
+          "statusText": "",
+          "httpVersion": "HTTP/2",
+          "cookies": [],
+          "headers": [],
+          "content": {
+            "size": 0,
+            "mimeType": ""
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "cache": {},
+        "timings": {
+          "send": 0,
+          "wait": 10,
+          "receive": 2.5
+        }
+      }
+    ]
+  }
+}

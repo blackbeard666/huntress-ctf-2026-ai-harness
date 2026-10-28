@@ -1,0 +1,7 @@
+{
+ "field": "pcap.max_incl_len",
+ "expected": "120",
+ "generator_cmd": "text2pcap -q -F pcap -t '%H:%M:%S.' in.txt base.pcap (5 Ethernet frames 60/74/98/54/120 B); snaplen field @16 set to 64 with dd",
+ "oracle_cmd": "tshark -r snap.pcap -T fields -e frame.cap_len | sort -n | tail -1 -> 120",
+ "decoy": false
+}

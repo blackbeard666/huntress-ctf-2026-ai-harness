@@ -1,0 +1,8 @@
+{
+ "field": "erf.packet_count",
+ "expected": "none",
+ "generator_cmd": "printf 'GMBX not a netmon capture, renamed text file\\n' > decoy_text.cap",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e decoy_text.cap -> 'isn't a capture file in a format capinfos understands'",
+ "decoy": true,
+ "member": "decoy_text.cap"
+}

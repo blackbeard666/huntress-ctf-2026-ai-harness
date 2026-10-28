@@ -1,0 +1,8 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "dockerfile-multistage-stage-graph",
+ "generator_cmd": "printf nginx-config | base64 -w0 as stage ARG CONF; printf 'v=3|language=dock' | gzip -n | head -c 20 | base64 -w0 (truncated gzip) as ENV CHECK in a side stage; final COPY --from=build",
+ "oracle_cmd": "mkdir -p $TMPDIR/ctx && docker build -q --pull=false --output type=local,dest=$TMPDIR/out_ds_decoy_benign_multistage -f tests/data/script_fixtures/ds_decoy_benign_multistage.Dockerfile $TMPDIR/ctx && cat $TMPDIR/out_ds_decoy_benign_multistage/site.conf  (real BuildKit build, local wordpress:cli image, final scratch stage exported)",
+ "oracle_note": "docker build exports only site.conf (an nginx server block): no v=3 plan in any stage"
+}

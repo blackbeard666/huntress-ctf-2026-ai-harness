@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.tls_cert_sha256",
+ "expected": "d9f0f2dfbcab9c1d71f899115f5944cc849ea20a2ac9f2c76651dfe670eeb866",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -subj '/O=Shadow Ops/CN=update.badcdn.example' -keyout k.pem -out c.pem; python3 tests/data/meta_fixtures/pcap/GENERATOR_app.py.txt app.pcap c.pem k.pem (stdlib struct frames + ssl.MemoryBIO OpenSSL TLS1.2 handshake); editcap -F pcapng app.pcap app.pcapng",
+ "oracle_cmd": "tshark 4.6.4 -r app.pcapng -o tcp.desegment_tcp_streams:TRUE -Y tls.handshake.type==1 -T fields -e tls.handshake.extensions_server_name -e tls.handshake.extensions_alpn_str -e tls.handshake.ja3; -Y tls.handshake.type==11 -e x509sat.uTF8String; openssl x509 -in c.pem -noout -fingerprint -sha256 (lowercased, colons dropped)",
+ "decoy": false,
+ "member": "app.pcapng"
+}

@@ -1,0 +1,96 @@
+"""Independent oracle for the synthesis_network fixtures. usage: .venv/bin/python -I ORACLE_host_network.py.txt <zip>
+Readers: tshark (-T fields ip/ipv6/tcp/udp ports, dns.qry.name; exit status != 0 / "cut short" = malformed capture;
+packet count = rows tshark prints), python-evtx (Evtx.Evtx record XML: Sysmon EID 3 / 22), str.split for the netstat
+table, the W3C pfirewall.log and the Zeek conn.log TSV. Prints a JSON dict of every fixture key."""
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import zipfile
+
+import Evtx.Evtx as E
+
+zp = sys.argv[1]
+tmp = tempfile.mkdtemp()
+z = zipfile.ZipFile(zp)
+caps, hosts = {}, {}
+for n in z.namelist():
+    p = os.path.join(tmp, n)
+    open(p, "wb").write(z.read(n))
+    r = subprocess.run(["tshark", "-n", "-r", p, "-T", "fields", "-E", "separator=|", "-e", "ip.src", "-e", "ip.dst",
+                        "-e", "tcp.srcport", "-e", "tcp.dstport", "-e", "udp.srcport", "-e", "udp.dstport",
+                        "-e", "dns.qry.name"], capture_output=True, text=True)
+    rows = [ln.split("|") for ln in r.stdout.splitlines()]
+    if rows or "cut short" in r.stderr:
+        eps, dns = set(), set()
+        for s, d, ts, td, us, ud, q in rows:
+            if ts:
+                eps |= {(s, int(ts)), (d, int(td))}
+            if us:
+                eps |= {(s, int(us)), (d, int(ud))}
+            if q:
+                dns.add(q.lower())
+        caps[n] = {"eps": eps, "dns": dns, "valid": r.returncode == 0, "packets": len(rows)}
+        continue
+    raw = z.read(n)
+    claims, qn = [], []
+    if raw[:8] == b"ElfFile\x00":
+        with E.Evtx(p) as f:
+            for rec in f.records():
+                x = rec.xml()
+                eid = re.search(r"<EventID[^>]*>(\d+)<", x).group(1)
+                dat = dict(re.findall(r'<Data Name="([^"]+)">([^<]*)</Data>', x))
+                if eid == "3":
+                    side = "Source" if dat.get("Initiated") == "false" else "Destination"
+                    claims.append((dat[side + "Ip"], int(dat[side + "Port"])))
+                elif eid == "22":
+                    qn.append(dat["QueryName"].lower())
+    else:
+        t = raw.decode()
+        if "Foreign Address" in t:
+            for ln in t.splitlines():
+                f = ln.split()
+                if f and f[0] in ("TCP", "UDP") and len(f) >= 3:
+                    h, _, prt = f[2].rpartition(":")
+                    if h not in ("0.0.0.0", "*") and prt not in ("0", "*") and "LISTEN" not in ln:
+                        claims.append((h, int(prt)))
+        elif "#Fields:" in t:
+            flds = t.split("#Fields:")[1].splitlines()[0].split()
+            for ln in t.splitlines():
+                if ln and not ln.startswith("#"):
+                    row = dict(zip(flds, ln.split()))
+                    if row["action"] == "ALLOW":
+                        pre = "src" if row["path"] == "RECEIVE" else "dst"
+                        claims.append((row[pre + "-ip"], int(row[pre + "-port"])))
+        elif "#fields" in t:
+            flds = [ln for ln in t.splitlines() if ln.startswith("#fields")][0].split("\t")[1:]
+            for ln in t.splitlines():
+                if ln and not ln.startswith("#"):
+                    row = dict(zip(flds, ln.split("\t")))
+                    claims.append((row["id.resp_h"], int(row["id.resp_p"])))
+    if claims or qn:
+        hosts[n] = {"claims": claims, "dns": qn}
+
+ev = set().union(*[c["eps"] for c in caps.values()]) if caps else set()
+evd = set().union(*[c["dns"] for c in caps.values()]) if caps else set()
+out = {}
+if caps and hosts:
+    allc = {c for h in hosts.values() for c in h["claims"]}
+    miss = sorted("%s:%d" % c for c in allc if c not in ev)
+    out["host_claims_missing_network_evidence"] = miss or "none"
+    out["matched_claim_count"] = len([c for c in allc if c in ev])
+    liars = sorted(n for n, h in hosts.items() if h["claims"] and not any(c in ev for c in h["claims"]))
+    out["lying_member"] = liars[0] if len(liars) == 1 else liars
+    orphan = sorted(n for n, c in caps.items() if not (allc & c["eps"]))
+    out["capture_without_host_evidence"] = orphan[0] if len(orphan) == 1 else (orphan or "none")
+    out["capture_dns_names"] = sorted(evd) or "none"
+    out["dns_claims_missing_network_evidence"] = sorted({q for h in hosts.values() for q in h["dns"]} - evd) or "none"
+else:
+    for k in ("host_claims_missing_network_evidence", "matched_claim_count", "lying_member"):
+        out[k] = "none"
+bad = sorted(n for n, c in caps.items() if not c["valid"])
+out["malformed_capture"] = bad[0] if len(bad) == 1 else (bad or "none")
+out["total_packets"] = sum(c["packets"] for c in caps.values() if c["valid"]) if caps else "none"
+print(json.dumps(out, indent=1))

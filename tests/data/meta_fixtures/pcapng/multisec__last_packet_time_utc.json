@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.last_packet_time_utc",
+ "expected": "2026-01-01T00:01:41.123456Z",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_carryover.sh.txt (Wireshark 4.6.4 editcap -F modpcap / dd version patch / head -c / gzip -9n / cat of two pcapng sections; kuz_be, zerolen, be_sec via stdlib struct GENERATOR_carryover_struct.py.txt; eth_us.pcap + eth_ng.pcapng = existing eth_us/eth_ng fixtures) -> multisec.pcapng",
+ "oracle_cmd": "TZ=UTC capinfos -c -a -e -l -E -t -I multisec.pcapng -> tshark -r multisec.pcapng -T fields -e frame.time_epoch -> last packet record (frame 6, obsolete PB) 1767225701.123456",
+ "decoy": false,
+ "member": "multisec.pcapng"
+}

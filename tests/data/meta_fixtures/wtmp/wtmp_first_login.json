@@ -1,0 +1,8 @@
+{
+ "field": "wtmp.first_login_time_utc",
+ "expected": "2024-06-01T01:00:00Z",
+ "generator_cmd": "python3 -I genutmp.py wtmp1 wtmp (struct utmp per <bits/utmp.h>, appended by glibc updwtmp(3) via ctypes)",
+ "oracle_cmd": "PYTHONPATH=pyutmp python3 -c 'import utmp; utmp.read(...)' (PyPI utmp 21.10.0) + TZ=UTC who -a wtmp1 -> alice pts/0 2024-06-01 01:00 (sec 1717203600)",
+ "decoy": false,
+ "member": "wtmp"
+}

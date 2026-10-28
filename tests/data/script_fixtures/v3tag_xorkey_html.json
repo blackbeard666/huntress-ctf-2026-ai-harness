@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=svg|role=smuggler|verdict=malicious|attack=T1027|obfuscation_profile=xor_base64|campaign_id=SV-88990011|url=https://sv-88990011.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | perl -0777 -ne '$k=\"K3Y\";for $i (0..length($_)-1){print chr(ord(substr($_,$i,1))^ord(substr($k,$i%3,1)))}' | base64 -w0",
+  "oracle_cmd": "sed -n 's/.*XORK3Y-\\([^ ]*\\) -->.*/\\1/p' v3tag_xorkey_html.svg | base64 -d | perl -0777 -ne '$k=\"K3Y\";for $i (0..length($_)-1){print chr(ord(substr($_,$i,1))^ord(substr($k,$i%3,1)))}'"
+}

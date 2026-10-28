@@ -1,0 +1,8 @@
+{
+ "field": "capture.packet_count",
+ "expected": "none",
+ "generator_cmd": "head -c 64 /dev/zero > zeros.cap",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e zeros.cap -> 'File type: JavaScript Object Notation' (not a packet capture; no capture magic, ERF type 0 invalid)",
+ "decoy": true,
+ "member": "zeros.cap"
+}

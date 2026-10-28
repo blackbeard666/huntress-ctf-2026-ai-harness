@@ -1,0 +1,7 @@
+{
+ "field": "evtx.connection_count",
+ "expected": "4",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_host_net_sysmon.py.txt <outdir>  (stdlib BinXML EVTX writer: Sysmon EID 3/22 + Security 4624 records)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_host_net_evtx.py.txt connection_count tests/data/meta_fixtures/evtx/hostnet_sysmon__connection_count.bin",
+ "decoy": false
+}

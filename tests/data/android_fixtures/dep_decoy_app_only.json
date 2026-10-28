@@ -1,0 +1,8 @@
+{
+ "entry": "dependency_inventory",
+ "expected": null,
+ "decoy": true,
+ "_why": "same layout as three_libs_pom, but the full ANS token sits in the APP package (MainActivity) and the lib holds a 15-hex near miss: no lib-tied ANS value",
+ "generator_cmd": "python3 tests/data/android_fixtures/dep_src/gen_dep.py decoy_app_only tests/data/android_fixtures/dep_decoy_app_only.apk  # javac --release 8 + d8 (tools/r8) dex, jar/zip for the asset .aar, gcc -shared fake libcrypto.so, `zip` APK; stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "jadx -q -d o dep_decoy_app_only.apk; grep -rloE 'ANS-[0-9a-f]{15,16}' o/sources  # full token only under com/huntress/..., lib org/vendor has ANS-3c9e1f0a7b62d4e (15 hex)"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "update_gate_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "code_blocked_ok layout, but the 'allowed' branch the real version takes holds a 15-hex near-miss; only the 'required' branch (taken by a lexicographic compare) has a valid token -> no token",
+ "generator_cmd": "python3 tests/data/android_fixtures/ugate_src/gen_ugate.py decoy_nearmiss tests/data/android_fixtures/ugate_decoy_nearmiss.apk  # apktool's bundled aapt2 link (binary manifest with versionCode/versionName[/versionCodeMajor]) + python zipfile APK",
+ "oracle_cmd": "python3 tests/data/android_fixtures/ugate_src/oracle.py tests/data/android_fixtures/ugate_decoy_nearmiss.apk  # aapt dump xmltree reads the manifest versions, python packaging Version/SpecifierSet judges the policy -> branch token"
+}

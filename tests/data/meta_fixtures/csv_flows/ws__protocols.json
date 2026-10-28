@@ -1,0 +1,8 @@
+{
+ "field": "csv_flows.protocols",
+ "expected": "[\"DNS\",\"FTP\",\"HTTP\",\"ICMP\",\"SMTP\",\"TCP\",\"TLSv1.2\"]",
+ "generator_cmd": "(as ws__row_count)",
+ "oracle_cmd": "python3 -I -c \"import csv;print(sorted({r['Protocol'] for r in csv.DictReader(open('ws.csv'))}))\"",
+ "decoy": false,
+ "member": "ws.csv"
+}

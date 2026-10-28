@@ -1,0 +1,8 @@
+{
+ "field": "zeek.record_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> eve.json (Suricata eve, not Zeek)",
+ "oracle_cmd": "jq -s 'map(has(\"uid\"))|any' eve.json -> false; every line has event_type (Suricata) -> not a Zeek log",
+ "decoy": true,
+ "member": "eve.json"
+}

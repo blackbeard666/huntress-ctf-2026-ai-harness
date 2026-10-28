@@ -37,7 +37,17 @@
     "audit.runtime.service.Application",
     "core.service.Main",
     "server.audit.Dispatcher",
-    "server.server.batch.Entry"
+    "server.server.batch.Entry",
+    "sync.agent.batch.Runner",
+    "core.util.Worker",
+    "client.core.LoaderXZ",
+    "audit.Loader",
+    "tools.runtime.agent.Runner",
+    "core.Dispatcher",
+    "audit.Runner",
+    "util.core.Worker",
+    "tools.client.core.Main",
+    "sync.app.server.DispatcherAFH"
   ],
   "-control": [
     "direct",
@@ -146,7 +156,17 @@
     "audit.runtime.service.Application",
     "core.service.Main",
     "server.audit.Dispatcher",
-    "server.server.batch.Entry"
+    "server.server.batch.Entry",
+    "sync.agent.batch.Runner",
+    "core.util.Worker",
+    "client.core.LoaderXZ",
+    "audit.Loader",
+    "tools.runtime.agent.Runner",
+    "core.Dispatcher",
+    "audit.Runner",
+    "util.core.Worker",
+    "tools.client.core.Main",
+    "sync.app.server.DispatcherAFH"
   ],
   "control": [
     "direct",

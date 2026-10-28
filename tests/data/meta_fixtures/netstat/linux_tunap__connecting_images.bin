@@ -1,0 +1,7 @@
+Active Internet connections (servers and established)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      812/sshd
+tcp        0     36 172.16.4.20:22          192.0.2.77:51544        ESTABLISHED 30411/sshd: root@pt
+tcp        0      0 172.16.4.20:40112       45.33.32.156:4444       ESTABLISHED 30502/nc
+tcp6       0      0 :::80                   :::*                    LISTEN      901/apache2
+udp        0      0 0.0.0.0:68              0.0.0.0:*                           640/dhclient

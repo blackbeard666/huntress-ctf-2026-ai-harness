@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=nsis|role=downloader|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=standalone|obfuscation_profile=gzip_base64|stage_profile=single_stage|next_language=",
+ "decoy": false,
+ "target": "function-return-literal-battery",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/anylit_gen.py  (stdlib gzip|base64 encode, nameless literal, no marker)",
+ "oracle_cmd": "python3 -I -c \"import re,base64,gzip,sys;print(gzip.decompress(base64.b64decode(re.search(r'StrCpy \\S+ \\\"(.*?)\\\"',open(sys.argv[1]).read()).group(1))).decode())\" tests/data/script_fixtures/anylit_nsis_strcpy.nsi"
+}

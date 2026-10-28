@@ -1,0 +1,7 @@
+{
+ "entry": "exported_reachability_scan",
+ "expected": "ANS-4c1e9a07b3d258f6",
+ "_why": "3 libs x 1 flaw: exported deep-link LinkActivity.onNewIntent -> Handler.post(anon Runnable).run -> net.alpha.yamlkit flaw (reached); non-exported SyncService.onStartCommand -> org.beta.imgcodec (decoy); io.gamma.netcfg dead",
+ "generator_cmd": "python3 tests/data/android_fixtures/erx_src/gen_erx.py activity_handler tests/data/android_fixtures/erx_activity_handler.apk  # javac --release 8 (android.* stubs classpath-only) + dex2jar d2j-jar2dex + `apktool b` (bundled aapt2/framework compiles the text manifest)",
+ "oracle_cmd": "sh tests/data/android_fixtures/erx_src/oracle.sh tests/data/android_fixtures/erx_activity_handler.apk  # `aapt dump xmltree` -> exported components (exported attr / legacy intent-filter < targetSdk 31 / signature-permission guard), d2j-dex2jar + RUN their entry methods on the JVM -> flaws hit: [ANS-4c1e9a07b3d258f6 HCTF-DEP-YAML-0031]"
+}

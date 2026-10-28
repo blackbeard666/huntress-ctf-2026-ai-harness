@@ -1,0 +1,7 @@
+{
+ "field": "sysmon.dns_query_names",
+ "expected": "[\"login.microsoftonline.com\",\"updates.contoso-cdn.net\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_host_net_sysmon.py.txt <outdir>  (stdlib BinXML EVTX writer: Sysmon EID 3/22 + Security 4624 records)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_host_net_evtx.py.txt dns_query_names tests/data/meta_fixtures/sysmon/hostnet_sysmon__dns_query_names.bin",
+ "decoy": false
+}

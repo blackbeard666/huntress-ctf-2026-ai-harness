@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.capture_dns_names",
+ "expected": "[\"updates.contoso-cdn.net\"]",
+ "generator_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/GENERATOR_host_network.py.txt $T -> netsyn_a.zip (dpkt pcap/pcapng WRITERS, plain-text netstat/pfirewall/Zeek conn.log, Sysmon EVTX from ../sysmon/hostnet_sysmon__remote_ips.bin, stdlib zipfile)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/synthesis/ORACLE_host_network.py.txt netsyn_a.zip (tshark fields/exit status, python-evtx, str.split text readers; key 'capture_dns_names')",
+ "decoy": false
+}

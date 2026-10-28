@@ -665,6 +665,10 @@ def decode(material, rep, transform, key=None):
         return _ws_decode(material, transform, key)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("configchain", "configdiff", "configsurvival", "stageconfig"):   # stage-config-survival-diff
         return _cfgchain_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("lineage", "specimenlineage", "parentattribution", "lineageattribution"):   # specimen-lineage-attribution
+        return _lin_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("corpussummary", "corpusaggregate", "corpusstats", "capstone"):   # corpus-aggregate-questions
+        return _cs_decode(material, transform, key)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -1087,6 +1091,11 @@ _BH_MK_ASSIGN = re.compile(r"(?:(?:override|export|private)[ \t]+)*(?P<name>[A-Z
 _BH_ENV_PAIR = re.compile(r"""(?P<name>[A-Za-z_]\w*)=(?P<val>"(?:[^"\\]|\\.)*"|'[^']*'|(?:[^\s"'\\]|\\.)*)""")
 _BH_VAR = re.compile(r"\$(?:\((?P<p>[A-Za-z_][\w.-]*)\)|\{(?P<b>[A-Za-z_][\w.-]*)(?::?[-+](?P<d>[^}]*))?\}|(?P<s>[A-Za-z_]\w*))")
 _BH_ECHO = re.compile(r"""(?:^|[\s;&|(`"'\[,])(?:/(?:usr/)?bin/)?(?P<cmd>echo|printf)\b(?P<args>(?:\\.|"[^"]*"|'[^']*'|[^|;&<>)`\n])*)""")
+# GNU make text functions a descriptor may be wrapped in (target makefile-v3-carrier-forms), args already literal;
+# `$(info|warning|error ..)` text is printed at parse time: a payload like an echo argument
+_BH_MKFN = re.compile(r"\$\((?P<f>strip|subst|value|firstword|lastword)[ \t]+(?P<a>[^()$\0]*)\)")
+_BH_MKMSG = re.compile(r"\$\((?:info|warning|error)[ \t]+(?P<a>(?:[^()]|\([^()]*\))*)\)")
+_BH_MKCOND = re.compile(r"(?m)^(?:ifn?def|ifn?eq)[ \t]+\S[^\n]*\n(?:[^\n]*\n)*?endif\b")
 _BH_HEREDOC = re.compile(r"""<<-?[ \t]*(["']?)(?P<tag>[A-Za-z_]\w*)\1[^\n]*\n(?P<body>.*?)\n[ \t]*(?P=tag)[ \t]*(?:\n|$)""", re.S)
 _MIX_CMD = re.compile(r"""(?<![\w"'])(?:"cmd[ \t]+(?P<c>(?:[^"\\\r\n]|\\.)+)"|'cmd[ \t]+(?P<c2>(?:[^'\\\r\n]|\\.)+)')""")
 
@@ -1117,20 +1126,36 @@ def _bh_lines(src, docker):
     return out
 
 
-def _bh_expand(s, env, depth=0):
-    """`$(X)` / `${X}` / `${X:-d}` / `$X` from `env` (unknown -> ''), `$$` -> `$`, `$(shell ..)` left for the caller."""
+def _bh_expand(s, env, depth=0, mk=False):
+    """`$(X)` / `${X}` / `${X:-d}` / `$X` from `env` (unknown -> ''), `$$` -> `$`, `$(shell ..)` left for the caller.
+    `mk`: GNU make `$(strip|subst|value|firstword|lastword ..)` evaluated too (innermost first, bounded)."""
     if "$" not in s or depth > 4:
         return s
 
     def rep(m):
         n = m.group("p") or m.group("b") or m.group("s")
         if n in env:
-            return _bh_expand(env[n], env, depth + 1)
+            return _bh_expand(env[n], env, depth + 1, mk)
         if m.group("s"):
             return m.group(0)                                        # bare `$X`: a shell variable, keep
         return m.group("d") or ""
-    s = s.replace("$$", "\0")
-    return _BH_VAR.sub(rep, s).replace("\0", "$")
+
+    def fn(m):
+        f, a = m.group("f"), m.group("a")
+        if f == "subst":
+            p = a.split(",", 2)
+            return p[2].replace(p[0], p[1]) if len(p) == 3 and p[0] else (p[-1] if len(p) == 3 else a)
+        if f == "value":
+            return env.get(a.strip(), "").replace("$$", "\0")
+        w = a.split()
+        return " ".join(w) if f == "strip" else (w[0] if f == "firstword" else w[-1]) if w else ""
+    s = _BH_VAR.sub(rep, s.replace("$$", "\0"))
+    for _ in range(6 if mk else 0):
+        s2 = _BH_VAR.sub(rep, _BH_MKFN.sub(fn, s))
+        if s2 == s:
+            break
+        s = s2
+    return s.replace("\0", "$")
 
 
 def _bh_shell_calls(s):
@@ -1164,8 +1189,8 @@ def _bh_echo_args(cmd):
     return out
 
 
-def _bh_payloads(cmd, env):
-    cmd = _bh_expand(cmd, env)
+def _bh_payloads(cmd, env, mk=False):
+    cmd = _bh_expand(cmd, env, mk=mk)
     return [a for a in _bh_echo_args(cmd)] + [m.group("body") for m in _BH_HEREDOC.finditer(cmd)]
 
 
@@ -1175,12 +1200,12 @@ def _build_host_codecs(src, budget=0.6):
         if not src or len(src) > (1 << 20):
             return []
         docker = bool(_BH_DOCKER.search(src))
-        make = bool(_BH_MAKE.search(src))
+        make = bool(_BH_MAKE.search(src) or _BH_MKCOND.search(src))  # or only indented assignments inside ifdef/ifeq
         mix = not (docker or make) and "Mix.Project" in src
         if not (docker or make or mix):
             return []
         end = time.time() + budget
-        env, order, run_cmds, marks = {}, [], [], []
+        env, order, run_cmds, marks, msgs = {}, [], [], [], []
         lines = [] if mix else _bh_lines(src, docker and not make)
         if mix:                                   # mix.exs `aliases:` task strings: `cmd ..` is a build-time shell run
             run_cmds = [re.sub(r"^(?:--(?:cd|app)[ \t]+\S+[ \t]+)+", "", _cl_unescape(m.group("c") or m.group("c2")))
@@ -1194,6 +1219,8 @@ def _build_host_codecs(src, budget=0.6):
                 if _ANALYSIS_RE.search(st):
                     marks.append(re.sub(r"\s+", "", st))
                 continue
+            if make and "$(" in ln and _BH_MKMSG.search(ln):
+                msgs.append(ln)
             if ln.startswith("\t"):                                  # make recipe line
                 run_cmds.append(ln[1:].lstrip("@-+ \t"))
                 continue
@@ -1250,7 +1277,7 @@ def _build_host_codecs(src, budget=0.6):
                     if op == "+=" and n in env:
                         v = env[n] + " " + v
                     elif op in (":=", "::=", ":::="):
-                        v = _bh_expand(v, env)
+                        v = _bh_expand(v, env, mk=True)
                     env[n] = v
                     order.append(n)
         cands, seen = [], set()
@@ -1262,11 +1289,14 @@ def _build_host_codecs(src, budget=0.6):
         names = list(dict.fromkeys(order))
         for n in names:
             if re.match(r"(?i)descriptor[_-]", n):
-                add(re.sub(r"(?i)^descriptor[_-]", "", n), _bh_expand(env[n], env))
+                add(re.sub(r"(?i)^descriptor[_-]", "", n), _bh_expand(env[n], env, mk=make))
         for c in run_cmds:
             if re.search(r"(?i)\bdescriptor[_-]", c):
-                for a in _bh_payloads(c, env):
+                for a in _bh_payloads(c, env, make):
                     add("run", a)
+        for ln in msgs:                                              # `$(info ..)` text, expanded
+            for mm in _BH_MKMSG.finditer(ln):
+                add("info", _bh_expand(mm.group("a"), env, mk=True).strip())
         for mk in marks:
             am = _ANALYSIS_RE.search(mk)
             plain = peel_plan(am.group("mat"), am.group("tag"), budget=min(0.3, max(0.05, end - time.time())))
@@ -1275,17 +1305,1069 @@ def _build_host_codecs(src, budget=0.6):
                 return [{"id": dm.group(1) if dm else "analysis", "rep": "descriptor", "transform": "identity",
                          "key": "", "material": am.group("mat"), "plain": plain}]
         for c in run_cmds:
-            for a in _bh_payloads(c, env):
+            for a in _bh_payloads(c, env, make):
                 add("run", a)
         for n in names:
-            add(n, _bh_expand(env[n], env))
+            add(n, _bh_expand(env[n], env, mk=make))
         ident, plain = _peel_ext(cands, budget=max(0.05, end - time.time()))
         if plain:
             return [{"id": ident, "rep": "descriptor", "transform": "identity", "key": "",
                      "material": dict(cands).get(ident), "plain": plain}]
+        if docker and not make and len(re.findall(r"(?im)^[ \t]*FROM[ \t]+\S", src)) > 1:
+            sc = _ds_stage_cands(docker_stages(src))                 # multi-stage: per-stage ARG/ENV scopes
+            ident, plain = _peel_ext([c for c in sc if (c[0], c[1]) not in seen],
+                                     budget=max(0.05, end + 0.4 - time.time()))
+            if plain:
+                return [{"id": ident, "rep": "descriptor", "transform": "identity", "key": "",
+                         "material": dict(sc).get(ident), "plain": plain, "stage": ident}]
     except Exception:  # noqa: BLE001 - unknown host -> nothing, never an exception
         return []
     return []
+
+
+# Target dockerfile-multistage-stage-graph: a multi-stage Dockerfile read as BuildKit scopes it (never built).
+# docker_stages(text) -> ordered [{index, name, base, platform, parent, args, env, labels, copies_from, runs, onbuild,
+# files}]: global `ARG`s before the first FROM feed only FROM lines (`FROM ${BASE} AS x`, `--platform=..`) unless a
+# stage re-declares `ARG X`; per-stage `ARG X=..` / `ENV` (legacy `ENV X v` too) expanded in that stage's scope; ENV
+# (not ARG) inherited from a parent stage (`FROM <earlier stage> AS y`); `COPY|ADD --from=<stage|index|image>` and
+# `RUN --mount=..,from=<stage>` recorded as edges (`stage` = the resolved stage index, None for an external image);
+# `ONBUILD <instr>` kept raw; `\`-continuations with `# escape=` (backtick on Windows images); RUN heredocs appended to
+# the command, `COPY <<EOF /dst` heredoc bodies kept as `files`. _build_host_codecs() falls back to these per-stage
+# scopes (a stage-1 `RUN echo "$A$B" | base64 -d` whose `B` a later stage re-ENVs) when its flat pass found no plan,
+# stages that feed the last stage via COPY --from first.
+_DS_TOK = re.compile(r"""(?P<name>[A-Za-z_][\w.-]*)(?:=(?P<val>"(?:[^"\\]|\\.)*"|'[^']*'|(?:[^\s"'\\]|\\.|\\)*))?""")
+_DS_HD = re.compile(r"""<<-?[ \t]*(["']?)([A-Za-z_]\w*)\1""")
+
+
+def _ds_unq(v):
+    if len(v) > 1 and v[:1] in "\"'" and v[-1:] == v[:1]:
+        return v[1:-1].replace('\\"', '"') if v[0] == '"' else v[1:-1]
+    return v
+
+
+def _ds_pairs(body, legacy):
+    body = body.strip()
+    if legacy and not re.match(r"[A-Za-z_][\w.-]*=", body):           # legacy `ENV X value`
+        lm = re.match(r"([A-Za-z_][\w.-]*)[ \t]+(.+)", body, re.S)
+        return [(lm.group(1), lm.group(2).strip())] if lm else []
+    out, i = [], 0
+    while i < len(body) and len(out) < 64:
+        if body[i] in " \t\n":
+            i += 1
+            continue
+        m = _DS_TOK.match(body, i)
+        if not m or m.end() == i:
+            break
+        out.append((m.group("name"), None if m.group("val") is None else _ds_unq(m.group("val"))))
+        i = m.end()
+    return out
+
+
+def docker_stages(text):
+    """Ordered build stages of a Dockerfile text (see the section comment); [] if it has no FROM. Never raises."""
+    try:
+        if not text or len(text) > (1 << 20) or not re.search(r"(?im)^[ \t]*FROM[ \t]+\S", text):
+            return []
+        text = text.replace("\r\n", "\n")
+        dm = re.match(r"(?:[ \t]*#[ \t]*\w+[ \t]*=[^\n]*\n)+", text)      # parser directives never continue
+        if dm:
+            text = re.sub(r"(?m)$", " ", dm.group(0)) + text[dm.end():]
+        lines = _bh_lines(text, True)
+        glob, stages, k = {}, [], 0
+        while k < len(lines) and len(stages) < 64:
+            st = lines[k].strip()
+            k += 1
+            if not st or st.startswith("#"):
+                continue
+            m = re.match(r"(?i)(ONBUILD[ \t]+)?([A-Z]+)(?:[ \t]+(.*))?\Z", st, re.S)
+            if not m:
+                continue
+            onb, ins, rest = m.group(1), m.group(2).upper(), m.group(3) or ""
+            hm = _DS_HD.search(rest) if ins in ("RUN", "COPY", "ADD") else None
+            body = None
+            if hm:                                                   # heredoc: raw lines up to the tag line
+                buf = []
+                while k < len(lines) and lines[k].strip() != hm.group(2):
+                    buf.append(lines[k])
+                    k += 1
+                k += 1
+                body = "\n".join(buf)
+            cur = stages[-1] if stages else None
+            if ins == "FROM" and not onb:
+                fm = re.match(r"((?:--[\w-]+(?:=\S*)?[ \t]+)*)(\S+)(?:[ \t]+AS[ \t]+(\S+))?", rest, re.I)
+                if not fm:
+                    continue
+                pm = re.search(r"--platform=(\S+)", fm.group(1) or "")
+                base = _bh_expand(fm.group(2), glob)
+                name = _bh_expand(fm.group(3), glob).lower() if fm.group(3) else None
+                parent = next((s["index"] for s in stages if s["name"] and s["name"] == base.lower()), None)
+                stages.append({"index": len(stages), "name": name, "base": base,
+                               "platform": _bh_expand(pm.group(1), glob) if pm else None, "parent": parent,
+                               "args": {}, "env": dict(stages[parent]["env"]) if parent is not None else {},
+                               "labels": {}, "copies_from": [], "runs": [], "onbuild": [], "files": {}})
+                continue
+            if onb:
+                if cur is not None:
+                    cur["onbuild"].append(ins + " " + rest + ("\n" + body if body is not None else ""))
+                continue
+            if ins == "ARG":
+                for n, v in _ds_pairs(rest, False):
+                    if cur is None:
+                        glob[n] = _bh_expand(v, glob) if v is not None else glob.get(n, "")
+                    else:
+                        scope = dict(cur["env"], **cur["args"])
+                        cur["args"][n] = _bh_expand(v, scope) if v is not None else glob.get(n, "")
+                continue
+            if cur is None:
+                continue
+            scope = dict(cur["args"], **cur["env"])
+            if ins in ("ENV", "LABEL"):
+                for n, v in _ds_pairs(rest, ins == "ENV"):
+                    if v is None:
+                        continue
+                    v = _bh_expand(v, scope)
+                    if ins == "ENV":
+                        cur["env"][n] = scope[n] = v
+                    else:
+                        cur["labels"][_ds_unq(n)] = v
+                continue
+            if ins in ("COPY", "ADD"):
+                r = _bh_expand(rest, scope)
+                if r.lstrip().startswith("["):
+                    parts = re.findall(r'"((?:[^"\\]|\\.)*)"', r)
+                else:
+                    parts = r.split()
+                frm = next((p.split("=", 1)[1] for p in parts if p.lower().startswith("--from=")), None)
+                paths = [p for p in parts if not p.startswith("--")]
+                if body is not None and paths:
+                    cur["files"][paths[-1]] = _bh_expand(body, scope) if not hm.group(1) else body
+                if frm is not None:
+                    cur["copies_from"].append({"from": frm, "stage": _ds_ref(stages, frm), "kind": ins.lower(),
+                                               "src": paths[:-1], "dst": paths[-1] if paths else None})
+                continue
+            if ins in ("RUN", "CMD", "ENTRYPOINT"):
+                cmd = rest
+                for mm in re.finditer(r"--mount=(\S+)", rest):
+                    opts = dict(o.split("=", 1) for o in mm.group(1).split(",") if "=" in o)
+                    if opts.get("from"):
+                        cur["copies_from"].append({"from": opts["from"], "stage": _ds_ref(stages, opts["from"]),
+                                                   "kind": "mount", "src": [opts.get("source", "/")],
+                                                   "dst": opts.get("target") or opts.get("dst")})
+                cmd = re.sub(r"^(?:--[\w-]+(?:=\S*)?[ \t]+)+", "", cmd)
+                if body is not None:
+                    cmd += "\n" + body + "\n" + hm.group(2)
+                if ins == "RUN":
+                    cur["runs"].append(_bh_expand(cmd, scope))
+        return stages
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _ds_ref(stages, ref):
+    """Stage index a `--from=` reference resolves to (name or earlier index), None for an external image."""
+    r = (ref or "").lower()
+    if r.isdigit():
+        return int(r) if int(r) < len(stages) else None
+    return next((s["index"] for s in stages if s["name"] == r), None)
+
+
+def _ds_stage_cands(stages):
+    """(ident, literal) candidates per stage scope, stages copied into the last stage (transitively) first."""
+    if not stages:
+        return []
+    want, todo = [], [len(stages) - 1]
+    while todo and len(want) < 64:
+        i = todo.pop(0)
+        for c in stages[i]["copies_from"]:
+            if c["stage"] is not None and c["stage"] not in want and c["stage"] != len(stages) - 1:
+                want.append(c["stage"])
+                todo.append(c["stage"])
+        if stages[i]["parent"] is not None and stages[i]["parent"] not in want:
+            want.append(stages[i]["parent"])
+            todo.append(stages[i]["parent"])
+    order = want + [i for i in range(len(stages)) if i not in want]
+    out = []
+    for i in order:
+        s, sid = stages[i], stages[i]["name"] or str(i)
+        for cmd in s["runs"] + [o.split(None, 1)[-1] for o in s["onbuild"] if o.upper().startswith("RUN")]:
+            for a in _bh_echo_args(cmd) + [m.group("body") for m in _BH_HEREDOC.finditer(cmd)]:
+                out.append((sid, a))
+        out += [(sid, v) for v in s["files"].values()]
+        out += [(sid, v) for v in list(s["env"].values()) + list(s["args"].values()) + list(s["labels"].values())]
+    return out
+
+
+# Build / infra wrapper hosts (target build-file-host-profiles): docker-compose / Taskfile YAML, CMake, justfile and
+# package.json scripts wrapping an earlier language, read as the tool would evaluate them -- never run. Variables:
+# compose `environment:` / `args:` maps and `- K=V` lists with `${X:-default}` / `$${X}` (`$$` -> `$`), Taskfile `vars:`
+# with `{{.X}}`; CMake `set()` / `string(APPEND|PREPEND|CONCAT|JOIN|REPLACE|STRIP)` / `list(APPEND|JOIN)` with `${X}`
+# (quoted / bracket / unquoted arguments, `;` lists); justfile `x := 'a' + y` with `{{x}}`; package.json strings as
+# `npm_package_<path>` (`$x` / `${x}` / `%x%`). Payloads are the echo / printf arguments of `command:` / `entrypoint:` /
+# `cmds:` / recipe / `COMMAND` / script strings plus every variable (descriptor-named first) and JSON string, peeled
+# name-agnostically (peel_plan). A YAML scalar is read as text only (no `on:` -> True). find_codecs() uses it for a gap
+# or a full plan ahead of a piece reading it extends.
+_BW_COMPOSE = re.compile(r"(?m)^(?:services|x-[\w-]+)[ \t]*:[ \t]*(?:&[\w-]+[ \t]*)?$")
+_BW_TASK = re.compile(r"(?m)^tasks[ \t]*:[ \t]*$")
+_BW_CMAKE = re.compile(r"(?im)^[ \t]*(?:cmake_minimum_required|project|execute_process|add_custom_(?:command|target)|"
+                       r"include|message)[ \t]*\(")
+_BW_JUST = re.compile(r"(?m)^(?:export[ \t]+)?[A-Za-z_][\w-]*[ \t]*:=[ \t]*\S")
+_BW_YKEY = re.compile(r"""(?P<i>[ \t]*)(?P<d>-[ \t]+)?(?P<k>"[^"]*"|'[^']*'|[^\s:#'"\[\]{}&*!|>-][^:#\n]*?)[ \t]*:"""
+                      r"""(?:[ \t]+(?P<v>.*))?\Z""")
+_BW_REF = re.compile(r"\$\$?\{(?P<b>[A-Za-z_]\w*)(?::?-(?P<d>[^}]*))?\}|\$\$?(?P<s>[A-Za-z_]\w*)|\$\$|"
+                     r"\{\{-?[ \t]*\.?(?P<t>[A-Za-z_][\w-]*)[ \t]*-?\}\}|%(?P<p>npm_[A-Za-z_]\w*)%")
+
+
+def _bw_kind(src):
+    if src.lstrip("\ufeff \t\r\n")[:1] == "{" and re.search(r'"(?:scripts|config)"[ \t]*:', src):
+        return "npm"
+    if _BW_COMPOSE.search(src) or (_BW_TASK.search(src) and re.search(r"(?m)^[ \t]+cmds[ \t]*:", src)):
+        return "yaml"
+    if _BW_CMAKE.search(src) and re.search(r"(?im)^[ \t]*(?:set|string|list|execute_process|file)[ \t]*\(", src):
+        return "cmake"
+    if _BW_JUST.search(src) and re.search(r"(?m)^[A-Za-z_@][\w-]*(?:[ \t]+[^:\n=]*)?:(?!=)[^\n]*\n(?:[ \t]+[^\n]*\n?)+", src):
+        return "just"
+    return None
+
+
+def _bw_expand(s, env, skip=(), depth=0):
+    """Expand compose / shell / Taskfile / just / npm references from `env`; unknown -> default or kept as written."""
+    if depth > 4 or not s or not any(c in s for c in "${%"):
+        return s
+
+    def rep(m):
+        if m.group(0) == "$$":
+            return "$"
+        n = m.group("b") or m.group("s") or m.group("t") or m.group("p")
+        if n in env and n not in skip:
+            return _bw_expand(env[n], env, tuple(skip) + (n,), depth + 1)
+        if m.group("d") is not None:
+            return _bw_expand(m.group("d"), env, skip, depth + 1)
+        return m.group(0)
+    return _BW_REF.sub(rep, s)
+
+
+def _bw_yaml_scalar(v):
+    """A YAML flow scalar as text: quotes removed (double: escapes; single: `''`), trailing comment dropped."""
+    import json
+    v = v.strip()
+    if v[:1] == '"':
+        m = re.match(r'"((?:[^"\\]|\\.)*)"', v, re.S)
+        if m:
+            try:
+                return json.loads('"' + re.sub(r"\\(?![\"\\/bfnrtu])", r"\\\\", m.group(1).replace("\n", " ")) + '"')
+            except ValueError:
+                return m.group(1)
+    if v[:1] == "'":
+        m = re.match(r"'((?:[^']|'')*)'", v, re.S)
+        if m:
+            return m.group(1).replace("''", "'")
+    return re.sub(r"[ \t]+#.*$", "", v)
+
+
+def _bw_yaml(src, env, runs):
+    """Minimal YAML reader: `key: scalar`, block scalars (`|` / `>` with chomping), multi-line plain / quoted scalars,
+    `- K=V` / `- scalar` items and flow sequences; leaf key -> env, every scalar -> runs."""
+    import json
+    lines = src.split("\n")[:20000]
+    i = 0
+    while i < len(lines):
+        ln = lines[i].rstrip("\r")
+        i += 1
+        if not ln.strip() or ln.lstrip().startswith("#"):
+            continue
+        ind = len(ln) - len(ln.lstrip(" "))
+        m = _BW_YKEY.match(ln)
+        key, val = (m.group("k").strip("\"'"), m.group("v") or "") if m else (None, None)
+        if m is None:
+            im = re.match(r"[ \t]*-[ \t]+(.*)\Z", ln)
+            if not im:
+                continue
+            val = im.group(1)
+        val = re.sub(r"^(?:[&!][\w!-]*[ \t]*)+", "", val.strip())
+        if val[:1] and val[0] in "|>":                               # block scalar
+            body, bi = [], None
+            while i < len(lines):
+                b = lines[i].rstrip("\r")
+                if b.strip():
+                    bind = len(b) - len(b.lstrip(" "))
+                    if bind <= ind:
+                        break
+                    bi = bind if bi is None else bi
+                    body.append(b[min(bi, bind):])
+                else:
+                    body.append("")
+                i += 1
+            text = "\n".join(body).strip("\n") if val[0] == "|" else re.sub(r"[ \t]*\n[ \t]*", " ", "\n".join(body).strip())
+        else:
+            if val[:1] and val[0] in "\"'" and not re.match(r"""("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')""", val, re.S):
+                while i < len(lines) and not re.match(r"""("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')""", val, re.S):
+                    val += " " + lines[i].strip()
+                    i += 1
+            elif val and val[:1] not in "[{\"'":
+                while i < len(lines) and lines[i].strip() and not lines[i].lstrip().startswith(("#", "- ")) and \
+                        len(lines[i]) - len(lines[i].lstrip(" ")) > ind and not _BW_YKEY.match(lines[i].rstrip("\r")):
+                    val += " " + lines[i].strip()
+                    i += 1
+            if val[:1] == "[":                                       # flow sequence: items joined like an argv
+                try:
+                    items = json.loads(re.sub(r"[ \t]+#.*$", "", val))
+                    text = " ".join(str(x) for x in items) if isinstance(items, list) else val
+                except ValueError:
+                    text = " ".join(_bw_yaml_scalar(x) for x in val.strip("[] ").split(","))
+            else:
+                text = _bw_yaml_scalar(val)
+        if not text:
+            continue
+        if key is None or (m and m.group("d") and "=" in key):
+            kv = re.match(r"([A-Za-z_]\w*)=(.*)\Z", text if key is None else ln.split("-", 1)[1].strip(), re.S)
+            if kv:
+                env[kv.group(1)] = _bw_yaml_scalar(kv.group(2))
+                continue
+        if key:
+            env[key] = text
+        runs.append(text)
+
+
+def _bw_cmake_args(body):
+    """CMake arguments of one command: (value, kind) with kind 'q' quoted, 'b' bracket, 'u' unquoted."""
+    out, i, n = [], 0, len(body)
+    while i < n:
+        c = body[i]
+        if c in " \t\r\n":
+            i += 1
+        elif c == "#":
+            bm = re.match(r"#\[(=*)\[", body[i:])
+            if bm:
+                j = body.find("]" + bm.group(1) + "]", i)
+                i = n if j < 0 else j + len(bm.group(1)) + 2
+            else:
+                j = body.find("\n", i)
+                i = n if j < 0 else j
+        elif c == '"':
+            j, buf = i + 1, []
+            while j < n and body[j] != '"':
+                if body[j] == "\\" and j + 1 < n:
+                    e = body[j + 1]
+                    buf.append({"n": "\n", "t": "\t", "r": "\r", "\n": ""}.get(e, e))
+                    j += 2
+                else:
+                    buf.append(body[j])
+                    j += 1
+            out.append(("".join(buf), "q"))
+            i = j + 1
+        elif c == "[" and re.match(r"\[(=*)\[", body[i:]):
+            eq = re.match(r"\[(=*)\[", body[i:]).group(1)
+            j = body.find("]" + eq + "]", i)
+            j = n if j < 0 else j
+            v = body[i + len(eq) + 2:j]
+            out.append((v[1:] if v[:1] == "\n" else v, "b"))
+            i = j + len(eq) + 2
+        else:
+            m = re.match(r"""(?:\\.|[^\s()#"\\]|\([^()]*\))+""", body[i:], re.S)
+            if not m:
+                i += 1
+                continue
+            out.append((re.sub(r"\\(.)", r"\1", m.group(0)), "u"))
+            i += m.end()
+    return out
+
+
+def _bw_cmake(src, env, runs):
+    """Evaluate the CMake variable commands in source order (set / string / list / file / execute_process ...)."""
+    i, n, cnt = 0, len(src), 0
+    cmd_re = re.compile(r"(?m)(?:^|(?<=[\s;)]))([A-Za-z_]\w*)[ \t]*\(")
+    while i < n and cnt < 5000:
+        cnt += 1
+        if src[i] == "#":                                            # line / bracket comment
+            bm = re.match(r"#\[(=*)\[", src[i:i + 40])
+            j = src.find("]" + bm.group(1) + "]", i) if bm else src.find("\n", i)
+            i = n if j < 0 else j + 1
+            continue
+        m = cmd_re.match(src, i) if (i == 0 or src[i - 1] in "\n \t;)") else None
+        if not m:
+            i += 1
+            continue
+        j, d, q = m.end(), 1, False                                  # matching `)` outside quotes / brackets
+        while j < n and d:
+            c = src[j]
+            if q:
+                if c == "\\":
+                    j += 1
+                elif c == '"':
+                    q = False
+            elif c == '"':
+                q = True
+            elif c == "[" and re.match(r"\[(=*)\[", src[j:j + 40]):
+                eq = re.match(r"\[(=*)\[", src[j:j + 40]).group(1)
+                k = src.find("]" + eq + "]", j)
+                j = n if k < 0 else k + len(eq) + 1
+            elif c == "#":
+                k = src.find("\n", j)
+                j = n if k < 0 else k
+                continue
+            else:
+                d += {"(": 1, ")": -1}.get(c, 0)
+            j += 1
+        name, raw = m.group(1).lower(), src[m.end():j - 1]
+        i = j
+        args = [(v if k == "b" else _bw_expand(re.sub(r"\$ENV\{", "${", v), env), k)
+                for v, k in _bw_cmake_args(raw)]
+        a = [v for v, _ in args]
+        if name == "set" and a:
+            vals = a[1:]
+            for kw in ("CACHE", "PARENT_SCOPE"):
+                if kw in vals:
+                    vals = vals[:vals.index(kw)]
+            env[a[0]] = ";".join(vals)
+        elif name == "string" and len(a) >= 2:
+            op = a[0].upper()
+            if op in ("APPEND", "PREPEND", "CONCAT") and len(a) >= 2:
+                s = "".join(a[2:])
+                env[a[1]] = (env.get(a[1], "") + s if op == "APPEND" else s + env.get(a[1], "") if op == "PREPEND" else s)
+            elif op == "JOIN" and len(a) >= 3:
+                env[a[2]] = a[1].join(a[3:])
+            elif op == "REPLACE" and len(a) >= 4:
+                env[a[3]] = "".join(a[4:]).replace(a[1], a[2]) if a[1] else "".join(a[4:])
+            elif op == "STRIP" and len(a) >= 3:
+                env[a[2]] = a[1].strip()
+            elif op == "REGEX" and len(a) >= 6 and a[1].upper() == "REPLACE":
+                try:
+                    env[a[4]] = re.sub(a[2], re.sub(r"\\(\d)", r"\\\1", a[3]), "".join(a[5:]))
+                except (re.error, IndexError):
+                    env[a[4]] = "".join(a[5:])
+        elif name == "list" and len(a) >= 2:
+            op = a[0].upper()
+            if op == "APPEND":
+                env[a[1]] = ";".join([x for x in [env.get(a[1], "")] if x] + a[2:])
+            elif op == "JOIN" and len(a) >= 4:
+                env[a[3]] = a[2].join(env.get(a[1], "").split(";"))
+        elif name in ("execute_process", "add_custom_command", "add_custom_target", "file", "message",
+                      "configure_file", "install"):
+            runs.append(" ".join(a))
+            if name in ("file", "message"):
+                runs.extend(a[1:] if name == "file" else a)
+
+
+def _bw_just(src, env, runs):
+    """justfile `[export] x := 'a' + "b" + y` (adjacent `/` = path join) assignments and recipe bodies."""
+    import json
+    tok = re.compile(r"""[ \t]*(?:'''(?P<t1>.*?)'''|\"\"\"(?P<t2>.*?)\"\"\"|'(?P<s>[^']*)'|"(?P<d>(?:[^"\\]|\\.)*)"|"""
+                     r"""(?P<id>[A-Za-z_][\w-]*)|(?P<op>[+/]))""", re.S)
+    for m in re.finditer(r"(?m)^(?:export[ \t]+)?([A-Za-z_][\w-]*)[ \t]*:=[ \t]*((?:[^\n]|\\\n)*)", src):
+        parts, pos, expr, op = [], 0, m.group(2), "+"
+        while pos < len(expr):
+            t = tok.match(expr, pos)
+            if not t or t.end() == pos:
+                break
+            pos = t.end()
+            if t.group("op"):
+                op = t.group("op")
+                continue
+            if t.group("d") is not None:
+                v = t.group("d")
+                try:
+                    v = json.loads('"' + re.sub(r"\\(?![\"\\nrt])", r"\\\\", v) + '"')
+                except ValueError:
+                    pass
+            elif t.group("id"):
+                v = env.get(t.group("id"), "")
+            else:
+                v = next(g for g in (t.group("t1"), t.group("t2"), t.group("s")) if g is not None)
+            parts.append(("/" if op == "/" and parts else "") + v)
+        env[m.group(1)] = "".join(parts)
+    for m in re.finditer(r"(?m)^[ \t]+(\S[^\n]*)", src):
+        runs.append(m.group(1).lstrip("@-"))
+
+
+def _bw_npm(src, env, runs):
+    import json
+    try:
+        doc = json.loads(src.lstrip("\ufeff"))
+    except ValueError:
+        return
+
+    def walk(o, path, depth=0):
+        if depth > 12:
+            return
+        if isinstance(o, dict):
+            for k, v in o.items():
+                walk(v, path + [str(k)], depth + 1)
+        elif isinstance(o, list):
+            for k, v in enumerate(o):
+                walk(v, path + [str(k)], depth + 1)
+        elif isinstance(o, str):
+            env[re.sub(r"\W", "_", "npm_package_" + "_".join(path))] = o
+            runs.append(o)
+    walk(doc, [])
+
+
+def _build_wrap_codecs(src, budget=0.4):
+    """find_codecs entries read from a compose / Taskfile / CMake / justfile / package.json wrapper (section above)."""
+    try:
+        if not isinstance(src, str) or not src or len(src) > (1 << 20):
+            return []
+        kind = _bw_kind(src)
+        if not kind:
+            return []
+        end = time.time() + budget
+        env, runs = {}, []
+        {"npm": _bw_npm, "yaml": _bw_yaml, "cmake": _bw_cmake, "just": _bw_just}[kind](src, env, runs)
+        cands, seen = [], set()
+
+        def add(ident, lit):
+            if lit and lit.strip() and len(lit) < (1 << 18) and (ident, lit) not in seen and len(cands) < 400:
+                seen.add((ident, lit))
+                cands.append((ident, lit))
+                if kind == "cmake" and ";" in lit:
+                    cands.append((ident, lit.replace(";", "")))
+        val = {k: _bw_expand(v, env, (k,)) for k, v in list(env.items())[:2000]}
+        for k, v in val.items():
+            if re.search(r"(?i)descriptor", k):
+                add(re.sub(r"(?i)^.*?descriptor[_-]?", "", k) or k, v)
+        for r in runs[:2000]:
+            x = _bw_expand(r, val)
+            for a in _bh_echo_args(x) + [hm.group("body") for hm in _BH_HEREDOC.finditer(x)]:
+                add("run", a)
+        for k, v in val.items():
+            add(k, v)
+        best, tried = None, set()                                    # the longest plan: a piece reads as a prefix
+        for ident, lit in cands:
+            for cand in (re.sub(r"\s+", "", lit), lit.strip()):
+                if not cand or cand in tried or time.time() > end:
+                    continue
+                tried.add(cand)
+                plain = peel_plan(cand, budget=min(0.3, max(0.05, end - time.time())))
+                if plain and (best is None or len(plain) > len(best[2])):
+                    best = (ident, lit, plain)
+        if best:
+            return [{"id": best[0], "rep": "descriptor", "transform": "identity", "key": "", "material": best[1],
+                     "plain": best[2]}]
+    except Exception:  # noqa: BLE001 - unknown wrapper -> nothing, never an exception
+        return []
+    return []
+
+
+# Variable interpolation / concatenation fold (target var-interpolation-concat-fold): a descriptor split over several
+# build / shell variables and joined at the use site -- Dockerfile `ARG A=..` `LABEL d=${A}${B}` / `${A:-x}`, Makefile
+# `D := $(A)$(B)` / `+=` / `$(subst|strip ..)`, HCL `"${local.a}${local.b}"` / `join("", [..])`, bash / zsh `d=${a}${b}`
+# / `d+=..`, fish `set d $a$b` / `set -a`, Tcl `set d "$a$b"` / `append`, awk `d = a b`, Kotlin / Swift `"${a}$b"` /
+# `"\(a)"`. Only literal assignments and references are folded (depth <= 4): a command substitution / function call
+# leaves the value unresolved. find_codecs() uses it for a gap, or the full plan ahead of a piece reading it extends.
+_VIF_CUE = re.compile(r"\$\{?[A-Za-z_]|\$\([A-Za-z_][\w.-]*\)|\\\([A-Za-z_]\w*\)|\bappend[ \t]|\+=|\bjoin\(|"
+                      r"(?:^|[;{])[ \t]*[A-Za-z_]\w*[ \t]*=[ \t]*[A-Za-z_]\w*[ \t]+[A-Za-z_\"]", re.M)
+_VIF_REF = re.compile(r"\$\$|\$\{(?P<b>[A-Za-z_][\w.]*)(?::?-(?P<d>[^}]*))?\}|\$\((?P<f>subst|strip)[ \t]+(?P<a>[^()$]*)\)"
+                      r"|\$\((?P<p>[A-Za-z_][\w.-]*)\)|\$(?P<s>[A-Za-z_]\w*)|\\\((?P<w>[A-Za-z_][\w.]*)\)|\$\(|`")
+_VIF_DECL = re.compile(r"(?:(?:export|local|typeset|declare|readonly|override|private|public|internal|static|lazy|"
+                       r"final|const|val|var|let|my|our|global)[ \t]+(?:-[A-Za-z]+[ \t]+)*)*"
+                       r"(?P<n>[A-Za-z_][\w.]*)(?:[ \t]*:[ \t]*[\w.<>?]+)?[ \t]*(?P<op>:::=|::=|:=|\?=|\+=|=)(?!=)[ \t]*(?P<v>.*)\Z", re.S)
+_VIF_SET = re.compile(r"(?P<c>set|append|lappend)[ \t]+(?P<fl>(?:-{1,2}[A-Za-z]+[ \t]+)*)(?P<n>[A-Za-z_]\w*)(?:[ \t]+(?P<v>.*))?\Z", re.S)
+_VIF_MKVAR = re.compile(r"\$[({]([A-Za-z_][\w.-]*)[)}]")
+_VIF_LIT = re.compile(r""""((?:[^"\\]|\\.)*)"|'([^']*)'""", re.S)
+
+
+def _vif_lang(src, hint):
+    h = (hint or "").lower()
+    if h:
+        return {"dockerfile": "docker", "makefile": "make", "terraform": "hcl", "zsh": "sh", "bash": "sh", "kts": "kt",
+                "kotlin": "kt", "swift": "kt", "gawk": "awk"}.get(h, h)
+    if re.search(r"(?im)^[ \t]*FROM[ \t]+\S", src) and _BH_DOCKER.search(src):
+        return "docker"
+    if re.search(r"(?m)^[ \t]*(?:locals|variable[ \t]+\"[\w-]+\"|resource[ \t]+\"|output[ \t]+\"[\w-]+\")[ \t]*\{", src):
+        return "hcl"
+    if re.search(r"^#!.*\b[gm]?awk\b|^[ \t]*BEGIN[ \t]*\{", src, re.M):
+        return "awk"
+    if re.search(r"^#!.*\bfish\b|^[ \t]*set[ \t]+-[gxlUa]+[ \t]|^[ \t]*end[ \t]*$", src, re.M):
+        return "fish"
+    if re.search(r"^#!.*\btclsh\b|^[ \t]*(?:puts|proc)[ \t]|^[ \t]*set[ \t]+\w+[ \t]+[\"{]", src, re.M):
+        return "tcl"
+    if re.search(r"(?m)^[ \t]*(?:val|let|var|const[ \t]+val|fun|func|import)[ \t]+\w", src):
+        return "kt"
+    if re.search(r"(?m)^[A-Za-z_][\w.-]*[ \t]*(?:::?=|\?=)|^\t\S|^[\w./-]+[ \t]*:(?!=)", src):
+        return "make"
+    return "sh"
+
+
+def _vif_stmts(src, lang):
+    """Logical statements (`\\`-continuations joined, `;` split outside quotes / braces), HCL block names attached."""
+    lines = _bh_lines(src, lang == "docker") if lang in ("docker", "make", "sh", "fish", "tcl") else src.split("\n")
+    out, blk = [], []
+    for ln in lines:
+        st = ln.strip().rstrip("\r")
+        if lang == "hcl":
+            m = re.match(r"(locals|variable[ \t]+\"([\w-]+)\")[ \t]*\{[ \t]*$", st)
+            if m:
+                blk.append("local" if m.group(1) == "locals" else "var:" + m.group(2))
+                continue
+            if st.endswith("{"):
+                blk.append("")
+                continue
+            if st.startswith("}") and blk:
+                blk.pop()
+                continue
+            out.append((blk[-1] if blk else "", st))
+            continue
+        cur, q, d = "", "", 0
+        for ch in st:
+            if q:
+                q = "" if ch == q and not cur.endswith("\\") else q
+            elif ch in "\"'" and lang != "make":
+                q = ch
+            elif ch == "{" and (lang == "tcl" or cur.endswith("$")):
+                d += 1
+            elif ch == "}" and d:
+                d -= 1
+            elif ch in "{}" and lang in ("awk", "kt", "sh"):          # block braces: statement separators
+                out.append(("", cur.strip()))
+                cur = ""
+                continue
+            elif ch == ";" and not d and lang != "make":
+                out.append(("", cur.strip()))
+                cur = ""
+                continue
+            cur += ch
+        out.append(("", cur.strip()))
+    return out
+
+
+def _vif_interp(s, env, lang, used, depth):
+    """`s` with `$X` / `${X}` / `${X:-d}` / `$(X)` / `\\(X)` / make `$(subst|strip ..)` folded, or None (unresolved)."""
+    bad = []
+    if lang == "make" and depth == 0:                              # innermost first: `$(subst .,,$(A).$(B))`
+        s = s.replace("$$", "\0")
+        for _ in range(6):
+            s2 = _VIF_MKVAR.sub(lambda m: (used.append(m.group(1)) or env[m.group(1)].replace("$$", "\0"))
+                                if m.group(1) in env else m.group(0), s)
+            s2 = _VIF_REF.sub(lambda m: _vif_interp(m.group(0), env, lang, used, 1) or m.group(0)
+                              if m.group("f") else m.group(0), s2)
+            if s2 == s:
+                break
+            s = s2
+        return None if re.search(r"\$[({]|\$[A-Za-z_]", s) else s.replace("\0", "$")
+
+    def rep(m):
+        g = m.group(0)
+        if g == "$$":
+            return "$" if lang == "make" else g
+        if g in ("$(", "`"):
+            bad.append(g)
+            return ""
+        if m.group("f"):
+            a = _vif_interp(m.group("a"), env, lang, used, depth + 1) if lang == "make" else None
+            if a is None:
+                bad.append(g)
+                return ""
+            if m.group("f") == "strip":
+                return " ".join(a.split())
+            p = a.split(",", 2)
+            return p[2].replace(p[0], p[1]) if len(p) == 3 and p[0] else a
+        n = m.group("b") or m.group("p") or m.group("s") or m.group("w")
+        if m.group("p") and lang != "make":
+            bad.append(g)                                            # shell `$(cmd)`: never evaluated
+            return ""
+        if m.group("w") and lang != "kt":
+            return g
+        if n in env:
+            used.append(n)
+            return env[n]
+        if m.group("d") is not None:
+            used.append(n)
+            return m.group("d")
+        if lang == "kt" and m.group("s") and not s[m.end():m.end() + 1].isalnum():
+            return g if depth else (bad.append(g) or "")
+        bad.append(g)
+        return ""
+    out = _VIF_REF.sub(rep, s)
+    return None if bad else out
+
+
+def _vif_unq(body):
+    return re.sub(r"\\([\"\\$`])", r"\1", body)
+
+
+def _vif_eval(rhs, env, lang, used):
+    """A right-hand side: quoted / bare pieces concatenated (fish / make args keep their spaces), or None."""
+    rhs = rhs.strip()
+    if lang in ("make", "docker"):
+        if lang == "make":
+            rhs = re.sub(r"(?<!\\)[ \t]*#.*$", "", rhs)
+        elif rhs[:1] in "\"'" and rhs[-1:] == rhs[:1] and len(rhs) > 1:
+            rhs = _vif_unq(rhs[1:-1]) if rhs[0] == '"' else rhs[1:-1]
+            return rhs if "$" not in rhs or rhs.startswith("'") else _vif_interp(rhs, env, lang, used, 0)
+        return _vif_interp(rhs, env, lang, used, 0)
+    m = re.match(r"join\(\s*(\"[^\"]*\"|'[^']*')\s*,\s*\[(.*)\]\s*\)\s*[,;]?\Z", rhs, re.S)
+    if m:                                                            # HCL / JS `join("", [a, "b"])`
+        parts = [_vif_eval(p, env, lang, used) for p in re.split(r"\s*,\s*", m.group(2).strip().rstrip(","))]
+        return None if None in parts else m.group(1)[1:-1].join(parts)
+    out, i, n, sep = [], 0, len(rhs), lang in ("fish", "tcl_args")
+    while i < n:
+        c = rhs[i]
+        if c in " \t":
+            if lang == "sh":                                         # `local a="$x" b`: the word ends the value
+                break
+            while i < n and rhs[i] in " \t":
+                i += 1
+            if sep and out and i < n and rhs[i] != "#":
+                out.append(" ")
+            continue
+        if c == "#" and lang in ("sh", "fish", "tcl", "tcl_args", "awk", "hcl"):
+            break
+        if rhs.startswith("//", i) and lang in ("kt", "hcl"):
+            break
+        if c == '"':
+            m = re.compile(r'"((?:[^"\\]|\\.)*)"', re.S).match(rhs, i)
+            if not m:
+                return None
+            body = m.group(1)
+            if lang == "kt":
+                body = re.sub(r"\\([\"\\$])", r"\1", body.replace("\\$", "\0")).replace("\0", "\\$")
+                v = _vif_interp(body, env, lang, used, 0)
+                v = v.replace("\\$", "$") if v is not None else None
+            else:
+                v = _vif_interp(body, env, lang, used, 0)
+                v = _vif_unq(v) if v is not None else None
+            if v is None:
+                return None
+            out.append(v)
+            i = m.end()
+            continue
+        if c == "'" and lang not in ("kt", "tcl", "tcl_args"):
+            j = rhs.find("'", i + 1)
+            if j < 0:
+                return None
+            out.append(rhs[i + 1:j])
+            i = j + 1
+            continue
+        if c == "{" and lang in ("tcl", "tcl_args"):
+            d, j = 0, i
+            while j < n:
+                d += {"{": 1, "}": -1}.get(rhs[j], 0)
+                if d == 0:
+                    break
+                j += 1
+            out.append(rhs[i + 1:j])
+            i = j + 1
+            continue
+        if c in "+&" or rhs.startswith("..", i) or (c in ".," and lang in ("awk", "kt", "hcl")):
+            i += 2 if rhs.startswith("..", i) else 1
+            continue
+        if c in ";" :
+            break
+        m = re.compile(r"[^\s\"'+&;#]+").match(rhs, i)
+        if not m:
+            return None
+        w = m.group(0)
+        i = m.end()
+        if lang in ("awk", "kt", "hcl"):
+            if w in env:
+                used.append(w)
+                out.append(env[w])
+            elif re.fullmatch(r"\d+", w):
+                out.append(w)
+            else:
+                return None
+        else:
+            v = _vif_interp(w, env, lang, used, 0)
+            if v is None:
+                return None
+            out.append(v.replace("\\", "") if lang == "sh" else v)
+    return "".join(out)
+
+
+def fold_interpolation(text, lang_hint=None):
+    """Folded values (>= 40 chars) of variables / use-site strings assembled from other variables by interpolation or
+    concatenation (see the section comment); descriptor-named ones first. Never raises."""
+    try:
+        if not isinstance(text, str):
+            text = (text or b"").decode("utf-8", "ignore")
+        if not text or len(text) > (1 << 20):
+            return []
+        lang = _vif_lang(text, lang_hint)
+        stmts = _vif_stmts(text, lang)[:20000]
+        prev, env, folded = {}, {}, {}
+        for _ in range(4):                     # forward references (make `=`, HCL) resolve over repeated passes
+            env, folded, uses = {}, {}, []
+            look = _VifEnv(env, prev)
+            for blk, st in stmts:
+                if not st or st.startswith("#") or st.startswith("//"):
+                    continue
+                pairs = []
+                if lang == "docker":
+                    dm = re.match(r"(?i)(ARG|ENV|LABEL)[ \t]+(.*)\Z", st, re.S)
+                    if dm:
+                        ps = list(_BH_ENV_PAIR.finditer(dm.group(2)))
+                        if ps:
+                            pairs = [(p.group("name"), "=", p.group("val")) for p in ps]
+                        elif dm.group(1).upper() == "ENV":
+                            lm = re.match(r"([A-Za-z_]\w*)[ \t]+(.+)", dm.group(2), re.S)
+                            pairs = [(lm.group(1), "=", lm.group(2).strip())] if lm else []
+                    elif not re.match(r"(?i)(FROM|RUN|CMD|ENTRYPOINT|COPY|ADD|WORKDIR|USER|SHELL|EXPOSE)\b", st):
+                        continue
+                    else:
+                        uses.append(st)
+                        continue
+                elif lang in ("fish", "tcl") and _VIF_SET.match(st):
+                    sm = _VIF_SET.match(st)
+                    c, fl, v = sm.group("c"), sm.group("fl"), sm.group("v")
+                    if v is None:
+                        continue
+                    op = "+=" if c != "set" or re.search(r"-\w*a\b|--append", fl) else "="
+                    pairs = [(sm.group("n"), op + ("s" if c != "append" else ""), v)]
+                else:
+                    am = _VIF_DECL.match(st)
+                    if not am:
+                        uses.append(st)
+                        continue
+                    nm = am.group("n")
+                    if lang == "hcl" and blk:
+                        if blk == "local":
+                            nm = "local." + nm
+                        elif nm == "default":
+                            nm = "var." + blk[4:]
+                        else:
+                            continue
+                    pairs = [(nm, am.group("op"), am.group("v"))]
+                for nm, op, v in pairs:
+                    used = []
+                    if op.startswith("+=") and lang == "fish" or op == "+=s":
+                        lg = "fish" if lang == "fish" else "tcl_args"
+                    elif lang == "tcl" and op == "+=":
+                        lg = "tcl_args"
+                    else:
+                        lg = lang
+                    if op == "?=" and nm in env:
+                        continue
+                    val = _vif_eval(v, look, lg, used)
+                    if lg == "tcl_args" and val is not None and op == "+=":
+                        val = val.replace(" ", "") if lang == "tcl" and not op.endswith("s") else val
+                    if val is None:
+                        continue
+                    if op.startswith("+=") and nm in env:
+                        sep = " " if lang == "make" or op.endswith("s") or lang == "fish" else ""
+                        val = env[nm] + sep + val
+                        used.append(nm)
+                    if op == "+=" and lang == "kt" and nm not in env:
+                        continue
+                    env[nm] = val
+                    if used:
+                        folded[nm] = val
+                    else:
+                        folded.pop(nm, None)
+            if env == prev:
+                break
+            prev = dict(env)
+        out = [v for k, v in sorted(folded.items(), key=lambda kv: not re.search(r"(?i)descriptor", kv[0]))]
+        look = _VifEnv(env, {})
+        for st in [u for u in uses if "$" in u or "\\(" in u][:256]:   # use-site strings: `echo "$a$b"`, `"${a}${b}"`
+            for m in _VIF_LIT.finditer(st):
+                if m.group(1) is not None and len(_VIF_REF.findall(m.group(1))) >= 2:
+                    used = []
+                    v = _vif_interp(m.group(1), look, "kt" if lang == "kt" else lang, used, 0)
+                    if v is not None and used:
+                        out.append(v)
+        seen = set()
+        return [v for v in out if len(v.strip()) >= 40 and not (v in seen or seen.add(v))]
+    except Exception:  # noqa: BLE001 - unreadable input -> nothing
+        return []
+
+
+class _VifEnv(dict):
+    """Current-pass variables, falling back to the previous pass (forward references)."""
+
+    def __init__(self, cur, prev):
+        super().__init__()
+        self.cur, self.prev = cur, prev
+
+    def __contains__(self, k):
+        return k in self.cur or k in self.prev
+
+    def __getitem__(self, k):
+        return self.cur[k] if k in self.cur else self.prev[k]
+
+
+def _vif_codecs(src, budget=0.5):
+    """find_codecs entries: the first folded value that peels to a `v=` plan."""
+    try:
+        vals = fold_interpolation(src)
+        if not vals:
+            return []
+        end = time.time() + budget
+        for v in vals:
+            for cand in (re.sub(r"\s+", "", v), v.strip()):
+                if time.time() > end:
+                    return []
+                plain = peel_plan(cand, budget=min(0.3, max(0.05, end - time.time())))
+                if plain and plain.lstrip("\ufeff \r\n\t").startswith("v="):
+                    return [{"id": "fold", "rep": "descriptor", "transform": "identity", "key": "", "material": v,
+                             "plain": plain}]
+    except Exception:  # noqa: BLE001
+        return []
+    return []
+
+
+# Marker-damaged / nameless fallback (target function-return-literal-battery). D22 NSIS `StrCpy $0 ".."` and D26 Erlang
+# `build_plan() -> "<data>".` carried the plan with no descriptor name: only the marker regex found it. When the marker
+# line is split or dropped and nothing else reads, every long literal in any quote syntax (`".."`, `'..'`, Rust
+# `r#".."#`, Swift `#".."#`, `"""..""" `, Lua `[[..]]`, Tcl `{..}`, heredoc / Makefile `define`..`endef` bodies, bare
+# `$(info ..)` / `ARG X=..` tokens) is joined with its adjacent pieces and shape-peeled; only a `v=` plan is kept. A
+# `$VAR` use site (Dockerfile `LABEL x=$HUNTRESS_DESCRIPTOR`) is short, so the `ARG` literal is what reads.
+_AL_CUE = re.compile(r"[A-Za-z0-9+/=_\-]{40}")
+_AL_LIT = re.compile(r"""(?P<rh>(?<![\w])r(?P<h1>\#+)"(?P<rb>.*?)"(?P=h1))|(?P<sh>(?<![\w"])(?P<h2>\#+)"(?P<sb>.*?)"(?P=h2))"""
+                     r"""|(?P<tq>(?P<q3>\"\"\"|''')(?P<tb>.*?)(?P=q3))|\[(?P<eq>=*)\[(?P<lb>.*?)\](?P=eq)\]"""
+                     r"""|"(?P<db>(?:[^"\\\n]|\\.){1,65536})"|'(?P<qb>(?:[^'\\\n]|\\.){1,65536})'"""
+                     r"""|(?<![\w$])\{(?P<cb>[^{}\s]{40,})\}""", re.S)
+_AL_BLOCK = re.compile(r"""<<[-~<]?[ \t]*(["']?)(?P<tag>[A-Za-z_]\w*)\1[^\n]*\n(?P<hb>.*?)\n[ \t]*(?P=tag)\b"""
+                       r"""|(?m:^define[ \t]+\S+[^\n]*\n)(?P<mb>.*?)\n[ \t]*endef\b""", re.S)
+_AL_GAP = re.compile(r"""(?:\s|\\\r?\n|\+\+|<>|\.\.|[+.&,~|_\\])*""")
+_AL_BARE = re.compile(r"(?<![\w+/=%.~:\-])[A-Za-z0-9+/=_\-.%~:]{40,}")
+_AL_ESC = re.compile(r"\\(?:\r?\n[ \t]*|[nrt])")
+
+
+def _anylit_candidates(src):
+    """Literal bodies >= 40 chars, longest-first: adjacent-joined runs, single pieces, heredoc / define bodies, bare
+    encoded tokens."""
+    pieces, runs = [], []
+    for m in _AL_LIT.finditer(src):
+        body = next((m.group(g) for g in ("rb", "sb", "tb", "lb", "db", "qb", "cb") if m.group(g) is not None), "")
+        if pieces and _AL_GAP.fullmatch(src, pieces[-1][1], m.start()):
+            runs[-1].append(body)
+        else:
+            runs.append([body])
+        pieces.append((m.start(), m.end()))
+    out = ["".join(r) for r in runs if len(r) > 1] + [b for r in runs for b in r]
+    out += [m.group("hb") if m.group("hb") is not None else m.group("mb") for m in _AL_BLOCK.finditer(src)]
+    out += [m.group(0) for m in _AL_BARE.finditer(src)]
+    seen, cands = set(), []
+    for b in out:
+        for c in (b, _AL_ESC.sub("", b)):
+            if c not in seen and _AL_CUE.search(re.sub(r"\s+", "", c)):
+                seen.add(c)
+                cands.append(c)
+    return sorted(cands, key=len, reverse=True)[:48]
+
+
+def _anylit_codecs(src, budget=0.6):
+    """find_codecs entries: every distinct `v=` plan under a long nameless literal (bounded by `budget` s)."""
+    try:
+        if not isinstance(src, str) or len(src) > (1 << 20) or not _AL_CUE.search(src):
+            return []
+        end, out, seen = time.time() + budget, [], set()
+        for lit in _anylit_candidates(src):
+            for cand in dict.fromkeys((re.sub(r"\s+", "", lit), lit.strip())):
+                if time.time() > end or len(out) >= 4:
+                    return out
+                plain = peel_plan(cand, budget=min(0.25, max(0.05, end - time.time())))
+                if plain and plain.lstrip("\ufeff \r\n\t").startswith("v=") and \
+                        not any(q.startswith(plain) for q in seen):      # a wrapped line of a longer literal
+                    seen.add(plain)
+                    out.append({"id": "anylit", "rep": "literal", "transform": "identity", "key": "", "material": lit,
+                                "plain": plain})
+                    break
+    except Exception:  # noqa: BLE001
+        return []
+    return out
+
+
+# --- shell startup / config files as hosts (shell-rc-host-carriers, T1546.004) ---------------------------------------
+# A persistence-flavoured zsh / fish / bash host keeps its descriptor in an rc file (.zshrc precmd hook, oh-my-zsh
+# *.plugin.zsh alias, fish conf.d `--on-event` function, .bashrc PROMPT_COMMAND). Plain `"..."` / `'...'` bodies there
+# already read through the generic literal readers; this reads the three rc-only spellings they miss:
+#   fish_variables `SETUVAR [--export] name:value` (what `set -U` writes: every non-word char as `\xNN`, lists `\x1e`),
+#   bash/zsh ANSI-C `$'\xNN\NNN\uXXXX..'` strings (adjacent `$'..'"..."'..'` words joined),
+#   list joins: zsh `arr=(a b c)` + `${(j::)arr}` / `${(j.-.)arr}`, fish `set [-l|-g|-U] arr a b c` + `string join '' $arr`.
+_SHRC_CUE = re.compile(r"(?m)^SETUVAR[ \t]|\$'|\$\{\([^)]*j(.)|\bstring[ \t]+join0?\b")
+_SHRC_ANSI_ESC = re.compile(r"\\(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c(.)|(.))",
+                            re.S)
+_SHRC_ANSI_SIMPLE = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r", "t": "\t",
+                     "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?"}
+_SHRC_WORD = re.compile(r"\$'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\"|'([^']*)'|([^\s'\"$;|&()<>`#]+)", re.S)
+_SHRC_ARR = re.compile(r"(?m)^[ \t]*(?:(?:typeset|declare|local|readonly|export)[ \t]+(?:-[A-Za-z]+[ \t]+)*)?"
+                       r"([A-Za-z_]\w*)=\(([^()]*)\)")
+_SHRC_FISH_SET = re.compile(r"(?m)^[ \t]*set[ \t]+(?:-[A-Za-z]+[ \t]+|--[a-z]+[ \t]+)*([A-Za-z_]\w*)[ \t]+([^\n;]+)")
+
+
+def _shrc_ansi(body):
+    """bash/zsh `$'..'` body -> text (`\\xHH`, octal, `\\uXXXX`, `\\cX`, C escapes)."""
+    def sub(m):
+        hx, u4, u8, oc, ctl, ch = m.groups()
+        if hx or u4 or u8:
+            v = int(hx or u4 or u8, 16)
+            return chr(v) if v < 0x110000 else ""
+        if oc:
+            return chr(int(oc, 8) & 0xFF)
+        if ctl is not None:
+            return chr(ord(ctl) & 0x1F)
+        return _SHRC_ANSI_SIMPLE.get(ch, "\\" + ch)
+    return _SHRC_ANSI_ESC.sub(sub, body)
+
+
+def _shrc_words(s):
+    """Shell words of `s` (adjacent quoted pieces joined: `$'..'"..."x` is one word), unquoted."""
+    words, cur, last = [], None, -1
+    for m in _SHRC_WORD.finditer(s):
+        a, d, q, bare = m.groups()
+        piece = (_shrc_ansi(a) if a is not None else
+                 re.sub(r"\\([\\\"$`\n])", r"\1", d) if d is not None else q if q is not None else bare)
+        if cur is not None and m.start() == last:
+            cur += piece
+        else:
+            if cur is not None:
+                words.append(cur)
+            cur = piece
+        last = m.end()
+    if cur is not None:
+        words.append(cur)
+    return words
+
+
+def _shrc_codecs(src, budget=0.5):
+    """find_codecs entries read from shell rc / fish_variables spellings (see the section comment)."""
+    try:
+        if not isinstance(src, str) or len(src) > (1 << 20) or not _SHRC_CUE.search(src):
+            return []
+        end, cands = time.time() + budget, []
+        for m in re.finditer(r"(?m)^SETUVAR[ \t]+(?:--\w+[ \t]+)*([A-Za-z_]\w*):(.*)$", src):
+            v = re.sub(r"\\x([0-9a-fA-F]{2})", lambda x: chr(int(x.group(1), 16)), m.group(2)).replace("\\\\", "\\")
+            cands += [v.replace("\x1e", ""), v.replace("\x1e", " ")] if "\x1e" in v else [v]
+        for n, m in enumerate(re.finditer(r"\$'((?:[^'\\]|\\.)*)'", src)):  # ANSI-C words + adjacent pieces
+            if n >= 256:
+                break
+            ls = src.rfind("\n", 0, m.start()) + 1
+            le = src.find("\n", m.end())
+            for w in [_shrc_ansi(m.group(1))] + _shrc_words(src[ls:le if le >= 0 else len(src)]):
+                for v in (w, re.sub(r"\A[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=", "", w)):  # `name=$'..'` word
+                    if len(v) >= 24:
+                        cands.append(v)
+        arrs = {}
+        for m in _SHRC_ARR.finditer(src):
+            arrs[m.group(1)] = _shrc_words(m.group(2).replace("\\\n", " "))
+        for m in _SHRC_FISH_SET.finditer(src):
+            if m.group(1) not in arrs:
+                ws = _shrc_words(m.group(2))
+                if len(ws) > 1:
+                    arrs[m.group(1)] = ws
+        for m in re.finditer(r"\$\{\(([^)]*)\)([A-Za-z_]\w*)", src):   # zsh ${(j:sep:)arr}, j with any delimiter
+            jm = re.search(r"j(.)(.*?)\1", m.group(1))
+            if jm and m.group(2) in arrs:
+                cands.append(jm.group(2).join(arrs[m.group(2)]))
+        for m in re.finditer(r"\bstring[ \t]+join[ \t]+(?:--\S+[ \t]+)*('[^']*'|\"[^\"]*\"|\S+)[ \t]+((?:\$\w+[ \t]*)+)",
+                             src):
+            sep = _shrc_words(m.group(1))
+            names = re.findall(r"\$(\w+)", m.group(2))
+            if all(n in arrs for n in names):
+                cands.append((sep[0] if sep else "").join(w for n in names for w in arrs[n]))
+        out, seen = [], set()
+        for c in sorted(dict.fromkeys(cands), key=len, reverse=True)[:32]:
+            if time.time() > end or len(out) >= 4:
+                break
+            plain = peel_plan(c, budget=min(0.25, max(0.05, end - time.time())))
+            if plain and plain.lstrip("﻿ \r\n\t").startswith("v=") and \
+                    not any(q.startswith(plain) for q in seen):
+                seen.add(plain)
+                out.append({"id": "shrc", "rep": "literal", "transform": "identity", "key": "", "material": c,
+                            "plain": plain})
+    except Exception:  # noqa: BLE001
+        return []
+    return out
 
 
 _FC_CACHE = {}
@@ -1326,6 +2408,13 @@ def _find_codecs_uncached(src, _depth=0):
         # NSIS `!define`/`${X}`/`StrCpy $0 "$0.."` folded descriptor: a gap, or the full plan ahead of a piece it extends
         have = [c.get("plain") for c in out if c.get("plain")]
         x = [c for c in _nsis_codecs(src) if not have or
+             any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
+        out = x + out
+    if _depth < 2 and isinstance(src, str) and _SHRC_CUE.search(src[:1 << 20]):
+        # shell rc / fish_variables (`SETUVAR`, `$'..'`, `${(j::)arr}` / `string join`): a gap, or the full plan ahead
+        # of the first array element it extends
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _shrc_codecs(src) if not have or
              any(c["plain"] != p and c["plain"].startswith(p) for p in have)]
         out = x + out
     if _depth < 2 and isinstance(src, str) and _INNO_CUE.search(src[:1 << 20]):
@@ -1527,6 +2616,15 @@ def _find_codecs_uncached(src, _depth=0):
         x = [c for c in _mf_codecs(src) if c["plain"] not in have and (not have or any(
             c["plain"] != p and c["plain"].startswith(p) for p in have))]
         out = x + out
+    if _depth < 2 and isinstance(src, str) and _VIF_CUE.search(src[:1 << 20]):
+        # descriptor split over variables joined by interpolation / concatenation (fold_interpolation): a gap, or the
+        # full plan ahead of a piece reading it extends (a piece of a split base64 / hex plan reads plan-shaped with a
+        # ragged tail, or as a middle `|steps=` run)
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _vif_codecs(src, 0.5 if not have else 0.25) if c["plain"] not in have and (not have or any(
+            len(c["plain"]) > len(p) and (p in c["plain"] or c["plain"].startswith(p[:max(12, len(p) - 4)]))
+            for p in have))]
+        out = x + out
     if _depth < 1 and isinstance(src, str) and (_JSP_CUE.search(src[:1 << 16]) or (
             "\\u" in src and "String" in src and _JAVA_CUE.search(src[:1 << 16]))):
         # JSP / JSPX / .tag / Java / .war: a gap, or -- when unicode escapes, includes or constant concatenations can
@@ -1539,6 +2637,24 @@ def _find_codecs_uncached(src, _depth=0):
                 out = out + x
             elif x and not set(have) & {c["plain"] for c in x}:
                 out = x + out
+    if _depth < 1 and isinstance(src, str) and _bw_kind(src[:1 << 20]):
+        # compose / Taskfile / CMake / justfile / package.json wrapper: a gap, or the full plan ahead of a piece reading
+        # it extends (a `string(APPEND ..)` / `- D0=..` / `p0 + p1` split reads as its first piece)
+        have = [c.get("plain") for c in out if c.get("plain")]
+        x = [c for c in _build_wrap_codecs(src, 0.4 if not have else 0.25) if c["plain"] not in have and (
+            not have or any(c["plain"] != p and c["plain"].startswith(p) or (   # or a short garbled first-piece read
+                p.startswith("v=") and p.count("|") < 6 and len(c["plain"]) > len(p) and
+                c["plain"].startswith(p[:p.rfind("|") + 1])) for p in have))]
+        out = x + out
+    if _depth < 1 and isinstance(src, str):
+        # marker split / dropped, nameless literal: any long literal fills a gap, or goes ahead of short plan-shaped
+        # readings it extends (a split marker reads as the first piece `v=3|language=x|role`)
+        have = [c.get("plain") for c in out if c.get("plain")]
+        if not have:
+            out = out + _anylit_codecs(src)
+        elif all(p.startswith("v=") and p.count("|") < 6 for p in have):
+            out = [c for c in _anylit_codecs(src, 0.3) if any(c["plain"] != p and c["plain"].startswith(p)
+                                                              for p in have)] + out
     return out
 
 
@@ -1592,8 +2708,13 @@ def _find_codecs_text(src):
                 cont = [("", v) for v in _marker_continued(src, am)]
                 plain = _peel_ext(cont + _ahk_literals(src) + _descriptor_literals_ext(src), am.group("tag"),
                                   tried=_descriptor_literals(src) + [am.group("mat")])[1]
+        mat = am.group("mat")
+        if plain is None or (am.string is src and re.match(r"""["'<][^\s;,)\-"'>]""", src[am.end():am.end() + 2])):
+            vt = _v3_tag_line(src, budget=0.3)               # v3-tag-vocab-extend: tag table / full marker line (b85/a85 `<"'`)
+            if vt and (plain is None or len(vt[2]) > len(plain) and vt[2].startswith(plain)):
+                mat, plain = vt[1], vt[2]
         out.append({"id": dm.group(1) if dm else "analysis", "rep": rep, "transform": "identity", "key": "",
-                    "material": am.group("mat"), "plain": plain})
+                    "material": mat, "plain": plain})
     elif not out:
         if _SPLIT_MARK_RE.search(src or ""):                     # D18 bare SPLIT marker + literal-array material
             mat, plain = _split_array_plain(src)
@@ -1618,6 +2739,11 @@ def _find_codecs_text(src):
             if plain:
                 out.append({"id": ident, "rep": "descriptor", "transform": "identity", "key": "",
                             "material": dict(lits).get(ident), "plain": plain})
+        if not out and "HUNTRESS_ANALYSIS_V" in (src or ""):     # a marker material _ANALYSIS_RE cannot start (b85 `<`)
+            vt = _v3_tag_line(src)
+            if vt:
+                out.append({"id": "analysis", "rep": vt[0].lower(), "transform": "identity", "key": "",
+                            "material": vt[1], "plain": vt[2]})
     return out
 
 
@@ -3185,6 +4311,156 @@ def peel_plan(material, tag="", depth=4, max_nodes=3000, budget=0.5):
     return None
 
 
+# ------------------------------------------------------------------------------------------------ v=3 tag vocabulary
+# Target v3-tag-vocab-extend: the single's marker has carried B64/HEX/HB64/FRAG (+ SPLIT / LYR) for 20 days; a late
+# twist may name a new carrier tag (B32, B85/A85, ZB64 = zlib+b64, GZB64, ROT13, REV, UTF16B64, XOR<key>, URL, ...).
+# _V3_TAG_TOKENS spells each tag token as a LYR layer name (lib.codec _lyr_readings); a compound tag is split greedily
+# (`_` separators too), an `XOR<key>` token takes a hex or ASCII key, and the chain is undone in both orders (ENCODE
+# order ZB64 = zlib then b64; READ order HB64 = hex of b64). An unknown tag falls back to the name-agnostic shape peel
+# (max 4 layers: zlib/gzip magic, base32 alphabet, utf-16le NULs). The marker line is re-read to its end, so a b85/a85
+# material keeps the `<"'` its alphabet holds. Only a `v=` plan is accepted and it is returned verbatim: the peel never
+# composes a field (obfuscation_profile= comes from the plan bytes or not at all). Consulted only when every earlier
+# reading found no plan, so GM-verified readings are unchanged. Bounded, never raises.
+_V3_TAG_TOKENS = (
+    ("UTF16LE", "utf16"), ("UTF16BE", "utf16"), ("UTF16", "utf16"), ("UNICODE", "utf16"), ("WIDE", "utf16"),
+    ("U16", "utf16"), ("BASE64URL", "b64u"), ("B64URL", "b64u"), ("B64U", "b64u"), ("URLB64", "b64u"),
+    ("BASE64", "b64"), ("B64", "b64"), ("BASE32HEX", "b32hex"), ("B32HEX", "b32hex"), ("B32H", "b32hex"),
+    ("BASE32", "b32"), ("B32", "b32"), ("BASE85", "b85"), ("B85", "b85"), ("ASCII85", "a85"), ("A85", "a85"),
+    ("Z85", "z85"), ("BASE58", "b58"), ("B58", "b58"), ("BASE16", "hex"), ("HEX", "hex"), ("B16", "hex"),
+    ("GZIP", "gz"), ("GZ", "gz"), ("ZLIB", "zlib"), ("DEFLATE", "deflate"), ("DFL", "deflate"), ("ZL", "zlib"),
+    ("BZIP2", "bz2"), ("BZ2", "bz2"), ("LZMA", "xz"), ("XZ", "xz"), ("ZSTD", "zstd"), ("BROTLI", "br"),
+    ("LZ4", "lz4"), ("ROT47", "rot47"), ("ROT13", "rot13"), ("REVERSE", "rev"), ("REV", "rev"), ("URL", "url"),
+    ("PCT", "url"), ("QP", "qp"), ("UUE", "uu"), ("UU", "uu"), ("BIN", "bin"), ("FRAG", "frag"), ("Z", "zlib"),
+    ("H", "hex"),
+)
+_V3_LINE_RE = re.compile(r"HUNTRESS_ANALYSIS_V\d+:([A-Za-z0-9_]{1,40})-([^\s]{8,})")
+_V3_CLOSERS = ("-->", "--%>", "*/", "?>", "%>", "#>", "]]", "--]]", "|#", "-}", "*)", ";", '"', "'", ")", ",")
+
+
+def _v3_tag_split(tag, limit=48):
+    """Every reading of a compound tag as [layer name, ...] (XOR<key> -> 'xor<hex>'), up to `limit`."""
+    out = []
+
+    def rec(t, acc):
+        if len(out) >= limit or len(acc) > 6:
+            return
+        if not t:
+            out.append(acc)
+            return
+        if t[0] == "_":
+            return rec(t[1:], acc)
+        u = t.upper()
+        if u.startswith("XOR"):
+            rest = t[3:]
+            for j in range(min(len(rest), 32), -1, -1):
+                key, tail = rest[:j], rest[j:]
+                if tail and tail[0] != "_" and not any(tail.upper().startswith(p) for p, _ in _V3_TAG_TOKENS):
+                    continue
+                k = key.lstrip("_")
+                keys = []
+                if re.fullmatch(r"(?:0[xX])?[0-9a-fA-F]+", k) and len(k.replace("0x", "").replace("0X", "")) % 2 == 0:
+                    keys.append("xor" + k.lower().replace("0x", ""))
+                if k:
+                    keys.append(("xorasc", k))
+                else:
+                    keys.append("xor")
+                for kk in keys:
+                    rec(tail, acc + [kk])
+            return
+        m = re.match(r"(?:ROT|CAESAR|SHIFT)(\d{1,2})", u)
+        if m and m.group(0) not in ("ROT13", "ROT47"):
+            rec(t[m.end():], acc + ["rot" + m.group(1)])
+        for p, name in _V3_TAG_TOKENS:
+            if u.startswith(p):
+                rec(t[len(p):], acc + [name])
+    rec(tag, [])
+    return out
+
+
+def _v3_layer_fns(name):
+    if isinstance(name, tuple):                                    # ASCII XOR key
+        k = name[1].encode("latin-1", "ignore")
+        return [lambda s, l, k=k: _lyr_xor(s, k, l)] if k else None
+    return _lyr_readings(name)
+
+
+def v3_tag_peel(tag, material, budget=0.3):
+    """The `v=` plan (str, verbatim) of a v=3 marker `<tag>-<material>` read through the tag table (both layer orders),
+    else through the name-agnostic shape peel (max 4 layers); None when neither yields a plan. Never raises."""
+    try:
+        mat = (material or "").strip()
+        if not mat or not tag:
+            return None
+        end = time.time() + budget
+        data = mat.encode("utf-8", "ignore")
+        steps = [0]
+
+        def dfs(chain, i, s):
+            if i == len(chain):
+                return _lyr_v(s)
+            for f in chain[i]:
+                steps[0] += 1
+                if steps[0] > 4000 or time.time() > end:
+                    return None
+                try:
+                    o = f(s, i == len(chain) - 1)
+                except Exception:  # noqa: BLE001 - this reading does not fit
+                    continue
+                if o and len(o) < (1 << 22):
+                    r = dfs(chain, i + 1, o)
+                    if r:
+                        return r
+            return None
+        splits = _v3_tag_split(tag.strip("_"))
+        text_layers = {"b64", "b64u", "b32", "b32hex", "b85", "a85", "z85", "b58", "hex", "url", "qp", "uu", "bin"}
+        for outer in (None, "b64", "hex", "b32", "b64u"):     # a tag naming no text layer (XORK3Y): the material has one
+            for layers in splits:
+                if outer and any(n in text_layers for n in layers if isinstance(n, str)):
+                    continue
+                lay = layers + [outer] if outer else layers
+                reads = [_v3_layer_fns(n) for n in lay]
+                if not layers or not all(reads):
+                    continue
+                for chain in ((reads[::-1], reads) if len(reads) > 1 and not outer else (reads[::-1],)):
+                    r = dfs(chain, 0, data)
+                    if r:
+                        return r
+                if time.time() > end:
+                    break
+        p = peel_plan(mat, "", depth=4, max_nodes=2500, budget=max(0.03, end - time.time()))
+        return p if p and _lyr_v(p.encode("utf-8")) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _v3_tag_line(src, budget=0.4):
+    """(tag, material, plan) of the first v=3 marker line whose tag-table peel yields a plan, else None."""
+    try:
+        end = time.time() + budget
+        for m in _V3_LINE_RE.finditer(src or "", 0, 1 << 20):
+            tag, mat = m.group(1), m.group(2)
+            if tag.upper() in ("LYR", "SPLIT"):
+                continue
+            cands = [mat]
+            for _ in range(3):
+                t = cands[-1]
+                for c in _V3_CLOSERS:
+                    if t.endswith(c) and len(t) > len(c) + 8:
+                        cands.append(t[:-len(c)])
+                        break
+                else:
+                    break
+            for c in cands:
+                if time.time() > end:
+                    return None
+                p = v3_tag_peel(tag, c, budget=max(0.03, min(0.25, end - time.time())))
+                if p:
+                    return tag, c, p
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
 # ------------------------------------------------------------------------------------------------ .reg / .inf hosts
 # Target reg-inf-host-route (persistence hosts; builds on source-encoding-normalize): a regedit export (UTF-16LE + BOM
 # for `Version 5.00`, ANSI for REGEDIT4) hides values as `"name"=hex(2):`/`hex(7):`/`hex:` comma-hex (UTF-16LE text,
@@ -3394,6 +4670,43 @@ def _xpath_literal(expr):
     return "".join(a or b for a, b in lits)
 
 
+_XSL_NODTD = re.compile(r"<!(?:DOCTYPE|ENTITY)\b", re.I)
+
+
+def _xslt_etree_text(src):
+    """Target xslt-v3-fixtures (D23-D27 shape): the stylesheet parsed with xml.etree (no DTD, so no entity expansion;
+    never applied). Comment text ends at `-->` (a tight `<!-- HUNTRESS_ANALYSIS_V1:B64-..-->` marker), char refs
+    (`&#x2E;` FRAG dots) and CDATA come back resolved, and EVERY <xsl:variable|param> (any name: huntress_descriptor,
+    d, ..) is rewritten as `descriptor_<name> = "<select literal | text content>"`. Returns that text, else None."""
+    import xml.etree.ElementTree as ET
+    if len(src) > 1 << 20 or _XSL_NODTD.search(src):
+        return None
+    try:   # a pull parser: the line-2 marker comment sits BEFORE the root element, which fromstring() drops
+        pp = ET.XMLPullParser(events=("comment", "end"))
+        pp.feed(src.encode("utf-8"))
+        pp.close()
+        events = list(pp.read_events())
+    except Exception:  # noqa: BLE001 - not well-formed XML: the regex readings already ran
+        return None
+    out = []
+    for ev, e in events:
+        if len(out) >= 64:
+            break
+        if ev == "comment":
+            t = (e.text or "").strip()
+            if "HUNTRESS_ANALYSIS" in t:
+                out.append(t + "\n")
+            continue
+        if not isinstance(e.tag, str) or not re.search(r"\}(?:variable|param|with-param)$", e.tag):
+            continue
+        nm = re.sub(r"\W", "_", e.get("name") or "")
+        sel = e.get("select")
+        lit = _xpath_literal(sel) if sel else "".join(e.itertext()).strip()
+        if nm and lit:
+            out.append('descriptor_%s = "%s"\n' % (nm, lit.replace('"', "")))
+    return "".join(out) or None
+
+
 def _xslt_codecs(src):
     try:
         if not src or not _XSL_HOST.search(src[:1 << 16]):
@@ -3416,6 +4729,9 @@ def _xslt_codecs(src):
             if lit:
                 syn.append('%s = "%s"\n' % (nm.group(1).replace("-", "_"), lit.replace('"', "")))
         texts.append(("xslt", flat + "\n" + "".join(syn)))
+        ety = _xslt_etree_text(src)
+        if ety:
+            texts.append(("xslt", ety))
         for ident, text in texts:
             for c in _find_codecs_text(text):
                 if c.get("plain"):
@@ -22957,7 +24273,22 @@ class _Tfh:
             if ref is None:
                 raise _TfhFail
             return self.ref(name, ref), j2
-        raise _TfhFail                             # resource / data / path / count references: unknown
+        if s.startswith(".", j):                   # `<type>.<name>.<attr>` / `data.<type>.<name>.<attr>`: a literal
+            parts, ends = [name], [j]              # resource attribute folds (terraform_data `.output` = `.input`)
+            while s.startswith(".", ends[-1]) and len(parts) < 4:
+                t, j2 = self.ident(ends[-1] + 1)
+                if t is None:
+                    break
+                parts.append(t)
+                ends.append(j2)
+            n = 4 if name == "data" else 3
+            if len(parts) >= n:
+                if parts[0] == "terraform_data" and parts[2] == "output":
+                    parts[2] = "input"
+                key = ".".join(parts[:n])
+                if ("res", key) in self.env:
+                    return self.ref("res", key), ends[n - 1]
+        raise _TfhFail                             # path / count / unregistered resource references: unknown
 
     def ref(self, kind, name):
         key = (kind, name)
@@ -23204,6 +24535,8 @@ class _Tfh:
                     self.env.setdefault(("local", name), ("todo", self, pos))
                 elif len(path) == 2 and path[0] == "variable" and name == "default":
                     self.env.setdefault(("var", path[1]), ("todo", self, pos))
+                elif len(path) == 3 and path[0] in ("resource", "data"):
+                    self.env.setdefault(("res", ".".join(path[path[0] == "resource":] + (name,))), ("todo", self, pos))
                 out.append((path, name, pos))
                 try:
                     i = self.expr(pos)[1]
@@ -24287,3 +25620,498 @@ def _cfgchain_decode(material, transform=None, key=None):
     if f is None:
         return None
     return str(r.get(f, "none"))
+
+
+# --- specimen-lineage-attribution -----------------------------------------------------------------------------------
+# D27 prompt: "A Dockerfile and several earlier specimens share strings, but sharing strings doesn't mean sharing
+# parents. Attribute each specimen using build-stage, semantic, and static-handoff evidence, and expose the resemblance
+# that's only skin-deep." lineage(plans_by_member, texts_by_member) -> {member: (parent|None, evidence)}; the parent is
+# taken from the strongest edge: (1) static handoff (producer next_stage leaf == member leaf, equal handoff_id /
+# `HandoffId` with a producer direction, next_language == member language), (2) build stage (Dockerfile
+# `COPY --from=<stage>` -> the member that lives in that stage, plain `COPY`/`ADD` -> the Dockerfile; make
+# `target: prereq`), (3) semantic (same campaign token and the nearest earlier stage / role in the chain), and only
+# (4) shared url/host/path strings. A shared string belongs to the family whose campaign token it carries (else the
+# larger family); a member holding it from another family is `skin_deep` (evidence["skin_deep_of"] = the member it
+# resembles). decode(material=JSON {member: text} | {"members": {..}, "plans": {..}}, rep='lineage',
+# transform='parent'|'parent_language'|'evidence'|'decoy'|'skin_deep_of'|'json', key=member).
+_LIN_ROLE = {"dropper": 0, "launcher": 0, "loader": 0, "installer": 0, "downloader": 0, "entry": 0, "initial": 0,
+             "builder": 0, "stager": 1, "staged_chain": 1, "stage": 1, "bridge": 1, "relay": 1, "handoff": 1,
+             "decoder": 1, "injector": 1, "payload": 2, "collector": 2, "collection": 2, "uploader": 2, "exfil": 2,
+             "exfiltration": 2, "beacon": 2, "persistence": 2, "impact": 2, "implant": 2, "final": 2}
+_LIN_URL = re.compile(r"(?i)\b[a-z][a-z0-9+.-]{1,9}://[^\s'\"`<>|)\]}]+")
+_LIN_HID = re.compile(r"(?i)handoff[_-]?id\W{0,4}[\"']?([\w.:-]{4,64})")
+_LIN_NONE = ("", "none", "null", "nil", "n/a", "-")
+
+
+def _lin_leaf(n):
+    return _cl_split(n)[1].lower()
+
+
+def _lin_strings(plan, text):
+    """url / host / path strings of one member (plan values + literal urls in the source)."""
+    out = set()
+    vals = [str(v) for k, v in plan.items() if k not in ("v", "language", "next_language", "role", "campaign_id")]
+    vals += _LIN_URL.findall(text[:1 << 20])
+    for v in vals:
+        v = v.strip().rstrip(".,;")
+        m = re.match(r"(?i)^[a-z][a-z0-9+.-]*://([^/:?#\s]+)(?::\d+)?(/[^?#\s]*)?", v)
+        if m:
+            out.add("url:" + v)
+            out.add("host:" + m.group(1).lower())
+            if m.group(2) and len(m.group(2)) > 1:
+                out.add("path:" + m.group(2))
+        elif _IC_HOSTLIKE.match(v) and not re.fullmatch(r"[\d.]+", v):
+            out.add("host:" + v.lower())
+        elif re.match(r"^(?:/|[A-Za-z]:\\|%\w+%\\)[^\s]{3,}$", v):
+            out.add("path:" + v)
+    return out
+
+
+def _lin_docker(text):
+    """[(stage_name, base, [context leaves], [(from_stage, leaf)])] of one Dockerfile text, [] if not one."""
+    stages = []
+    if not re.search(r"(?im)^\s*FROM\s+\S+", text or ""):
+        return stages
+    for ln in re.sub(r"\\\r?\n", " ", text).splitlines():
+        m = re.match(r"(?i)^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?", ln)
+        if m:
+            stages.append([(m.group(2) or str(len(stages))).lower(), m.group(1).lower(), [], []])
+            continue
+        m = re.match(r"(?i)^\s*(COPY|ADD)\s+(.*)$", ln)
+        if not m or not stages:
+            continue
+        args = m.group(2).strip()
+        frm = None
+        if args.startswith("["):
+            try:
+                import json
+                parts = [str(x) for x in json.loads(args)]
+            except ValueError:
+                parts = args.strip("[]").replace('"', "").split(",")
+        else:
+            parts = args.split()
+        srcs = []
+        for p in parts:
+            p = p.strip()
+            if p.lower().startswith("--from="):
+                frm = p.split("=", 1)[1].lower()
+            elif not p.startswith("--"):
+                srcs.append(p)
+        for s in srcs[:-1] if len(srcs) > 1 else srcs:
+            leaf = re.split(r"[\\/]", s.rstrip("/"))[-1].lower()
+            if leaf:
+                (stages[-1][3].append((frm, leaf)) if frm else stages[-1][2].append(leaf))
+    return stages
+
+
+def lineage(plans_by_member, texts_by_member=None):
+    """{member: (parent_member|None, evidence)} of ONE corpus. evidence = {rank, kind, via, shares, skin_deep_of}:
+    rank 1 handoff / 2 build / 3 semantic / 4 strings / None; shares = members sharing a url/host/path string;
+    skin_deep_of = the member whose strings it borrows while its lineage points elsewhere. Never raises ({} on error)."""
+    try:
+        texts = {str(k): (v.decode("utf-8", "replace") if isinstance(v, (bytes, bytearray)) else str(v or ""))
+                 for k, v in (texts_by_member or {}).items()}
+        given = {str(k): v for k, v in (plans_by_member or {}).items()}
+        names = list(dict.fromkeys(list(texts) + list(given)))
+        pl = {}
+        for n in names:
+            p = given.get(n)
+            if p is None and texts.get(n) and not _lin_docker(texts[n]):
+                try:
+                    p = next((c.get("plain") for c in find_codecs(texts[n]) if c.get("plain")), None)
+                except Exception:  # noqa: BLE001
+                    p = None
+            pl[n] = {str(k).strip().lower(): str(v).strip() for k, v in _cl_plan(p).items()}
+        info = {}
+        for n in names:
+            p, t = pl[n], texts.get(n, "")
+            camp = p.get("campaign_id") or p.get("campaign") or ""
+            ct = _IC_HEX.findall(camp)
+            hid = p.get("handoff_id") or next(iter(_LIN_HID.findall(t)), "")
+            st = p.get("stage", "")
+            info[n] = dict(lang=_ic_alias(_ic_lang_of(n, p)), tok=ct[-1].lower() if ct else "", hid=hid.lower(),
+                           stage=int(st) if re.fullmatch(r"\d{1,3}", st) else None,
+                           role=_LIN_ROLE.get(re.sub(r"[^a-z_]", "", p.get("role", "").lower())),
+                           strs=_lin_strings(p, t))
+        leaf_of = {}
+        for n in names:
+            leaf_of.setdefault(_lin_leaf(n), n)
+        cand = {n: [] for n in names}               # (rank, sub, parent, kind, via)
+
+        # (1) static handoff
+        for a in names:
+            pa, ia = pl[a], info[a]
+            ns = pa.get("next_stage", "")
+            nleaf = re.split(r"[\\/]", ns)[-1].lower() if ns.lower() not in _LIN_NONE else ""
+            nl = pa.get("next_language", "")
+            nl = "" if nl.lower() in _LIN_NONE else _ic_alias(nl)
+            for b in names:
+                if a == b:
+                    continue
+                ib = info[b]
+                if nleaf and _lin_leaf(b) == nleaf:
+                    cand[b].append((1, 0, a, "handoff", "next_stage=" + ns))
+                elif ia["hid"] and ia["hid"] == ib["hid"] and (
+                        (nl and nl == ib["lang"]) or (ia["stage"] is not None and ib["stage"] is not None
+                                                      and ia["stage"] < ib["stage"])
+                        or ((nl or nleaf) and not (pl[b].get("next_language", "").lower() not in _LIN_NONE
+                                                   or pl[b].get("next_stage", "").lower() not in _LIN_NONE))):
+                    cand[b].append((1, 1, a, "handoff", "handoff_id=" + ia["hid"]))
+                elif nl and nl == ib["lang"]:
+                    cand[b].append((1, 2 if ia["tok"] and ia["tok"] == ib["tok"] else 3, a, "handoff",
+                                    "next_language=" + nl))
+        # (2) build stage
+        for d in names:
+            t = texts.get(d, "")
+            stages = _lin_docker(t) if t else []
+            lives = {}
+            for sname, base, ctx, cps in stages:
+                for leaf in ctx:
+                    if leaf in leaf_of and leaf_of[leaf] != d:
+                        lives.setdefault(sname, leaf_of[leaf])
+                        cand[leaf_of[leaf]].append((2, 1, d, "build", "COPY " + leaf))
+                for frm, leaf in cps:
+                    if leaf in leaf_of and leaf_of[leaf] != d:
+                        par = lives.get(frm) or d
+                        cand[leaf_of[leaf]].append((2, 0, par, "build", "COPY --from=%s %s" % (frm, leaf)))
+                        lives.setdefault(sname, leaf_of[leaf])
+            if not stages and re.search(r"(?m)^[\w./-]+\s*:(?!=)", t):
+                for m in re.finditer(r"(?m)^([\w./-]+(?:\s+[\w./-]+)*)\s*:(?!=)[ \t]*([^\n#;]*)", t):
+                    for tg in m.group(1).split():
+                        tl = re.split(r"[\\/]", tg)[-1].lower()
+                        pre = [re.split(r"[\\/]", x)[-1].lower() for x in m.group(2).split()]
+                        pre = [leaf_of[x] for x in pre if x in leaf_of and leaf_of[x] != leaf_of.get(tl)]
+                        if tl in leaf_of and pre:
+                            cand[leaf_of[tl]].append((2, 0, pre[0], "build", "make %s: %s" % (tg, _cl_split(pre[0])[1])))
+        # (3) semantic: same campaign token, nearest earlier stage / role
+        for b in names:
+            ib = info[b]
+            if not ib["tok"]:
+                continue
+            best = None
+            for a in names:
+                ia = info[a]
+                if a == b or ia["tok"] != ib["tok"]:
+                    continue
+                for key in ("stage", "role"):
+                    if ia[key] is not None and ib[key] is not None and ia[key] < ib[key]:
+                        gap = (0 if key == "stage" else 100) + ib[key] - ia[key]
+                        if best is None or gap < best[0]:
+                            best = (gap, a, "campaign=%s %s %s<%s" % (ib["tok"], key, ia[key], ib[key]))
+                        break
+            if best:
+                cand[b].append((3, best[0], best[1], "semantic", best[2]))
+        # a next_language edge that reaches several members stands only where another edge / the token corroborates it
+        fan = {}
+        for b in names:
+            for x in cand[b]:
+                if x[3] == "handoff" and x[4].startswith("next_language="):
+                    fan.setdefault(x[2], []).append(b)
+        for a, cons in fan.items():
+            if len(cons) < 2:
+                continue
+            for b in cons:
+                ok = any(y[2] == a and not y[4].startswith("next_language=") for y in cand[b]) or \
+                    bool(info[a]["tok"] and info[a]["tok"] == info[b]["tok"])
+                if not ok:
+                    cand[b] = [y for y in cand[b] if not (y[2] == a and y[4].startswith("next_language="))]
+        # (4) shared strings
+        shares = {n: sorted(m for m in names if m != n and info[n]["strs"] & info[m]["strs"]) for n in names}
+        for b in names:
+            for a in shares[b]:
+                ia, ib = info[a], info[b]
+                if (ia["stage"] is not None and ib["stage"] is not None and ia["stage"] < ib["stage"]) or \
+                        (ia["role"] is not None and ib["role"] is not None and ia["role"] < ib["role"]):
+                    cand[b].append((4, 0, a, "strings", ",".join(sorted(ia["strs"] & ib["strs"]))[:200]))
+        res = {}
+        for n in names:
+            c = sorted(cand[n], key=lambda x: (x[0], x[1], names.index(x[2])))
+            top = [x for x in c if x[:2] == c[0][:2]] if c else []
+            if top and len({x[2] for x in top}) > 1:      # ambiguous at its best rank: try the campaign token
+                same = [x for x in top if info[x[2]]["tok"] and info[x[2]]["tok"] == info[n]["tok"]]
+                top = same if len({x[2] for x in same}) == 1 else []
+                if not top:
+                    c = [x for x in c if x[0] > c[0][0]]
+                    top = c[:1]
+            e = top[0] if top else None
+            res[n] = [e[2] if e else None, dict(rank=e[0] if e else None, kind=e[3] if e else None,
+                                                via=e[4] if e else "", shares=shares[n], skin_deep_of=None,
+                                                parent_language=(_ic_lang_of(e[2], pl[e[2]]) or (
+                                                    "dockerfile" if _lin_docker(texts.get(e[2], "")) else ""))
+                                                if e else None)]
+        # families over rank 1-3 edges; a shared string belongs to the family carrying its token (else the larger one)
+        root = {n: n for n in names}
+
+        def find(x):
+            while root[x] != x:
+                root[x] = root[root[x]]
+                x = root[x]
+            return x
+        for n in names:
+            if res[n][0] and res[n][1]["rank"] <= 3:
+                root[find(n)] = find(res[n][0])
+        fam = {}
+        for n in names:
+            fam.setdefault(find(n), []).append(n)
+        for n in names:
+            for s in sorted(info[n]["strs"]):
+                holders = [m for m in names if s in info[m]["strs"]]
+                fams = {find(m) for m in holders}
+                if len(fams) < 2:
+                    continue
+                toks = set(t.lower() for t in _IC_HEX.findall(s))
+
+                def score(f):
+                    own = any(info[m]["tok"] and any(t.startswith(info[m]["tok"]) or info[m]["tok"].startswith(t)
+                                                     for t in toks) for m in fam[f])
+                    edge = any(res[m][1]["rank"] == 1 for m in fam[f])
+                    return (own, sum(1 for m in holders if find(m) == f), edge)
+                ranked = sorted(fams, key=score, reverse=True)
+                if score(ranked[0]) == score(ranked[1]) or find(n) == ranked[0]:
+                    continue
+                res[n][1]["skin_deep_of"] = next(m for m in holders if find(m) == ranked[0])
+                break
+        return {n: (v[0], v[1]) for n, v in res.items()}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def lineage_answer(res, member=None, field="parent"):
+    """`<fam>-parent` (leaf) / `-parent-language` / `-evidence` (handoff|build|semantic|strings) / `-decoy` (the
+    skin-deep member) / `-skin-deep-of` from lineage() output; member matches the full name or a unique leaf."""
+    try:
+        f = _cl_norm(field)
+        if f.endswith("decoy") or f.endswith("skindeep") or f.endswith("skindeepmember") or f.endswith("decoymember"):
+            d = [n for n, (_, e) in res.items() if e.get("skin_deep_of")]
+            return _cl_split(d[0])[1] if d else "none"
+        hit = [n for n in res if n == member or _cl_split(n)[1] == member or _lin_leaf(n) == str(member).lower()]
+        if len(hit) != 1:
+            return None
+        par, ev = res[hit[0]]
+        if f.endswith("skindeepof") or f.endswith("resembles"):
+            return _cl_split(ev["skin_deep_of"])[1] if ev.get("skin_deep_of") else "none"
+        if f.endswith("evidence") or f.endswith("kind"):
+            return ev.get("kind") or "none"
+        if par is None:
+            return "none"
+        if f.endswith("parentlanguage") or f.endswith("language"):
+            return ev.get("parent_language") or _ic_lang_of(par, {}) or "none"
+        if f.endswith("parent") or f.endswith("parentmember") or f.endswith("member"):
+            return _cl_split(par)[1]
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _lin_decode(material, transform=None, key=None):
+    """decode() hook for rep 'lineage': material = JSON {member: text} or {"members": {..}, "plans": {..}}."""
+    import json
+    if isinstance(material, (bytes, bytearray)):
+        material = bytes(material).decode("utf-8", "ignore")
+    try:
+        mem = json.loads(material) if isinstance(material, str) else material
+    except ValueError:
+        return None
+    if not isinstance(mem, dict):
+        return None
+    texts, plans = (mem.get("members") or {}, mem.get("plans") or {}) if "members" in mem else (mem, {})
+    if not isinstance(texts, dict) or not isinstance(plans, dict):
+        return None
+    res = lineage(plans, texts)
+    if not res or not any(p for p, _ in res.values()):
+        return None                                  # no edge at all: nothing to attribute
+    t = _cl_norm(transform or "parent")
+    if t in ("json", "rows", "identity"):
+        return json.dumps({n: [p, e] for n, (p, e) in res.items()}, sort_keys=True, separators=(",", ":"))
+    return lineage_answer(res, key, t)
+
+
+# --- corpus-aggregate-questions ----------------------------------------------------------------------------------------
+# Capstone questions over one whole corpus (or one Mastery set): counters of role / attack / language / next_language /
+# host_profile, the language-level next_language edge list and its longest simple path, campaign-token groups.
+# decode(material=JSON {member: plan|text} | {"plans": {..}}, rep='corpus_summary', transform=<question>, key=<arg>):
+# count (key "role=benign_utility" | "benign_utility"), members (same key; ", "-joined), distinct (key field),
+# top (key field), handoff_to / handoff_from (key language), languages_for_role (key role), longest_chain (">"-joined),
+# longest_chain_hops / longest_chain_length (nodes), campaign_members (key token|member), largest_campaign, json.
+_CS_FIELDS = ("role", "attack", "language", "next_language", "host_profile")
+
+
+def _cs_val(v):
+    s = str(v if v is not None else "").strip().strip("'\"`").strip().lower()
+    if re.fullmatch(r"t\d{4}(?:\.\d{3})?", s):
+        return s.upper()                             # ATT&CK ids keep their canonical case
+    return "none" if s in _LIN_NONE else s
+
+
+def corpus_summary(plans_by_member):
+    """Corpus-level aggregates of {member: plan text|dict}. Never raises ({} when no member carries a plan)."""
+    try:
+        import time as _t
+        t0 = _t.time()
+        rows = {}
+        for n, p in (plans_by_member or {}).items():
+            d = {str(k).strip().lower(): v for k, v in _cl_plan(p).items()}
+            if not d or not any(k in d for k in _CS_FIELDS + ("campaign_id", "campaign")):
+                continue
+            r = {f: _cs_val(d.get(f)) for f in _CS_FIELDS}
+            if r["language"] == "none":
+                r["language"] = _ic_lang_of(n, {}) or "none"
+            camp = str(d.get("campaign_id") or d.get("campaign") or "")
+            ct = _IC_HEX.findall(camp)
+            r["campaign"] = ct[-1].lower() if ct else ""
+            rows[str(n)] = r
+        if not rows:
+            return {}
+        counts = {f: {} for f in _CS_FIELDS}
+        for r in rows.values():
+            for f in _CS_FIELDS:
+                counts[f][r[f]] = counts[f].get(r[f], 0) + 1
+        # language-level edges (spelled as the producing / consuming member's language field)
+        spell = {}
+        for r in rows.values():
+            if r["language"] != "none":
+                spell.setdefault(_ic_alias(r["language"]), r["language"])
+        edges, member_edges = [], []
+        for n, r in rows.items():
+            if r["next_language"] == "none" or r["language"] == "none":
+                continue
+            e = (r["language"], spell.get(_ic_alias(r["next_language"]), r["next_language"]))
+            if e not in edges:
+                edges.append(e)
+            for m, q in rows.items():
+                if m != n and _ic_lang_eq(q["language"], r["next_language"]):
+                    member_edges.append((n, m))
+        adj = {}
+        for a, b in edges:
+            if a != b:
+                adj.setdefault(a, []).append(b)
+        for a in adj:
+            adj[a].sort()
+        best = []
+
+        def dfs(path):
+            nonlocal best
+            if _t.time() - t0 > 0.5:
+                return
+            if len(path) > len(best) or (len(path) == len(best) and path < best):
+                best = list(path)
+            for b in adj.get(path[-1], ()):
+                if b not in path:
+                    path.append(b)
+                    dfs(path)
+                    path.pop()
+        for a in sorted(adj):
+            dfs([a])
+        groups = {}
+        for n, r in rows.items():
+            if r["campaign"]:
+                groups.setdefault(r["campaign"], []).append(n)
+        return dict(members=len(rows), rows=rows, counts=counts, edges=edges, member_edges=member_edges,
+                    longest_path=best if len(best) > 1 else [],
+                    campaigns={k: sorted(v) for k, v in groups.items() if len(v) > 1})
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def corpus_answer(summ, question, key=None):
+    """One capstone answer (str) from corpus_summary() output; "none" when the field is absent, None if unanswerable."""
+    try:
+        if not summ:
+            return None
+        q = _cl_norm(question)
+        rows, counts = summ["rows"], summ["counts"]
+        k = str(key if key is not None else "").strip()
+        fld, _, val = k.partition("=") if "=" in k else ("", "", k)
+        fld = _cl_norm(fld).replace("nextlanguage", "next_language").replace("hostprofile", "host_profile")
+        val = _cs_val(val)
+
+        def match(r):
+            if fld in _CS_FIELDS:
+                return _ic_lang_eq(r[fld], val) if "language" in fld else r[fld] == val
+            return any((_ic_lang_eq(r[f], val) if "language" in f else r[f] == val) for f in _CS_FIELDS)
+        if q in ("members", "membercount", "total", "totalmembers", "count") and not k:
+            return str(summ["members"])
+        if q in ("count", "countof", "howmany", "number"):
+            return str(sum(1 for r in rows.values() if match(r)))
+        if q in ("members", "membersof", "memberswith", "membernames", "which"):
+            hit = sorted(_cl_split(n)[1] for n, r in rows.items() if match(r))
+            return ", ".join(hit) if hit else "none"
+        f = _cl_norm(k).replace("nextlanguage", "next_language").replace("hostprofile", "host_profile")
+        if q in ("distinct", "distinctcount", "unique"):
+            return str(len([v for v in counts.get(f, {}) if v != "none"])) if f in counts else None
+        if q in ("top", "mostcommon", "mode"):
+            c = counts.get(f) if f in counts else None
+            if c is None:
+                return None
+            c = {v: n for v, n in c.items() if v != "none"}
+            if not c:
+                return "none"
+            m = max(c.values())
+            top = sorted(v for v, n in c.items() if n == m)
+            return top[0] if len(top) == 1 else None
+        if q in ("handoffto", "handsoffto", "languagehandingoffto", "producerof", "from"):
+            hit = sorted({a for a, b in summ["edges"] if _ic_lang_eq(b, val)})
+            return ", ".join(hit) if hit else "none"
+        if q in ("handofffrom", "handsofffrom", "nextlanguageof", "to"):
+            hit = sorted({b for a, b in summ["edges"] if _ic_lang_eq(a, val)})
+            return ", ".join(hit) if hit else "none"
+        if q in ("languagesforrole", "languagesperrole", "rolelanguages"):
+            hit = sorted({r["language"] for r in rows.values() if r["role"] == val and r["language"] != "none"})
+            return ", ".join(hit) if hit else "none"
+        if q in ("longestchain", "longestpath", "chain", "longesthandoffchain"):
+            return ">".join(summ["longest_path"]) or "none"
+        if q in ("longestchainhops", "chainhops", "longestchainedges"):
+            return str(max(len(summ["longest_path"]) - 1, 0))
+        if q in ("longestchainlength", "chainlength", "longestchainnodes"):
+            return str(len(summ["longest_path"]))
+        if q in ("edgecount", "handoffedges", "edges"):
+            return str(len(summ["edges"]))
+        if q in ("campaignmembers", "sharecampaign", "sharedcampaign", "campaignpeers"):
+            tok = k.lower()
+            if tok not in summ["campaigns"]:
+                hit = [n for n in rows if n == k or _cl_split(n)[1] == k]
+                tok = rows[hit[0]]["campaign"] if len(hit) == 1 else ""
+            mem = summ["campaigns"].get(tok)
+            return ", ".join(sorted(_cl_split(n)[1] for n in mem)) if mem else "none"
+        if q in ("largestcampaign", "biggestcampaign"):
+            c = summ["campaigns"]
+            if not c:
+                return "none"
+            m = max(len(v) for v in c.values())
+            top = sorted(t for t, v in c.items() if len(v) == m)
+            return top[0] if len(top) == 1 else None
+        if q in ("campaigngroups", "sharedcampaigns"):
+            return str(len(summ["campaigns"]))
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cs_decode(material, transform=None, key=None):
+    """decode() hook for rep 'corpus_summary': material = JSON {member: plan|script text} or {"plans": {..}}."""
+    import json
+    if isinstance(material, (bytes, bytearray)):
+        material = bytes(material).decode("utf-8", "ignore")
+    try:
+        mem = json.loads(material) if isinstance(material, str) else material
+    except ValueError:
+        return None
+    if not isinstance(mem, dict):
+        return None
+    if isinstance(mem.get("plans"), dict):
+        mem = mem["plans"]
+    plans = {}
+    for n, v in mem.items():
+        p = v
+        if isinstance(v, str) and not _cl_plan(v).get("v") and not _cl_plan(v).get("language"):
+            try:
+                p = next((c.get("plain") for c in find_codecs(v) if c.get("plain")), None)
+            except Exception:  # noqa: BLE001
+                p = None
+        plans[n] = p
+    summ = corpus_summary(plans)
+    if not summ:
+        return None
+    if _cl_norm(transform) in ("json", "summary", "identity"):
+        return json.dumps({k: v for k, v in summ.items() if k != "rows"}, sort_keys=True, separators=(",", ":"))
+    return corpus_answer(summ, transform or "members", key)

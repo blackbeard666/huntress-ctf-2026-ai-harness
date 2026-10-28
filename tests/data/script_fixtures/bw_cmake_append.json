@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=cmake|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=cmake_project|obfuscation_profile=base64|stage_profile=single_stage|next_language=sh|campaign_id=CM-3f1a9c20|url=https://cm-3f1a9c20.example.invalid/stage|file_path=/tmp/huntress-cm-3f1a9c20/.stage",
+ "decoy": false,
+ "target": "build-file-host-profiles",
+ "note": "cmake string(APPEND) short pieces",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bw_gen.py  (stdlib base64/gzip/json writer, inert source)",
+ "oracle_cmd": "(printf 'macro(project)\\nendmacro()\\nmacro(execute_process)\\nendmacro()\\nmacro(file)\\nendmacro()\\n'; cat tests/data/script_fixtures/bw_cmake_append.cmake; printf 'message(\\\"${HUNTRESS_DESCRIPTOR}\\\")\\n') > $TMPDIR/bw_o.cmake && cmake -P $TMPDIR/bw_o.cmake 2>&1 | base64 -d "
+}

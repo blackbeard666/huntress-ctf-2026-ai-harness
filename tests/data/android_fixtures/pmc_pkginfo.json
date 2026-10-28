@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": "ANS-595aa9112ea4f270",
+ "decoy": false,
+ "_why": "getPackageInfo(own, GET_ACTIVITIES|GET_RECEIVERS|GET_SERVICES): activities[] scanned by name (.ChallengeActivity index -> gate), exported count, permission lengths, services[0].exported=false -> -1, receivers[0].exported=true -> 4, activities[0].applicationInfo.targetSdkVersion; narrowing into a long mixer",
+ "generator_cmd": "python3 tests/data/android_fixtures/pmc_src/gen_pmc.py pkginfo tests/data/android_fixtures/pmc_pkginfo.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex + apktool's aapt2 link (binary manifest, minSdk 23 / targetSdk 30, ChallengeActivity exported only by its huntress27://dependency-surface/unlock intent-filter, AdminActivity exported=false + permission, SyncService exported=false, BootReceiver exported=true) + zipfile + keytool + apksigner v1+v2",
+ "oracle_cmd": "same generator, oracle stage: `aapt dump xmltree <apk> AndroidManifest.xml` -> per-component name (relative names expanded against the package) / exported attr (else intent-filter present => exported, targetSdk < 31) / permission + uses-sdk; those facts feed android.* stubs (PackageManager / ComponentName / ActivityInfo / PackageInfo / ApplicationInfo) and `java -cp <javac out> <pkg>.Probe` runs Release.code(new Context()) -> 'ANS-595aa9112ea4f270'"
+}

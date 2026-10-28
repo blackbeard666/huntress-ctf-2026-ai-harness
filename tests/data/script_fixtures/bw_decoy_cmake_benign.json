@@ -1,0 +1,9 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "build-file-host-profiles",
+ "note": "benign cmake project, base64 banner (no plan)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bw_gen.py  (stdlib base64/gzip/json writer, inert source)",
+ "oracle_cmd": "(printf 'macro(project)\\nendmacro()\\nmacro(execute_process)\\nendmacro()\\nmacro(file)\\nendmacro()\\n'; cat tests/data/script_fixtures/bw_decoy_cmake_benign.cmake; printf 'message(\\\"${GREETING}\\\")\\n') > $TMPDIR/bw_o.cmake && cmake -P $TMPDIR/bw_o.cmake 2>&1 | base64 -d ",
+ "oracle_result": "hello from a benign cmake project"
+}

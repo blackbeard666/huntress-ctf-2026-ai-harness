@@ -1,0 +1,6 @@
+{
+  "expected_plain": null,
+  "decoy": true,
+  "generator_cmd": "printf %s '<plan>' | perl -MCompress::Zlib -0777 -ne 'print substr(compress($_),0,40)' | base64 -w0  # zlib cut at 40 bytes",
+  "oracle_cmd": "sed -n 's/.*ZB64-\\([^ ]*\\) -->.*/\\1/p' v3tag_decoy_zb64_trunc.html | base64 -d | perl -MCompress::Zlib -0777 -ne 'print defined(uncompress($_))?\"ok\":\"truncated\"'  # -> truncated"
+}

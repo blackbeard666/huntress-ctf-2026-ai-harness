@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=makefile|role=downloader|verdict=suspicious|attack=T1105|adapter=http_client|host_profile=standalone|obfuscation_profile=base64|stage_profile=two_stage_download_execute|next_language=jscript|stage_count=2|steps=acquire_remote,dispatch_process|campaign_id=MAKEFILE-88fc98cf|url=https://makefile-88fc98cf6a.example.invalid/stage|file_path=/tmp/huntress-makefile/.88fc98cf6aaaf1d5.stage",
+ "decoy": false,
+ "language": "makefile",
+ "tag": "B64",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mkv3_gen.py  (stdlib base64/binascii encode of the plan; make text template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/mkv3_nm_ifndef_quoted.mk | sed -n 's/^  DESCRIPTOR_BD3A5C5B ?= \"\\(.*\\)\"$/\\1/p' | base64 -d"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "snoop.packet_count",
+ "expected": "13",
+ "generator_cmd": "editcap 4.6.4 -F snoop mix13.pcap mix13.snoop  (mix13.pcap = existing fixture tests/data/meta_fixtures/pcap/flows_eth_mix__flow_count.bin)",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e mix13.snoop -> 'File type: Sun snoop', 'Number of packets: 13'",
+ "decoy": false,
+ "member": "mix13.snoop"
+}

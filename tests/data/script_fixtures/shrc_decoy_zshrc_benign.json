@@ -1,0 +1,6 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/shrc_gen.py  (hand-written benign startup file: source/autoload/alias/hook, hex non-plan literal)",
+ "oracle_cmd": "! { grep -oE '[0-9a-f]{16,}' tests/data/script_fixtures/shrc_decoy_zshrc_benign.zshrc | while read -r x; do echo \"$x\" | xxd -r -p; echo; done; } | grep -q 'v=3|'  # exits 0: no hex literal decodes to a v=3 plan"
+}

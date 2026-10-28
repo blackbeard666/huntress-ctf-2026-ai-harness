@@ -1,0 +1,9 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "build-file-host-profiles",
+ "note": "compose descriptor truncated gzip (no plan)",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bw_gen.py  (stdlib base64/gzip/json writer, inert source)",
+ "oracle_cmd": "docker compose -f tests/data/script_fixtures/bw_decoy_compose_trunc.yml config --format json | jq -r .services.app.environment.HUNTRESS_DESCRIPTOR | base64 -d | gunzip",
+ "oracle_result": "(oracle failed: gzip: stdin: unexpected end of file)"
+}

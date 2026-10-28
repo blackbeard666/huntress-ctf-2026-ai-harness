@@ -1,0 +1,8 @@
+{
+ "entry": "jvm_classfile_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "near-miss: token() = \"ANS-\" + Long.toHexString(System.nanoTime() ^ k) (runtime), NEAR const has 15 hex, wide() formats 17 hex -> no ANS-<16 hex> token",
+ "generator_cmd": "python3 tests/data/android_fixtures/jvmcf_src/gen_jvmcf.py decoy_runtime tests/data/android_fixtures/jvmcf_decoy_runtime.apk  # javac + jar (+ zip for the .aar) + zip APK",
+ "oracle_cmd": "sh tests/data/android_fixtures/jvmcf_src/oracle.sh tests/data/android_fixtures/jvmcf_decoy_runtime.apk org.legacy.codec.Keys  # unzip asset jar/aar->classes.jar, javap -constants, RUN the static String methods on the JVM"
+}

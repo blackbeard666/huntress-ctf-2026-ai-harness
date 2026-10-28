@@ -1,0 +1,8 @@
+{
+ "field": "pcap.packet_count",
+ "expected": "2",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_carryover.sh.txt (Wireshark 4.6.4 editcap -F modpcap / dd version patch / head -c / gzip -9n / cat of two pcapng sections; kuz_be, zerolen, be_sec via stdlib struct GENERATOR_carryover_struct.py.txt; eth_us.pcap + eth_ng.pcapng = existing eth_us/eth_ng fixtures) -> short1.pcap",
+ "oracle_cmd": "TZ=UTC capinfos -c -a -e -l -E -t -I short1.pcap -> 'cut short in the middle of a packet', 'Number of packets: 2' (file is 1 byte short)",
+ "decoy": false,
+ "member": "short1.pcap"
+}

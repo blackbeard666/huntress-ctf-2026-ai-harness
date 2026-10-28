@@ -1,0 +1,8 @@
+{
+ "field": "btmp.logins_for_admin",
+ "expected": "2",
+ "generator_cmd": "python3 -I genutmp.py btmp1 btmp (struct utmp per <bits/utmp.h>, appended by glibc updwtmp(3) via ctypes)",
+ "oracle_cmd": "PYTHONPATH=pyutmp python3 -c 'import utmp; utmp.read(...)' (PyPI utmp 21.10.0) + TZ=UTC who -a btmp1 -> 2 records user=admin",
+ "decoy": false,
+ "member": "btmp"
+}

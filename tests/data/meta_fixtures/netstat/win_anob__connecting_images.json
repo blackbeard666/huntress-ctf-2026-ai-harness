@@ -1,0 +1,7 @@
+{
+ "field": "netstat.connecting_images",
+ "expected": "[\"powershell.exe\",\"svch0st.exe\",\"svchost.exe\"]",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "awk '/^ *(TCP|UDP) /{ok=($4!=\"LISTENING\" && $3 !~ /^(\\*:\\*|0\\.0\\.0\\.0:0|\\[::\\]:0)$/); want=ok; next} want && /^ *\\[/{gsub(/[][\\r ]/,\"\"); print; want=0}' tests/data/meta_fixtures/netstat/win_anob__connecting_images.bin | python3 -c 'import sys,json;v=sorted(set(l.strip() for l in sys.stdin.read().splitlines() if l.strip()));print(json.dumps(v,separators=(\",\",\":\")) if v else \"none\")'",
+ "decoy": false
+}

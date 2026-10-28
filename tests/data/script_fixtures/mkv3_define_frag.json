@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=makefile|role=staged_chain|verdict=suspicious|attack=T1059|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=MAKEFILE-b4b55bbf|url=https://makefile-b4b55bbf02.example.invalid/stage|file_path=/tmp/huntress-makefile/.b4b55bbf02ca27e6.stage",
+ "decoy": false,
+ "language": "makefile",
+ "tag": "FRAG",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mkv3_gen.py  (stdlib base64/binascii encode of the plan; make text template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/mkv3_define_frag.mk | sed -n '/^define DESCRIPTOR_85927CE8$/,/^endef$/p' | sed '1d;$d' | tr -d '\\n' | tr -d . | xxd -r -p"
+}

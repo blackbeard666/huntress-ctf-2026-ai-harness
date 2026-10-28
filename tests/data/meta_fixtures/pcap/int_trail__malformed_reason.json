@@ -1,0 +1,7 @@
+{
+ "field": "pcap.malformed_reason",
+ "expected": "trailing_bytes",
+ "generator_cmd": "text2pcap -q -F pcap -t '%H:%M:%S.' in.txt base.pcap (5 Ethernet frames 60/74/98/54/120 B); cp base.pcap trail.pcap; printf ABCDEFG >> trail.pcap",
+ "oracle_cmd": "capinfos -c trail.pcap -> exit 1 'cut short' after reading all 5 packets (only the 7 appended bytes remain)",
+ "decoy": false
+}

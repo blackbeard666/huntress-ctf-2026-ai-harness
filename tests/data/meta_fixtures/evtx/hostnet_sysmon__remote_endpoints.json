@@ -1,0 +1,7 @@
+{
+ "field": "evtx.remote_endpoints",
+ "expected": "[\"10.20.30.9:52211\",\"198.51.100.7:8080\",\"203.0.113.45:443\"]",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_host_net_sysmon.py.txt <outdir>  (stdlib BinXML EVTX writer: Sysmon EID 3/22 + Security 4624 records)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_host_net_evtx.py.txt remote_endpoints tests/data/meta_fixtures/evtx/hostnet_sysmon__remote_endpoints.bin",
+ "decoy": false
+}

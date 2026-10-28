@@ -1,0 +1,6 @@
+{
+  "expected_plain": null,
+  "decoy": true,
+  "generator_cmd": "printf 'user=guest|theme=dark|...' | base32 -w0",
+  "oracle_cmd": "sed -n 's/.*B32-//p' v3tag_decoy_b32_noplan.py | base32 -d  # settings text, no v= plan"
+}

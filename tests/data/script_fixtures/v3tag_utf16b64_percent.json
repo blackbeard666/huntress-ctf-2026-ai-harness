@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=erlang|role=beacon|verdict=malicious|attack=T1071.001|obfuscation_profile=utf16le_base64|campaign_id=ER-77889900|url=https://er-77889900.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | iconv -t UTF-16LE | base64 -w0",
+  "oracle_cmd": "sed -n 's/^% HUNTRESS_ANALYSIS_V1:UTF16B64-//p' v3tag_utf16b64_percent.erl | base64 -d | iconv -f UTF-16LE -t UTF-8"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "journald.n_entries",
+ "expected": "3",
+ "generator_cmd": "systemd-journal-remote 259.9 (apt-get download systemd-journal-remote libmicrohttpd12t64; dpkg -x) --split-mode=none -o out1.journal exp1.txt (export-format input); fixture = head -c 4096 of the 8 MiB file (header only)",
+ "oracle_cmd": "TZ=UTC journalctl --file out1.journal --header -> Entry objects: 3",
+ "decoy": false,
+ "member": "system.journal"
+}

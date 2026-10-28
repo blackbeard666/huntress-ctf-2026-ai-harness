@@ -1,0 +1,7 @@
+{
+ "entry": "jvm_classfile_scan",
+ "expected": "ANS-9b6644150ecf1f1c",
+ "_why": "assets/legacy.jar -> Keys.token(): \"ANS-\" + Long.toHexString(chain() | 1L<<63), chain() = a() ^ (b(1009)<<40) ^ (a()>>>3), Long.rotateLeft; javac 21 invokedynamic makeConcatWithConstants",
+ "generator_cmd": "python3 tests/data/android_fixtures/jvmcf_src/gen_jvmcf.py jar_indy_chain tests/data/android_fixtures/jvmcf_jar_indy_chain.apk  # javac + jar (+ zip for the .aar) + zip APK",
+ "oracle_cmd": "sh tests/data/android_fixtures/jvmcf_src/oracle.sh tests/data/android_fixtures/jvmcf_jar_indy_chain.apk org.legacy.codec.Keys  # unzip asset jar/aar->classes.jar, javap -constants, RUN the static String methods on the JVM"
+}

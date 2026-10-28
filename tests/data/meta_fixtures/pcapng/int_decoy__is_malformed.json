@@ -1,0 +1,7 @@
+{
+ "field": "pcapng.is_malformed",
+ "expected": "none",
+ "generator_cmd": "printf 'not a capture, just notes\\n' > notes.txt",
+ "oracle_cmd": "capinfos notes.txt -> \"isn't a capture file in a format capinfos understands\"",
+ "decoy": true
+}

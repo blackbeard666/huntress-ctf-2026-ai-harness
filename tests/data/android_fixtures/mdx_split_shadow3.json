@@ -1,0 +1,7 @@
+{
+ "entry": "dex_eval_scan",
+ "expected": "ANS-9b04e7c1a35d6f28",
+ "_why": "Challenge.answer() in classes.dex -> lib.Mixer.build() in classes2.dex (xor array) reading mdx.Key.K (<clinit>) back in classes.dex; classes3.dex holds a SHADOW lib.Mixer -> ANS-0f1e2d3c4b5a6978 that never loads",
+ "generator_cmd": "python3 tests/data/android_fixtures/mdx_src/gen_mdx.py split_shadow3 tests/data/android_fixtures/mdx_split_shadow3.apk  # javac --release 8 + d8 (tools/r8) per dex group, `zip` APK (zip order classes9..classes2,classes10,classes.dex != load order); stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "sh tests/data/android_fixtures/mdx_src/oracle.sh tests/data/android_fixtures/mdx_split_shadow3.apk  # dex2jar each classesN.dex, java -cp c1.jar:c2.jar:..:cN.jar (numeric order, first definition wins) com.hctf.mdx.Challenge; prints ANS-9b04e7c1a35d6f28"
+}

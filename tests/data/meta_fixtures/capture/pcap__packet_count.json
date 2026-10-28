@@ -1,0 +1,8 @@
+{
+ "field": "capture.packet_count",
+ "expected": "3",
+ "generator_cmd": "cp tests/data/meta_fixtures/pcap/eth_us__packet_count.bin eth3.pcap",
+ "oracle_cmd": "TZ=UTC capinfos 4.6.4 -t -E -c -a -e eth3.pcap -> 'Wireshark/tcpdump/... - pcap', 'Number of packets: 3'",
+ "decoy": false,
+ "member": "eth3.pcap"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "journal.machine_id",
+ "expected": "none",
+ "generator_cmd": "python3 -I genutmp.py wtmp1 wtmp (struct utmp per <bits/utmp.h>, appended by glibc updwtmp(3) via ctypes); renamed system.journal",
+ "oracle_cmd": "cp wtmp1 w.journal; journalctl --file w.journal --header -> 'Failed to open files: Bad message' (no LPKSHHRH signature)",
+ "decoy": true,
+ "member": "system.journal"
+}

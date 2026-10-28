@@ -1,0 +1,1 @@
+{"schema":"huntress.synthetic_crash.v1","kind":"IllegalStateException","frames":["stageThree","stageTwo","stageOne"]}

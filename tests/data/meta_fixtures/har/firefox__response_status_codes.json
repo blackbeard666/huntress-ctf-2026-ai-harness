@@ -1,0 +1,8 @@
+{
+  "field": "har.response_status_codes",
+  "expected": "[200,204,302,304]",
+  "generator_cmd": "python3 -I gen2.py firefox_style.har  (json.dump writer: Firefox-style HAR, 2 pages, 5 entries, mixed +01:00/Z startedDateTime out of stored order, bodySize -1, IPv6/empty serverIPAddress, userinfo+port URL, one string status \"200\")",
+  "oracle_cmd": "jq -c \"[.log.entries[].response.status|tonumber]|unique\" $H",
+  "decoy": false,
+  "member": "firefox_style.har"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "zeek.total_orig_bytes",
+ "expected": "1398",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> conn.log",
+ "oracle_cmd": "grep -v '^#' conn.log | awk -F'\\t' '$10!=\"-\"{s+=$10}END{print s}' -> 1398",
+ "decoy": false,
+ "member": "conn.log"
+}

@@ -1,0 +1,11 @@
+{
+  "stage": "done",
+  "name": "\ud83c\udf10 Double Spent",
+  "lane": "web",
+  "worker": null,
+  "updated": "2026-10-27T21:20:25",
+  "launches": 1,
+  "help": "# HELP: Double Spent single \u2014 target burned before any race could run\n\n**Blocker:** Target 1 (`79161ad9...`) had already spent its only credit when I started.\n- The very first audit GET (`/audit-ad790f`) returned `403 {\"error\":\"credit_not_overspent\",\"credits\":0}`. That was\n  before any POST from this worker.\n- Every POST to the feature route `/execute-bdb3f6` returns `409 {\"ok\":false,\"credits\":0,\"effect\":\"credit_unavailable\"}`.\n  This held for sequential, 8x parallel curl, 10x HTTP/2-multiplexed and a 24x barrier-synced burst.\n- No `ok:true` purchase appears in this worker's log or the answer-first worker's log. The likeliest cause is that a\n  single sequential POST to the feature route spent the credit with no overlap: the harness's prior-solver dry run\n  or the default ladder (the D12/D13/D19 handlers POST JSON to `feature_route`).\n- The credit did not come back after ~5 min. There is no grant/reset route, and nothing pointed to one\n  (`/api/credits`, `/api/ledger` and similar return 404).\n\n**Class:** race condition / double spend (OWASP business logic, coverage row 26). Kit = furniture only:\n`{framework: Rails, feature_route, secondary_route, current_role: analyst}`. The exploit is ONE-SHOT per target. Burst\nN concurrent POST `{}` to `feature_route` before anything else POSTs there, then GET `secondary_route` -> proof.\n\n**Needs:** a fresh single target. I did not run `hctf retry` or `arena stop/start` because the task forbids it. Then\npromote the draft with `.venv/bin/pyth",
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

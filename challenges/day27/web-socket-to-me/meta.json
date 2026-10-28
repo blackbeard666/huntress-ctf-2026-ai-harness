@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-22-socket-to-me",
+  "lane": "web",
+  "name": "🌐 Socket to Me",
+  "ids": {
+    "single_solve": "web-exploitation-day-22-socket-to-me",
+    "time_trial": "web-exploitation-day-22-socket-to-me/time_trial",
+    "mastery": "web-exploitation-day-22-socket-to-me/mastery"
+  }
+}

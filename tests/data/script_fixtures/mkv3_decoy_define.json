@@ -1,0 +1,9 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "language": "makefile",
+ "tag": "HEX",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mkv3_gen.py  (stdlib base64/binascii encode of the plan; make text template)",
+ "oracle_cmd": "cat tests/data/script_fixtures/mkv3_decoy_define.mk | sed -n '/^define DESCRIPTOR_BDEB9BA2$/,/^endef$/p' | sed '1d;$d' | tr -d '\\n' | xxd -r -p",
+ "oracle_stdout": "status=ok;inert-analysis-fixture;no plan here"
+}

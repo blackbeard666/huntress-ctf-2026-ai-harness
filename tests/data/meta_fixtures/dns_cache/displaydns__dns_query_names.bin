@@ -1,0 +1,40 @@
+
+Windows IP Configuration
+
+    updates.contoso-cdn.net
+    ----------------------------------------
+    Record Name . . . . . : updates.contoso-cdn.net
+    Record Type . . . . . : 1
+    Time To Live  . . . . : 212
+    Data Length . . . . . : 4
+    Section . . . . . . . : Answer
+    A (Host) Record . . . : 203.0.113.45
+
+
+    login.microsoftonline.com
+    ----------------------------------------
+    Record Name . . . . . : login.microsoftonline.com
+    Record Type . . . . . : 5
+    Time To Live  . . . . : 30
+    Data Length . . . . . : 8
+    Section . . . . . . . : Answer
+    CNAME Record  . . . . : login.mso.msidentity.com
+
+
+    Record Name . . . . . : login.mso.msidentity.com
+    Record Type . . . . . : 1
+    Time To Live  . . . . : 30
+    Data Length . . . . . : 4
+    Section . . . . . . . : Answer
+    A (Host) Record . . . : 20.190.151.6
+
+
+    localhost
+    ----------------------------------------
+    Record Name . . . . . : localhost
+    Record Type . . . . . : 1
+    Time To Live  . . . . : 0
+    Data Length . . . . . : 4
+    Section . . . . . . . : Answer
+    A (Host) Record . . . : 127.0.0.1
+

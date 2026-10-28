@@ -1,0 +1,7 @@
+{
+ "file": "vif_tcl_append3.tcl",
+ "expected_plain": "v=3|language=tcl|role=chain|verdict=malicious|attack=T1105|adapter=build_interp|host_profile=ci_runner|obfuscation_profile=split_variables|stage_count=2|steps=resolve_vars,fold_descriptor,dispatch|campaign_id=TCL-7a1c15|next_stage=stage2.ps1",
+ "decoy": false,
+ "generator_cmd": "python3 tests/data/script_fixtures/vif_gen.py (dotted hex split 3, append d $b $c)",
+ "oracle_cmd": "tclsh vif_tcl_append3.tcl | python3 -c 'import sys;print(bytes.fromhex(sys.stdin.read().replace(\".\",\"\").strip()).decode())'"
+}

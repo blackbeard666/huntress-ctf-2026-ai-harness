@@ -1,0 +1,30 @@
+import struct
+# Kuznetzov modified pcap, big-endian: 24-B record hdr = ts_sec, ts_usec, incl, orig, ifindex u32, proto u16, pkt_type u8, pad u8
+recs=[(1767225600,250000,b'\x45'+b'\x00'*39),(1767225661,5,b'\x45'+b'\x00'*19)]
+o=struct.pack('>IHHiIII',0xa1b2cd34,2,4,0,0,4096,1)
+for s,f,d in recs: o+=struct.pack('>IIIIIHBB',s,f,len(d),len(d),2,0x0800,0,0)+d
+open('kuz_be.pcap','wb').write(o)
+# classic LE usec pcap with a zero-length record in the middle
+recs=[(1767225600,1,b'\xaa'*14),(1767225601,2,b''),(1767225602,3,b'\xbb'*20)]
+o=struct.pack('<IHHiIII',0xa1b2c3d4,2,4,0,0,262144,1)
+for s,f,d in recs: o+=struct.pack('<IIII',s,f,len(d),len(d))+d
+open('zerolen.pcap','wb').write(o)
+# big-endian pcapng section: SHB, IDB(linktype 101), EPB, SPB, PB(obsolete), ISB, NRB, DSB, CB 0xbad, CB 0x40000bad
+def blk(t,body):
+    body+=b'\0'*((-len(body))%4); n=12+len(body)
+    return struct.pack('>II',t,n)+body+struct.pack('>I',n)
+E='>'
+shb=blk(0x0A0D0D0A,struct.pack('>IHHq',0x1A2B3C4D,1,0,-1)+struct.pack('>HH',3,5)+b'Linux\0\0\0'+struct.pack('>HH',0,0))
+idb=blk(1,struct.pack('>HHI',101,0,65535)+struct.pack('>HH',2,6)+b'tun0\x00\x00\0\0'+struct.pack('>HH',0,0))
+ts=1767225700*10**6+123456
+pkt=b'\x45'+b'\x00'*19
+epb=blk(6,struct.pack('>IIIII',0,ts>>32,ts&0xffffffff,len(pkt),len(pkt))+pkt)
+spb=blk(3,struct.pack('>I',len(pkt))+pkt)
+ts2=ts+1000000
+pb=blk(2,struct.pack('>HHIIII',0,0,ts2>>32,ts2&0xffffffff,len(pkt),len(pkt))+pkt)
+isb=blk(5,struct.pack('>III',0,ts2>>32,ts2&0xffffffff))
+nrb=blk(4,struct.pack('>HH',1,8)+bytes([10,0,0,1])+b'h.x\0'+struct.pack('>HH',0,0))
+dsb=blk(0x0A,struct.pack('>II',0x544c534b,0))
+cb1=blk(0x00000BAD,struct.pack('>I',32473)+b'custom-a')
+cb2=blk(0x40000BAD,struct.pack('>I',32473)+b'custom-b')
+open('be_sec.pcapng','wb').write(shb+idb+epb+spb+pb+isb+nrb+dsb+cb1+cb2)

@@ -1,0 +1,7 @@
+{
+ "field": "pcap.trailing_bytes_count",
+ "expected": "0",
+ "generator_cmd": "text2pcap -q -F pcap -t '%H:%M:%S.' in.txt base.pcap (5 Ethernet frames 60/74/98/54/120 B)",
+ "oracle_cmd": "capinfos -s -d -c: 510 - (24 + 5*16 + 406) = 0",
+ "decoy": false
+}

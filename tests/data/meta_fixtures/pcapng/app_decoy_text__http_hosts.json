@@ -1,0 +1,8 @@
+{
+ "field": "pcapng.http_hosts",
+ "expected": "none",
+ "generator_cmd": "printf 'GET /a HTTP/1.1\\r\\nHost: decoy.example...' > http.txt (raw HTTP text renamed .pcapng)",
+ "oracle_cmd": "file http.txt -> ASCII text; capinfos http.txt -> 'not a capture file in a format it understands'",
+ "decoy": true,
+ "member": "http.pcapng"
+}

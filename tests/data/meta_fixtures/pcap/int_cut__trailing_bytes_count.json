@@ -1,0 +1,7 @@
+{
+ "field": "pcap.trailing_bytes_count",
+ "expected": "126",
+ "generator_cmd": "text2pcap -q -F pcap -t '%H:%M:%S.' in.txt base.pcap (5 Ethernet frames 60/74/98/54/120 B); head -c 500 base.pcap > cut.pcap",
+ "oracle_cmd": "capinfos -s -d -c cut.pcap: File size 500 - (24 + 4*16 + Data size 286) = 126",
+ "decoy": false
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "update_gate_scan",
+ "expected": "ANS-2100c0de4f00d5aa",
+ "_why": "versionCodeMajor 1 + versionCode 5 (longVersionCode 4294967301), versionName 2.10.0 vs res/raw/version_rules.json rules [<2.9.0, >=2.9.0 <2.10.0, >=2.10.0] -> the '>=2.10.0' rule's value (lexicographic picks '<2.9.0')",
+ "generator_cmd": "python3 tests/data/android_fixtures/ugate_src/gen_ugate.py rules_longcode tests/data/android_fixtures/ugate_rules_longcode.apk  # apktool's bundled aapt2 link (binary manifest with versionCode/versionName[/versionCodeMajor]) + python zipfile APK",
+ "oracle_cmd": "python3 tests/data/android_fixtures/ugate_src/oracle.py tests/data/android_fixtures/ugate_rules_longcode.apk  # aapt dump xmltree reads the manifest versions, python packaging Version/SpecifierSet judges the policy -> branch token"
+}

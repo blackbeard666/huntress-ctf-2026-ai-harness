@@ -2706,8 +2706,9 @@ def dex_strings(apk):
     hits = []
     try:
         with zipfile.ZipFile(apk) as z:
-            for n in z.namelist():
-                if re.fullmatch(r"classes\d*\.dex", Path(n).name):
+            top = _dex_names(z.namelist())
+            for n in (top if len(top) > 1 else []) + [n for n in z.namelist() if n not in top or len(top) < 2]:
+                if re.fullmatch(r"classes\d*\.dex", Path(n).name):  # multidex: load order (classes10 after classes9)
                     hits += [m.decode() for m in ANS_RE_B.findall(z.read(n))]
             z.fp.seek(0)
             janus = _JNS_MAGIC.match(z.fp.read(8)) is not None
@@ -3897,6 +3898,18 @@ def proof_flow_candidates(apk):
                     seen.add(tok)
                     rest.append({"value": tok, "source": where, "reached_by_proof": False, "dead_only": tok in dead})
             rest.sort(key=lambda c: c["dead_only"])  # row 72: decoys only behind an opaque predicate rank last
+            if not reached and len({c["value"] for c in rest if c["source"].startswith("dex:")}) >= 2 and \
+                    time.time() < deadline:
+                # rows 1/8/106: dependency flaws in bundled lib packages, one reached from an exported component ->
+                # unreached ones rank last (only when every reached value sits outside the manifest's app package)
+                ex = [c for c in exported_reachable_candidates(apk) if c["value"].startswith("ANS-")]
+                hit = {c["value"] for c in ex if c["reachable"]}
+                apps = {c["name"].rsplit(".", 1)[0] for c in exported_components(apk)}
+                if hit and any(not c["reachable"] and c["value"] not in hit for c in ex) and \
+                        not any(c["lib"] in apps for c in ex if c["reachable"]):
+                    for c in rest:
+                        c["exported_unreached"] = c["value"] not in hit
+                    rest.sort(key=lambda c: (c["exported_unreached"], c["dead_only"]))
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list({c["value"]: c for c in reached}.values()) + rest
@@ -10207,10 +10220,11 @@ class _DxDex:
         self.o_pro, self.o_fld, self.o_met, self.n_fld, self.n_met = o_pro, o_fld, o_met, n_fld, n_met
         self._s, self._m, self._f = {}, {}, {}
         self.code, self.clinit, self.svals, self.sfields = {}, {}, {}, {}
-        self.order, self.coff = [], {}
+        self.order, self.coff, self.cdefs = [], {}, set()
         for c in range(n_cls):
             base = o_cls + 32 * c
             ct = self.typ(u32(base))
+            self.cdefs.add(ct)
             cdata, sval = u32(base + 24), u32(base + 28)
             if not cdata:
                 continue
@@ -10330,10 +10344,26 @@ class _DxVM:
     inst_of = False  # instance-of: exact in-dex class match (only _KcoVM turns it on)
     trace = None  # switch keys taken, in order (only _AdsVM records them)
     exc = False  # model `throw` + runtime faults through the try/catch tables (only _ExcVM turns it on)
+    peers = None  # multidex (row 107): {class descriptor: _DxDex of its FIRST definition} (_dx_multidex); None = 1 dex
 
     def __init__(self, dx, deadline):
         self.dx, self.deadline, self.statics, self.inited, self.seen = dx, deadline, {}, set(), []
         self.steps = 0
+
+    def _peer(self, ct):
+        """The sibling _DxDex that defines `ct` first when it is not the current one (None: same dex / no multidex)."""
+        if self.peers is None:
+            return None
+        own = self.peers.get(ct)
+        return own if own is not None and own is not self.dx else None
+
+    def _cross(self, own, fn, *a):
+        """Run fn(*a) with `own` as the current dex (string / type / method ids are per dex: never shared)."""
+        saved, self.dx = self.dx, own
+        try:
+            return fn(*a)
+        finally:
+            self.dx = saved
 
     def note(self, v):
         if isinstance(v, str) and len(v) >= 8:
@@ -10343,6 +10373,9 @@ class _DxVM:
     def init_class(self, ct):
         if ct in self.inited:
             return
+        own = self._peer(ct)
+        if own is not None:
+            return self._cross(own, self.init_class, ct)
         self.inited.add(ct)
         sfl, sval = self.dx.sfields.get(ct, ((), 0))
         d = self.dx.d
@@ -10398,6 +10431,9 @@ class _DxVM:
         raise _DxAbort  # invoke-polymorphic / invoke-custom: only method_handle_scan's VM runs them
 
     def invoke(self, ref, raw, depth):
+        own = self._peer(ref[:ref.find("->")])
+        if own is not None:
+            return self._cross(own, self.invoke, ref, raw, depth)
         intr = _DXE_INTR.get(ref)
         if intr is not None or ref in self.dx.code:
             ps = _dxe_params(ref)
@@ -10719,7 +10755,7 @@ class _DxVM:
             elif 0x60 <= op <= 0x6D:
                 ct, fk, ft = dx.fref(u16(p + 2))
                 if fk not in self.statics:
-                    if ct in dx.sfields:
+                    if ct in dx.sfields or self._peer(ct) is not None:  # multidex: the owner dex's statics
                         self.init_class(ct)
                     elif fk in _DXE_SFIELDS:
                         self.statics[fk] = _DXE_SFIELDS[fk]
@@ -10827,6 +10863,9 @@ class _DxeDeepVM(_DxVM):
     nondet = None  # "non-deterministic" once the run hit an unseeded source (new Random(), Math.random, ...)
 
     def invoke(self, ref, raw, depth):
+        own = self._peer(ref[:ref.find("->")])
+        if own is not None:
+            return self._cross(own, self.invoke, ref, raw, depth)
         if self.prng and (ref in _DXR_NONDET or ref in _DXR_INTR and ref not in self.dx.code):  # row 96 PRNGs
             return self.note(_dxr_call(self, ref, raw))
         if ref in self.dx.code and _dxp_pure(self.dx, ref):  # pure static long/int fn: memoised compiled closures
@@ -10865,6 +10904,9 @@ class _DxeDeepVM(_DxVM):
         super().init_class(ct)
 
     def new_instance(self, t):
+        own = self._peer(t)
+        if own is not None:
+            return self._cross(own, self.new_instance, t)
         if t in _dxx_supers(self.dx):  # an in-dex class with no statics: Release$Companion, $$ExternalSyntheticLambda0
             self.init_class(t)
             return _DxObj(t)
@@ -12009,6 +12051,57 @@ def _nlb_resolver(z, extra=()):
     return resolve
 
 
+def _dex_names(names):
+    """Top-level classes.dex, classes2.dex, ... in ART load order (numeric: classes10 after classes9, row 107)."""
+    return sorted(dict.fromkeys(n for n in names if re.fullmatch(r"classes\d*\.dex", n)), key=lambda n: int(n[7:-4] or 1))
+
+
+def _dex_load_order(z, dexes, cap):
+    """(dex blobs, n top-level): with 2+ top-level classesN.dex, those first in load order, then the zip's other
+    classes*.dex blobs in zip order; a single top-level dex keeps `dexes` (zip order) unchanged."""
+    top = _dex_names(i.filename for i in z.infolist() if i.file_size <= cap)
+    if len(top) < 2:
+        return dexes, 0
+    rest = [z.read(i) for i in z.infolist() if i.file_size <= cap and i.filename not in top
+            and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+    return [z.read(n) for n in top] + rest, len(top)
+
+
+def _dx_parse(dexes, top):
+    """([_DxDex], peers) of _dex_load_order()'s blobs: malformed dexes dropped; peers = _dx_multidex(top-level)."""
+    dxs, tops = [], []
+    for k, d in enumerate(dexes):
+        if d[:4] != b"dex\n" or len(d) < 0x70:
+            continue
+        try:
+            dxs.append(_DxDex(d))
+        except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+            continue
+        if k < top:
+            tops.append(dxs[-1])
+    return dxs, _dx_multidex(tops)
+
+
+def _dx_shadowed(peers, dx, ref):
+    """`ref`'s class has an earlier classesN.dex definition than `dx`: this copy never runs (a shadow / decoy)."""
+    if peers is None:
+        return False
+    own = peers.get(ref[:ref.find("->")])
+    return own is not None and own is not dx
+
+
+def _dx_multidex(dxs):
+    """{class descriptor: the _DxDex holding its FIRST definition} over dexes in load order (PathClassLoader: the
+    first classesN.dex defining a class wins; a later copy is a shadow that never runs). None for a single dex."""
+    if len(dxs) < 2:
+        return None
+    own = {}
+    for dx in dxs:
+        for ct in dx.cdefs:
+            own.setdefault(ct, dx)
+    return own
+
+
 def dex_eval_scan(apk, deep=False):
     """ANS tokens computed by simple Dalvik bytecode: each app method (static String-returning ones and any method with
     an array / xor / switch / int-to-char op) is evaluated by a tiny static interpreter -- const / move / arrays /
@@ -12027,15 +12120,15 @@ def dex_eval_scan(apk, deep=False):
         with zipfile.ZipFile(apk) as z:
             dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
                      and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
-        for d in dexes:
-            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
-                continue
-            try:
-                dx = _DxDex(d)
-            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+            dexes, top = _dex_load_order(z, dexes, _DXE_MAX_DEX)
+        dxs, peers = _dx_parse(dexes, top)
+        for dx in dxs:
+            if time.time() > deadline:
                 continue
             todo = []
             for ref in dx.order:
+                if _dx_shadowed(peers, dx, ref):
+                    continue
                 nreg, nin, ins, acc = dx.code[ref]
                 ps = _dxe_params(ref)
                 if len(ps) > 4 or nin > nreg:
@@ -12048,6 +12141,7 @@ def dex_eval_scan(apk, deep=False):
                 if time.time() > deadline:
                     break
                 vm = _DxVM(dx, deadline)
+                vm.peers = peers
                 raw = [] if acc & 0x8 else [_DxObj(ref.split("->")[0])]
                 for p in ps:
                     raw += [_dxe_default(p)] + ([None] if p in "JD" else [])
@@ -12095,16 +12189,14 @@ def _dex_eval_deep(apk, entry_only=False, assets=None, libs=()):
         with zipfile.ZipFile(apk) as z:
             dexes = [z.read(i) for i in z.infolist() if i.file_size <= _DXE_MAX_DEX
                      and re.fullmatch(r"classes\d*\.dex", Path(i.filename).name)]
+            dexes, top = _dex_load_order(z, dexes, _DXE_MAX_DEX)
             try:
                 natives = _nlb_resolver(z, libs)
             except Exception:  # noqa: BLE001 - no runnable JNI bridge
                 natives = None
-        for d in dexes:
-            if d[:4] != b"dex\n" or len(d) < 0x70 or time.time() > deadline:
-                continue
-            try:
-                dx = _DxDex(d)
-            except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+        dxs, peers = _dx_parse(dexes, top)
+        for dx in dxs:
+            if time.time() > deadline:
                 continue
             live = _eav_reached(dx, deadline) if entry_only else None
             if entry_only and not live:
@@ -12119,12 +12211,13 @@ def _dex_eval_deep(apk, entry_only=False, assets=None, libs=()):
                 nreg, nin, _ins, acc = dx.code[ref]
                 ps = _dxe_params(ref)
                 if not ref.endswith(")Ljava/lang/String;") or not acc & 0x8 or len(ps) > 4 or nin > nreg \
-                        or _DXE_LIB.match(ref) or (live is not None and ref not in live):
+                        or _DXE_LIB.match(ref) or (live is not None and ref not in live) or _dx_shadowed(peers, dx, ref):
                     continue
                 if time.time() > deadline:
                     break
                 vm = vmc(dx, deadline)
                 vm.natives = natives
+                vm.peers = peers
                 raw = []
                 for q in ps:
                     raw += [_dxe_default(q)] + ([None] if q in "JD" else [])
@@ -14174,6 +14267,8 @@ def _ctx_facts(apk):
                 elif tag == "uses-sdk":
                     t = str(at.get("targetSdkVersion", at.get("minSdkVersion", "")))
                     f["tsdk"] = int(t) if t.isdigit() else f.get("tsdk")
+                    m = str(at.get("minSdkVersion", ""))
+                    f["msdk"] = int(m) if m.isdigit() else f.get("msdk")
                 else:  # first-install ApplicationInfo bits (row 100): allowBackup default true, cleartext by targetSdk
                     tsdk = f.get("tsdk") or 1
                     bk, ct = str(at.get("allowBackup", "true")).lower(), at.get("usesCleartextTraffic")
@@ -14317,6 +14412,24 @@ def _x5_rfc2253(name):
     return ",".join(rdns)
 
 
+# --- manifest component facts behind PackageManager (coverage atlas v2-boolean-gate-manifest-facts) -------------------
+# A v2 gate like D27's `exportedReachability(boolean z, int i) = z ? i+1 : -1` fed by
+# getActivityInfo(new ComponentName(ctx, ChallengeActivity.class), 0).exported or PackageInfo.activities[i].exported:
+# without these models iget on the framework object read the missing field as 0 (false) and the run took the decoy side.
+# Infos carry name / packageName / exported (exported_components: explicit attr, else intent-filter / provider < 17
+# default) / permission / targetActivity / applicationInfo; ApplicationInfo gains targetSdkVersion / minSdkVersion.
+_PMC_CN = "Landroid/content/ComponentName;"
+_PMC_INFO = {"activity": "Landroid/content/pm/ActivityInfo;", "activity-alias": "Landroid/content/pm/ActivityInfo;",
+             "receiver": "Landroid/content/pm/ActivityInfo;", "service": "Landroid/content/pm/ServiceInfo;",
+             "provider": "Landroid/content/pm/ProviderInfo;"}
+_PMC_GET = {"getActivityInfo": ("activity", "activity-alias"), "getReceiverInfo": ("receiver",),
+            "getServiceInfo": ("service",), "getProviderInfo": ("provider",)}
+_PMC_ARRAYS = ((0x1, "activities", ("activity", "activity-alias"), "Landroid/content/pm/ActivityInfo;"),
+               (0x2, "receivers", ("receiver",), "Landroid/content/pm/ActivityInfo;"),
+               (0x4, "services", ("service",), "Landroid/content/pm/ServiceInfo;"),
+               (0x8, "providers", ("provider",), "Landroid/content/pm/ProviderInfo;"))
+
+
 class _CtxVM(_DxeDeepVM, _EnvVM):
     """_DxeDeepVM on the clean Pixel (_EnvVM) holding a Context whose assets / resources / package facts are the APK's."""
     prng = False
@@ -14327,13 +14440,96 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
         self.statics.update(_CTX_BYTEORDER)
 
     def new_instance(self, t):
-        if t in _CTX_JSON or t in ("Ljava/io/ByteArrayInputStream;", _SQL_CV):
+        if t in _CTX_JSON or t in ("Ljava/io/ByteArrayInputStream;", _SQL_CV, _PMC_CN):
             return _DxObj(t)
         return super().new_instance(t)
 
     def env(self, ref, raw):
-        v = self.ctx(ref, raw)
+        v = self.pm_comp(ref, raw)
+        if v is _ENV_UNSET:
+            v = self.ctx(ref, raw)
         return super().env(ref, raw) if v is _ENV_UNSET else v
+
+    def comps(self):
+        """exported_components() of the install's own manifest (cached in the facts)."""
+        f = self.apk
+        if f is None:
+            return []
+        if "comps" not in f:
+            try:
+                f["comps"] = exported_components(self.z)
+            except Exception:  # noqa: BLE001 - unreadable manifest: no components
+                f["comps"] = []
+        return f["comps"]
+
+    def comp_info(self, c):
+        """ActivityInfo / ServiceInfo / ProviderInfo of one manifest component (_PMC_* section comment)."""
+        t = _PMC_INFO[c["type"]]
+        o, pkg = _DxObj(t), (self.apk or {}).get("pkg")
+        perm = c["permission"]
+        for k in {t, "Landroid/content/pm/ComponentInfo;", "Landroid/content/pm/PackageItemInfo;"}:
+            o.f.update({k + "->name": c["name"], k + "->packageName": pkg, k + "->exported": int(c["exported"]),
+                        k + "->enabled": 1, k + "->directBootAware": 0, k + "->processName": pkg,
+                        k + "->applicationInfo": self.app_info()})
+        if c["type"] == "provider":
+            r, w = c.get("rw") or (None, None)
+            o.f[t + "->readPermission"], o.f[t + "->writePermission"] = r or perm, w or perm
+        else:
+            o.f[t + "->permission"] = perm
+        if c["type"] == "activity-alias":
+            o.f[t + "->targetActivity"] = c["class"][1:-1].replace("/", ".")
+        return o
+
+    def pm_comp(self, ref, raw):  # noqa: C901 - one table of PackageManager component models
+        """Manifest component facts through PackageManager / ComponentName (coverage atlas v2-boolean-gate-manifest-facts):
+        getPackageInfo(own, GET_ACTIVITIES | GET_RECEIVERS | GET_SERVICES | GET_PROVIDERS) component arrays,
+        get{Activity,Service,Receiver,Provider}Info(ComponentName, flags), getComponentEnabledSetting, ComponentName
+        <init> / accessors; _ENV_UNSET otherwise."""
+        cls, rest = ref.split("->", 1)
+        name, sig = rest.split("(", 1)
+        o = raw[0] if raw and isinstance(raw[0], _DxObj) else None
+        t, pkg = o.t if o is not None else None, (self.apk or {}).get("pkg")
+        if t == _PMC_CN or cls == _PMC_CN:
+            if name == "<init>" and o is not None and len(raw) >= 3:
+                p, c = raw[1], raw[2]
+                if isinstance(p, _DxObj) and not isinstance(c, _DxObj):  # (Context, String)
+                    p = pkg
+                if isinstance(c, _DxObj) and c.t == "Ljava/lang/Class;" and "d" in c.f:  # (Context|String, Class)
+                    c = c.f["d"][1:-1].replace("/", ".")
+                    p = pkg if not isinstance(p, str) else p
+                if not isinstance(p, str) or not isinstance(c, str):
+                    raise _DxAbort
+                o.f["pkg"], o.f["cls"] = p, c
+                return None
+            if o is None or "cls" not in o.f:
+                raise _DxAbort
+            p, c = o.f["pkg"], o.f["cls"]
+            if name == "getClassName":
+                return c
+            if name == "getPackageName":
+                return p
+            if name == "getShortClassName":
+                return c[len(p):] if c.startswith(p + ".") else c
+            if name in ("flattenToString", "flattenToShortString"):
+                return p + "/" + (c[len(p):] if name == "flattenToShortString" and c.startswith(p + ".") else c)
+            if name == "toShortString":
+                return "{" + p + "/" + (c[len(p):] if c.startswith(p + ".") else c) + "}"
+            raise _DxAbort
+        if not cls.startswith("Landroid/content/pm/") or self.apk is None:
+            return _ENV_UNSET
+        a = raw[1:] if o is not None else raw
+        if name in _PMC_GET and a and isinstance(a[0], _DxObj) and a[0].t == _PMC_CN and "cls" in a[0].f:
+            cn = a[0].f
+            hit = next((c for c in self.comps() if c["type"] in _PMC_GET[name] and c["name"] == cn["cls"]), None) \
+                if cn["pkg"] == pkg else None
+            self.log_probe("PackageManager." + name, cn["cls"], "NameNotFoundException" if hit is None else
+                           f"exported={hit['exported']}")
+            if hit is None:
+                raise _DxThrow(*_ENV_NNF)
+            return self.comp_info(hit)
+        if name == "getComponentEnabledSetting" and a and isinstance(a[0], _DxObj) and a[0].t == _PMC_CN:
+            return 0  # COMPONENT_ENABLED_STATE_DEFAULT
+        return _ENV_UNSET
 
     def res_table(self):
         if self.tab is None:
@@ -14782,6 +14978,13 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
             P = "Landroid/content/pm/PackageInfo;->"
             pi.f.update({P + "versionCode": _dxe_w32(self.apk["vc"]), P + "versionName": self.apk["vn"],
                          P + "firstInstallTime": _CTX_INSTALL_MS, P + "lastUpdateTime": _CTX_INSTALL_MS})
+            flags = a[1] if len(a) > 1 and isinstance(a[1], int) else 0
+            for bit, fld, kinds, et in _PMC_ARRAYS:  # GET_ACTIVITIES / RECEIVERS / SERVICES / PROVIDERS: manifest order
+                cs = [self.comp_info(c) for c in self.comps() if c["type"] in kinds] if flags & bit else []
+                if cs:  # the framework leaves the array null when the package declares none
+                    arr = _DxArr(cs)
+                    arr.t = et
+                    pi.f[P + fld] = arr
             return pi
         if t == "Landroid/content/pm/PackageInfo;" and name == "getLongVersionCode":
             return self.apk["vc"]
@@ -14807,6 +15010,9 @@ class _CtxVM(_DxeDeepVM, _EnvVM):
         f, A = self.apk, "Landroid/content/pm/ApplicationInfo;->flags"
         if f is not None and "backup" in f:  # the manifest's FLAG_ALLOW_BACKUP / FLAG_USES_CLEARTEXT_TRAFFIC
             ai.f[A] = ai.f[A] & ~0x08008000 | (0x8000 if f["backup"] else 0) | (0x08000000 if f["cleartext"] else 0)
+        if f is not None and f.get("tsdk"):  # targetSdk defaults to minSdk; minSdk to 1
+            A = "Landroid/content/pm/ApplicationInfo;->"
+            ai.f[A + "targetSdkVersion"], ai.f[A + "minSdkVersion"] = f["tsdk"], f.get("msdk") or 1
         return ai
 
     def nsc_permitted(self, host):
@@ -20638,8 +20844,13 @@ def _erc_manifest(z):
     return out
 
 
-def _erc_dex(d, deadline, manifest, budget):
-    """One dex -> candidate dicts {value, method, reachable, twins} (twins = structurally equivalent methods)."""
+def _erc_dex(d, deadline, manifest, budget, entry_set=None, tok_re=None, cb=_ERC_CB, parent=None):
+    """One dex -> candidate dicts {value, method, reachable, twins} (twins = structurally equivalent methods).
+    entry_set (descriptors) replaces the name / manifest-activity entries; tok_re the ANS token regex (lib methods are
+    then kept too); cb the framework-callback names an instantiated subclass gets; parent collects ref -> caller ref."""
+    tok_re = tok_re or ANS_RE_T
+    keep_lib = entry_set is not None
+    parent = {} if parent is None else parent
     dx = _DxDex(d)
     u32 = lambda o: struct.unpack_from("<I", d, o)[0]  # noqa: E731
     n_cls, o_cls = u32(0x60), u32(0x64)
@@ -20683,10 +20894,13 @@ def _erc_dex(d, deadline, manifest, budget):
 
     reached, inst, vsites, work = set(), set(), set(), []
 
+    cur = [None]
+
     def reach(ref):
         if ref and ref in dx.code and ref not in reached:
             reached.add(ref)
             work.append(ref)
+            parent[ref] = cur[0]
 
     def instantiate(t):
         if t in inst or t not in sup:
@@ -20698,10 +20912,14 @@ def _erc_dex(d, deadline, manifest, budget):
                 reach(resolve(t, sig))
         if any(s not in sup and s != "Ljava/lang/Object;" for s in supers(t)):
             for ref in by_cls.get(t, ()):  # framework callback overrides (Runnable.run, OnClickListener, ...)
-                if ref.split("->")[1].split("(")[0] in _ERC_CB:
+                if ref.split("->")[1].split("(")[0] in cb:
                     reach(ref)
 
-    entries = [t for t in sup if _ERC_ENTRY.search(t) or any(t.endswith("/" + m) or t == "L" + m for m in manifest)]
+    if entry_set is not None:
+        entries = [t for t in sup if t in entry_set]
+        entries += [s for t in entries for s in supers(t) if s in sup and s not in entries]  # app base classes
+    else:
+        entries = [t for t in sup if _ERC_ENTRY.search(t) or any(t.endswith("/" + m) or t == "L" + m for m in manifest)]
     for t in entries:
         instantiate(t)
         for ref in by_cls.get(t, ()):
@@ -20710,6 +20928,7 @@ def _erc_dex(d, deadline, manifest, budget):
         if time.time() > deadline:
             return []
         ref = work.pop()
+        cur[0] = ref
         ct = ref.split("->")[0]
         _, calls, strs, types, fcls = info[ref]
         reach(dx.clinit.get(ct))
@@ -20769,7 +20988,7 @@ def _erc_dex(d, deadline, manifest, budget):
 
     def tokens(ref):
         _, _, strs, _, fcls = info[ref]
-        out = [m for s in strs if s for m in ANS_RE_T.findall(s)]
+        out = [m for s in strs if s for m in tok_re.findall(s)]
         if not out and ref.endswith(")Ljava/lang/String;") and time.time() < deadline:
             try:
                 nreg, nin, _, acc = dx.code[ref]
@@ -20777,7 +20996,7 @@ def _erc_dex(d, deadline, manifest, budget):
                     vm = _DxVM(dx, min(deadline, time.time() + 0.05))
                     vm.init_class(ref.split("->")[0])
                     v = vm.run(ref, [] if acc & 0x8 else [_DxObj(ref.split("->")[0])])
-                    out = ANS_RE_T.findall(v) if isinstance(v, str) else []
+                    out = tok_re.findall(v) if isinstance(v, str) else []
             except Exception:  # noqa: BLE001
                 pass
         return out
@@ -20788,9 +21007,9 @@ def _erc_dex(d, deadline, manifest, budget):
             groups.setdefault(info[ref][0], []).append(ref)
     out = []
     for ref in dx.code:
-        if _DXE_LIB.match(ref):
+        if _DXE_LIB.match(ref) and not keep_lib:
             continue
-        toks = tokens(ref) if ref in reached or ANS_RE_T.search(" ".join(s for s in info[ref][2] if s)) else []
+        toks = tokens(ref) if ref in reached or tok_re.search(" ".join(s for s in info[ref][2] if s)) else []
         twins = [r for r in groups.get(info[ref][0], ()) if r != ref and r.split("->")[0] != ref.split("->")[0]]
         for tok in toks:
             out.append({"value": tok, "method": ref, "reachable": ref in reached, "twins": len(twins),
@@ -20830,6 +21049,144 @@ def entry_reachable_scan(apk):
     """Only the ANS values whose method is reachable from the entry activities (see entry_reachable_candidates);
     unreachable look-alike twins are decoys. [] when absent."""
     return list(dict.fromkeys(c["value"] for c in entry_reachable_candidates(apk) if c["reachable"]))
+
+
+# --- exported-surface sink reachability (coverage atlas rows 1, 8, 106) -------------------------------------------------
+# D27 "Prove which generated dependency flaw is reachable from an exported mobile surface": several bundled libs each
+# carry a flaw (ANS- const / HCTF-DEP-* id / computed String); only the one reached from a component OTHER apps can start
+# counts. Entries = every manifest activity / activity-alias / service / receiver / provider that is exported (explicit
+# exported=true, or an intent-filter without the attr -- the legacy implicit export, refused at install from targetSdk 31
+# but still read as exported here; a provider without the attr below targetSdk 17), minus those guarded by a
+# signature-level permission (declared protectionLevel signature / signatureOrSystem, or a platform BIND_* permission;
+# component permission, else the application's). The rapid-type-analysis walk of entry_reachable_candidates runs from
+# them (direct / static / virtual / interface / super calls, reflection names, Runnable / Handler / Thread.start and other
+# framework callbacks of instantiated subclasses incl. a started Service's onStartCommand / onBind).
+_ERX_TOK = re.compile(r"ANS-[0-9A-Fa-f]{16}(?![0-9A-Fa-f])|HCTF-[A-Z0-9]+-[A-Za-z0-9_-]{2,64}|CVE-\d{4}-\d{4,7}"
+                      r"|GHSA(?:-[23456789cfghjmpqrvwx]{4}){3}")  # str twin of _DEP_TOK
+_ERX_CB = _ERC_CB | frozenset(("onNewIntent", "onStartCommand", "onBind", "onHandleIntent", "onStartJob", "query",
+                               "insert", "update", "delete", "openFile", "getType", "onTransact"))
+_ERX_COMP = ("activity", "activity-alias", "service", "receiver", "provider")
+
+
+def exported_components(apk):
+    """Binary-manifest component facts [{type, name (FQN), class (descriptor of the code that runs), exported,
+    exported_attr, filters, permission, signature_guarded, reachable_externally}] plus targetSdk handling (see the section
+    comment). [] when the APK has no binary AndroidManifest.xml; never raises."""
+    try:
+        if isinstance(apk, zipfile.ZipFile):
+            man = apk.read("AndroidManifest.xml")
+        else:
+            data = apk if isinstance(apk, (bytes, bytearray)) else Path(apk).read_bytes()
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                man = z.read("AndroidManifest.xml")
+    except Exception:  # noqa: BLE001 - not a zip / no manifest
+        return []
+    if man[:2] != b"\x03\x00":
+        return []
+    pkg, tsdk, app_perm, sig, comps, stack = "", None, None, set(), [], []
+    try:
+        for ev, tag, attrs, _ in _axml_events(man):
+            if ev == "end":
+                if stack:
+                    stack.pop()
+                continue
+            if ev != "start":
+                continue
+            a = {k.split("}")[-1].split(":")[-1]: v for k, v in (attrs or {}).items()}
+            if tag == "manifest":
+                pkg = a.get("package") or ""
+            elif tag == "uses-sdk":
+                for k in ("targetSdkVersion", "minSdkVersion"):
+                    if tsdk is None and str(a.get(k, "")).isdigit():
+                        tsdk = int(a[k])
+            elif tag == "permission" and a.get("name"):
+                lvl = str(a.get("protectionLevel", ""))
+                if (lvl.isdigit() and int(lvl) & 0xF in (2, 3)) or lvl.lower().startswith("signature"):
+                    sig.add(a["name"])
+            elif tag == "application":
+                app_perm = a.get("permission")
+            elif tag in _ERX_COMP:
+                comps.append({"type": tag, "name": a.get("name") or "", "target": a.get("targetActivity"),
+                              "exported_attr": a.get("exported"), "permission": a.get("permission"),
+                              "rw": (a.get("readPermission"), a.get("writePermission")), "filters": 0})
+            elif tag == "intent-filter" and stack and stack[-1] in _ERX_COMP and comps:
+                comps[-1]["filters"] += 1
+            stack.append(tag)
+    except Exception:  # noqa: BLE001 - a truncated manifest keeps what parsed
+        pass
+    tsdk = tsdk or 0
+
+    def fqn(n):
+        n = n or ""
+        return pkg + n if n.startswith(".") else n if "." in n else (pkg + "." + n if pkg and n else n)
+
+    def guarded(p):
+        return bool(p) and (p in sig or p.startswith("android.permission.BIND_"))
+
+    out = []
+    for c in comps:
+        ea = c["exported_attr"]
+        if ea is not None:
+            exp = ea == "true" or ea not in ("false", "0")
+        else:
+            exp = c["filters"] > 0 or (c["type"] == "provider" and 0 < tsdk < 17)
+        perm = c["permission"] or app_perm
+        g = guarded(perm) or (c["type"] == "provider" and not perm and all(guarded(x) for x in c["rw"]))
+        name = fqn(c["name"])
+        run = fqn(c["target"]) if c["type"] == "activity-alias" and c["target"] else name
+        out.append({"type": c["type"], "name": name, "class": "L" + run.replace(".", "/") + ";", "exported": exp,
+                    "exported_attr": ea, "filters": c["filters"], "permission": perm, "signature_guarded": g,
+                    "reachable_externally": exp and not g, "target_sdk": tsdk, "rw": c["rw"]})
+    return out
+
+
+def exported_reachable_candidates(apk):
+    """Every flaw-shaped value (ANS- / HCTF-*-* / CVE- / GHSA- literal, or a zero-arg String method's computed ANS) of the
+    APK's dexes as {value, method, lib (package), reachable, component, depth}: `reachable` = its method is reached from
+    an externally reachable exported component (exported_components) by the entry_reachable walk; component = the entry
+    class it was reached from, depth = call hops. Reached first (ANS before ids, shallow first). [] when there is no
+    exported component / no token; never raises; ~0.9 s bound."""
+    comps = exported_components(apk)
+    entry_set = {c["class"] for c in comps if c["reachable_externally"]}
+    if not comps:
+        return []
+    out, deadline = [], time.time() + _ERC_BUDGET_S
+    try:
+        with zipfile.ZipFile(apk if isinstance(apk, (str, Path)) else io.BytesIO(apk)) as z:
+            budget = [_ERC_UNITS]
+            for i in z.infolist():
+                if i.file_size > _ERC_MAX_DEX or not re.fullmatch(r"classes\d*\.dex", Path(i.filename).name):
+                    continue
+                d = z.read(i)
+                if d[:4] != b"dex\n" or len(d) < 0x70 or not _DEP_TOK.search(d) and not _ERC_PRE.search(d) or \
+                        time.time() > deadline:
+                    continue
+                parent = {}
+                try:
+                    cands = _erc_dex(d, deadline, set(), budget, entry_set=entry_set, tok_re=_ERX_TOK, cb=_ERX_CB,
+                                     parent=parent)
+                except Exception:  # noqa: BLE001 - malformed dex contributes nothing
+                    continue
+                for c in cands:
+                    m, depth, root = c["method"], 0, c["method"]
+                    while c["reachable"] and parent.get(root) and depth < 256:
+                        root, depth = parent[root], depth + 1
+                    cls = m.split("->")[0]
+                    out.append({"value": c["value"], "method": m, "lib": cls[1:].rsplit("/", 1)[0].replace("/", "."),
+                                "reachable": c["reachable"], "component": root.split("->")[0] if c["reachable"] else None,
+                                "depth": depth if c["reachable"] else None})
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        return []
+    out.sort(key=lambda c: (not c["reachable"], not c["value"].startswith("ANS-"), c["depth"] or 0))
+    return out
+
+
+def exported_reachability_scan(apk):
+    """Only the flaw values reached from an externally reachable exported component (ANS- first, then flaw ids);
+    unreached ones (non-exported / signature-guarded / dead) are vetoed. [] when absent."""
+    cands = exported_reachable_candidates(apk)
+    reached = {c["value"] for c in cands if c["reachable"]}
+    return [v for v in dict.fromkeys(c["value"] for c in cands) if v in reached]
 
 
 # --- entry-anchored candidate veto (coverage atlas row 98) ------------------------------------------------------------
@@ -21283,10 +21640,9 @@ def classloader_shadow_facts(apk):
     try:
         with zipfile.ZipFile(apk) as z:
             payloads = _cls_payloads(z)
-            if not payloads:
+            hosts = _dex_names(z.namelist())
+            if not payloads and len(hosts) < 2:  # row 107: a class defined in 2 host classesN.dex -> the first wins
                 return {}
-            hosts = sorted((n for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", n)),
-                           key=lambda n: int(n[7:-4] or 1))
             host_b = [(n, z.read(n)) for n in hosts]
     except (OSError, zipfile.BadZipFile, ValueError, KeyError, RuntimeError):
         return {}
@@ -22481,3 +22837,1545 @@ def key_attestation_tokens(apk):
     recs = key_attestation_scan(apk)
     recs.sort(key=lambda r: not r.get("clean"))
     return list(dict.fromkeys(t for r in recs for t in r.get("tokens", [])))
+
+
+# --- dependency inventory (rows 106-108: bundled third-party libs, versions, their source) ------------------------------
+_DEP_SKIP = ("android.", "androidx.", "kotlin.", "kotlinx.", "java.", "javax.", "dalvik.", "sun.", "org.jetbrains.annotations",
+             "org.intellij.lang.annotations")
+_DEP_TOK = re.compile(rb"ANS-[0-9A-Fa-f]{16}(?![0-9A-Fa-f])|HCTF-[A-Z0-9]+-[A-Za-z0-9_-]{2,64}|CVE-\d{4}-\d{4,7}|GHSA(?:-[23456789cfghjmpqrvwx]{4}){3}")
+_DEP_TLD = {"com", "org", "net", "io", "de", "me", "co", "app", "dev", "info", "uk", "cn", "ru", "fr", "jp"}
+_DEP_VER_FIELDS = {"VERSION", "VERSION_NAME", "LIB_VERSION", "SDK_VERSION", "LIBRARY_VERSION", "BUILD_VERSION"}
+_DEP_SO_VER = re.compile(rb"(OpenSSL|BoringSSL|LibreSSL|SQLite|libpng|libjpeg-turbo|zlib|libcurl|curl|FFmpeg|libwebp|protobuf|"
+                         rb"mbed TLS|wolfSSL|Expat|libxml2)[ /_-]?(?:version )?v?(\d+\.\d+(?:\.\d+){0,2}[a-z]?)(?![\w.])")
+
+
+def _dep_skip(pkg, app):
+    return not pkg or any(pkg == s.rstrip(".") or pkg.startswith(s) for s in _DEP_SKIP) or \
+        any(a and (pkg == a or pkg.startswith(a + ".")) for a in app)
+
+
+def _dep_dex(d, src, app, rec):
+    """One dex -> rec[pkg] = {"classes": [...], "dex": {src}, "values": [...], "versions": [(v, how)]} for classes outside
+    the app / platform packages; values = token const-strings / static String values of those classes."""
+    if d[:4] != b"dex\n" or len(d) < 0x70:
+        return
+    u32 = lambda o: struct.unpack_from("<I", d, o)[0]  # noqa: E731
+    n_str, o_str, n_typ, o_typ = u32(0x38), u32(0x3C), u32(0x40), u32(0x44)
+    n_fld, o_fld, n_cls, o_cls = u32(0x50), u32(0x54), u32(0x60), u32(0x64)
+    if n_str > 1 << 22 or n_cls > 1 << 20 or o_str + 4 * n_str > len(d) or o_typ + 4 * n_typ > len(d) or \
+            o_cls + 32 * n_cls > len(d) or o_fld + 8 * n_fld > len(d):
+        return
+    cache = {}
+
+    def s(i):
+        if i in cache:
+            return cache[i]
+        r = None
+        if 0 <= i < n_str:
+            try:
+                _, p = _uleb(d, u32(o_str + 4 * i))
+                e = d.find(b"\x00", p)
+                r = d[p:e if e >= 0 else len(d)].decode("utf-8", "replace")
+            except (IndexError, ValueError, struct.error):
+                r = None
+        cache[i] = r
+        return r
+
+    tok = {}  # string idx -> token
+    if _DEP_TOK.search(d):
+        for i in range(n_str):
+            v = s(i)
+            m = v and _DEP_TOK.search(v.encode("utf-8", "replace"))
+            if m:
+                tok[i] = m.group(0).decode()
+        cache = {k: v for k, v in cache.items() if k in tok}
+    spans = []  # (insns_start, insns_end, pkg, cls)
+    for k in range(n_cls):
+        co = o_cls + 32 * k
+        ci, _, _, _, _, _, cdo, svo = struct.unpack_from("<8I", d, co)
+        desc = s(u32(o_typ + 4 * ci)) if ci < n_typ else None
+        if not desc or not desc.startswith("L") or "/" not in desc:
+            continue
+        cls = desc[1:].rstrip(";").replace("/", ".")
+        pkg = cls.rsplit(".", 1)[0]
+        if _dep_skip(pkg, app):
+            continue
+        r = rec.setdefault(pkg, {"classes": [], "dex": [], "values": [], "versions": []})
+        r["classes"].append(cls)
+        if src not in r["dex"]:
+            r["dex"].append(src)
+        if not cdo or cdo >= len(d):
+            continue
+        try:
+            ns, i = _uleb(d, cdo)
+            ni, i = _uleb(d, i)
+            nd, i = _uleb(d, i)
+            nv, i = _uleb(d, i)
+            sf, fi = [], 0
+            for _ in range(min(ns, 1 << 16)):
+                x, i = _uleb(d, i)
+                _, i = _uleb(d, i)
+                fi += x
+                sf.append(fi)
+            for _ in range(ni):
+                _, i = _uleb(d, i)
+                _, i = _uleb(d, i)
+            for cnt in (nd, nv):
+                mi = 0
+                for _ in range(min(cnt, 1 << 16)):
+                    x, i = _uleb(d, i)
+                    _, i = _uleb(d, i)
+                    c, i = _uleb(d, i)
+                    if c and tok and c + 16 <= len(d):
+                        spans.append((c + 16, c + 16 + 2 * u32(c + 12), pkg, cls))
+            vals = _pf_static_values(d, svo, len(sf)) if svo and svo < len(d) else []
+            for fidx, v in zip(sf, vals):
+                if not v or fidx >= n_fld:
+                    continue
+                if v[1] in tok:
+                    r["values"].append({"value": tok[v[1]], "class": cls, "via": "static"})
+                fname = s(u32(o_fld + 8 * fidx + 4))
+                if fname in _DEP_VER_FIELDS:
+                    ver = s(v[1])
+                    if ver and re.fullmatch(r"v?\d+(?:\.\d+){0,3}(?:[-+.][\w.+-]{1,32})?", ver):
+                        r["versions"].append((ver, f"{cls}.{fname}"))
+        except (IndexError, ValueError, struct.error):
+            continue
+    if not spans:
+        return
+    spans.sort()
+    starts = [a for a, _, _, _ in spans]
+    import bisect
+    for t, val in tok.items():
+        pats = [re.escape(b"\x1a") + b"." + re.escape(struct.pack("<H", t))] if t < 1 << 16 else []
+        pats.append(re.escape(b"\x1b") + b"." + re.escape(struct.pack("<I", t)))
+        for m in re.finditer(b"|".join(pats), d, re.S):
+            j = bisect.bisect_right(starts, m.start()) - 1
+            if j >= 0 and m.start() < spans[j][1] and (m.start() - spans[j][0]) % 2 == 0:
+                vs = rec[spans[j][2]]["values"]
+                if not any(x["value"] == val and x["class"] == spans[j][3] for x in vs):
+                    vs.append({"value": val, "class": spans[j][3], "via": "const-string"})
+
+
+def _dep_meta(name, b, metas, src_prefix=""):
+    """META-INF version facts -> metas: [(group, artifact, version, source, [packages])]."""
+    base = name.rsplit("/", 1)[-1]
+    src = src_prefix + name
+    if name.startswith("META-INF/maven/") and base == "pom.properties":
+        kv = {}
+        for ln in b[:65536].decode("utf-8", "replace").splitlines():
+            if "=" in ln and not ln.lstrip().startswith("#"):
+                k, v = ln.split("=", 1)
+                kv[k.strip()] = v.strip()
+        parts = name.split("/")
+        g = kv.get("groupId") or (parts[2] if len(parts) > 4 else "")
+        a = kv.get("artifactId") or (parts[3] if len(parts) > 4 else "")
+        if g or a:
+            metas.append((g, a, kv.get("version") or None, src, []))
+    elif name.startswith("META-INF/") and base.endswith(".version") and "/" not in name[9:]:
+        stem = base[:-8]
+        g, _, a = stem.partition("_")
+        v = b[:128].decode("utf-8", "replace").strip()
+        metas.append((g, a or g, v if re.fullmatch(r"[\w.+-]{1,64}", v or "") else None, src, []))
+    elif name.startswith("META-INF/") and base.endswith(".kotlin_module"):
+        pk = sorted({m.decode() for m in re.findall(rb"[a-z_][\w]*(?:\.[A-Za-z_][\w]*)+", b[:65536])})
+        metas.append(("", base[:-len(".kotlin_module")], None, src, pk))
+
+
+def _dep_zip(z, prefix, app, rec, metas, depth, deadline):
+    names = z.namelist()
+    dexes = sorted((n for n in names if re.fullmatch(r"classes\d*\.dex", n)),
+                   key=lambda n: int(n[7:-4] or 1))
+    for n in dexes:
+        if time.time() > deadline:
+            return
+        try:
+            _dep_dex(z.read(n), prefix + n, app, rec)
+        except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError, EOFError, zlib.error):
+            continue
+    for n in names:
+        if time.time() > deadline:
+            return
+        low = n.lower()
+        try:
+            if n.startswith("META-INF/") and (low.endswith((".version", ".kotlin_module")) or
+                                              n.endswith("/pom.properties")):
+                _dep_meta(n, z.read(n), metas, prefix)
+            elif low.endswith(".class") and prefix:
+                cls = n[:-6].replace("/", ".")
+                pkg = cls.rsplit(".", 1)[0] if "." in cls else ""
+                if _dep_skip(pkg, app):
+                    continue
+                r = rec.setdefault(pkg, {"classes": [], "dex": [], "values": [], "versions": []})
+                r["classes"].append(cls)
+                src = prefix.rstrip("!")
+                if src not in r["dex"]:
+                    r["dex"].append(src)
+                for m in _DEP_TOK.finditer(z.read(n)):
+                    r["values"].append({"value": m.group(0).decode(), "class": cls, "via": "classfile"})
+            elif depth > 0 and (low.startswith("assets/") or prefix) and low.endswith((".jar", ".aar", ".zip")):
+                b = z.read(n)
+                if b[:4] == b"PK\x03\x04" and len(b) < 64 << 20:
+                    with zipfile.ZipFile(io.BytesIO(b)) as inner:
+                        _dep_zip(inner, prefix + n + "!", app, rec, metas, depth - 1, deadline)
+        except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError, EOFError, zlib.error, KeyError):
+            continue
+
+
+def dependency_inventory(apk):
+    """Bundled third-party dependency inventory (rows 106-108): [{pkg, name, version, source, classes, dex, values}].
+    Dex classes (classes*.dex in numeric order + assets/*.jar|*.aar|*.zip, recursing into classes.jar / nested
+    classes.dex / JVM .class files) grouped by package root outside the manifest package / launcher-activity package and
+    android/androidx/kotlin/java; versions from META-INF/maven/**/pom.properties, META-INF/<group>_<artifact>.version,
+    *.kotlin_module (module name), and static final String VERSION / VERSION_NAME / LIB_VERSION fields of the lib;
+    native libs from lib/<abi>/*.so version strings (OpenSSL / SQLite / ...; pkg None). `values` = the token-shaped
+    const-strings / static values (ANS-, HCTF-*-*, CVE-, GHSA-) a lib's own classes hold, tagged with the class.
+    [] when the APK bundles no lib code / version metadata (or is not a zip). Never raises."""
+    try:
+        return _dependency_inventory(apk)
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        return []
+
+
+def _dependency_inventory(apk):
+    deadline = time.time() + 1.5
+    data = apk if isinstance(apk, (bytes, bytearray)) else Path(apk).read_bytes()
+    if data[:2] != b"PK":
+        return []
+    out = []
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        names = set(z.namelist())
+        app = []
+        if "AndroidManifest.xml" in names:
+            man = z.read("AndroidManifest.xml")
+            stack, pkg, comp = [], None, None
+            for ev, tag, attrs, _ in (_axml_events(man) if man[:2] == b"\x03\x00" else ()):
+                if ev == "start":
+                    a = {k.split("}")[-1].split(":")[-1]: v for k, v in (attrs or {}).items()}
+                    if tag == "manifest":
+                        pkg = a.get("package")
+                    elif tag in ("activity", "activity-alias"):
+                        comp = a.get("targetActivity") or a.get("name")
+                    elif tag == "category" and a.get("name") == "android.intent.category.LAUNCHER" and comp and \
+                            "activity" in stack:
+                        app.append(comp)
+                    stack.append(tag)
+                elif ev == "end" and stack:
+                    stack.pop()
+            app = [pkg] + [(pkg + c if c.startswith(".") else c).rsplit(".", 1)[0] for c in app
+                           if pkg or not c.startswith(".")] if pkg else []
+        rec, metas = {}, []
+        _dep_zip(z, "", app, rec, metas, 2, deadline)
+        so = {}
+        for n in sorted(names):
+            if re.fullmatch(r"lib/[^/]+/[^/]+\.so", n) and time.time() < deadline:
+                zi = z.getinfo(n)
+                if zi.file_size > 32 << 20:
+                    continue
+                for m in _DEP_SO_VER.finditer(z.read(n)):
+                    k = (m.group(1).decode(), m.group(2).decode())
+                    so.setdefault(k, n)
+    # package roots: shortest ancestor package with classes (a bare `com` / `org` never), capped at 3 segments
+    roots = {}
+    for p in rec:
+        seg = p.split(".")
+        anc = [".".join(seg[:i]) for i in range(1, len(seg) + 1)]
+        root = next((a for a in anc if a in rec and (a.count(".") or a not in _DEP_TLD)), p)
+        if root == p and len(seg) > 3:
+            root = ".".join(seg[:3])
+        roots.setdefault(root, []).append(p)
+    libs = []
+    for root in sorted(roots):
+        rs = [rec[p] for p in roots[root]]
+        cls = sorted({c for r in rs for c in r["classes"]})
+        dex = list(dict.fromkeys(x for r in rs for x in r["dex"]))
+        vals = [v for r in rs for v in r["values"]]
+        vers = [v for r in rs for v in r["versions"]]
+        libs.append({"pkg": root, "name": root, "version": vers[0][0] if vers else None,
+                     "source": [vers[0][1]] if vers else [], "classes": cls, "dex": dex,
+                     "values": list({(v["value"], v["class"]): v for v in vals}.values())})
+    for g, a, v, src, pks in metas:
+        if g.startswith(("androidx.", "android.", "kotlin", "org.jetbrains")) or g in ("androidx", "kotlin"):
+            continue
+        best, score = None, 0
+        for lib in libs:
+            p = lib["pkg"]
+            if not p:  # an earlier pom-only / native entry
+                continue
+            sc = 0
+            if pks and any(p == x or p.startswith(x + ".") or x.startswith(p + ".") for x in pks):
+                sc = 4
+            elif g and (p == g or p.startswith(g + ".") or g.startswith(p + ".")):
+                sc = 3 if a and a.replace("-", "").lower() in p.replace("_", "").lower() else 2
+            elif a and a.replace("-", "").lower() in p.split("."):
+                sc = 1
+            if sc > score:
+                best, score = lib, sc
+        if best is None:
+            if pks and not g:
+                continue
+            best = {"pkg": None, "name": f"{g}:{a}" if g else a, "version": None, "source": [], "classes": [],
+                    "dex": [], "values": []}
+            libs.append(best)
+        if g or a:
+            if best["name"] == best["pkg"] and g:
+                best["name"] = f"{g}:{a}"
+            elif best["name"] == best["pkg"]:
+                best["name"] = a
+        if v and (best["version"] is None or "pom.properties" in src):
+            best["version"] = v
+        best["source"].append(src)
+    for (nm, v), src in sorted(so.items(), key=lambda kv: kv[1]):
+        libs.append({"pkg": None, "name": nm, "version": v, "source": [src], "classes": [], "dex": [], "values": []})
+    for lib in libs:
+        lib["source"] = ", ".join(dict.fromkeys(lib["source"])) or "dex"
+        lib["classes"] = lib["classes"][:200]
+        out.append(lib)
+    return out
+
+
+def dependency_values(apk):
+    """[(token, lib pkg, class)] from dependency_inventory: candidate values tied to a bundled lib (ANS- consts, flaw
+    ids like HCTF-DEP-*); the day's solver ranks them (reachability / advisory match decide which one counts)."""
+    return [(v["value"], lib["pkg"] or lib["name"], v["class"]) for lib in dependency_inventory(apk)
+            for v in lib["values"]]
+
+# --- advisory table x bundled lib versions (coverage atlas row 109) --------------------------------------------------
+# A challenge-owned advisory list (assets/**/*.json incl. OSV `affected[].ranges[].events`, or `pkg | range | id` text
+# lines) matched against dependency_inventory versions. Version order = Maven ComparableVersion-like: numeric segments
+# numerically (1.2.10 > 1.2.9), qualifiers alpha < beta < milestone < rc < snapshot < '' (ga/final/release) < sp <
+# unknown words; 'v' prefix and '+build' ignored. Ranges: npm (^ ~ < <= >= = x-ranges, 'a - b', ||), Maven intervals
+# '[1.0,1.3),[2.0,)', python '>=1.0,<2.0' / '~=' / '!=' / '==1.2.*', bare 'fixed'/'introduced' fields.
+_ADV_Q = {"alpha": 1, "a": 1, "beta": 2, "b": 2, "milestone": 3, "m": 3, "rc": 4, "cr": 4, "pre": 4, "preview": 4,
+          "snapshot": 5, "dev": 0, "": 6, "ga": 6, "final": 6, "release": 6, "sp": 7}
+_ADV_PKG = ("package", "pkg", "library", "lib", "artifact", "module", "component", "dependency", "coordinates",
+            "coordinate", "purl", "name", "artifactId")
+_ADV_RNG = ("affected", "range", "ranges", "vulnerable", "affected_versions", "vulnerable_versions", "versions_affected",
+            "affected_range", "version_range", "vulnerable_range", "spec", "constraint", "versions")
+_ADV_FIX = ("fixed", "fixed_in", "fixed_version", "patched", "patched_versions", "first_patched_version", "safe_version",
+            "before")
+_ADV_ID = ("id", "advisory", "advisory_id", "cve", "ghsa", "flaw", "flaw_id", "ref", "key")
+_ADV_OP = re.compile(r"(\^|~=|~>|~|>=|<=|==|!=|=>|=<|>|<|=)?\s*(v?[0-9xX*][\w.*+-]*)")
+
+
+def _adv_parse(v):
+    v = str(v or "").strip().lower()
+    v = re.sub(r"^(?:v|version\s*)(?=\d)", "", v).split("+", 1)[0]
+    m = re.match(r"(\d+(?:\.\d+)*)(.*)$", v)
+    if not m:
+        return None
+    nums = [int(x) for x in m.group(1).split(".")]
+    quals = [int(t) if t.isdigit() else t for t in re.findall(r"\d+|[a-z]+", m.group(2))]
+    if quals and quals[0] in ("ga", "final", "release"):
+        quals = quals[1:]
+    if quals and isinstance(quals[0], int):  # Maven 1.0-1 / 1.0.0.1-style trailing build numbers: still numeric
+        while quals and isinstance(quals[0], int):
+            nums.append(quals.pop(0))
+    while len(nums) > 1 and nums[-1] == 0:
+        nums.pop()
+    return nums, quals
+
+
+def _adv_qk(t):
+    if t is None:
+        return (1, 6, "")
+    if isinstance(t, int):
+        return (2, t, "")
+    return (1, _ADV_Q[t], "") if t in _ADV_Q else (1, 8, t)
+
+
+def version_compare(a, b):
+    """-1 / 0 / 1 for version strings a vs b (numeric segments numerically, Maven/semver qualifier order, 'v' prefix and
+    '+build' ignored, trailing .0 insignificant); None when either is not a version."""
+    pa, pb = _adv_parse(a), _adv_parse(b)
+    if pa is None or pb is None:
+        return None
+    na, nb = pa[0], pb[0]
+    n = max(len(na), len(nb))
+    na, nb = na + [0] * (n - len(na)), nb + [0] * (n - len(nb))
+    if na != nb:
+        return -1 if na < nb else 1
+    qa, qb = pa[1], pb[1]
+    for i in range(max(len(qa), len(qb))):
+        x, y = (qa[i] if i < len(qa) else None), (qb[i] if i < len(qb) else None)
+        x, y = (0 if x is None and isinstance(y, int) else x), (0 if y is None and isinstance(x, int) else y)
+        x, y = _adv_qk(x), _adv_qk(y)
+        if x != y:
+            return -1 if x < y else 1
+    return 0
+
+
+def _adv_wild(v):
+    """'1.2.x' / '1.2.*' / '1.2' (npm partial) -> (lo, hi_exclusive) or None when no wildcard."""
+    seg = v.split(".")
+    if not any(s in ("x", "X", "*") for s in seg):
+        return None
+    keep = []
+    for s in seg:
+        if s in ("x", "X", "*"):
+            break
+        keep.append(s)
+    if not keep:
+        return ("0", None)
+    hi = keep[:-1] + [str(int(keep[-1]) + 1)] if keep[-1].isdigit() else None
+    return (".".join(keep), ".".join(hi) if hi else None)
+
+
+def _adv_cmp(v, op, x):
+    c = version_compare(v, x)
+    if c is None:
+        return None
+    return {"<": c < 0, "<=": c <= 0, "=<": c <= 0, ">": c > 0, ">=": c >= 0, "=>": c >= 0, "=": c == 0,
+            "==": c == 0, "": c == 0, "!=": c != 0}.get(op)
+
+
+def _adv_term(v, op, x):
+    op = op or ""
+    x = x[1:] if x[:1] in "vV" else x
+    w = _adv_wild(x)
+    if w:
+        lo, hi = w
+        if op in ("", "=", "==", "!="):
+            r = _adv_cmp(v, ">=", lo) and (hi is None or _adv_cmp(v, "<", hi))
+            return (not r) if op == "!=" else r
+        if op in ("<", ">="):
+            return _adv_cmp(v, op, lo)
+        if op in (">", "<="):
+            return (hi is None) == (op == "<=") or _adv_cmp(v, ">=" if op == ">" else "<", hi)
+        x, op = lo, op
+    if op in ("^", "~", "~>", "~="):
+        p = _adv_parse(x)
+        if p is None:
+            return None
+        nums = [int(s) for s in re.match(r"(\d+(?:\.\d+)*)", x).group(1).split(".")]
+        if op == "^":
+            i = next((k for k, n in enumerate(nums) if n), len(nums) - 1)
+        elif op == "~":
+            i = min(1, len(nums) - 1) if len(nums) > 1 else 0
+        else:  # ~= / ~> : drop the last segment
+            i = max(len(nums) - 2, 0)
+        hi = nums[:i] + [nums[i] + 1]
+        return bool(_adv_cmp(v, ">=", x)) and bool(_adv_cmp(v, "<", ".".join(map(str, hi))))
+    return _adv_cmp(v, op, x)
+
+
+def version_in_range(v, spec):
+    """True / False when version v satisfies the range spec (npm, Maven interval, python specifier syntaxes; see the
+    section comment), None when the spec or v cannot be read."""
+    try:
+        return _version_in_range(str(v), str(spec))
+    except (ValueError, TypeError, IndexError, AttributeError):
+        return None
+
+
+def _version_in_range(v, spec):
+    s = spec.strip()
+    if _adv_parse(v) is None or not s:
+        return None
+    if s in ("*", "any", "all", "x"):
+        return True
+    if s[0] in "[(":
+        ivs = re.findall(r"([\[(])\s*([^,\])]*?)\s*(?:(,)\s*([^\])]*?)\s*)?([\])])", s)
+        if not ivs:
+            return None
+        for lb, lo, comma, hi, rb in ivs:
+            if not comma:
+                if lb + rb == "[]" and _adv_cmp(v, "=", lo):
+                    return True
+                continue
+            ok = True
+            if lo:
+                ok = _adv_cmp(v, ">=" if lb == "[" else ">", lo)
+            if ok and hi:
+                ok = _adv_cmp(v, "<=" if rb == "]" else "<", hi)
+            if ok:
+                return True
+        return False
+    seen = False
+    for alt in re.split(r"\|\||\bor\b|;", s):
+        alt = alt.strip()
+        if not alt:
+            continue
+        m = re.fullmatch(r"v?([\w.*+-]+)\s+-\s+v?([\w.*+-]+)", alt)
+        terms = [(">=", m.group(1)), ("<=", m.group(2))] if m else \
+            [(o, x) for o, x in _ADV_OP.findall(re.sub(r"\band\b|&&", " ", alt))]
+        if not terms:
+            continue
+        rs = [_adv_term(v, o, x) for o, x in terms]
+        if any(r is None for r in rs):
+            continue
+        seen = True
+        if all(rs):
+            return True
+    return False if seen else None
+
+
+def _adv_str(x):
+    if isinstance(x, (str, int, float)) and not isinstance(x, bool):
+        return str(x)
+    if isinstance(x, list) and all(isinstance(e, str) for e in x) and x:
+        return " || ".join(x)
+    return None
+
+
+def _adv_get(d, keys):
+    low = {k.lower(): v for k, v in d.items() if isinstance(k, str)}
+    for k in keys:
+        if k.lower() in low and low[k.lower()] not in (None, ""):
+            return low[k.lower()]
+    return None
+
+
+def _adv_osv(d):
+    """OSV ranges [{type, events: [{introduced}, {fixed} | {last_affected}]}] (+ versions list) -> range spec."""
+    alts = []
+    for r in d.get("ranges") or []:
+        if not isinstance(r, dict):
+            continue
+        lo = None
+        for e in r.get("events") or []:
+            if not isinstance(e, dict):
+                continue
+            if "introduced" in e:
+                lo = str(e["introduced"])
+            elif "fixed" in e or "last_affected" in e or "limit" in e:
+                hi = e.get("fixed") or e.get("limit")
+                t = [f">={lo}"] if lo and lo != "0" else []
+                t.append(f"<{hi}" if hi else f"<={e['last_affected']}")
+                alts.append(" ".join(t))
+                lo = None
+        if lo:
+            alts.append(f">={lo}" if lo != "0" else "*")
+    vs = d.get("versions")
+    if isinstance(vs, list):
+        alts += [f"={x}" for x in vs if isinstance(x, str)]
+    return " || ".join(alts) or None
+
+
+def _adv_rows(o, out, ctx=None, depth=0):
+    """Walk parsed JSON -> out: [{pkg, range, id, values, row}] for advisory-shaped dicts."""
+    if depth > 8 or len(out) > 2000:
+        return
+    if isinstance(o, list):
+        for e in o[:5000]:
+            _adv_rows(e, out, ctx, depth + 1)
+        return
+    if not isinstance(o, dict):
+        return
+    pkg = _adv_get(o, _ADV_PKG)
+    if isinstance(pkg, dict):  # OSV {"package": {"ecosystem", "name", "purl"}}
+        pkg = pkg.get("name") or pkg.get("purl")
+    if not pkg and o.get("groupId") and o.get("artifactId"):
+        pkg = f"{o['groupId']}:{o['artifactId']}"
+    elif o.get("groupId") and isinstance(pkg, str) and pkg == o.get("artifactId"):
+        pkg = f"{o['groupId']}:{pkg}"
+    rid = _adv_get(o, _ADV_ID)
+    rid = rid if isinstance(rid, (str, int)) else (ctx or {}).get("id")
+    vals = [m.group(0) for k, v in o.items() if isinstance(v, str) and k.lower() not in ("package", "pkg")
+            for m in ANS_RE_T.finditer(v)]
+    vals = list(dict.fromkeys(vals + list((ctx or {}).get("values") or [])))
+    rng = None
+    raw = _adv_get(o, _ADV_RNG)
+    if isinstance(o.get("ranges"), list) and any(isinstance(e, dict) and e.get("events") for e in o["ranges"]):
+        raw = _adv_osv(o)  # OSV affected entry: ranges[].events (+ versions)
+    if isinstance(raw, list) and raw and all(isinstance(e, dict) for e in raw):
+        sub = {"id": rid, "values": vals}
+        for e in raw:
+            _adv_rows(e, out, sub, depth + 1)
+        return
+    elif isinstance(raw, dict):
+        raw = _adv_get(raw, _ADV_RNG + ("introduced",)) if not raw.get("events") else _adv_osv({"ranges": [raw]})
+    rng = _adv_str(raw) if raw is not None else None
+    if not rng and isinstance(o.get("ranges"), list):
+        rng = _adv_osv(o)
+    fix = _adv_get(o, _ADV_FIX)
+    fix = fix.get("identifier") if isinstance(fix, dict) else fix
+    if not rng and isinstance(fix, str):
+        intro = _adv_get(o, ("introduced", "introduced_in", "since", "from"))
+        rng = (f">={intro} " if isinstance(intro, str) and intro not in ("0", "") else "") + f"<{fix}"
+    if pkg and isinstance(pkg, str) and rng:
+        out.append({"pkg": pkg.strip(), "range": rng, "id": None if rid is None else str(rid), "values": vals,
+                    "fixed": fix if isinstance(fix, str) else None})
+        return
+    for k, v in o.items():
+        if isinstance(v, (list, dict)):
+            sub = ctx
+            if isinstance(v, (list, dict)) and isinstance(k, str) and pkg is None and rng is None and \
+                    _adv_parse(k) is None and re.fullmatch(r"[\w.:@/-]{2,128}", k) and isinstance(v, dict) and \
+                    _adv_get(v, _ADV_RNG + _ADV_FIX) is not None and _adv_get(v, _ADV_PKG) is None:
+                v = dict(v, package=k)  # {"com.acme:jsonlite": {"affected": "<1.2.10", ...}}
+            _adv_rows(v, out, sub, depth + 1)
+
+
+_ADV_LINE = re.compile(r"^\s*([\w.:@/-]{2,128})\s*[|,;\t ]\s*((?:[\[(]|[<>=^~!]|v?\d)[^|;\t]*?)\s*(?:[|;\t,]\s*(.*))?$")
+
+
+def advisory_table(apk):
+    """Challenge-owned advisory rows of the APK: [{pkg, range, id, values, fixed, source}] from assets/** and res/raw/**
+    JSON (any advisory-shaped dict: package/library/artifact/name + affected/range/vulnerable/versions or fixed[_in],
+    OSV `affected[].package.name` + `ranges[].events`) and `pkg | range | id` text lines (.txt/.csv/.tsv/.psv).
+    [] when absent / not a zip. Never raises."""
+    try:
+        data = apk if isinstance(apk, (bytes, bytearray)) else Path(apk).read_bytes()
+        if data[:2] != b"PK":
+            return []
+        out = []
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            for zi in z.infolist()[:4000]:
+                n, low = zi.filename, zi.filename.lower()
+                if not low.startswith(("assets/", "res/raw/")) or zi.file_size > 4 << 20:
+                    continue
+                if low.endswith(".json"):
+                    try:
+                        o = json.loads(z.read(n).decode("utf-8-sig"))
+                    except (ValueError, UnicodeDecodeError, zipfile.BadZipFile, OSError, zlib.error, RecursionError):
+                        continue
+                    rows = []
+                    _adv_rows(o, rows)
+                elif low.endswith((".txt", ".csv", ".tsv", ".psv")) and re.search(r"advis|vuln|cve|flaw|secur", low):
+                    rows = []
+                    for ln in z.read(n)[:1 << 20].decode("utf-8", "replace").splitlines()[:5000]:
+                        m = _ADV_LINE.match(ln)
+                        if m and not ln.lstrip().startswith("#") and version_in_range("0", m.group(2)) is not None:
+                            rest = m.group(3) or ""
+                            rid = re.search(r"[A-Z][\w]*-[\w-]+", rest)
+                            rows.append({"pkg": m.group(1), "range": m.group(2), "id": rid.group(0) if rid else None,
+                                         "values": [t.group(0) for t in ANS_RE_T.finditer(rest)], "fixed": None})
+                else:
+                    continue
+                for r in rows:
+                    r["source"] = n
+                    if not any(r == x for x in out):
+                        out.append(r)
+        return out
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        return []
+
+
+def _adv_names(lib):
+    out = set()
+    for x in (lib.get("pkg"), lib.get("name")):
+        if not x:
+            continue
+        x = x.lower()
+        out.add(x)
+        if ":" in x:
+            g, a = x.split(":", 1)
+            out |= {a, f"{g}.{a}", f"{g}/{a}", f"{g}.{a.replace('-', '')}"}
+        elif "." in x:
+            out.add(x.rsplit(".", 1)[-1])
+    return out
+
+
+def _adv_key(p):
+    p = re.sub(r"^pkg:[a-z]+/", "", p.strip().lower()).split("@")[0]
+    return {p, p.replace("/", ":"), p.replace("/", "."), p.replace(":", "."), p.replace("-", "")}
+
+
+def advisory_matches(apk):
+    """Advisory rows (advisory_table) x bundled libs (dependency_inventory, versions): [{advisory, pkg, lib, version,
+    range, affected, values, source, reachable}] for every row whose package names a versioned lib; affected = the lib
+    version satisfies the row's range under real version order (1.2.10 > 1.2.9, never lexicographic). values = the
+    row's own ANS tokens + the lib's ANS consts; reachable = one of them is reached from an exported component
+    (exported_reachable_candidates; None when not computed). Affected first, then reachable. [] when absent."""
+    try:
+        rows = advisory_table(apk)
+        if not rows:
+            return []
+        libs = [lb for lb in dependency_inventory(apk) if lb.get("version")]
+        out = []
+        for r in rows:
+            keys = _adv_key(r["pkg"])
+            for lb in libs:
+                names = _adv_names(lb)
+                if not (keys & names or any(lb.get("pkg") and k.startswith(lb["pkg"].lower() + ".") for k in keys)):
+                    continue
+                aff = version_in_range(lb["version"], r["range"])
+                lv = [v["value"] for v in lb.get("values") or [] if v["value"].startswith("ANS-")]
+                out.append({"advisory": r["id"], "pkg": r["pkg"], "lib": lb.get("pkg") or lb["name"],
+                            "version": lb["version"], "range": r["range"], "affected": aff,
+                            "values": list(dict.fromkeys(r["values"] + lv)), "source": r["source"], "reachable": None})
+        hit = [m for m in out if m["affected"] and m["values"]]
+        if len({v for m in hit for v in m["values"]}) > 1:
+            try:
+                reach = {c["value"] for c in exported_reachable_candidates(apk) if c["reachable"]}
+            except Exception:  # noqa: BLE001
+                reach = set()
+            if reach:
+                for m in out:
+                    m["reachable"] = any(v in reach for v in m["values"])
+        out.sort(key=lambda m: (m["affected"] is not True, m["reachable"] is False))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def advisory_match_scan(apk):
+    """The ANS values of the affected (lib, advisory) pairs, reachable ones first (advisory_matches). [] when absent."""
+    return list(dict.fromkeys(v for m in advisory_matches(apk) if m["affected"] is True and m["reachable"] is not False
+                              for v in m["values"])) or \
+        list(dict.fromkeys(v for m in advisory_matches(apk) if m["affected"] is True for v in m["values"]))
+
+
+# --- row 109: forced-update / minimum-version gate (MASVS-CODE-2) ----------------------------------------------------
+# PackageManager.getPackageInfo(own pkg) -> versionCode / longVersionCode ((versionCodeMajor << 32) | versionCode) /
+# versionName from the binary manifest, against a challenge-owned update policy in assets/** or res/raw/** JSON:
+# min/minimum/required/supported version(Name|Code) keys, blocked/denied/revoked version lists (exact versions, codes or
+# version_in_range specs), or a rules list [{range | min/max version, value}]. Version order = version_compare (6.0.10 >
+# 6.0.9 > 6.0.1, never lexicographic). Branch values: ANS tokens under update-required keys (force/required/blocked/
+# outdated/fail/deny...) vs pass keys (ok/allowed/current/pass/continue...); the answer is the branch the APK's version takes.
+_UPG_MIN_N = re.compile(r"(?i)^(?:(?:min|minimum|lowest|least)[_-]?(?:app[_-]?|supported[_-]?|required[_-]?|allowed[_-]?)?"
+                        r"(?:version)?|(?:required|supported|min[_-]?supported)[_-]?(?:app[_-]?)?version)[_-]?"
+                        r"(?:name|string|str)?$")
+_UPG_MIN_C = re.compile(r"(?i)^(?:min|minimum|lowest|least|required|supported|min[_-]?supported)[_-]?"
+                        r"(?:app[_-]?|supported[_-]?|required[_-]?|allowed[_-]?)?(?:version)?[_-]?(?:code|build|number)$")
+_UPG_BLK = re.compile(r"(?i)^(?:blocked|blacklist(?:ed)?|denylist|denied|banned|revoked|killed|disabled|forbidden|"
+                      r"bad|vulnerable|insecure)[_-]?(?:version|versions|codes?|builds?|list)?(?:[_-]?(?:names?|codes?))?$")
+_UPG_FAIL = re.compile(r"(?i)force|required|block|outdated|below|fail|den[yi]|reject|upgrade|update|expired|stale|"
+                       r"too[_-]?old|unsupported|kill|locked|insecure|revoked|banned")
+_UPG_PASS = re.compile(r"(?i)^(?:on[_-]?)?(?:ok|okay|allow|allowed|pass|passed|current|up[_-]?to[_-]?date|uptodate|"
+                       r"supported|continue|proceed|accept|accepted|success|valid|default|else|normal|latest|fine|"
+                       r"compliant|granted|unlocked|open)(?:[_-]?(?:value|token|proof|answer|flag|branch|result))?$")
+_UPG_RNG = ("range", "versions", "version_range", "spec", "constraint", "when", "match", "applies", "applies_to")
+
+
+def _upg_manifest(z):
+    """{"vc", "lvc", "vn", "pkg"} from the binary AndroidManifest.xml; None when unreadable / not AXML."""
+    try:
+        zi = z.getinfo("AndroidManifest.xml")
+        if zi.file_size > 1 << 22:
+            return None
+        b = z.read(zi)
+    except (KeyError, OSError, zipfile.BadZipFile, zlib.error, RuntimeError, EOFError):
+        return None
+    if b[:2] != b"\x03\x00":
+        return None
+    for kind, tag, attrs, _ in _axml_events(b):
+        if kind == "start" and tag == "manifest" and attrs is not None:
+            at = {k.split(":")[-1]: v for k, v in attrs.items()}
+            vc, mj = str(at.get("versionCode", "")).strip(), str(at.get("versionCodeMajor", "0")).strip()
+            vc = int(vc, 0) if re.fullmatch(r"-?\d+|0x[0-9a-fA-F]+", vc) else None
+            mj = int(mj, 0) if re.fullmatch(r"\d+|0x[0-9a-fA-F]+", mj) else 0
+            vn = at.get("versionName")
+            return {"vc": vc, "lvc": None if vc is None else (mj << 32) | (vc & 0xFFFFFFFF),
+                    "vn": vn if isinstance(vn, str) and vn else None, "pkg": at.get("package")}
+    return None
+
+
+def _upg_vals(o, depth=0):
+    if isinstance(o, str):
+        return [m.group(0) for m in ANS_RE_T.finditer(o)]
+    if depth > 4:
+        return []
+    if isinstance(o, dict):
+        return [v for x in o.values() for v in _upg_vals(x, depth + 1)]
+    if isinstance(o, list):
+        return [v for x in o[:256] for v in _upg_vals(x, depth + 1)]
+    return []
+
+
+def _upg_int(x):
+    if isinstance(x, bool):
+        return None
+    if isinstance(x, int):
+        return x
+    s = str(x).strip() if isinstance(x, (str, float)) else ""
+    return int(s) if re.fullmatch(r"\d{1,19}", s) else None
+
+
+def _upg_hit(item, man):
+    """True when the APK's version equals / satisfies one blocked-list item; None when unreadable."""
+    n = _upg_int(item)
+    if n is not None and (man["lvc"] is not None) and not (isinstance(item, str) and "." in item):
+        if isinstance(item, int) or man["vn"] is None or version_compare(man["vn"], str(item)) is None:
+            return n in (man["vc"], man["lvc"])
+    if man["vn"] is None or not isinstance(item, (str, int)):
+        return None
+    s = str(item).strip()
+    if re.search(r"[<>=^~,\[\]()|*xX ]", s) and not re.fullmatch(r"v?\d+(?:\.\d+)*", s):
+        return version_in_range(man["vn"], s)
+    c = version_compare(man["vn"], s)
+    return None if c is None else c == 0
+
+
+def _upg_policy(o, man, src, out, depth=0):
+    if depth > 6:
+        return
+    if isinstance(o, list):
+        for e in o[:512]:
+            _upg_policy(e, man, src, out, depth + 1)
+        return
+    if not isinstance(o, dict):
+        return
+    checks, fail_v, pass_v, rule = [], [], [], None
+    for k, v in o.items():
+        ks = str(k)
+        nv = isinstance(v, (str, int, float)) and not isinstance(v, bool)
+        if _UPG_MIN_C.match(ks) and _upg_int(v) is not None and man["lvc"] is not None:
+            checks.append(("min_code", v, man["lvc"] < _upg_int(v)))
+        elif _UPG_MIN_N.match(ks) and nv and man["vn"] and version_compare(man["vn"], str(v)) is not None:
+            checks.append(("min_version", v, version_compare(man["vn"], str(v)) < 0))
+        elif re.fullmatch(r"(?i)max(?:imum)?[_-]?(?:version)?[_-]?(?:name)?", ks) and man["vn"] and \
+                isinstance(v, (str, int, float)) and not isinstance(v, bool):
+            c = version_compare(man["vn"], str(v))
+            if c is not None:
+                rule = (rule if rule is not None else True) and c <= 0
+        elif _UPG_BLK.match(ks) and isinstance(v, (list, str, int)) and not isinstance(v, bool):
+            items = v if isinstance(v, list) else [x for x in re.split(r"[;,\s]+", v) if x] \
+                if isinstance(v, str) and not re.search(r"[<>\[\]()^~|]", v) else [v]
+            hs = [_upg_hit(x, man) for x in items[:256] if isinstance(x, (str, int))]
+            if any(h is not None for h in hs):
+                checks.append(("blocked", v, any(hs)))
+        elif ks.lower() in _UPG_RNG and isinstance(v, str) and man["vn"]:
+            r = version_in_range(man["vn"], v)
+            if r is not None:
+                rule = (rule if rule is not None else True) and r
+        elif isinstance(v, (str, dict, list)):
+            n0 = len(out)
+            if not isinstance(v, str):
+                _upg_policy(v, man, src, out, depth + 1)
+            vals = _upg_vals(v) if len(out) == n0 else []
+            if vals and _UPG_PASS.match(ks):
+                pass_v += vals
+            elif vals and _UPG_FAIL.search(ks):
+                fail_v += vals
+            # a bare value / token key is not a branch: a rules-list entry picks it up below
+    # min-version checks found in the dict: a failed check -> update required; branch values chosen accordingly
+    if checks and (fail_v or pass_v):
+        req = any(c[2] for c in checks)
+        out.append({"kind": "gate", "checks": [(c[0], c[1], c[2]) for c in checks], "required": req,
+                    "values": list(dict.fromkeys(fail_v if req else pass_v)), "source": src})
+    elif rule is not None:
+        vals = [x for k, v in o.items() if re.fullmatch(r"(?i)value|token|proof|answer|flag|result|payload", str(k))
+                for x in _upg_vals(v)]
+        if vals:
+            out.append({"kind": "rule", "checks": [("range", next((o[k] for k in o if str(k).lower() in _UPG_RNG), None),
+                                                    rule)], "required": None, "values": vals if rule else [],
+                        "matched": rule, "source": src})
+
+
+def update_gate_matches(apk):
+    """Forced-update / min-version gates of the APK (row 109): [{kind ("gate" | "rule"), checks [(what, policy value,
+    failed)], required (the version is below a minimum / blocked), values (the ANS tokens of the branch the manifest
+    version takes), source, version {vc, lvc, vn}}]. [] when absent / no manifest version / not a zip. Never raises."""
+    try:
+        data = apk if isinstance(apk, (bytes, bytearray)) else Path(apk).read_bytes()
+        if data[:2] != b"PK":
+            return []
+        out = []
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            man = _upg_manifest(z)
+            if not man or (man["vn"] is None and man["lvc"] is None):
+                return []
+            for zi in z.infolist()[:4000]:
+                n, low = zi.filename, zi.filename.lower()
+                if not low.startswith(("assets/", "res/raw/")) or not low.endswith(".json") or zi.file_size > 2 << 20:
+                    continue
+                try:
+                    o = json.loads(z.read(n).decode("utf-8-sig"))
+                except (ValueError, UnicodeDecodeError, zipfile.BadZipFile, OSError, zlib.error, RecursionError,
+                        RuntimeError, EOFError):
+                    continue
+                rows = []
+                _upg_policy(o, man, n, rows)
+                for r in rows:
+                    r["version"] = {k: man[k] for k in ("vc", "lvc", "vn")}
+                out += rows
+        return out
+    except Exception:  # noqa: BLE001 - truncated / impostor APK
+        return []
+
+
+def update_gate_scan(apk):
+    """The ANS values on the branch the APK's real version takes through its update gates (update_gate_matches);
+    matched rules after explicit gates. [] when absent."""
+    ms = update_gate_matches(apk)
+    return list(dict.fromkeys(v for m in sorted(ms, key=lambda m: m["kind"] != "gate") for v in m["values"]))
+
+
+
+# --- row 108: JVM bytecode dependency (assets/*.jar, .aar -> classes.jar, *.class), not dex -------------------------
+_JCF_MASK = {"I": 0xFFFFFFFF, "J": 0xFFFFFFFFFFFFFFFF}
+_JCF_TOK = re.compile(r"(?<![0-9A-Za-z])ANS-[0-9A-Fa-f]{16}(?![0-9A-Fa-f])")
+
+
+def _jcf_wrap(v, t):
+    m = _JCF_MASK[t]
+    v &= m
+    return v - (m + 1) if v > (m >> 1) else v
+
+
+def _jcf_args(desc):
+    """'(IJLjava/lang/String;[I)J' -> (['I', 'J', 'L', '['], 'J')."""
+    out, i = [], 1
+    while i < len(desc) and desc[i] != ")":
+        j = i
+        while desc[j] == "[":
+            j += 1
+        if desc[j] == "L":
+            j = desc.index(";", j)
+        out.append("[" if j > i and desc[i] == "[" else desc[i])
+        i = j + 1
+    return out, desc[i + 1:]
+
+
+def classfile_parse(b):
+    """Pure-python JVM .class reader -> {name, super, cp, fields: [{name, desc, access, value}], methods: [{name, desc,
+    access, code, max_locals, ...}], bootstrap: [(mh_idx, [arg idx])]}; cp entries as (tag, ...) tuples (Long/Double
+    take 2 slots). None for a non-CAFEBABE / truncated blob. Never raises."""
+    try:
+        return _classfile_parse(bytes(b))
+    except (IndexError, ValueError, struct.error, UnicodeDecodeError, KeyError, TypeError):
+        return None
+
+
+def _classfile_parse(b):
+    if b[:4] != b"\xca\xfe\xba\xbe" or len(b) < 10:
+        return None
+    u1 = lambda o: b[o]
+    u2 = lambda o: struct.unpack_from(">H", b, o)[0]
+    u4 = lambda o: struct.unpack_from(">I", b, o)[0]
+    n_cp, o = u2(8), 10
+    cp, i = [None] * n_cp, 1
+    while i < n_cp:
+        t = u1(o)
+        if t == 1:
+            ln = u2(o + 1)
+            raw = b[o + 3:o + 3 + ln]
+            if len(raw) != ln:
+                return None
+            cp[i] = (1, raw.replace(b"\xc0\x80", b"\x00").decode("utf-8", "replace"))
+            o += 3 + ln
+        elif t in (3, 4):
+            cp[i] = (t, struct.unpack_from(">i" if t == 3 else ">f", b, o + 1)[0])
+            o += 5
+        elif t in (5, 6):
+            cp[i] = (t, struct.unpack_from(">q" if t == 5 else ">d", b, o + 1)[0])
+            o += 9
+            i += 1
+        elif t in (7, 8, 16, 19, 20):
+            cp[i] = (t, u2(o + 1))
+            o += 3
+        elif t in (9, 10, 11, 12, 17, 18):
+            cp[i] = (t, u2(o + 1), u2(o + 3))
+            o += 5
+        elif t == 15:
+            cp[i] = (t, u1(o + 1), u2(o + 2))
+            o += 4
+        else:
+            return None
+        i += 1
+    utf = lambda k: cp[k][1] if 0 < k < n_cp and cp[k] and cp[k][0] == 1 else None
+    cls = lambda k: utf(cp[k][1]) if 0 < k < n_cp and cp[k] and cp[k][0] == 7 else None
+
+    def attrs(o):
+        n, o, out = u2(o), o + 2, []
+        for _ in range(n):
+            ln = u4(o + 2)
+            out.append((utf(u2(o)), o + 6, ln))
+            o += 6 + ln
+        if o > len(b):
+            raise ValueError("truncated")
+        return out, o
+
+    acc, this, sup = u2(o), u2(o + 2), u2(o + 4)
+    o += 6
+    o += 2 + 2 * u2(o)
+    res = {"name": cls(this), "super": cls(sup), "access": acc, "cp": cp, "fields": [], "methods": [], "bootstrap": []}
+    for kind in ("fields", "methods"):
+        n, o = u2(o), o + 2
+        for _ in range(n):
+            m = {"access": u2(o), "name": utf(u2(o + 2)), "desc": utf(u2(o + 4))}
+            al, o = attrs(o + 6)
+            for an, ao, ln in al:
+                if an == "ConstantValue" and kind == "fields":
+                    e = cp[u2(ao)]
+                    m["value"] = utf(e[1]) if e[0] == 8 else e[1]
+                elif an == "Code" and kind == "methods":
+                    cl = u4(ao + 4)
+                    m.update(max_locals=u2(ao + 2), code=b[ao + 8:ao + 8 + cl])
+            res[kind].append(m)
+    al, o = attrs(o)
+    for an, ao, ln in al:
+        if an == "BootstrapMethods":
+            n, p = u2(ao), ao + 2
+            for _ in range(n):
+                na = u2(p + 2)
+                res["bootstrap"].append((u2(p), [u2(p + 4 + 2 * k) for k in range(na)]))
+                p += 4 + 2 * na
+    return res
+
+
+class _JcfBail(Exception):
+    pass
+
+
+def _jcf_fmt(fmt, args):
+    """java.lang.String.format subset: %[0][width](x|X|d|s|S|%)."""
+    it = iter(args)
+
+    def one(m):
+        if m.group(3) == "%":
+            return "%"
+        v = next(it)
+        t, v = v if isinstance(v, tuple) else ("S", v)
+        c = m.group(3)
+        if c in "xX":
+            if t not in "IJ":
+                raise _JcfBail()
+            s = format(v & _JCF_MASK[t], "x")
+        elif c == "d":
+            if t not in "IJ":
+                raise _JcfBail()
+            s = str(v)
+        else:
+            s = v if isinstance(v, str) else str(v)
+        if c in "XS":
+            s = s.upper()
+        w = int(m.group(2) or 0)
+        return s.rjust(w, "0" if m.group(1) else " ")
+    return re.sub(r"%(0?)(\d*)([xXdsS%])", one, fmt)
+
+
+def _jcf_str(v):
+    if isinstance(v, tuple):
+        v = v[1]
+    if v is None:
+        return "null"
+    if isinstance(v, (str, int)):
+        return str(v)
+    raise _JcfBail()
+
+
+def _jcf_native(cls, name, desc, args):
+    """Pure JDK calls a token chain uses; _JcfBail for anything else (I/O, reflection, randomness, time)."""
+    key = cls + "." + name
+    a, ret = _jcf_args(desc)
+    if key in ("java/lang/Long.toHexString", "java/lang/Integer.toHexString"):
+        return format(args[0] & _JCF_MASK[a[0]], "x")
+    if key in ("java/lang/Long.toString", "java/lang/Integer.toString", "java/lang/String.valueOf") and len(args) == 1:
+        return str(args[0]) if a[0] in "IJ" else _jcf_str(args[0])
+    if key in ("java/lang/Long.valueOf", "java/lang/Integer.valueOf") and a[0] in "IJ":
+        return (a[0], args[0])
+    if key in ("java/lang/Long.longValue", "java/lang/Integer.intValue") and isinstance(args[0], tuple):
+        return args[0][1]
+    if key == "java/lang/Long.rotateLeft" or key == "java/lang/Long.rotateRight":
+        v, r = args[0] & _JCF_MASK["J"], args[1] & 63
+        if name == "rotateRight":
+            r = (64 - r) & 63
+        return _jcf_wrap((v << r) | (v >> (64 - r)), "J")
+    if key == "java/lang/String.format" and desc.startswith("(Ljava/lang/String;[Ljava/lang/Object;)"):
+        return _jcf_fmt(args[0], args[1] or [])
+    if cls == "java/lang/String" and isinstance(args[0], str):
+        s = args[0]
+        if name in ("toUpperCase", "toLowerCase", "trim", "toString", "intern") and len(a) == 0:
+            return {"toUpperCase": s.upper, "toLowerCase": s.lower, "trim": s.strip}.get(name, lambda: s)()
+        if name == "concat":
+            return s + _jcf_str(args[1])
+        if name == "length":
+            return len(s)
+    if cls == "java/lang/StringBuilder" and isinstance(args[0], list):
+        sb = args[0]
+        if name == "<init>":
+            sb.append(_jcf_str(args[1]) if a and a[0] == "L" else "")
+            return None
+        if name == "append" and len(a) == 1:
+            v = args[1]
+            sb.append(chr(v & 0xFFFF) if a[0] == "C" else ("true" if v else "false") if a[0] == "Z" else _jcf_str(v))
+            return sb
+        if name == "toString":
+            return "".join(sb)
+    raise _JcfBail()
+
+
+def _jcf_indy(c, bsm_i, args):
+    """invokedynamic StringConcatFactory.makeConcatWithConstants (javac 9+ string `+`)."""
+    bm = c["bootstrap"][bsm_i]
+    cp = c["cp"]
+    if not bm[1] or cp[bm[1][0]][0] != 8:
+        raise _JcfBail()
+    recipe, it, out = cp[cp[bm[1][0]][1]][1], iter(args), []
+    consts = iter(bm[1][1:])
+    for ch in recipe:
+        if ch == "\x01":
+            out.append(_jcf_str(next(it)))
+        elif ch == "\x02":
+            e = cp[next(consts)]
+            out.append(cp[e[1]][1] if e[0] == 8 else str(e[1]))
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def jvm_eval(classes, cname, mname, desc=None, args=(), budget=None):
+    """Run a static pure JVM method from parsed classes ({internal name: classfile_parse()}) -> its return value (int /
+    str / None for void), or None when it touches anything outside the pure subset (I/O, arrays of primitives, fields
+    of other objects, exceptions) or exceeds the step budget. Statics come from ConstantValue + <clinit>."""
+    st = budget if budget is not None else {"steps": 0, "statics": {}, "deadline": time.time() + 0.5}
+    try:
+        return _jcf_call(classes, cname, mname, desc, list(args), st, 0)
+    except (_JcfBail, IndexError, KeyError, ValueError, TypeError, ZeroDivisionError, StopIteration,
+            AttributeError, RecursionError, struct.error):
+        return None
+
+
+def _jcf_static(classes, cname, fname, st, depth):
+    sk = st["statics"].setdefault(cname, None)
+    if sk is None:
+        c = classes.get(cname)
+        if c is None:
+            raise _JcfBail()
+        sk = st["statics"][cname] = {f["name"]: f.get("value", 0 if f["desc"] in "IJSBCZ" else None)
+                                     for f in c["fields"] if f["access"] & 0x8}
+        if any(m["name"] == "<clinit>" for m in c["methods"]):
+            _jcf_call(classes, cname, "<clinit>", "()V", [], st, depth + 1)
+    if fname not in sk:
+        raise _JcfBail()
+    return sk
+
+
+def _jcf_call(classes, cname, mname, desc, args, st, depth):
+    c = classes.get(cname)
+    if c is None:
+        return _jcf_native(cname, mname, desc, args)
+    m = next((m for m in c["methods"] if m["name"] == mname and (desc is None or m["desc"] == desc)), None)
+    if m is None or "code" not in m or depth > 24:
+        raise _JcfBail()
+    a, rt = _jcf_args(m["desc"])
+    if not m["access"] & 0x8 or len(args) != len(a):
+        raise _JcfBail()
+    loc, k = {}, 0
+    for t, v in zip(a, args):
+        loc[k] = v
+        k += 2 if t in "JD" else 1
+    code, cp, stk, pc = m["code"], c["cp"], [], 0
+    u2 = lambda o: (code[o] << 8) | code[o + 1]
+    s2 = lambda o: struct.unpack_from(">h", code, o)[0]
+    s4 = lambda o: struct.unpack_from(">i", code, o)[0]
+
+    def ref(i):
+        e = cp[i]
+        nt = cp[e[2]]
+        return cp[cp[e[1]][1]][1], cp[nt[1]][1], cp[nt[2]][1]
+    W, I, J = _jcf_wrap, "I", "J"
+    bin_ops = {0x60: lambda x, y: x + y, 0x64: lambda x, y: x - y, 0x68: lambda x, y: x * y,
+               0x7e: lambda x, y: x & y, 0x80: lambda x, y: x | y, 0x82: lambda x, y: x ^ y}
+    while True:
+        st["steps"] += 1
+        if st["steps"] > 200000 or (st["steps"] & 1023 == 0 and time.time() > st["deadline"]):
+            raise _JcfBail()
+        op = code[pc]
+        if op == 0x00 or op == 0xc0:  # nop, checkcast
+            pc += 1 if op == 0 else 3
+        elif op == 0x01:
+            stk.append(None)
+            pc += 1
+        elif 0x02 <= op <= 0x08:
+            stk.append(op - 3)
+            pc += 1
+        elif op in (0x09, 0x0a):
+            stk.append(op - 9)
+            pc += 1
+        elif op == 0x10:
+            stk.append(struct.unpack_from(">b", code, pc + 1)[0])
+            pc += 2
+        elif op == 0x11:
+            stk.append(s2(pc + 1))
+            pc += 3
+        elif op in (0x12, 0x13, 0x14):
+            i = code[pc + 1] if op == 0x12 else u2(pc + 1)
+            e = cp[i]
+            if e[0] not in (3, 5, 8):
+                raise _JcfBail()
+            stk.append(cp[e[1]][1] if e[0] == 8 else e[1])
+            pc += 2 if op == 0x12 else 3
+        elif 0x15 <= op <= 0x19:
+            stk.append(loc[code[pc + 1]])
+            pc += 2
+        elif 0x1a <= op <= 0x2d:
+            stk.append(loc[(op - 0x1a) % 4])
+            pc += 1
+        elif 0x36 <= op <= 0x3a:
+            loc[code[pc + 1]] = stk.pop()
+            pc += 2
+        elif 0x3b <= op <= 0x4e:
+            loc[(op - 0x3b) % 4] = stk.pop()
+            pc += 1
+        elif op in (0x2e, 0x2f, 0x32, 0x33, 0x34, 0x35):  # xaload
+            i = stk.pop()
+            stk.append(stk.pop()[i])
+            pc += 1
+        elif op in (0x4f, 0x50, 0x53, 0x54, 0x55, 0x56):  # xastore
+            v, i = stk.pop(), stk.pop()
+            stk.pop()[i] = v
+            pc += 1
+        elif op == 0x57:
+            stk.pop()
+            pc += 1
+        elif op == 0x59:
+            stk.append(stk[-1])
+            pc += 1
+        elif op == 0x5f:
+            stk[-1], stk[-2] = stk[-2], stk[-1]
+            pc += 1
+        elif 0x60 <= op <= 0x83:
+            base, t = (op - 0x60) & ~1, J if op & 1 else I
+            if base in (0x74 - 0x60,):  # ineg / lneg
+                stk.append(W(-stk.pop(), t))
+                pc += 1
+                continue
+            y, x = stk.pop(), stk.pop()
+            if op in bin_ops or op - 1 in bin_ops:
+                r = bin_ops[op & ~1](x, y)
+            elif op in (0x6c, 0x6d, 0x70, 0x71):
+                q = abs(x) // abs(y) * (1 if (x < 0) == (y < 0) else -1)
+                r = q if op <= 0x6d else x - q * y
+            elif 0x78 <= op <= 0x7d:
+                sh = y & (63 if t == J else 31)
+                if op <= 0x79:
+                    r = x << sh
+                elif op <= 0x7b:
+                    r = x >> sh
+                else:
+                    r = (x & _JCF_MASK[t]) >> sh
+            else:
+                raise _JcfBail()
+            stk.append(W(r, t))
+            pc += 1
+        elif op == 0x84:
+            loc[code[pc + 1]] = W(loc[code[pc + 1]] + struct.unpack_from(">b", code, pc + 2)[0], I)
+            pc += 3
+        elif op == 0x85:
+            pc += 1
+        elif op == 0x88:
+            stk.append(W(stk.pop(), I))
+            pc += 1
+        elif op in (0x91, 0x92, 0x93):
+            v = stk.pop()
+            stk.append(W(v, I) if False else (((v & 0xFF) ^ 0x80) - 0x80 if op == 0x91 else
+                                              v & 0xFFFF if op == 0x92 else ((v & 0xFFFF) ^ 0x8000) - 0x8000))
+            pc += 1
+        elif op == 0x94:
+            y, x = stk.pop(), stk.pop()
+            stk.append((x > y) - (x < y))
+            pc += 1
+        elif 0x99 <= op <= 0xa6 or op in (0xc6, 0xc7):
+            if op <= 0x9e or op >= 0xc6:
+                x, y = stk.pop(), 0
+                if op >= 0xc6:
+                    x, y, op = (0 if x is None else 1), 0, 0x99 if op == 0xc6 else 0x9a
+            else:
+                y, x = stk.pop(), stk.pop()
+                if op >= 0xa5:  # if_acmp: identity of interned strings / None
+                    x, y, op = (0 if x == y else 1), 0, 0x99 if op == 0xa5 else 0x9a
+                else:
+                    op -= 6
+            ok = (x == y, x != y, x < y, x >= y, x > y, x <= y)[op - 0x99]
+            pc = pc + s2(pc + 1) if ok else pc + 3
+        elif op == 0xa7:
+            pc += s2(pc + 1)
+        elif op in (0xaa, 0xab):
+            k, base = stk.pop(), pc
+            p = (pc + 4) & ~3
+            dflt = s4(p)
+            if op == 0xaa:
+                lo, hi = s4(p + 4), s4(p + 8)
+                pc = base + (s4(p + 12 + 4 * (k - lo)) if lo <= k <= hi else dflt)
+            else:
+                n = s4(p + 4)
+                pc = base + next((s4(p + 12 + 8 * j) for j in range(n) if s4(p + 8 + 8 * j) == k), dflt)
+        elif 0xac <= op <= 0xb0:
+            return stk.pop()
+        elif op == 0xb1:
+            return None
+        elif op in (0xb2, 0xb3):
+            cn, fn, _ = ref(u2(pc + 1))
+            sk = _jcf_static(classes, cn, fn, st, depth)
+            if op == 0xb2:
+                stk.append(sk[fn])
+            else:
+                sk[fn] = stk.pop()
+            pc += 3
+        elif op in (0xb6, 0xb7, 0xb8):
+            cn, mn, md = ref(u2(pc + 1))
+            n = len(_jcf_args(md)[0]) + (op != 0xb8)
+            av = stk[len(stk) - n:]
+            del stk[len(stk) - n:]
+            r = _jcf_call(classes, cn, mn, md, av, st, depth + 1) if op == 0xb8 and cn in classes else \
+                _jcf_native(cn, mn, md, av)
+            if _jcf_args(md)[1] != "V":
+                stk.append(r)
+            pc += 3
+        elif op == 0xba:
+            e = cp[u2(pc + 1)]
+            md = cp[cp[e[2]][2]][1]
+            n = len(_jcf_args(md)[0])
+            av = stk[len(stk) - n:]
+            del stk[len(stk) - n:]
+            stk.append(_jcf_indy(c, e[1], av))
+            pc += 5
+        elif op == 0xbb:
+            if cp[cp[u2(pc + 1)][1]][1] != "java/lang/StringBuilder":
+                raise _JcfBail()
+            stk.append([])
+            pc += 3
+        elif op in (0xbc, 0xbd):
+            n = stk.pop()
+            if not 0 <= n <= 4096:
+                raise _JcfBail()
+            stk.append([0 if op == 0xbc else None] * n)
+            pc += 2 if op == 0xbc else 3
+        elif op == 0xbe:
+            stk.append(len(stk.pop()))
+            pc += 1
+        else:
+            raise _JcfBail()
+
+
+def _jcf_collect(z, prefix, out, depth, deadline):
+    """{internal class name: parsed} from *.class entries of a zip, recursing into nested .jar/.aar/.zip."""
+    for n in z.namelist():
+        if time.time() > deadline:
+            return
+        low = n.lower()
+        try:
+            zi = z.getinfo(n)
+            if zi.file_size > 16 << 20:
+                continue
+            if low.endswith(".class") and len(out) < 4000:
+                c = classfile_parse(z.read(n))
+                if c and c["name"]:
+                    out.setdefault(c["name"], (c, prefix + n))
+            elif depth > 0 and low.endswith((".jar", ".aar", ".zip")):
+                b = z.read(n)
+                if b[:4] == b"PK\x03\x04":
+                    with zipfile.ZipFile(io.BytesIO(b)) as inner:
+                        _jcf_collect(inner, prefix + n + "!", out, depth - 1, deadline)
+        except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError, EOFError, zlib.error, KeyError):
+            continue
+
+
+def jvm_classes(apk, depth=3):
+    """{internal name: (classfile_parse dict, 'assets/x.aar!classes.jar!a/B.class')} for every JVM .class in the APK
+    (top level or inside assets/*.jar|*.aar|*.zip, nested). {} when none / not a zip. Never raises."""
+    try:
+        data = apk if isinstance(apk, (bytes, bytearray)) else Path(apk).read_bytes()
+        if data[:2] != b"PK":
+            return {}
+        out = {}
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            _jcf_collect(z, "", out, depth, time.time() + 1.0)
+        return out
+    except Exception:  # noqa: BLE001 - truncated / impostor
+        return {}
+
+
+def jvm_classfile_candidates(apk):
+    """Row 108: ANS tokens held by JVM bytecode shipped in the APK (assets/*.jar, .aar -> classes.jar, bare *.class):
+    [{value, class, member, via: 'const' | 'static' | 'eval', source}]. 'const' = a String constant-pool entry,
+    'static' = a static final field's ConstantValue, 'eval' = the String a no-arg static method returns when run by
+    the pure-subset interpreter (long/int arithmetic chains across static methods/classes, StringBuilder /
+    makeConcatWithConstants / String.format / Long.toHexString). [] when absent. Never raises."""
+    try:
+        return _jvm_classfile_candidates(apk)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _jvm_classfile_candidates(apk):
+    found = jvm_classes(apk)
+    if not found:
+        return []
+    classes = {k: v[0] for k, v in found.items()}
+    out, seen = [], set()
+
+    def add(v, cn, member, via):
+        for m in _JCF_TOK.finditer(v) if isinstance(v, str) else ():
+            key = (m.group(0), cn)
+            if key not in seen:
+                seen.add(key)
+                out.append({"value": m.group(0), "class": cn.replace("/", "."), "member": member, "via": via,
+                            "source": found[cn][1]})
+    for cn, c in classes.items():
+        for f in c["fields"]:
+            if isinstance(f.get("value"), str):
+                add(f["value"], cn, f["name"], "static")
+        for e in c["cp"]:
+            if e and e[0] == 8:
+                add(c["cp"][e[1]][1], cn, None, "const")
+    deadline = time.time() + 0.8
+    for cn, c in classes.items():
+        for m in c["methods"]:
+            if time.time() > deadline:
+                return out
+            if m["access"] & 0x8 and m["desc"] == "()Ljava/lang/String;" and "code" in m:
+                st = {"steps": 0, "statics": {}, "deadline": min(deadline, time.time() + 0.2)}
+                add(jvm_eval(classes, cn, m["name"], m["desc"], budget=st), cn, m["name"], "eval")
+    return out
+
+
+def jvm_classfile_scan(apk):
+    """[ANS tokens] from jvm_classfile_candidates (consts first, then evaluated static String methods)."""
+    return list(dict.fromkeys(c["value"] for c in jvm_classfile_candidates(apk)))
+
+
+# --- zip slip: the asset archive entry that lands on the path the dex reads (coverage atlas row 110) -----------------
+# An APK asset zip / jar the dex extracts with ZipInputStream + new File(dir, entry.getName()) + FileOutputStream writes
+# each entry where Java resolves it: File(parent, child) concatenates (a leading '/' in the name is re-rooted UNDER dir),
+# getCanonicalPath() folds '.' and '..' (clamped at '/'), '\' is a literal name char on Android, and a later entry of the
+# same resolved path overwrites the earlier one. Only an entry that ESCAPES the extraction dir can reach the file the
+# app later reads (files/config.json, the code_cache dex, ...); the extraction dir's own name is unknown, so it is
+# modelled as 1-2 anonymous segments under files/ code_cache/ cache/ no_backup/ (or app_<name> via getDir), shallow
+# first. Targets are the dex's path strings (`<root>/x.ext`, `/data/data/<pkg>/...`, or a bare `x.ext` under a root).
+# ZipInputStream streams LOCAL headers, so the names are the raw local-record names (utf-8), in file order.
+_ZSL_ROOTS = ("files", "code_cache", "cache", "no_backup", "")
+_ZSL_TARGET = re.compile(r"/?[\w$\-]+(?:[./][\w$\-]+)*\.[A-Za-z0-9]{1,10}")
+_ZSL_DATA = re.compile(r"/data/(?:data|user(?:_de)?/\d+)/[\w.]+/")
+_ZSL_D = ("data", "data", "\x00app")
+_ZSL_MAX_ASSET, _ZSL_MAX_ENTRIES, _ZSL_MAX_TARGETS, _ZSL_DEADLINE_S = 32 << 20, 4096, 2000, 0.8
+
+
+def _zsl_canon(base, name):
+    """Segments of Java new File(base, name).getCanonicalPath() (no symlinks): '' and '.' dropped, '..' pops (clamped
+    at the root), '\\' kept literally inside a segment."""
+    parts = list(base)
+    for seg in name.split("/"):
+        if seg == "..":
+            if parts:
+                parts.pop()
+        elif seg not in ("", "."):
+            parts.append(seg)
+    return tuple(parts)
+
+
+def _zsl_targets(dexes):
+    """{absolute canonical path segments: dex string} of the path-like (with an extension) dex pool strings."""
+    out = {}
+    for d in dexes:
+        if d[:4] != b"dex\n" or len(d) < 0x70:
+            continue
+        n, off = struct.unpack_from("<II", d, 0x38)
+        if off + 4 * n > len(d):
+            continue
+        for so in struct.unpack_from(f"<{n}I", d, off):
+            if so >= len(d) or not 4 <= d[so] <= 120:
+                continue
+            raw = d[so + 1:so + 1 + d[so]]
+            if d[so + 1 + d[so]:so + 2 + d[so]] != b"\x00" or not _ZSL_TARGET.fullmatch(raw.decode("latin-1")):
+                continue
+            s = raw.decode("latin-1")
+            m = _ZSL_DATA.match(s)
+            if m:
+                forms = [_ZSL_D + _zsl_canon((), s[m.end():])]
+            elif s.startswith("/"):
+                forms = [_zsl_canon((), s)]
+            else:
+                first = s.split("/", 1)[0]
+                forms = ([_ZSL_D + _zsl_canon((), s)] if first in _ZSL_ROOTS or first.startswith("app_") else
+                         [_ZSL_D + _zsl_canon((r,), s) for r in _ZSL_ROOTS if r])
+            for f in forms:
+                out.setdefault(f, s)
+            if len(out) >= _ZSL_MAX_TARGETS:
+                return out
+    return out
+
+
+def _zsl_entries(b):
+    """[(raw local name, inflated bytes)] of an archive in local-record (ZipInputStream) order; [] when not a zip."""
+    out = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(b)) as z:
+            infos = sorted(z.infolist(), key=lambda i: i.header_offset)[:_ZSL_MAX_ENTRIES]
+    except (zipfile.BadZipFile, OSError, ValueError, EOFError, struct.error):
+        return out
+    for i in infos:
+        loc = _zsa_local(b, i.header_offset)
+        if loc is None or loc[1] & 1:  # encrypted: ZipInputStream cannot read it
+            continue
+        lname, flags, method, lcsize, ds, _ = loc
+        name = lname.decode("utf-8", "replace")
+        if not name or "\x00" in name:  # invalid File name: ZipInputStream / File reject it
+            continue
+        n = i.compress_size if flags & 8 or not lcsize else lcsize
+        out.append((name, _zsa_inflate(b[ds:ds + n], method)))
+    return out
+
+
+def _zsl_extract(base, entries):
+    """{canonical path: [(index, name, data) of every successful write, in order]} of a vulnerable extraction under
+    `base`: the canonical parent is mkdirs()'d, then the RAW path is opened, so the kernel walks it segment by segment
+    and every named segment before the leaf must already be a directory (created by an earlier entry / mkdirs);
+    the first entry that cannot be opened throws out of the loop and ends the extraction."""
+    dirs = {_ZSL_D[:k] for k in range(len(_ZSL_D) + 1)} | {_ZSL_D + (r,) for r in _ZSL_ROOTS if r}
+    dirs |= {base[:k] for k in range(len(base) + 1)}
+    land = {}
+    for idx, (name, data) in enumerate(entries):
+        p = _zsl_canon(base, name)
+        if name.endswith("/"):
+            dirs |= {p[:k] for k in range(len(p) + 1)}
+            continue
+        if not p or p in dirs:
+            break
+        dirs |= {p[:k] for k in range(len(p))}
+        cur, ok = list(base), True
+        for seg in name.split("/")[:-1]:
+            if seg == "..":
+                if cur:
+                    cur.pop()
+            elif seg not in ("", "."):
+                cur.append(seg)
+                if tuple(cur) not in dirs:
+                    ok = False
+                    break
+        if not ok:
+            break
+        land.setdefault(p, []).append((idx, name, data))
+    return land
+
+
+def zip_slip_facts(apk):
+    """[{asset, base, target, path, entry, index, shadowed, data}] for every dex-read path an extracted asset archive
+    writes by escaping its extraction dir: `entry` / `index` is the LAST successful write there (it wins), `shadowed`
+    the earlier ones it overwrote. Ordered: shallow extraction dir first, then files/ code_cache/ cache/ no_backup/
+    app_. [] when no asset archive escapes onto a dex path; never raises."""
+    out, end = [], time.time() + _ZSL_DEADLINE_S
+    try:
+        with zipfile.ZipFile(apk) as z:
+            dexes = [z.read(n) for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", n)]
+            archives = []
+            for i in z.infolist():
+                if i.file_size > _ZSL_MAX_ASSET or i.is_dir() or i.flag_bits & 1:
+                    continue
+                with z.open(i) as f:
+                    if f.read(4) != b"PK\x03\x04":
+                        continue
+                archives.append((i.filename, _zsl_entries(z.read(i))))
+        targets = _zsl_targets(dexes) if any(e for _, e in archives) else {}
+        for depth in (1, 2) if targets else ():
+            for root in _ZSL_ROOTS:
+                base = _ZSL_D + ((root,) if root else ()) + tuple(f"\x00dir{k}" for k in range(depth))
+                for aname, entries in archives:
+                    if time.time() > end:
+                        return out
+                    for p, recs in _zsl_extract(base, entries).items():
+                        if p in targets and p[:len(base)] != base:
+                            idx, ename, data = recs[-1]
+                            out.append({"asset": aname, "base": "/".join(base[3:]).replace("\x00", "<") or "<pkg>",
+                                        "target": targets[p], "path": "/" + "/".join(p).replace("\x00app", "<pkg>"),
+                                        "entry": ename, "index": idx, "data": data,
+                                        "shadowed": [r[1] for r in recs[:-1]]})
+    except Exception:  # noqa: BLE001 - truncated / impostor archive: no answer here, never raise
+        pass
+    return out
+
+
+def zip_slip_scan(apk):
+    """ANS tokens of the winning (last-written) asset-archive entries that escape onto a dex-read path, in
+    zip_slip_facts order: literal / UTF-16 token, puzzle json, inner zip, decode_any. Shadowed entries never count."""
+    hits, state, seen = [], {"budget": _ZSA_DECODE_BUDGET, "end": time.time() + _ZSA_DEADLINE_S}, set()
+    for f in zip_slip_facts(apk):
+        key = (f["asset"], f["index"])
+        if key not in seen:
+            seen.add(key)
+            _zsa_blob(f["entry"], f["data"], hits, state, 1)
+    return list(dict.fromkeys(hits))

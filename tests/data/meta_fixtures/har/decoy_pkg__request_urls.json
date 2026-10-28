@@ -1,0 +1,8 @@
+{
+  "field": "har.request_urls",
+  "expected": "none",
+  "generator_cmd": "python3 -I -c \"import json;json.dump({'name':'demo','version':'1.0.0','log':{'level':'info'}},open('decoy_pkg.har','w'))\"  (package.json-like JSON renamed .har; has a log key but no entries)",
+  "oracle_cmd": "jq -r \"if (.log.entries|type)==\\\"array\\\" then 0 else \\\"none\\\" end\" $H",
+  "decoy": true,
+  "member": "decoy_pkg.har"
+}

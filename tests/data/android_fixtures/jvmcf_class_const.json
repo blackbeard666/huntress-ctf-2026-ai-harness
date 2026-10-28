@@ -1,0 +1,7 @@
+{
+ "entry": "jvm_classfile_scan",
+ "expected": "ANS-3f9a0c7e51b2d846",
+ "_why": "assets/legacy.jar -> net.oldlib.xml.Build: public static final String ADVISORY ConstantValue",
+ "generator_cmd": "python3 tests/data/android_fixtures/jvmcf_src/gen_jvmcf.py class_const tests/data/android_fixtures/jvmcf_class_const.apk  # javac + jar (+ zip for the .aar) + zip APK",
+ "oracle_cmd": "sh tests/data/android_fixtures/jvmcf_src/oracle.sh tests/data/android_fixtures/jvmcf_class_const.apk net.oldlib.xml.Build  # unzip asset jar/aar->classes.jar, javap -constants, RUN the static String methods on the JVM"
+}

@@ -1,0 +1,7 @@
+{
+ "file": "vif_bash_decoy_cmdsubst.sh",
+ "expected_plain": null,
+ "decoy": true,
+ "generator_cmd": "python3 tests/data/script_fixtures/vif_gen.py (hex piece + command substitution (never evaluated))",
+ "oracle_cmd": "bash vif_bash_decoy_cmdsubst.sh  # decoy: folded value is not a v= plan"
+}

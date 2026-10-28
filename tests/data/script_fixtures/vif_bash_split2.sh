@@ -1,0 +1,5 @@
+#!/bin/bash
+part_a='dj0zfGxhbmd1YWdlPWJhc2h8cm9sZT11cGxvYWRlcnx2ZXJkaWN0PW1hbGljaW91c3xhdHRhY2s9VDExMDV8YWRhcHRlcj1idWlsZF9pbnRlcnB8aG9zdF9wcm9maWxlPWNpX3J1bm5lcnxvYmZ1c2NhdGlvbl9wcm9maWxlPXNwbGl0'
+part_b="X3ZhcmlhYmxlc3xzdGFnZV9jb3VudD0yfHN0ZXBzPXJlc29sdmVfdmFycyxmb2xkX2Rlc2NyaXB0b3IsZGlzcGF0Y2h8Y2FtcGFpZ25faWQ9QkFTSC03YTFjMjZ8dXJsPWh0dHBzOi8vc2gtN2ExYy5leGFtcGxlLmludmFsaWQvdXA="
+descriptor="${part_a}${part_b}"
+printf '%s\n' "$descriptor"

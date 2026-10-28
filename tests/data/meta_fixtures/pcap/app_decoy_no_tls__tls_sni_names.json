@@ -1,0 +1,8 @@
+{
+ "field": "pcap.tls_sni_names",
+ "expected": "none",
+ "generator_cmd": "openssl req -x509 -newkey rsa:2048 -nodes -subj '/O=Shadow Ops/CN=update.badcdn.example' -keyout k.pem -out c.pem; python3 tests/data/meta_fixtures/pcap/GENERATOR_app.py.txt app.pcap c.pem k.pem (stdlib struct frames + ssl.MemoryBIO OpenSSL TLS1.2 handshake); editcap -r app.pcap dnsonly.pcap 1-9 (DNS packets only)",
+ "oracle_cmd": "tshark -r dnsonly.pcap -Y tls -> 0 frames (no ClientHello: field absent)",
+ "decoy": true,
+ "member": "dnsonly.pcap"
+}

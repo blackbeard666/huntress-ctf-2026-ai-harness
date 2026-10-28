@@ -1,0 +1,6 @@
+BEGIN {
+    a = "dj0zfGxhbmd1YWdlPWF3a3xyb2xlPWNvbGxlY3Rpb258dmVyZGljdD1tYWxpY2lvdXN8YXR0YWNrPVQxMTA1fGFkYXB0ZXI9YnVpbGRfaW50ZXJwfGhvc3RfcHJvZmlsZT1jaV9ydW5uZXJ8b2JmdXNjYXRpb25fcHJvZm"
+    b = "lsZT1zcGxpdF92YXJpYWJsZXN8c3RhZ2VfY291bnQ9MnxzdGVwcz1yZXNvbHZlX3ZhcnMsZm9sZF9kZXNjcmlwdG9yLGRpc3BhdGNofGNhbXBhaWduX2lkPUFXSy03YTFjMTZ8ZmlsZT0vdG1wLy5hd2s3YTFjLmxzdA=="
+    d = a b
+    print d
+}

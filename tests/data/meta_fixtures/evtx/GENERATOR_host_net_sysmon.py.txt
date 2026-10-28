@@ -1,0 +1,52 @@
+# Sysmon / Security EVTX writer for host_net fixtures (run: python3 -I GENERATOR_host_net_sysmon.py.txt <outdir>).
+# Reuses the stdlib BinXML EVTX writer GENERATOR_evtx_binxml.py.txt (same directory) via runpy: real ElfFile/ElfChnk,
+# inline-then-referenced templates, substitution arrays. Events: Sysmon EID 3 NetworkConnect (outbound + one inbound
+# Initiated=false), EID 22 DNSEvent, plus a Security 4624 that must not count.
+import os
+import runpy
+import sys
+
+G = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "GENERATOR_evtx_binxml.py.txt"))
+ev, evtx = G["ev"], G["evtx"]
+SYS = {"provider": "Microsoft-Windows-Sysmon", "guid": "{5770385F-C22A-43E0-BF4C-06F5698FFBD9}",
+       "channel": "Microsoft-Windows-Sysmon/Operational", "computer": "WKS-FIN-22.corp.example.local"}
+N3 = ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "Image", "User", "Protocol", "Initiated", "SourceIsIpv6",
+      "SourceIp", "SourceHostname", "SourcePort", "SourcePortName", "DestinationIsIpv6", "DestinationIp",
+      "DestinationHostname", "DestinationPort", "DestinationPortName"]
+N22 = ["RuleName", "UtcTime", "ProcessGuid", "ProcessId", "QueryName", "QueryStatus", "QueryResults", "Image", "User"]
+E3 = dict(SYS, tid_tmpl=0x5E000003, tmpl_guid="{0F3D2A11-0000-0000-0000-000000000003}", data_names=N3)
+E22 = dict(SYS, tid_tmpl=0x5E000016, tmpl_guid="{0F3D2A11-0000-0000-0000-000000000016}", data_names=N22)
+PG = "{9A1B2C3D-1111-2222-3333-444455556666}"
+
+
+def net(t, utc, img, proto, init, sip, sport, dip, dhost, dport):
+    return ev(E3, event_id=3, time=t, data=["-", utc, PG, "4120", img, "CORP\\m.okafor", proto, init, "false", sip, "-",
+                                             sport, "-", "false", dip, dhost, dport, "-"])
+
+
+def dns(t, utc, q, res, img):
+    return ev(E22, event_id=22, time=t, data=["-", utc, PG, "4120", q, "0", res, img, "CORP\\m.okafor"])
+
+
+def sysmon_log():
+    return evtx(1, [[
+        dns("2024-05-14T13:02:10Z", "2024-05-14 13:02:10.311", "updates.contoso-cdn.net",
+            "::ffff:203.0.113.45;", "C:\\Users\\m.okafor\\AppData\\Local\\Temp\\svch0st.exe"),
+        net("2024-05-14T13:02:11Z", "2024-05-14 13:02:11.042", "C:\\Users\\m.okafor\\AppData\\Local\\Temp\\svch0st.exe",
+            "tcp", "true", "10.20.30.41", "49733", "203.0.113.45", "updates.contoso-cdn.net", "443"),
+        net("2024-05-14T13:05:47Z", "2024-05-14 13:05:47.900", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            "tcp", "true", "10.20.30.41", "49741", "198.51.100.7", "-", "8080"),
+        dns("2024-05-14T13:06:02Z", "2024-05-14 13:06:02.120", "login.microsoftonline.com",
+            "type:  5 login.mso.msidentity.com;::ffff:20.190.151.6;", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"),
+        net("2024-05-14T13:01:59Z", "2024-05-14 13:01:59.500", "C:\\Windows\\System32\\svchost.exe",
+            "tcp", "false", "10.20.30.9", "52211", "10.20.30.41", "-", "3389"),
+        net("2024-05-14T13:07:30Z", "2024-05-14 13:07:30.015", "C:\\Users\\m.okafor\\AppData\\Local\\Temp\\svch0st.exe",
+            "tcp", "true", "10.20.30.41", "49750", "203.0.113.45", "updates.contoso-cdn.net", "443"),
+    ]], first_rid=7001)
+
+
+if __name__ == "__main__":
+    out = sys.argv[1]
+    for name, b in {"hostnet_sysmon.bin": sysmon_log(), "hostnet_decoy_security.bin": G["security_log"]()}.items():
+        with open(os.path.join(out, name), "wb") as f:
+            f.write(b)

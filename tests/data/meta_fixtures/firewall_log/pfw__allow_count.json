@@ -1,0 +1,8 @@
+{
+ "field": "firewall_log.allow_count",
+ "expected": "3",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> pfirewall.log",
+ "oracle_cmd": "grep -v '^#' pfirewall.log | awk '$3==\"ALLOW\"' | wc -l -> 3",
+ "decoy": false,
+ "member": "pfirewall.log"
+}

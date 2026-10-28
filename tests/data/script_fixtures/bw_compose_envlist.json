@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=docker_compose|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=docker_compose|obfuscation_profile=base64|stage_profile=single_stage|next_language=sh|campaign_id=DC-5c8e1a07|url=https://dc-5c8e1a07.example.invalid/stage|file_path=/tmp/huntress-dc-5c8e1a07/.stage",
+ "decoy": false,
+ "target": "build-file-host-profiles",
+ "note": "compose `- Dn=..` env list joined by `$${Dn}` in command",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bw_gen.py  (stdlib base64/gzip/json writer, inert source)",
+ "oracle_cmd": "docker compose -f tests/data/script_fixtures/bw_compose_envlist.yml config --format json | python3 -I -c \"import json,sys,string,re,base64;s=json.load(sys.stdin)['services']['app'];c=' '.join(s['command']).replace('\\$\\$','\\$');print(base64.b64decode(re.search(r'echo (\\S+)',string.Template(c).substitute(s['environment'])).group(1)).decode(),end='')\""
+}

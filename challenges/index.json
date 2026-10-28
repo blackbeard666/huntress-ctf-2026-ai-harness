@@ -155,6 +155,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Crash Course"
   },
+  "binary-reverse-engineering-day-27-compiler-attribution": {
+    "day": 27,
+    "dir": "day27/binary-compiler-says-what",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Compiler Says What"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -311,6 +317,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Before You Go"
   },
+  "metadata-forensics-day-27-packet-loss-prevention": {
+    "day": 27,
+    "dir": "day27/metadata-packet-loss-prevention",
+    "lane": "metadata-forensics",
+    "name": "🔎 Packet Loss Prevention"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -466,6 +478,12 @@
     "dir": "day26/mobile-split-decision",
     "lane": "mobile-android",
     "name": "📱 Split Decision"
+  },
+  "mobile-android-day-27-dependency-surface": {
+    "day": 27,
+    "dir": "day27/mobile-dependency-surface",
+    "lane": "mobile-android",
+    "name": "📱 Dependency Surface"
   },
   "read-the-rules": {
     "day": 1,
@@ -629,6 +647,12 @@
     "lane": "script-analysis",
     "name": "📜 Mixed Signals"
   },
+  "script-analysis-day-27-docker-build-attribution": {
+    "day": 27,
+    "dir": "day27/scripting-from-whence-it-came",
+    "lane": "script-analysis",
+    "name": "📜 FROM Whence It Came"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -785,6 +809,12 @@
     "lane": "warmups",
     "name": "👶 Food for Thought"
   },
+  "warmups-day-27": {
+    "day": 27,
+    "dir": "day27/warmups-monkey-business",
+    "lane": "warmups",
+    "name": "👶 Monkey Business"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -904,6 +934,24 @@
     "dir": "day26/web-serialized-offender",
     "lane": "web",
     "name": "🌐 Serialized Offender"
+  },
+  "web-exploitation-day-21-double-spent": {
+    "day": 27,
+    "dir": "day27/web-double-spent",
+    "lane": "web",
+    "name": "🌐 Double Spent"
+  },
+  "web-exploitation-day-22-socket-to-me": {
+    "day": 27,
+    "dir": "day27/web-socket-to-me",
+    "lane": "web",
+    "name": "🌐 Socket to Me"
+  },
+  "web-exploitation-day-23-forwarded-misgivings": {
+    "day": 27,
+    "dir": "day27/web-forwarded-misgivings",
+    "lane": "web",
+    "name": "🌐 Forwarded Misgivings"
   },
   "welcome-robots": {
     "day": 1,

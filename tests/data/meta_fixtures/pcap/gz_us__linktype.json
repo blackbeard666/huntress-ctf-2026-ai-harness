@@ -1,0 +1,8 @@
+{
+ "field": "pcap.linktype",
+ "expected": "1",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_carryover.sh.txt (Wireshark 4.6.4 editcap -F modpcap / dd version patch / head -c / gzip -9n / cat of two pcapng sections; kuz_be, zerolen, be_sec via stdlib struct GENERATOR_carryover_struct.py.txt; eth_us.pcap + eth_ng.pcapng = existing eth_us/eth_ng fixtures) -> eth_us.pcap.gz",
+ "oracle_cmd": "TZ=UTC capinfos -c -a -e -l -E -t -I eth_us.pcap.gz -> 'Encapsulation = Ethernet (1 - ether)'",
+ "decoy": false,
+ "member": "capture-001.pcap.gz"
+}

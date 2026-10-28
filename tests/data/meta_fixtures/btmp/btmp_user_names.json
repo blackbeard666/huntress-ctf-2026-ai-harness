@@ -1,0 +1,8 @@
+{
+ "field": "btmp.user_names",
+ "expected": "[\"admin\",\"oracle\"]",
+ "generator_cmd": "python3 -I genutmp.py btmp1 btmp (struct utmp per <bits/utmp.h>, appended by glibc updwtmp(3) via ctypes)",
+ "oracle_cmd": "PYTHONPATH=pyutmp python3 -c 'import utmp; utmp.read(...)' (PyPI utmp 21.10.0) + TZ=UTC who -a btmp1 -> login_process users admin, oracle, admin",
+ "decoy": false,
+ "member": "btmp"
+}

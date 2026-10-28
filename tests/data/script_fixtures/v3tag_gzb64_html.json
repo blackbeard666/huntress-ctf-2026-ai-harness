@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=html|role=smuggler|verdict=malicious|attack=T1027.006|obfuscation_profile=gzip_base64|campaign_id=HT-33445566|url=https://ht-33445566.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | gzip -9n | base64 -w0",
+  "oracle_cmd": "sed -n 's/.*GZB64-\\([^ ]*\\) -->.*/\\1/p' v3tag_gzb64_html.html | base64 -d | gunzip"
+}

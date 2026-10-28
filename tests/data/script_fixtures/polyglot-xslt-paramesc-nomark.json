@@ -1,0 +1,27 @@
+{
+ "expected_plain": "v=3|language=xslt|role=staged_chain|verdict=suspicious|attack=T1220|adapter=operation_graph|host_profile=standalone|obfuscation_profile=fragmented_hex|stage_profile=cross_language_handoff|next_language=vbscript|stage_count=3|steps=profile_host,decode_configuration,dispatch_language|campaign_id=XSLT-776cc67f|url=https://xslt-776cc67f87.example.invalid/stage|file_path=/tmp/huntress-xslt/.776cc67f879fb21d.stage",
+ "decoy": false,
+ "language": "xslt",
+ "role": "staged-chain",
+ "family": "polyglot-xslt",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/pgx_gen.py  (stdlib base64/binascii encode of the plan; xslt template)",
+ "oracle_cmd": "echo '<x/>' | xsltproc tests/data/script_fixtures/polyglot-xslt-paramesc-nomark.xsl - | tr -d . | xxd -r -p",
+ "expected_fields": {
+  "language": "xslt",
+  "role": "staged_chain",
+  "verdict": "suspicious",
+  "attack": "T1220",
+  "adapter": "operation_graph",
+  "host_profile": "standalone",
+  "obfuscation_profile": "fragmented_hex",
+  "stage_profile": "cross_language_handoff",
+  "next_language": "vbscript",
+  "stage_count": "3",
+  "steps": "profile_host,decode_configuration,dispatch_language",
+  "campaign_id": "XSLT-776cc67f",
+  "url": "https://xslt-776cc67f87.example.invalid/stage",
+  "file_path": "/tmp/huntress-xslt/.776cc67f879fb21d.stage",
+  "url_host": "xslt-776cc67f87.example.invalid",
+  "file_dir": "/tmp/huntress-xslt/"
+ }
+}

@@ -1,0 +1,7 @@
+{
+ "field": "wer.report_identifier",
+ "expected": "8f3a2c1d-4b5e-46f7-a8b9-0c1d2e3f4a5b",
+ "generator_cmd": "python3 /home/testpwn/huntress-2026/.run/tmp/prebuild-a741ef11/wtd/gen.py (stdlib text writer: open(..., 'w', encoding='utf-16'|'utf-8', newline='\\r\\n') of the literal lines -- see the .bin); PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "iconv -f UTF-16 -t UTF-8 tests/data/meta_fixtures/wer/report_appcrash.bin | tr -d \"\\r\" | grep -oP '^ReportIdentifier=\\K.*'",
+ "decoy": false
+}

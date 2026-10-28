@@ -1,0 +1,7 @@
+{
+ "field": "synthesis.malformed_capture_names",
+ "expected": "[\"cap-02.pcap\",\"cap-03.pcap\",\"cap-05.pcapng\",\"cap-06.pcap\"]",
+ "generator_cmd": "kit of cap-01.pcap=base.pcap, cap-02.pcap=cut.pcap, cap-03.pcap=trail.pcap, cap-04.pcapng=base.pcapng, cap-05.pcapng=blen.pcapng, cap-06.pcap=text renamed .pcap, README.txt; zip -X kit.zip (see pcap/pcapng int_* fixtures)",
+ "oracle_cmd": "for f in cap-*; do capinfos -c $f >/dev/null 2>&1 || echo $f; done -> cap-02.pcap cap-03.pcap cap-05.pcapng cap-06.pcap (capinfos rc!=0); README.txt not a capture name",
+ "decoy": false
+}

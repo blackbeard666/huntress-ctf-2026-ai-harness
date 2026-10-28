@@ -1,0 +1,6 @@
+# This file contains fish universal variable definitions.
+# VERSION: 3.0
+SETUVAR __fish_initialized:3400
+SETUVAR --export descriptor_d856669d:v\x3d3\x7clanguage\x3dfish\x7crole\x3dstaged_chain\x7cverdict\x3dsuspicious\x7cattack\x3dT1546\x2e004\x7cadapter\x3doperation_graph\x7chost_profile\x3dfish_config\x7cobfuscation_profile\x3dlayered_b64_hex\x7cstage_profile\x3dshell_startup_persistence\x7cnext_language\x3dzsh\x7cstage_count\x3d2\x7csteps\x3dprofile_host\x2cdispatch_language\x7ccampaign_id\x3dFISH\x2d73639660\x7curl\x3dhttps\x3a\x2f\x2ffish\x2d736396603f\x2eexample\x2einvalid\x2fstage\x7cfile_path\x3d\x2ftmp\x2fhuntress\x2dfish\x2f\x2e736396603fcb7ca0\x2estage
+SETUVAR fish_color_autosuggestion:555\x1ebrblack
+SETUVAR fish_key_bindings:fish_default_key_bindings

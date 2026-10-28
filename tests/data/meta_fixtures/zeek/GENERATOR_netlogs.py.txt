@@ -1,0 +1,72 @@
+# GENERATOR (stdlib writers + dpkt.netflow writer) for tests/data/meta_fixtures/{zeek,suricata,netflow,csv_flows,firewall_log}
+import json, struct, socket, sys
+import dpkt
+# --- zeek conn.log TSV (Zeek 6 LogAscii layout)
+hdr = ["#separator \\x09", "#set_separator\t,", "#empty_field\t(empty)", "#unset_field\t-", "#path\tconn",
+       "#open\t2026-10-27-09-00-00",
+       "#fields\tts\tuid\tid.orig_h\tid.orig_p\tid.resp_h\tid.resp_p\tproto\tservice\tduration\torig_bytes\tresp_bytes\tconn_state\torig_pkts\tresp_pkts",
+       "#types\ttime\tstring\taddr\tport\taddr\tport\tenum\tstring\tinterval\tcount\tcount\tstring\tcount\tcount"]
+rows = [("1761555600.101", "CAbc1", "10.0.0.5", "49152", "93.184.216.34", "80", "tcp", "http", "0.5", "420", "1520", "SF", "6", "5"),
+        ("1761555601.200", "CAbc2", "10.0.0.5", "53001", "8.8.8.8", "53", "udp", "dns", "0.01", "38", "54", "SF", "1", "1"),
+        ("1761555602.300", "CAbc3", "10.0.0.7", "49200", "203.0.113.9", "443", "tcp", "ssl", "2.1", "900", "4200", "SF", "10", "9"),
+        ("1761555603.400", "CAbc4", "10.0.0.7", "49201", "203.0.113.9", "4444", "tcp", "-", "-", "-", "-", "S0", "1", "0"),
+        ("1761555604.500", "CAbc2", "10.0.0.5", "53002", "8.8.8.8", "53", "udp", "dns", "0.01", "40", "56", "SF", "1", "1")]
+open("conn.log", "w").write("\n".join(hdr + ["\t".join(r) for r in rows] + ["#close\t2026-10-27-09-05-00"]) + "\n")
+# --- zeek dns.log JSON lines
+dns = [{"ts": 1761555601.2, "uid": "CD1", "id.orig_h": "10.0.0.5", "id.orig_p": 53001, "id.resp_h": "8.8.8.8", "id.resp_p": 53, "proto": "udp", "query": "evil.example.com", "qtype_name": "A"},
+       {"ts": 1761555602.2, "uid": "CD2", "id.orig_h": "10.0.0.5", "id.orig_p": 53002, "id.resp_h": "8.8.8.8", "id.resp_p": 53, "proto": "udp", "query": "cdn.example.net", "qtype_name": "AAAA"},
+       {"ts": 1761555603.2, "uid": "CD3", "id.orig_h": "10.0.0.7", "id.orig_p": 53003, "id.resp_h": "1.1.1.1", "id.resp_p": 53, "proto": "udp", "query": "evil.example.com", "qtype_name": "TXT"}]
+open("dns.log", "w").write("".join(json.dumps(d) + "\n" for d in dns))
+# --- suricata eve.json
+def al(ts, s, d, sid, sig, cat): return {"timestamp": ts, "flow_id": sid * 7, "event_type": "alert", "src_ip": s, "src_port": 49200, "dest_ip": d, "dest_port": 4444, "proto": "TCP", "alert": {"action": "allowed", "gid": 1, "signature_id": sid, "rev": 1, "signature": sig, "category": cat, "severity": 1}}
+eve = [al("2026-10-27T09:00:03.400000+0000", "10.0.0.7", "203.0.113.9", 2024217, "ET MALWARE Reverse Shell Beacon", "A Network Trojan was detected"),
+       {"timestamp": "2026-10-27T09:00:01.200000+0000", "event_type": "dns", "src_ip": "10.0.0.5", "src_port": 53001, "dest_ip": "8.8.8.8", "dest_port": 53, "proto": "UDP", "dns": {"type": "query", "id": 1, "rrname": "evil.example.com", "rrtype": "A"}},
+       {"timestamp": "2026-10-27T09:00:00.101000+0000", "event_type": "http", "src_ip": "10.0.0.5", "src_port": 49152, "dest_ip": "93.184.216.34", "dest_port": 80, "proto": "TCP", "http": {"hostname": "example.com", "url": "/a", "http_method": "GET"}},
+       al("2026-10-27T09:00:04.000000+0000", "10.0.0.7", "203.0.113.9", 2008983, "ET USER_AGENTS Suspicious User Agent", "Potentially Bad Traffic"),
+       al("2026-10-27T09:00:05.000000+0000", "10.0.0.5", "198.51.100.20", 2024217, "ET MALWARE Reverse Shell Beacon", "A Network Trojan was detected"),
+       {"timestamp": "2026-10-27T09:00:06.000000+0000", "event_type": "tls", "src_ip": "10.0.0.7", "src_port": 49200, "dest_ip": "203.0.113.9", "dest_port": 443, "proto": "TCP", "tls": {"sni": "c2.example.org", "version": "TLS 1.2"}},
+       {"timestamp": "2026-10-27T09:00:07.000000+0000", "event_type": "flow", "src_ip": "10.0.0.7", "src_port": 49200, "dest_ip": "203.0.113.9", "dest_port": 443, "proto": "TCP", "flow": {"pkts_toserver": 10, "pkts_toclient": 9}}]
+open("eve.json", "w").write("".join(json.dumps(e) + "\n" for e in eve))
+# --- netflow v5 via dpkt writer
+recs = []
+for s, d, sp, dp, pk, oc, pr in [("10.0.0.5", "93.184.216.34", 49152, 80, 11, 1940, 6), ("10.0.0.5", "8.8.8.8", 53001, 53, 2, 92, 17),
+                                  ("10.0.0.7", "203.0.113.9", 49200, 443, 19, 5100, 6), ("10.0.0.7", "203.0.113.9", 49201, 4444, 1, 60, 6)]:
+    recs.append(dpkt.netflow.Netflow5.NetflowRecord(src_addr=struct.unpack(">I", socket.inet_aton(s))[0], dst_addr=struct.unpack(">I", socket.inet_aton(d))[0],
+                src_port=sp, dst_port=dp, pkts_sent=pk, bytes_sent=oc, ip_proto=pr, start_time=1000, end_time=2000))
+nf = dpkt.netflow.Netflow5(version=5, sys_uptime=123456, unix_sec=1761555600, unix_nsec=0, flow_sequence=42, data=recs)
+nf.count = len(recs)
+v5 = bytes(nf)
+open("v5.bin", "wb").write(v5)
+# --- netflow v9 (stdlib struct writer, RFC 3954): template 256 = IPV4_SRC(8,4) IPV4_DST(12,4) L4_SRC(7,2) L4_DST(11,2) PROT(4,1) IN_PKTS(2,4) IN_BYTES(1,4)
+tf = [(8, 4), (12, 4), (7, 2), (11, 2), (4, 1), (2, 4), (1, 4)]
+tbody = struct.pack(">HH", 256, len(tf)) + b"".join(struct.pack(">HH", *f) for f in tf)
+tset = struct.pack(">HH", 0, 4 + len(tbody)) + tbody
+drecs = [("192.168.1.10", "198.51.100.1", 50000, 22, 6, 30, 4200), ("192.168.1.11", "198.51.100.2", 50001, 53, 17, 1, 70),
+         ("192.168.1.10", "198.51.100.1", 50002, 22, 6, 12, 1500)]
+dbody = b"".join(socket.inet_aton(a) + socket.inet_aton(b) + struct.pack(">HHBII", c, d, e, f, g) for a, b, c, d, e, f, g in drecs)
+pad = (-(4 + len(dbody))) % 4
+dset = struct.pack(">HH", 256, 4 + len(dbody) + pad) + dbody + b"\0" * pad
+v9 = struct.pack(">HHIIII", 9, 1 + len(drecs), 5000, 1761555600, 7, 1) + tset + dset
+open("v9.bin", "wb").write(v9)
+# --- pcap carrying the v5 export on udp/2055 (dpkt writer)
+def wrap(payload, fn):
+    u = dpkt.udp.UDP(sport=40000, dport=2055, data=payload); u.ulen = len(u)
+    ip = dpkt.ip.IP(src=socket.inet_aton("10.9.9.1"), dst=socket.inet_aton("10.9.9.2"), p=17, data=u); ip.len = len(ip)
+    eth = dpkt.ethernet.Ethernet(src=b"\x00\x11\x22\x33\x44\x55", dst=b"\x00\x66\x77\x88\x99\xaa", type=0x0800, data=ip)
+    w = dpkt.pcap.Writer(open(fn, "wb")); w.writepkt(bytes(eth), ts=1761555600.0); w.close()
+wrap(v5, "v5_in.pcap"); wrap(v9, "v9_in.pcap")
+# --- pfirewall.log
+fw = ["#Version: 1.5", "#Software: Microsoft Windows Firewall", "#Time Format: Local",
+      "#Fields: date time action protocol src-ip dst-ip src-port dst-port size tcpflags tcpsyn tcpack tcpwin icmptype icmpcode info path pid",
+      "", "2026-10-27 09:00:01 ALLOW UDP 10.0.0.5 8.8.8.8 53001 53 0 - - - - - - - SEND 1234",
+      "2026-10-27 09:00:02 DROP TCP 203.0.113.9 10.0.0.5 4444 445 52 S 1000 0 64240 - - - RECEIVE 4",
+      "2026-10-27 09:00:03 DROP TCP 203.0.113.9 10.0.0.5 4445 3389 52 S 1001 0 64240 - - - RECEIVE 4",
+      "2026-10-27 09:00:04 ALLOW TCP 10.0.0.5 93.184.216.34 49152 443 0 - - - - - - - SEND 5678",
+      "2026-10-27 09:00:05 DROP ICMP 198.51.100.7 10.0.0.5 - - 60 - - - - 8 0 - RECEIVE 4",
+      "2026-10-27 09:00:06 ALLOW TCP 10.0.0.5 203.0.113.9 49300 443 0 - - - - - - - SEND 5678"]
+open("pfirewall.log", "w").write("\r\n".join(fw) + "\r\n")
+iis = ["#Software: Microsoft Internet Information Services 10.0", "#Version: 1.0", "#Date: 2026-10-27 09:00:00",
+       "#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status time-taken",
+       "2026-10-27 09:00:01 10.0.0.2 GET /index.html - 80 - 10.0.0.5 Mozilla/5.0 - 200 0 0 12"]
+open("u_ex261027.log", "w").write("\r\n".join(iis) + "\r\n")
+open("users.csv", "w").write('"Name","Department","Source","Destination"\n"alice","IT","HQ","DR"\n"bob","HR","HQ","DR"\n')

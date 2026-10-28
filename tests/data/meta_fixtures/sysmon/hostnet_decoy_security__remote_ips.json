@@ -1,0 +1,7 @@
+{
+ "field": "sysmon.remote_ips",
+ "expected": "none",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/evtx/GENERATOR_host_net_sysmon.py.txt <outdir>  (stdlib BinXML EVTX writer: Sysmon EID 3/22 + Security 4624 records)",
+ "oracle_cmd": ".venv/bin/python -I tests/data/meta_fixtures/evtx/ORACLE_host_net_evtx.py.txt remote_ips tests/data/meta_fixtures/sysmon/hostnet_decoy_security__remote_ips.bin",
+ "decoy": true
+}

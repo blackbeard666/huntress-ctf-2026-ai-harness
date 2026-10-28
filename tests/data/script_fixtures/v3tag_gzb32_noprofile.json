@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=lua|role=launcher|verdict=suspicious|attack=T1059|stage_count=2|campaign_id=LU-50607080|url=https://lu-50607080.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | gzip -9n | base32 -w0",
+  "oracle_cmd": "sed -n 's/^-- HUNTRESS_ANALYSIS_V1:GZB32-//p' v3tag_gzb32_noprofile.lua | base32 -d | gunzip"
+}

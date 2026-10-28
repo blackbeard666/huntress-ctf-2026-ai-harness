@@ -1,0 +1,5 @@
+# inert analysis fixture
+$(info dj0zfGxhbmd1YWdlPW1ha2VmaWxlfHJvbGU9bGF1bmNoZXJ8dmVyZGljdD1zdXNwaWNpb3VzfGF0dGFjaz1UMTA1OXxhZGFwdGVyPXByb2Nlc3Nfc3Bhd258aG9zdF9wcm9maWxlPXN0YW5kYWxvbmV8b2JmdXNjYXRpb25fcHJvZmlsZT1iYXNlNjR8c3RhZ2VfcHJvZmlsZT1zaW5nbGVfc3RhZ2V8bmV4dF9sYW5ndWFnZT0=)
+
+all:
+	@true

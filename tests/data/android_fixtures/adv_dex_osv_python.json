@@ -1,0 +1,7 @@
+{
+ "entry": "advisory_match_scan",
+ "expected": "ANS-7e57ab1e0dd5c0de",
+ "_why": "dex libs with BuildConfig.VERSION_NAME jsonlite 1.10.0 / imgcodec 1.9.2, each lib holding an ANS const; assets/security/osv.json OSV events (introduced 0, fixed 1.9.0) + python specifier '>=1.2,<1.10': only imgcodec affected, token comes from the lib's dex class (lexicographic picks jsonlite)",
+ "generator_cmd": "python3 tests/data/android_fixtures/adv_src/gen_adv.py dex_osv_python tests/data/android_fixtures/adv_dex_osv_python.apk  # python zipfile APK (+ javac --release 8 / d8 dex for dex_osv_python), stock manifest of skc_decoy_cbc_wrong_key.apk",
+ "oracle_cmd": "python3 tests/data/android_fixtures/adv_src/oracle.py tests/data/android_fixtures/adv_dex_osv_python.apk  # unzip/jadx read versions + table; Maven VersionRange (tools/maven-artifact), node semver (tools/npm), python packaging.SpecifierSet judge each row -> AFFECTED rows' tokens"
+}

@@ -1,0 +1,10 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "language": "xslt",
+ "role": "decoy",
+ "family": "polyglot-xslt",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/pgx_gen.py  (stdlib base64/binascii encode of the plan; xslt template)",
+ "oracle_cmd": "echo '<x/>' | xsltproc tests/data/script_fixtures/polyglot-xslt-decoy-cdata-nomark.xsl - | base64 -d",
+ "oracle_stdout": ""
+}

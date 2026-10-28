@@ -1,0 +1,7 @@
+{
+ "field": "bash_history.remote_ips",
+ "expected": "none",
+ "generator_cmd": "printf (shell) writer of the literal text dump -- see the .bin; PNG impostor via Pillow Image.new(...).save(PNG)",
+ "oracle_cmd": "test $(grep -cE '(^|;)(ssh|scp|sftp|rsync|curl|wget|nc|ncat|telnet|ftp) ' tests/data/meta_fixtures/bash_history/decoy_fstab__remote_ips.bin) -eq 0 && echo none",
+ "decoy": true
+}

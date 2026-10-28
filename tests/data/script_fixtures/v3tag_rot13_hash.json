@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=bash|role=launcher|verdict=malicious|attack=T1059.004|obfuscation_profile=rot13_base64|campaign_id=SH-55667788|url=https://sh-55667788.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "printf %s '<plan>' | base64 -w0 | tr 'A-Za-z' 'N-ZA-Mn-za-m'",
+  "oracle_cmd": "sed -n 's/^# HUNTRESS_ANALYSIS_V1:ROT13-//p' v3tag_rot13_hash.sh | tr 'A-Za-z' 'N-ZA-Mn-za-m' | base64 -d"
+}

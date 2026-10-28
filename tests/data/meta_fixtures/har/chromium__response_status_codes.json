@@ -1,0 +1,8 @@
+{
+  "field": "har.response_status_codes",
+  "expected": "[200,201,404]",
+  "generator_cmd": "python3 gen.py chromium.har site/  (Playwright 1.61 Chromium 149 BrowserContext(record_har_path=...) against a loopback http.server: index.html + css/js/png + fetch POST (201, Set-Cookie sessionid) + 404 on localhost; pref cookie pre-set)",
+  "oracle_cmd": "jq -c \"[.log.entries[].response.status|tonumber]|unique\" $H",
+  "decoy": false,
+  "member": "chromium.har"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "pcap.tcp_syn_count",
+ "expected": "3",
+ "generator_cmd": "python3 -I tests/data/meta_fixtures/pcap/GENERATOR_flows.py.txt out (stdlib struct frame/pcap writer); eth_mix_ng = editcap -F pcapng eth_mix.pcap; decoy_snoop = editcap -F snoop eth_mix.pcap; decoy_text = printf HTTP text > .pcap -> eth_mix.pcap",
+ "oracle_cmd": "tshark 4.6.4 -r eth_mix.pcap -T fields -e ip.src -e ip.dst -e ipv6.src -e ipv6.dst -e tcp.dstport -e udp.dstport -e tcp.flags -e frame.cap_len; -q -z conv,ip -z conv,ipv6 -z conv,tcp -z conv,udp -z endpoints,ip -z endpoints,ipv6; capinfos -> tshark -Y 'tcp.flags.syn==1 && tcp.flags.ack==0' | wc -l",
+ "decoy": false,
+ "member": "eth_mix.pcap"
+}

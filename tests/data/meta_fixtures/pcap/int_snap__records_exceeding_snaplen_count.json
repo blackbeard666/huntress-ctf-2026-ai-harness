@@ -1,0 +1,7 @@
+{
+ "field": "pcap.records_exceeding_snaplen_count",
+ "expected": "3",
+ "generator_cmd": "text2pcap -q -F pcap -t '%H:%M:%S.' in.txt base.pcap (5 Ethernet frames 60/74/98/54/120 B); printf '\\x40\\0\\0\\0' | dd of=snap.pcap bs=1 seek=16 conv=notrunc (snaplen=64)",
+ "oracle_cmd": "capinfos -l snap.pcap 'Packet size limit: file hdr: 64'; tshark -r snap.pcap -T fields -e frame.cap_len | awk '$1>64' | wc -l -> 3",
+ "decoy": false
+}

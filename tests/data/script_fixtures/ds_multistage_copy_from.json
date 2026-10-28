@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=dockerfile|role=builder|verdict=suspicious|attack=T1610|adapter=process_spawn|host_profile=multi_stage|obfuscation_profile=base64|stage_profile=copy_from|next_language=powershell",
+ "decoy": false,
+ "target": "dockerfile-multistage-stage-graph",
+ "generator_cmd": "B=$(printf '%s' \"$PLAN\" | base64 -w0); head=${B:0:60} as stage-1 ENV HEAD, tail=${B:60} as global ARG TAIL re-declared in stage builder; stage lint (FROM builder) re-ENVs HEAD; final scratch stage COPY --from=builder + LABEL (coreutils base64, bash heredoc)",
+ "oracle_cmd": "mkdir -p $TMPDIR/ctx && docker build -q --pull=false --output type=local,dest=$TMPDIR/out_ds_multistage_copy_from -f tests/data/script_fixtures/ds_multistage_copy_from.Dockerfile $TMPDIR/ctx && cat $TMPDIR/out_ds_multistage_copy_from/plan.txt  (real BuildKit build, local wordpress:cli image, final scratch stage exported)"
+}

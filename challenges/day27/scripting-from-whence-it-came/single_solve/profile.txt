@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (5298632 function calls (5264287 primitive calls) in 2.013 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    207/1    0.002    0.000    2.015    2.015 {built-in method builtins.exec}
+        1    0.001    0.001    2.015    2.015 solve.py:1(<module>)
+        1    0.001    0.001    1.785    1.785 solve.py:837(main)
+        1    0.013    0.013    1.670    1.670 solve.py:889(_solve_pairs)
+        8    0.000    0.000    1.360    0.170 solve.py:529(analyse_node)
+        8    0.000    0.000    1.358    0.170 codec.py:1294(find_codecs)
+        8    0.001    0.000    1.358    0.170 codec.py:1307(_find_codecs_uncached)
+        8    0.002    0.000    1.331    0.166 codec.py:4893(_awksed_codecs)
+       94    0.014    0.000    1.326    0.014 codec.py:3148(peel_plan)
+     2743    0.102    0.000    1.301    0.000 codec.py:2842(_peel_children)
+    17656    0.312    0.000    0.861    0.000 decode.py:40(_candidates)
+  2823200    0.408    0.000    0.408    0.000 decode.py:103(<genexpr>)
+   105/25    0.000    0.000    0.356    0.014 <frozen importlib._bootstrap_external>:993(exec_module)
+   136/20    0.001    0.000    0.355    0.018 <frozen importlib._bootstrap>:1349(_find_and_load)
+   136/20    0.000    0.000    0.354    0.018 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   297/42    0.000    0.000    0.353    0.008 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+   126/21    0.000    0.000    0.352    0.017 <frozen importlib._bootstrap>:911(_load_unlocked)
+1120/1087    0.002    0.000    0.322    0.000 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+    32/17    0.000    0.000    0.318    0.019 {built-in method builtins.__import__}
+    11212    0.016    0.000    0.274    0.000 __init__.py:280(_compile)
+      796    0.003    0.000    0.245    0.000 _compiler.py:745(compile)
+      651    0.000    0.000    0.230    0.000 __init__.py:226(compile)
+    68958    0.033    0.000    0.192    0.000 decode.py:32(_printable)
+  845/749    0.002    0.000    0.164    0.000 {method 'acquire' of '_thread.lock' objects}
+        1    0.001    0.001    0.147    0.147 codec.py:1(<module>)

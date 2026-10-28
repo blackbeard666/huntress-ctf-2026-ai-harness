@@ -1,0 +1,7 @@
+{
+ "field": "pcap.is_malformed",
+ "expected": "none",
+ "generator_cmd": "printf 'not a capture, just notes\\n' > fake.pcap",
+ "oracle_cmd": "capinfos fake.pcap -> \"isn't a capture file in a format capinfos understands\" (not a capture: field absent)",
+ "decoy": true
+}

@@ -1,0 +1,8 @@
+{
+  "field": "har.first_request_url",
+  "expected": "http://127.0.0.1:46647/index.html",
+  "generator_cmd": "python3 gen.py chromium.har site/  (Playwright 1.61 Chromium 149 BrowserContext(record_har_path=...) against a loopback http.server: index.html + css/js/png + fetch POST (201, Set-Cookie sessionid) + 404 on localhost; pref cookie pre-set)",
+  "oracle_cmd": "jq -r \".log.entries[]|[.startedDateTime,.request.url]|@tsv\" $H | while IFS=$(printf \"\\t\") read t u; do echo \"$(date -u -d \"$t\" +%s.%N) $u\"; done | LC_ALL=C sort -s -n -k1,1 | head -1 | cut -d\" \" -f2",
+  "decoy": false,
+  "member": "chromium.har"
+}

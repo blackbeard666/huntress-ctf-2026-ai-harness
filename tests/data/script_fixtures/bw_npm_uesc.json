@@ -1,0 +1,8 @@
+{
+ "expected_plain": "v=3|language=node|role=launcher|verdict=suspicious|attack=T1059|adapter=process_spawn|host_profile=npm_lifecycle|obfuscation_profile=plain|stage_profile=single_stage|next_language=sh|campaign_id=NP-c13a7f90|url=https://np-c13a7f90.example.invalid/stage|file_path=/tmp/huntress-np-c13a7f90/.stage",
+ "decoy": false,
+ "target": "build-file-host-profiles",
+ "note": "package.json plan in \\\\uXXXX JSON escapes",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/bw_gen.py  (stdlib base64/gzip/json writer, inert source)",
+ "oracle_cmd": "node -e \"process.stdout.write(JSON.parse(require('fs').readFileSync(process.argv[1])).huntress.descriptor)\" tests/data/script_fixtures/bw_npm_uesc.json5"
+}

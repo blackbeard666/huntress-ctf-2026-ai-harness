@@ -1,0 +1,6 @@
+{
+  "expected_plain": "v=3|language=python|role=collector|verdict=malicious|attack=T1005|obfuscation_profile=url_encoding|campaign_id=PY-99001122|url=https://py-99001122.example.invalid/stage",
+  "decoy": false,
+  "generator_cmd": "jq -rn --arg p '<plan>' '$p|@uri'",
+  "oracle_cmd": "sed -n 's/^# HUNTRESS_ANALYSIS_V1:URL-//p' v3tag_url_hash.py | perl -pe 'chomp;s/%([0-9A-Fa-f]{2})/chr(hex($1))/ge'"
+}

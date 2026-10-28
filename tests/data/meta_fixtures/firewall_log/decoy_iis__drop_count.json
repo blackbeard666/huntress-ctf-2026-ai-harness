@@ -1,0 +1,8 @@
+{
+ "field": "firewall_log.drop_count",
+ "expected": "none",
+ "generator_cmd": "python3 -I GENERATOR_netlogs.py.txt (stdlib json/struct writers; dpkt.netflow.Netflow5 + dpkt.pcap.Writer for NetFlow) -> u_ex261027.log (IIS W3C log)",
+ "oracle_cmd": "grep '^#Fields' u_ex261027.log -> no action/src-ip/dst-ip columns -> not pfirewall.log",
+ "decoy": true,
+ "member": "u_ex261027.log"
+}

@@ -1,0 +1,8 @@
+{
+ "field": "journald.n_objects",
+ "expected": "17",
+ "generator_cmd": "systemd-journal-remote 259.9 (apt-get download systemd-journal-remote libmicrohttpd12t64; dpkg -x) --split-mode=none --compress=no -o out2.journal exp2.txt (export-format input); fixture = head -c 4096 of the 8 MiB file (header only)",
+ "oracle_cmd": "TZ=UTC journalctl --file out2.journal --header -> Objects: 17",
+ "decoy": false,
+ "member": "user-1000.journal"
+}

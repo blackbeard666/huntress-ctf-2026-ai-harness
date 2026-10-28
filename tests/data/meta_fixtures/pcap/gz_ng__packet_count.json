@@ -1,0 +1,8 @@
+{
+ "field": "pcap.packet_count",
+ "expected": "3",
+ "generator_cmd": "sh tests/data/meta_fixtures/pcap/GENERATOR_carryover.sh.txt (Wireshark 4.6.4 editcap -F modpcap / dd version patch / head -c / gzip -9n / cat of two pcapng sections; kuz_be, zerolen, be_sec via stdlib struct GENERATOR_carryover_struct.py.txt; eth_us.pcap + eth_ng.pcapng = existing eth_us/eth_ng fixtures) -> eth_ng.pcapng.gz",
+ "oracle_cmd": "TZ=UTC capinfos -c -a -e -l -E -t -I eth_ng.pcapng.gz -> 'pcapng (gzip compressed)', 'Number of packets: 3' (carried pcap question on a pcapng.gz mutation)",
+ "decoy": false,
+ "member": "capture-001.pcapng.gz"
+}

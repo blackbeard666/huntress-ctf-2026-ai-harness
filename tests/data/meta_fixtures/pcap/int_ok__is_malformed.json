@@ -1,0 +1,7 @@
+{
+ "field": "pcap.is_malformed",
+ "expected": "false",
+ "generator_cmd": "text2pcap -q -F pcap -t '%H:%M:%S.' in.txt base.pcap (5 Ethernet frames 60/74/98/54/120 B)",
+ "oracle_cmd": "capinfos -c base.pcap -> exit 0, no error, 5 packets",
+ "decoy": false
+}
