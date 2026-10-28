@@ -1,5 +1,11 @@
 # metadata-forensics — technique log (days 1-28; updated after every day)
 
+## Delivery layouts seen (resolve these before parsing)
+- Single / TT: one zip; members named in `artifact` after `->` (filename questions: artifact = the zip only). Mastery:
+  ONE download holding `-01.zip`..`-NN.zip` (D7 three levels deep); refs `<set zip> -> <member>`, names reused per set
+  -> resolve by (set zip, member). D9: download `<id>-mastery.zip` vs refs `...-evidence-0N.zip` -> resolve by sha256
+  (`lib.common.container_by_sha`). D6: two same-named downloads -> `delivery N: <zip>` refs.
+
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (organizer, D8: "new, dynamic variations/mutations"): solvers derive structure, degrade per field.
   **D23 mutated the WHOLE carry-over kit** (values that sat constant D13-D22 re-rolled: PE/ELF arch, audio codec, video

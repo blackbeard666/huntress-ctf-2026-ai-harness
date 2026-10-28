@@ -1,4 +1,4 @@
-# binary-reverse-engineering — technique log (days 1-27; updated after every day)
+# binary-reverse-engineering — technique log (days 1-28; updated after every day)
 
 How this lane has looked so far (OBSERVATIONS, not guarantees):
 - **Timed variants MUTATE** (organizer, D8: "new, dynamic variations/mutations"): solvers derive structure, degrade per field.
@@ -7,18 +7,21 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   D7 Kotlin jar, D8 Swift (67 MB), D9 Nim, D10 Zig, D11 D, D12 FPC, D13 Crystal, D14 ObjC, D15 C `-stripped`/`-symbolized`, D16
   WASM `-compact`/`-direct`, D17 Ada, D18 Fortran, D19 GnuCOBOL + `PK19` overlay, D20 Haskell + `RS20` overlay, D21 OCaml
   `-loader.elf` + `-plugin.cmxs`, D22 F# (+ `FSharp.Core.dll`), D23 VB.NET, D24 Scala jar PAIR `-vulnerable`/`-corrected`, D25
-  Clojure jar PAIR, D26 Groovy jar (+ `crash/trace.json` entry), **D27 V-language ELF PAIR `-gcc.elf`/`-tcc.elf` (one V source,
-  two C backends, both musl-dynamic x86-64)**.
+  Clojure jar PAIR, D26 Groovy jar (+ `crash/trace.json` entry), D27 V-language ELF PAIR `-gcc.elf`/`-tcc.elf` (one V source,
+  two C backends, both musl-dynamic x86-64), **D28 Odin ELF TRIO `-family-a.elf`/`-family-b.elf`/`-false-friend.elf` (22 KB
+  glibc PIEs, stripped, same size and layout; a/b differ in ONE byte, the false friend in ~2k bytes + its own config)**.
   Since D18 each day = a THEME on a new language: call graph (D18), packing (D19), resources/overlays (D20), shared libraries
   (D21), managed<->native bridge (D22), anti-analysis (D23), PATCH DIFFING (D24), BOUNDS-ERROR ROOT CAUSE + reachability (D25),
-  CRASH TRIAGE (D26), **COMPILER ATTRIBUTION (D27 "Every compiler signs its work. Compare the runtime and linker fingerprints
-  across builds and name the toolchain")**. D24-D26 vuln-research arc ended at 3 days; D27 opened a PROVENANCE/attribution
-  direction (next: linker/libc/optimisation fingerprints, PE Rich/MSVC-vs-MinGW, code-similarity/family attribution, or a
-  capstone/backfill -- 4 days left). Language track: D22-D26 "new language on an old runtime" 5x, D27 broke it with a
-  TRANSPILE-TO-C language (V; atlas row predicted it). Left: Vala/Genie, Odin, Hare, Cython, hxcpp, Haxe->Neko (`neko_bytecode`
-  still in the enum, unseen), Elixir/BEAM, niche JVM.
+  CRASH TRIAGE (D26), COMPILER ATTRIBUTION (D27 "name the toolchain"), **FAMILY CLUSTERING (D28 "These binaries might be related
+  -- or they might just look alike. Cluster them by behavior, watch out for false friends, and sort the family from the
+  strangers")**. D24-D26 = vuln arc (3 days); D27-D28 = ATTRIBUTION arc (toolchain -> family). 3 days left: expect the arc's
+  3rd step (variant/lineage ordering, shared-code/similarity measures, YARA-style family signature) or a capstone/backfill on
+  D31. Language track: D27 V and D28 Odin = niche native languages (both predicted by the atlas). Left: Hare, Vala/Genie, C3,
+  Cython, hxcpp, Haxe->Neko (`neko_bytecode` still in the enum, unseen), Elixir/BEAM, niche JVM.
   Ids `dNN_artifact_sha256_K` / `dNN_analysis_<field>`; multi-member groups add `dNN_analysis_<tag>_<field>` (D15/D16/D21/D24/
-  D25/D27) and unqualified ids whose QUESTION names the member (D21) or demands consensus of both twins (D24/D25/D27).
+  D25/D27/D28; hyphenated roles become underscores: `family-a.elf` -> `d28_analysis_family_a_machine`, `false_friend_*`) and
+  unqualified ids whose QUESTION names the member (D21) or demands consensus of the NAMED subset (D24/D25/D27 both twins; D28
+  "Decode family-a.elf and family-b.elf ... do not use false-friend.elf").
 - From D2 every new member embeds the **HCFG** blob `'HCFG' | u8 ver | u8 xor_key | u16le len | u32le crc32(plain) | xor'd JSON
   @12`; only its STORAGE changes (see Variant axes). Scan raw bytes for `HCFG` AND base64 `SENGR...`, crc-gate every hit; when
   both miss, look past the image end (overlay) and read the question. Parse the whole JSON dict (never-asked keys exist).
@@ -27,17 +30,21 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   member K (1-based)", format rule list, HCFG layout + carrier rule, JAR "Base64-alphabet UTF-8 constants >= 80 characters ...
   first CRC32-valid", D26 "Parse crash/trace.json ... first string in its frames array", D27 "Scan backward from the end").
 - **The contract LEAKS future days**: D19 "RS20 for Day 20", d07 "for Day 26 use the primary classfile named by that unit" (both
-  came true). Open after D27: enum `neko_bytecode` (D27 added no new token/day). Grep each contract for `[A-Z]{2}\d\d`, `Day NN`, unseen enum values.
+  came true). Open after D28: enum `neko_bytecode` (D22-D28 added no new token/day). Grep each contract for `[A-Z]{2}\d\d`, `Day NN`, unseen enum values.
 - **Theme asked on its own group only sometimes**: D19/D20 yes (overlay fields), D21-D25 NO, D26 YES (`crash_fault_method`,
-  `crash_frames_match_methods`, from a JSON SIDECAR inside the member), **D27 NO** (compiler fingerprints unasked: 12 ids =
-  2 sha256 + `<role>_format`/`<role>_machine` + consensus config_* + `gcc_config_*`).
+  `crash_frames_match_methods`, from a JSON SIDECAR inside the member), D27 NO (compiler fingerprints unasked), **D28 ONLY via
+  routing** (family consensus config_* + `false_friend_config_campaign`; no similarity/cluster field). 14 ids = 3 sha256 +
+  `<role>_format`/`<role>_machine` x3 + 4 family-consensus config_* + 1 false_friend config.
 - **Every member embeds a `huntress.binary.dynamic_trace.v1` template** (unasked) {branch, event_count, campaign, family
   `<lang>_<theme>_trace`, effects, network none} gated on env `HUNTRESS_HOST_MODEL` (+ `HUNTRESS_TRIGGER_FAULT` D25-D26); family
   NAMES THE THEME: D25 `clojure_bounds_root_cause_trace`, D26 `groovy_synthetic_crash_trace` (+ `huntress.synthetic_crash.v1`
-  sidecar), D27 `v_cross_backend_attribution_trace`/`equivalent_behavior_only` -- grep `_trace"` to read the day's theme.
-- Question count: 80 on D8, +10/day to 160, D17 204 (backfill #2), then +12/day: **D27 324**. Mastery = `setN.` copies, +1
-  set/day (**D27 11 sets = 3564 ids, ~36 MB per delivery**). Timed: D25 TT 10.5 s / Mastery ~2 min (cross-wired first POST);
-  D26 TT 5.3 s / Mastery 8.2 s; **D27 TT 5.4 s / Mastery 14.5 s first try** (Mastery: solve 2.5 s, submit 11.9 s of 3564 ids).
+  sidecar), D27 `v_cross_backend_attribution_trace`/`equivalent_behavior_only`, D28 `odin_family_cluster_trace`/
+  `behavior_cluster_only` + `cluster_marker_positive` (4 records per member; the false friend's event_counts differ) -- grep
+  `_trace"` to read the day's theme.
+- Question count: 80 on D8, +10/day to 160, D17 204 (backfill #2), +12/day to D27 324, **D28 392 = 28 groups x 14 (BACKFILL #3:
+  54 new ids pad EVERY old group to 14, all spelled as specs -- public predicates, regex counts, sorted-join sha256)**. Mastery =
+  `setN.` copies, +1 set/day (**D28 12 sets = 4704 ids, ~17 MB per delivery**). Timed: D26 TT 5.3 s / M 8.2 s; D27 TT 5.4 s /
+  M 14.5 s; **D28 TT 54 s (live worker: d10 re-rolled to PE) / Mastery CORRECT first POST (solve 2.4 s, submit 4.9 s)**.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **HCFG location / encoding** -- same blob, storage per container: `.hcfg` section (D2/D10/D14), .NET FieldRVA (D3), Go/Rust
@@ -64,20 +71,26 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   core/mesh/relay/stage, D25-D26 also edge/cache/vault/proxy/node), mutex `Global\HuntressBRNN_00V` -> `Global\Huntress<12 uppercase
   hex>`, url `.../api/BRNN-00V` -> `https://<word>-<8hex>.dayNN.example.invalid/<word>/<10hex>`; D27 shows ONE word pool for
   domain, url host and url path (sync/hub/core/mesh/relay/stage/edge/cache/vault/proxy/node/gate), each drawn independently.
+  D28 false friend: campaign prefix `FF28-` (`FF28-000` single, `FF28-<8HEX>` timed) vs the family's `BR28-`; new keys
+  `host_model` (`workstation`) and `ipv4` (TEST-NET dotted quad) are asked too.
   Rule: copy values verbatim from the decoded JSON/symtab; never regex-check a value shape or key on `00V` indices.
 - **Container per member** -- ELF vs PE32+ re-rolls per member in Mastery (d02, d04, d10 `pe`); labels from THIS member's header;
   dispatch on MAGIC (`7f454c46`, `MZ`, `PK`, `\0asm`, next `NEKO`). PE symbol fields = COMDAT `.text$<mangled>`. Extensions lie
-  about role, not container (D21 `.cmxs` = ELF ET_DYN).
+  about role, not container (D21 `.cmxs` = ELF ET_DYN). **ELF-worded backfill ids still apply to a PE re-roll** (D28 TT d10 `.exe`:
+  "Read ELF e_shnum ... including index 0" -> GM took FILE_HEADER.NumberOfSections, 9, no +1): map each ELF field to its PE twin.
 - **Member qualifier in the id (D15/D16/D21/D24)** -- peel the longest field prefix that is a `[^a-z0-9]+` token of exactly one
-  member name (`stripped`/`symbolized`, `compact`/`direct`, `loader`/`plugin`, `vulnerable`/`corrected` D24+D25, `gcc`/`tcc` D27
-  -- the role token can be a COMPILER name, so never hard-code the role vocabulary); the token can sit
+  member name (`stripped`/`symbolized`, `compact`/`direct`, `loader`/`plugin`, `vulnerable`/`corrected` D24+D25, `gcc`/`tcc` D27,
+  `family_a`/`family_b`/`false_friend` D28 = basename `-`->`_`, MULTI-WORD; roles can be compiler names, so never hard-code the
+  vocabulary; `family` alone names TWO members -> take the longest token naming exactly one); the token can sit
   BEFORE the field family (D24 `d24_analysis_corrected_format`, `..._corrected_config_url`). `sha256_K` = ARCHIVE order, never
   sorted (D24: vulnerable is member 1).
 - **Member named in the QUESTION (D21)** -- after the qualifier peel, if >1 member remains, keep the one whose basename ends with
   the token after `basename ends` / `Use the dNN--`. ORDER MATTERS (running it first dropped 26 ids on D21).
-- **Unqualified id over a twin pair (D24, D25, D27 identical wording)** -- "Decode both dNN-- role members and require their config objects to be
-  byte-for-byte equal before using the common value": decode EVERY member, assert equal JSON, answer the common value (a
-  first-member pick also passed because the twins always shared the config, but a mismatch should raise, not guess).
+- **Unqualified id over a twin pair / named subset (D24, D25, D27; D28)** -- "Decode both dNN-- role members and require their
+  config objects to be byte-for-byte equal before using the common value"; D28 "Decode family-a.elf and family-b.elf ...
+  common FAMILY value; do not use false-friend.elf": decode the members the question NAMES, drop the excluded one, assert equal
+  JSON, answer the common value. The excluded look-alike carries a DIFFERENT valid config (campaign `FF28-...` vs `BR28-...`), so
+  "first member" or "all members agree" logic is wrong here -- parse the include/exclude names from the question.
 - **Theme sidecar inside the member (D26)** -- jar entry `crash/trace.json` (`huntress.synthetic_crash.v1`, `kind`, `frames`
   innermost-first), IDENTICAL in all 12 deliveries while config re-rolled. Rule: entry whose name ends `trace.json` (never a
   fixed path), answer frames[0] verbatim; "every frame in the primary classfile method-name set" = set inclusion; missing =
@@ -89,12 +102,24 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   name is not a framework/dependency (FSharp.Core, System.*, Microsoft.*), i.e. the one carrying HCFG; hash ALL members.
 - **Stripped carry-over d01** -- re-rolls stripped in some sets (D15-D17 Mastery, D17/D19 TT, D23 Mastery set6): symbols/
   disassembly `[]`, has_symtab `false`, recover_code `none` (GM-confirmed; leaf-heuristic constants rejected). Pair by sha256.
-- **Mastery packaging** -- `setN.` ids (2-11 sets; D27 11 x ~36 MB), each its own delivery; each set's 1st question ends `Evidence
+- **Mastery packaging** -- `setN.` ids (2-12 sets; D27 11 x ~36 MB, D28 12 x ~17 MB), each its own delivery; each set's 1st question ends `Evidence
   case: dNN-m-<16hex>. [assigned-artifact-sha256:<zip sha256>]` (TT `dNN-tt-...`) = set->delivery map. Per-member caches key on
   (delivery, member name) or sha256, never `id(bytes)` (D25: 5/9 sets cross-wired, see Pitfalls).
 - **kind / field sets per group** -- `elf_class`/`machine` exact_text on d01 but INTEGER (`64`/`62`) on d08/d15/d21 (dispatch on
   `answer_format.kind`, which can change between fetches, D17); `has_<x>` = a structural marker of <x> in THIS member; old groups
-  gain ids over days (D8, D17): answer by field name from THAT member's facts dict.
+  gain ids over days (D8, D17, D28): answer by field name from THAT member's facts dict.
+- **Backfill #3 spec grammar (D28, 54 ids on d01-d27)** -- every new old-group id spells its rule: "Evaluate this public predicate
+  ... true exactly when the final bytes [as Latin-1 or UTF-16LE] contain X [or any nonempty ELF symbol name contains Y]"
+  (`has_nim/fpc/gnat_runtime`, `has_decoy_branch`); "From ELF symbol-table entries with nonempty resolved names, count names that
+  match /re/" (`d_symbol_count`, `crystal_symbol_count`, `handler_symbol_count`, `symbol_count`); "sort ... join with one LF ...
+  SHA-256" (`handler_symbols_sha256`, `method_names_sha256` over UNIQUE names); "join digests with ':' ... SHA-256"
+  (`structural_ordered_set_sha256`); byte scans (`conditional_branch_opcode_count`: 0x70-0x7f and 0f 80-8f in `.text`, one
+  left-to-right pass); header reads (`cli_runtime` = CLI header Major.Minor, `section_count`, PK19 `packing_key_1/2_hex`); new
+  config keys (`host_model`, `ipv4`); role-member config ids for the twin NOT asked before (`vulnerable_`, `symbolized_`,
+  `direct_`, `plugin_`, `gcc_`). Rule: implement the sentence literally (`lib.binary.generic_field` covers all of them); "ELF
+  symbol-table entries" = `.symtab` only (dupes kept), `.dynsym` ONLY when there is no `.symtab` (d13: 771 accepted, 1255 with
+  .dynsym rejected); a size id whose question names no magic = the day's own overlay magic (d20 `overlay_size` = len -
+  rfind(`RS20`) = 463; a generic `<2 caps><2 digits>` match gave 19, rejected).
 - **Speed flags (no answer change)** -- CPU contention: re-measure with `taskset -c 0,1 /usr/bin/time python3 solve.py`; D25 TT
   solve phase 8.0 s at 300 ids under load, D26 3.2 s (TT) / 3.9 s (10-set Mastery); isolated single ~0.6-1.2 s.
 
@@ -119,6 +144,9 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
 | Crash artifact ("it crashed", "dump", "unwind the stack", "faulting instruction"): a `crash/trace.json` / `*.dmp` / `core` / `hs_err_pid*.log` / ASan text next to or INSIDE the member | `unzip -l` the jar (non-class entries!), `jq . trace.json` (schema `huntress.synthetic_crash.v1`: `kind` = exception class, `frames` innermost-first); cross-check frames against `javap -p` method names and the static call chain (`javap -c`: stageOne->stageTwo->stageThree `invokestatic`, `new IllegalStateException`+`athrow` in frame 0). Native: `readelf -n core` (NT_PRSTATUS signal/RIP), map RIP -> symbol (`addr2line -f -e bin`), capstone the faulting insn |
 | Two members differing by a name tag (D15/D16 builds, D21 loader+plugin: a role member may carry no HCFG; unqualified ids -> the member the QUESTION names) or `-vulnerable` / `-corrected` twins (D24/D25; patched/unpatched, old/new, v1/v2) -- "diff the vulnerable function against its corrected twin", "prove the bounds error is real, trace its reachability" | Route `<role>_` ids by the name token; answer header+HCFG per member; for the (unasked so far) diff: `javap -p -c` per class of both jars and `diff` after stripping the role token from class names -- D24 Scala `score(String)I`, D25 Clojure `parse_frame` (unguarded `RT.nth(v,4)` vs `(< 4 (count v))` guard -> -1); reachability = the env compares in `-main`; native twins: `objdump -d` per symbol + `diff`, `rz-diff -t functions a b` |
 | V language ELF (D27: `main__main`, `_vinit`/`_vcleanup`, `builtin__*`/`strconv__*`/`Array_string_*`, `_const_<mod>__<name>` data symbols, `V panic: `, bundled Boehm `GC_*` + `GC_TRACE`, `builtin__print_backtrace*`) | C-backend language: plain ELF (`elf`/62) for header ids; HCFG RAW appended at image_end (`grep -abo HCFG F` = EOF-379); a gcc `-flto -Os` build keeps ~200 syms (main__main inlined away), the tcc build ~1900 |
+| Odin ELF (D28: strings `/odin/base/runtime/*.odin`, `base/runtime: getrandom failed`; glibc PIE, NEEDED libm/libc/ld-linux-x86-64, STRIPPED (~20 `.dynsym` entries, no `.symtab`), ~22 KB) | Plain ELF (`elf`/62) for header ids; HCFG RAW appended exactly at image_end (`e_shoff+e_shnum*64`, `grep -abo HCFG F`), same "scan backward from the end" rule as D27 |
+| N look-alike members (`-family-a`/`-family-b`/`-false-friend`, same size + section table) or "cluster by behavior", "false friends", "family vs strangers" | Per pair `cmp -l A B \| wc -l` (D28: a vs b = 1 byte, the role string `huntress-role-<role>`; false friend ~2k bytes from `.text` on), sha256 of `.text`/`.rodata` per member, HCFG per member (the false friend has its OWN valid config, campaign `FF28-` vs `BR28-`), trace records (`branch`/`event_count`). Route ids by role; family consensus = the NAMED members only |
+| Backfill question "Evaluate this public predicate ...", "count names that match /re/", "sort ..., join with one LF ..., SHA-256", "join those digests with ASCII colon" | The sentence is the spec: `lib.binary.generic_field(blob, suffix, question, member)`; ELF symbol names = `.symtab` (`.dynsym` only if no `.symtab`); "final bytes contain" = Latin-1 (+ UTF-16LE when stated) substring |
 | Same-source builds named by their COMPILER (`-gcc.elf`/`-tcc.elf`; next clang / zig cc / msvc / mingw) or "name the toolchain", "runtime and linker fingerprints" | Header + consensus HCFG per member as usual (D27 asked nothing else). Attribution facts if asked: `readelf --debug-dump=info F \| grep -m2 producer` (gcc: `GNU C99 12.2.1 20220924 ... -Os -std=c99`, `GNU AS 2.40`); `.comment` was ABSENT on both; gcc = DWARF 5 (`.debug_line_str`/`.debug_loclists`), IPA suffixes `.lto_priv.N`/`.constprop.N`/`.isra.N`, FILE `crtstuff.c`, `.eh_frame_hdr`+`.gnu.hash`; tcc = STABS (`.stab`/`.stabstr`, no DWARF), `.hash` only, unmerged input sections (`.text._start_c`, `.rodata.str1.1`, `.data.ro`, `.data.rel.ro.local`), one NT_GNU_PROPERTY note per input object (4), `tcc_backtrace`/`tcc_state`, 4x the size; libc = PT_INTERP `/lib/ld-musl-x86_64.so.1` + NEEDED `libc.musl-x86_64.so.1`, musl src path `/home/buildozer/aports/main/musl/src/1.2.4` (Alpine) |
 | Swift ELF (`swift5_*` sections, `$s<len><Module>` symbols, 60+ MB) | Never eager-parse symbols; regex `SENGR` base64 in `.rodata`; `bin/swift-demangle` |
 | Nim / D / Crystal / Free Pascal / ObjC / Ada / Fortran ELF (`NimMain`; `_D4core`; `Crystal:H`; `FPC 3.2.2`; `__objc_*`; `GNAT Version`; `libgfortran.so.5`) | Plain ELF (`elf`/`x86-64`/`62`), carried-over solver; HCFG base64 `SENGR...` (Nim/D/Crystal, offset = the `S`; Nim has raw decoys) or RAW (FPC `.data`, ObjC `.hcfg`, Ada/Fortran `.rodata`; offset = the `H`) |
@@ -144,32 +172,33 @@ overlay; NEW `overlay_offset`/`overlay_size`; the questions spelled the stub. **
 overlay; NEW `hcfg_resource_size`. **D21 "Shared Custody"** (T+1:33): OCaml loader + `.cmxs` plugin; question-named member
 routing AFTER the qualifier peel (running it first dropped 26 ids).
 
-**D22 "Bridge Troll"** (T+47 s): F# `sample.dll` + runtimeconfig + 5.7 MB `FSharp.Core.dll` support member; P/Invoke theme
-unasked; HCFG RAW twice ("FIRST record that validates"); basenames renamed `variant-000` -> `sample`. **D23 "Trust Issues"**
-(T+84 s): VB.NET, HCFG RAW only as PE overlay; anti-analysis predicates unasked; timed modes re-shaped values. **D24 "Spot the
-Difference"** (T+35 s): Scala twin jars `-vulnerable`/`-corrected` (only `score(String)I` changed, CWE-476); 12 ids = 2 sha256 +
-`<role>_format` + 4 consensus config_* + 4 `corrected_config_*`; HCFG `ldc` in the `Foo$` module. **D25 "Out of Bounds"** (T+80 s,
-zero new code): Clojure AOT twins, `parse-frame` unguarded `(nth frame 4)` (CWE-125) gated by `HUNTRESS_TRIGGER_FAULT`; same 12-id
-template; Mastery 9 sets first POST cross-wired 55 ids (`id(bytes)` caches) -> CORRECT ~2 min via localize + live worker.
+**D22 "Bridge Troll"** (T+47 s): F# dll + runtimeconfig + `FSharp.Core.dll` support member; HCFG RAW twice ("FIRST record
+that validates"); basenames `variant-000` -> `sample`. **D23 "Trust Issues"** (T+84 s): VB.NET, HCFG as PE overlay; timed modes
+re-shaped values. **D24 "Spot the Difference"** (T+35 s): Scala twin jars `-vulnerable`/`-corrected`, the 12-id twin template
+(role `<role>_format`, consensus config_*). **D25 "Out of Bounds"** (T+80 s): Clojure twins; Mastery 9 sets first POST
+cross-wired 55 ids (`id(bytes)` caches) -> CORRECT ~2 min via localize + live worker.
 
-**D26 "Crash Course"** (312 Qs; CORRECT T+76 s, 0 wrong; TT 5.3 s / Mastery 10 sets 8.2 s): one Groovy 4 jar (Main-Class
-`Day26Variant000`, static stageOne->stageTwo->stageThree, stageThree throws IllegalStateException) + a `crash/trace.json` sidecar
-(`huntress.synthetic_crash.v1`, frames innermost-first). Theme ASKED: `crash_fault_method` = frames[0], `crash_frames_match_methods`
-= frames subset of the Main-Class method_info names (`true`); `method_count` 10 (d07 "Day 26" leak). Race solver banked 310 ids at
-T+45 s; ~15 lines for the sidecar. Insight: the "dump" was a tiny JSON sidecar -- read the question before reversing.
+**D26 "Crash Course"** (312 Qs; T+76 s, 0 wrong): Groovy 4 jar + `crash/trace.json` sidecar; theme ASKED (`crash_fault_method` =
+frames[0], `crash_frames_match_methods`); ~15 lines for the sidecar. Insight: read the question before reversing. **D27 "Compiler
+Says What"** (324 Qs; T+56 s, 0 wrong, ZERO new code): V-language gcc/tcc twin ELFs, HCFG RAW appended at image_end, "scan
+backward from the end"; attribution theme UNASKED (facts in Recognition cues).
 
-**D27 "Compiler Says What"** (slug `compiler-attribution`; 324 Qs; **CORRECT T+56 s, 0 wrong, ZERO new code**; TT 5.4 s /
-Mastery 11 sets (3564 ids) 14.5 s first try).
-- Artifact: a V-language TWIN pair, members in order `d27--sample-gcc.elf` (108 KB, gcc 12.2.1 Alpine `-Os` + LTO, DWARF 5) and
-  `d27--sample-tcc.elf` (462 KB, tcc, STABS, unmerged sections, all V symbols kept). Both ELF64 x86-64 ET_EXEC, dynamic musl
-  (`/lib/ld-musl-x86_64.so.1`), Boehm GC bundled, NO `.comment`. Same HCFG RAW appended right after the section-header table in
-  each (379 B = whole tail, no overlay magic); trace family `v_cross_backend_attribution_trace`/`equivalent_behavior_only`.
-- 12 new ids = the D24/D25 twin template with compiler names as roles: `sha256_1/2`, `gcc_format`/`tcc_format` (`elf`),
-  `gcc_machine`/`tcc_machine` (integer `62`), 4 consensus config_* ("decode both role members ... byte-for-byte equal"), 2
-  `gcc_config_*`. HCFG rule reworded: "Scan backward from the end of the member ... accept the first CRC32-valid".
-- Carried-over solver covered every id (qualifier peel, twin consensus, raw scan incl. the tail); the worker cross-checked
-  `sha256sum` + `readelf -h` + `grep -abo HCFG` and submitted from the solver. Theme ("name the toolchain") UNASKED -- its
-  facts are in Recognition cues. No new contract leak.
+**D28 "Family Resemblance"** (slug `family-clustering`; 392 Qs; **CORRECT T+3:23, 6 rejected POSTs (4 batches + 2 single-id)**; TT 54 s / Mastery
+12 sets (4704 ids) CORRECT first POST).
+- Artifact: an Odin ELF TRIO in archive order `d28--sample-false-friend.elf`, `-family-a.elf`, `-family-b.elf` (~22.9 KB each,
+  glibc PIE, stripped, identical section table). a vs b differ in ONE byte (role string); the false friend differs in ~2k bytes
+  from `.text` on and carries its own valid HCFG (campaign `FF28-`). HCFG RAW appended at e_shoff+e_shnum*64 in all three.
+- 14 new ids: 3 sha256, `<role>_format`/`<role>_machine` for `false_friend`/`family_a`/`family_b` (integer 62), 4 unqualified
+  config_* = consensus of family-a + family-b ("do not use false-friend.elf"), `false_friend_config_campaign`. The cluster/
+  similarity theme itself was NOT asked beyond that routing.
+- BACKFILL #3 was the real work: 54 new spec-worded ids padded d01-d27 to 14 each (see Variant axes). The D27 solver answered
+  361/392; the race harness banked 324 carried-over ids at T+1:06 and 36 more by T+1:23 (bisected batches); a worker added
+  the 31 missing fields (generic spec-grammar fallback) and POSTed at T+2:34; last id at T+3:23.
+- Lost time: four all-or-nothing batches sank on ONE wrong backfill field each -- d20 `overlay_size` (generic `<2 caps><2
+  digits>` match -> 19; right = len - rfind(`RS20`) = 463) and d13 `crystal_symbol_count` (1255 with `.dynsym` added; right =
+  771 from `.symtab` only, re-derived in 44 s). TT: d10 re-rolled to a PE `.exe` and the ELF-worded
+  `section_count` was empty -> a live worker answered NumberOfSections (9). Mastery: the post-run replay of 10-12-set
+  cases hit the 8 s timeout under load (pyelftools `.symtab` parse ~1 s/set) -> struct-parsed symtab reader, ~1 s/set total.
 
 ## GM answer conventions learned
 | Field family | Accepted form | Rejected (never resubmit) |
@@ -203,6 +232,10 @@ Mastery 11 sets (3564 ids) 14.5 s first try).
 | hcfg_resource_size (integer, D20) | the overlay header's u32le resource-length field (RS20+8) in base 10 = the HCFG record length (12 + payload) | overlay size, payload-only length (not tried, but distinct values) |
 | hcfg_storage (enum, D17) | `base64`, `raw_hcfg_section`, `raw_const_array`, `wasm_data_segment`, `raw` | every free-text spelling (~10.9k probes) -- closed token set |
 | compression_methods (jar, json) | sorted distinct ZIP method ids, compact: `[0,8]` (names also accepted) | — |
+| D28 backfill #3 counts (integer) | `symbol_count`/`d_symbol_count`/`crystal_symbol_count`/`handler_symbol_count` over NONEMPTY `.symtab` names (dupes kept; `.dynsym` only when no `.symtab`); `section_count` = ELF e_shnum incl. index 0 (PE re-roll: FILE_HEADER.NumberOfSections); `class_count` = `.class` entries in the jar CD; `structural_artifact_count` = group members | d13 count with `.dynsym` added (1255) |
+| D28 hashes / predicates | `handler_symbols_sha256` = sha256(LF-join(sorted matches)), `method_names_sha256` over UNIQUE names; `structural_ordered_set_sha256` = sha256(":".join(member sha256 hex in CD order)); `has_*_runtime`/`has_decoy_branch` = literal substring predicate as stated -> `true`/`false` | — |
+| D28 header / identity text | `cli_runtime` = CLI header `Major.Minor` (`2.5` for every .NET group); `vtable_symbol` = first symtab name matching the regex, bare on ELF (`_ZTV15DiscoveryEngine`), section-prefixed on PE; `class_name` = Main-Class `this_class` internal name (`Day06Variant000`); `packing_key_1/2_hex` = PK19 k1/k2 `0x%02x`; `plugin_hcfg_offset` = the `H` | d20 `overlay_size` from a non-day magic (19) |
+| machine / format wording (D28 reworded) | machine (pattern): label, readelf/objdump/file label, or decimal/hex code all accepted; d10 format: ELF/PE in any case or ELF64/PE32+/"Portable Executable"; `<role>_machine` integer stays decimal (`62`) | — |
 Naming law (from playbook.py): native format = container only; a managed .NET binary = container_runtime (pe+cli).
 Java broke the compound law (`jar`); bytecode VMs get `<vm>_bytecode` (`neko_bytecode` in the D19 enum).
 
@@ -215,8 +248,9 @@ Java broke the compound law (`jar`); bytecode VMs get `<vm>_bytecode` (`neko_byt
   field the layout names (D20 `hcfg_resource_size` = u32 @+8, not overlay/JSON length).
 - **Absence vs hidden**: `none`/`[]`/`false` is right when the thing is ABSENT (stripped d01, a re-asked field inherits it),
   wrong when it is merely HIDDEN (D19 config: packed; the race harness's `none` placeholders were rejected).
-- **A multi-field POST is all-or-nothing.** One wrong field fails the set and hides which one (D2). Submit unconfirmed/new fields
-  ALONE; batch the bytes-derived ones. Old groups carry over by sha256: POST the known ids first (they bank as `accepted`).
+- **A multi-field POST is all-or-nothing.** One wrong field fails the set and hides which one (D2; D28: 4 batches sank on 2
+  generic-heuristic backfill fields, T+3:23 instead of ~T+1:30). POST carried-over ids first (they bank as `accepted`), then
+  each NEW field family ALONE or bisect on the first rejection; a heuristic answer to a new spec is a guess until accepted.
 - **Support members** (D3, D22): answer only from the PRIMARY assembly/classfile, but hash every member in archive order; skip
   a 5.7 MB framework DLL in brute passes.
 - **"The theme is never asked" is NOT a rule** (D26): after 5 unasked days the crash theme was asked via a JSON sidecar inside
@@ -227,9 +261,9 @@ Java broke the compound law (`jar`); bytecode VMs get `<vm>_bytecode` (`neko_byt
 - **Per-member caches keyed on `id(bytes)`** (D25 Mastery, 55 wrong ids in 5/9 sets): CPython reuses a freed object's address,
   so a later member inherits an earlier member's facts. Symptom: wrong values that are VALID answers for another `dNN--` group
   of the same delivery. Key on (delivery, member name) / sha256 or pin the bytes (fixed; D26 10 sets clean).
-- **Formatting**: build submit JSON with python/jq (mutex = ONE backslash); capstone `ret` -> strip trailing space; decimal imms.
-- **Id shape / kind / routing**: peel a member qualifier off the front before declaring a field unknown (D15); a
-  question-named-member router runs AFTER that peel (D21: first dropped 26 ids); read `answer_format.kind` per id (D8).
+- **Formatting / routing**: build submit JSON with python/jq (mutex = ONE backslash); capstone `ret` without trailing space,
+  decimal imms; peel the (longest, multi-word) member qualifier before declaring a field unknown (D15, D28 `family_a`), the
+  question-named-member router runs AFTER that peel (D21 dropped 26 ids), read `answer_format.kind` per id (D8).
 - **Archives**: never unzip recursively (nested .jar/.apk lose their `dNN--` prefix); jar members are deflated, so `grep HCFG
   file.jar` finds nothing -- inflate every class (Scala `$` module, Clojure `__init`, Groovy static field) and non-class entry.
   Huge members (D8 67 MB Swift): no per-key brute force or per-field re-parse; cheap encodings first, crc-gate every hit.
@@ -237,5 +271,7 @@ Java broke the compound law (`jar`); bytecode VMs get `<vm>_bytecode` (`neko_byt
   JSON that parses, keep scanning. Scan DIRECTION is part of the spec (D22 "first ... that validates" from the start, D27 "scan
   backward from the end"): with two valid records they pick different ones -- follow the question per id. Overlays: "final" -> `rfind`, verify the stated sha256. Offsets from `re.finditer().start()`
   on BOTH raw and base64 paths (D12), not `strings -t d` (off by 1).
+- **ELF-worded id on a PE re-roll** (D28 TT d10 `.exe`): the solver left `section_count` empty -> live worker (+~40 s). Every
+  ELF header/section/symbol field needs a PE mapping (NumberOfSections, COFF symbols, OptionalHeader) because members re-roll.
 - **Timed windows**: download dominates (D16 TT 52 s of 64 s; D25 single ~69 s of 80 s). WASM sizes = 5-byte PADDED LEB128;
   PE machine map must include 0x8664 -> `x86-64` (a replay emitted `0x8664` and failed TT twice).
