@@ -42,13 +42,14 @@ def _logfile(chal_dir, stage, pool):
 # is passed in; turns are a second, independent ceiling. Override via HCTF_MAX_TURNS_<STAGE>.
 MAX_TURNS = {"single": 80, "generalize": 50, "fix": 30, "ratchet": 110,  # ratchet: D15 used 78, D14 hit the 80 cap (exit 1); D8/D10 cut at 40
              # one lane's technique log + coverage atlas forecast (split out of the ratchet after D14); D27 cost hog,
-             # trimmed 40->34; D28 binary/mobile/metadata all hit "Reached maximum number of turns (34)" -> 40
-             "ratchet_log": 40,
+             # trimmed 40->34; D28 binary/mobile/metadata all hit "Reached maximum number of turns (34)" -> 40;
+             # D30 warmups/script/metadata all hit 40 (exit 1, entries possibly partial) -> 60
+             "ratchet_log": 60,
              "live": 60,         # live-answer worker on an open untimed attempt (orchestrate.LiveAnswer)
              "prebuild": 40}   # off-peak breadth worker (hctf/prebuild.py): one module + fixtures
 # Per-lane caps that differ from the stage's (lane prefix match). D28: binary's technique log covers the most families
 # (31 residual fields across ELF/PE/Mach-O) and was the furthest from done at the cap.
-MAX_TURNS_LANE = {("ratchet_log", "binary"): 45}
+MAX_TURNS_LANE = {("ratchet_log", "binary"): 70}
 
 
 def _max_turns(stage, lane=None):
@@ -261,6 +262,11 @@ def _worker_env(env_extra):
     # identically-named temp file into one $TMPDIR clobber each other -- a sibling once overwrote a 3075-entry
     # seating map with an 8-key summary, and one worker's script was replaced mid-run so it ran another's code.
     _tmp = TMP / f"{paths.slugify(env.get('HCTF_STAGE') or 'worker')}-{uuid.uuid4().hex[:8]}"
+    # D30 SHA1-Hulud: a single worker's emulator / traces / models lived in .run/tmp/single-<uuid> and every relaunch
+    # (timeout, max_turns, `hctf run --only`) started over from nothing. A single's scratch is the CHALLENGE's: one fixed
+    # dir in its chal dir, so a relaunch finds the previous session's work (also keeps `.run` out of Ghidra's paths).
+    if env.get("HCTF_STAGE") == "single" and env.get("HCTF_CHAL_DIR") and os.environ.get("HCTF_SINGLE_SCRATCH", "1") != "0":
+        _tmp = Path(env["HCTF_CHAL_DIR"]) / "scratch"
     _tmp.mkdir(parents=True, exist_ok=True)
     env["TMPDIR"] = str(_tmp)
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # so solvers/tools can `import lib.*`
@@ -594,18 +600,28 @@ API_MIN_LEFT = float(os.environ.get("HCTF_API_MIN_LEFT", "90"))   # don't relaun
 # the stage timeout), then runs. A reset further away than HCTF_LIMIT_WAIT_MAX (or none stated) keeps the old backoff.
 LIMIT_WAIT_MAX = float(os.environ.get("HCTF_LIMIT_WAIT_MAX", "21600"))
 LIMIT_RESET_PAD = float(os.environ.get("HCTF_LIMIT_RESET_PAD", "60"))
-_RESET_RE = re.compile(r"resets\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?(?:\s*\(([^)]+)\))?", re.I)
+# D29: the WEEKLY limit states a date too ("resets Oct 31, 6am (Asia/Manila)"): the old pattern never matched it, so
+# note_limit() returned False with no alert and every post-run/prebuild worker died after the 20/60/180 s backoff.
+_RESET_RE = re.compile(r"resets\s+(?:at\s+)?(?:([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(?:at\s+)?)?"
+                       r"(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?(?:\s*\(([^)]+)\))?", re.I)
+_MONTHS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov",
+                                        "dec"), 1)}
 _limit_gate = {"until": 0.0, "detail": ""}
 _limit_lock = threading.Lock()
+_limit_alerted = set()
 
 
 def limit_reset_epoch(detail, now=None):
-    """Epoch of the reset a usage-limit message states ("resets 4:10am (Asia/Manila)", "resets 16:00"), or None."""
+    """Epoch of the reset a usage-limit message states ("resets 4:10am (Asia/Manila)", "resets 16:00",
+    "resets Oct 31, 6am (Asia/Manila)"), or None."""
     m = _RESET_RE.search(str(detail or ""))
     if not m:
         return None
     import datetime as _dt
-    hh, mm, ampm, tzname = int(m.group(1)), int(m.group(2) or 0), (m.group(3) or "").lower().replace(".", ""), m.group(4)
+    mon, day = _MONTHS.get((m.group(1) or "")[:3].lower()), m.group(2)
+    if m.group(1) and not mon:
+        return None
+    hh, mm, ampm, tzname = int(m.group(3)), int(m.group(4) or 0), (m.group(5) or "").lower().replace(".", ""), m.group(6)
     if ampm:
         if not 1 <= hh <= 12:
             return None
@@ -621,6 +637,14 @@ def limit_reset_epoch(detail, now=None):
             tz = None
     now = time.time() if now is None else now
     base = _dt.datetime.fromtimestamp(now, tz) if tz else _dt.datetime.fromtimestamp(now)
+    if mon:
+        try:
+            at = base.replace(month=mon, day=int(day), hour=hh, minute=mm, second=0, microsecond=0)
+        except ValueError:
+            return None
+        if at.timestamp() <= now - 86400:      # "Jan 2" seen on Dec 30: next year's date
+            at = at.replace(year=at.year + 1)
+        return at.timestamp()
     at = base.replace(hour=hh, minute=mm, second=0, microsecond=0)
     if at.timestamp() <= now:
         at += _dt.timedelta(days=1)
@@ -628,9 +652,20 @@ def limit_reset_epoch(detail, now=None):
 
 
 def note_limit(detail):
-    """A usage-limit exit: close the gate until its stated reset (+pad). -> True when the gate is closed now."""
+    """A usage-limit exit: close the gate until its stated reset (+pad). -> True when the gate is closed now.
+    A limit that can't be gated (no parseable reset, or further than LIMIT_WAIT_MAX away) still raises ONE loud `!!!`
+    per message: D29's weekly limit killed the post-run and the whole prebuild with only `worker exit 1` in the feed,
+    and nothing launched Day 30."""
     t = limit_reset_epoch(detail)
     if t is None or t - time.time() > LIMIT_WAIT_MAX:
+        key = str(detail)[:160]
+        if key not in _limit_alerted:
+            _limit_alerted.add(key)
+            when = (f"stated reset {time.strftime('%a %H:%M', time.localtime(t))} "
+                    f"({(t - time.time()) / 3600:.1f} h away, > HCTF_LIMIT_WAIT_MAX)") if t else "no parseable reset"
+            print(f"!!! Claude USAGE LIMIT ({when}): workers will die after their retries -- every later worker and the "
+                  f"NEXT DROP are at risk; raise the limit/credits or wait for the reset -- {key[:120]}",
+                  file=sys.stderr, flush=True)
         return False
     until = t + LIMIT_RESET_PAD
     with _limit_lock:

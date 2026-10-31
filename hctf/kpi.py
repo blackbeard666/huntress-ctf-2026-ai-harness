@@ -66,7 +66,9 @@ def compute(day=None, log=None, root=None):
         msg = m.group(4)
         if msg.startswith("[wait] day") and " released (" in msg:
             rel = t
-        am = re.search(r"announced by the GM \(status probe, ([+-][\d.]+)s from the drop\)", msg)
+        # D28+ logs "status probe 0, +2.6s from the drop": the old pattern (no prober index) never matched, so KPI fell
+        # back to `released` (announce + the GM list fetch, ~9 s at the drop) and reported +11-12 s release lags
+        am = re.search(r"announced by the GM \(status probe(?: \d+)?, ([+-][\d.]+)s from the drop\)", msg)
         if am:
             announced = float(am.group(1))   # sub-second detection lag; `released` is that + the list fetch
         cm = re.match(r"(\d+) chains \((\d+) challenge modes\)", msg)

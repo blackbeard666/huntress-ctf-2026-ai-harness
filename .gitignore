@@ -19,3 +19,4 @@ __pycache__/
 challenges/*/*/solver/cases/*/artifacts/
 challenges/*/*/.generalize-snapshot/
 challenges/*/*/.generalize-rejected/
+challenges/*/*/*/scratch/

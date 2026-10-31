@@ -1499,3 +1499,36 @@ _r30 = _meta14.answer("d30-cluster-001-relation-identical-sha256-groups",
                       {"question": "Determine relation.identical_sha256_groups for cluster-001.zip."}, _z30b.getvalue())
 assert _r30 == ('[["alpha-01","alpha-02"],["bravo-01","bravo-02"]]', _meta14.VERIFIED), _r30
 print("ok  lib.meta: relation.identical_sha256_groups verified D30 (manifest ids, sha256 groups >= 2)")
+
+# Day 29 "Trust Issues": x509.sha256_fingerprint = sha256 of the WHOLE certificate DER (PEM decoded), lowercase hex, no
+# colons -- prebuilt x509 promoted to verified (GM single b466fdbf.., TT, 13/13 Mastery sets); not a cert -> "none"
+_pem29 = (
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIB3zCCAZGgAwIBAgIJAKtUqYzrHwrSMAUGAytlcDBOMQswCQYDVQQGEwJVUzEV\n"
+    "MBMGA1UEChMMSHVudHJlc3MgQ1RGMSgwJgYDVQQDEx9hcmVuYS1kZWY0MTRkNmIz\n"
+    "OWIuZXhhbXBsZS50ZXN0MB4XDTI2MTAwMTAwMDAwMFoXDTI3MTAwMTAwMDAwMFow\n"
+    "TjELMAkGA1UEBhMCVVMxFTATBgNVBAoTDEh1bnRyZXNzIENURjEoMCYGA1UEAxMf\n"
+    "YXJlbmEtZGVmNDE0ZDZiMzliLmV4YW1wbGUudGVzdDAqMAUGAytlcAMhAAOhB7/z\n"
+    "zhC+HXDdGOdLwJln5NYwm6UNXx3chmQSVTG4o4GLMIGIMA4GA1UdDwEB/wQEAwIH\n"
+    "gDAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDAYDVR0TAQH/BAIwADAd\n"
+    "BgNVHQ4EFgQUVkdap1RjR0wChd9dvyvKtz2mUTUwKgYDVR0RBCMwIYIfYXJlbmEt\n"
+    "ZGVmNDE0ZDZiMzliLmV4YW1wbGUudGVzdDAFBgMrZXADQQBqvlC6+UX7K/pxitEm\n"
+    "Ryk/pjGiP6bpKyTR0IS6chuMYv59kCjnRraxQWBqX3gsbSdmqM1nCgGzSem7gPa9\n"
+    "0wgB\n"
+    "-----END CERTIFICATE-----\n"
+)
+assert _meta14.lookup("x509", "sha256_fingerprint")[0].days == (29,)
+_r29 = _meta14.answer("d29-x509-001-x509-sha256-fingerprint",
+                      {"question": "Determine x509.sha256_fingerprint for certificate-001.pem."}, _pem29.encode())
+assert _r29 == ("b466fdbf8b8b8cb2d0b632bd24eb875576b44edb85f18f90f53dcdea1a0ec781", _meta14.VERIFIED), _r29
+assert _meta14.answer("d29-x509-001-x509-sha256-fingerprint", {}, b"not a cert")[0] == "none"
+print("ok  lib.meta: D29 x509.sha256_fingerprint promoted (verified)")
+
+# Day 29 "Fraternal Twins": analysis_optimized_* / analysis_unoptimized_* name the -O3 / -O0 member by file-name token
+import re as _re29  # noqa: E402
+from lib import knowledge as _kn29  # noqa: E402
+_q29 = _kn29.BINARY_MEMBER_OPT_QUALIFIERS
+_tok29 = lambda n, q: any(_re29.fullmatch(_q29[q], t) for t in _re29.split(r"[^a-z0-9]+", n.lower()))  # noqa: E731
+assert _tok29("d29--sample-O3.elf", "optimized") and not _tok29("d29--sample-O0.elf", "optimized")
+assert _tok29("d29--sample-O0.elf", "unoptimized") and not _tok29("d29--sample-O3.elf", "unoptimized")
+print("ok  knowledge: D29 binary optimized/unoptimized member qualifiers")

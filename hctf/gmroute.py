@@ -7,7 +7,8 @@ workers.hb_relays(): an `hb_daemon --stdio` channel on its own ssh connection, t
 
 Routing (every decision measured, never assumed -- 10-25: status 1.4 s from WSL vs 0.1 s on the VM):
   - per-op running averages (EWMA) for the relay and for today's path, refreshed by real calls and by a status
-    calibration on both every CAL_S (15 s);
+    calibration on both every CAL_S (15 s) that names a cid whose status reply is known / predicted <= CAL_MAX (32 KB;
+    D31: it named the last cid touched, and a 0.9-5 MB status rode the relay 8-15 s);
   - the relay is used only if its average < RATIO x today's - MARGIN (0.8 x local - 0.1 s), compared like with like
     (the op's own averages when both exist, else the status calibration's), and the request / the reply expected
     are <= MAX_BYTES (32 KB);
@@ -264,14 +265,46 @@ def _status_big(args):
     the mode's multi-MB contract -- rehearsal D28 fair run: three 4.7 MB binary Mastery statuses rode the relay, ~11 s each."""
     if STATUS_HEDGE_MAX <= 0 or len(args) < 2:
         return False
-    cid = str(args[1])
+    return _status_pred(str(args[1])) > STATUS_HEDGE_MAX
+
+
+def _status_pred(cid):
+    """The largest known / predicted status reply bytes of `cid` (0 = nothing known): this cid's last status reply,
+    TODAY's <mode>/contract.json, this lane+mode's last start reply, else the lane's earlier start of the mode."""
+    cid = str(cid)
     with _lock:
         last = _reply.get(("status", cid))
         known = _reply.get(("start", _shape(cid))) if "/" in cid else None
     sizes = [last or 0, _contract_bytes(cid) or 0, known or 0]
     if "/" in cid:            # a Single's status before its start is a short 409; its contract.json appears with start
         sizes.append(_earlier_start_bytes(cid))
-    return max(sizes) > STATUS_HEDGE_MAX
+    return max(sizes)
+
+
+# D31 (Day 29 `!!! slow transport` x3): the calibrator's status sample is a LATENCY probe, but it named the LAST cid any
+# call touched -- at the drop a just-started script TT (905 KB) / binary Mastery (4-5 MB) -- and sent it on a relay
+# channel with no size check: 8-15 s on relay0/1 (timed out once), the channel demoted 30 s, a second multi-MB public
+# download for the local sample, and both samples poisoning the status averages start/submit routing reads (21:02:05
+# "relay 6.57s vs local 4.56s"). The calibrator now only names a cid whose status reply is known / predicted <= this
+# many KB (the last such routed status, else the last cid if it qualifies, else CAL_DEFAULT_CID), and a sample whose
+# reply turns out bigger is dropped (not averaged; its local leg not sent). 0 = the old pick (the last cid, any size).
+CAL_MAX = int(float(os.environ.get("HCTF_GM_CAL_MAX_KB", "32")) * 1024)
+CAL_DEFAULT_CID = os.environ.get("HCTF_GM_CAL_CID", "warmups-day-01")   # day 1 warmups status: ~2 KB
+
+
+def _cal_cid():
+    """The cid the calibrator's status sample names (see CAL_MAX)."""
+    if CAL_MAX <= 0:
+        return _state.get("last_cid") or CAL_DEFAULT_CID
+    for c in (_state.get("cal_cid"), _state.get("last_cid")):
+        if not c:
+            continue
+        try:
+            if _status_pred(c) <= CAL_MAX:
+                return c
+        except Exception:  # noqa: BLE001 - unknown size: not this one
+            continue
+    return CAL_DEFAULT_CID
 
 
 def _note_status_bytes(args, env):
@@ -279,6 +312,8 @@ def _note_status_bytes(args, env):
         n = _approx_bytes(env)
         with _lock:
             _reply[("status", str(args[1]))] = n
+        if CAL_MAX > 0 and n <= CAL_MAX and _judged(env) and env.get("http") != 404:
+            _state["cal_cid"] = str(args[1])     # a known-small, existing cid: the calibrator's next sample names it
 
 
 def decide(op):
@@ -577,12 +612,18 @@ def _attempt_of(env):
 
 
 def calibrate_once(cid=None):
-    """One status on each path (sequential: neither queues behind the other) -> (relay s | None, local s | None)."""
+    """One status on each path (sequential: neither queues behind the other) -> (relay s | None, local s | None).
+    cid None: a known-small cid (_cal_cid). A reply > CAL_MAX is not a latency sample: not averaged, and the other
+    leg is not sent (D31)."""
     from . import remote
-    cid = cid or _state.get("last_cid") or "warmups-day-01"
+    cid = cid or _cal_cid()
     out = []
     chan = _chan()
+    big = False
     for path in ("relay", "local"):
+        if big:
+            out.append(None)
+            continue
         t0 = time.time()
         try:
             if path == "relay":
@@ -597,6 +638,13 @@ def calibrate_once(cid=None):
             continue
         dt = time.time() - t0
         if _judged(env):
+            _note_status_bytes(["status", cid], env)   # learned: a big cid is never the calibrator's pick again
+            if CAL_MAX > 0 and _approx_bytes(env) > CAL_MAX:
+                big = True
+                _say(f"[gmroute] calibration sample dropped: status {cid} replied {_approx_bytes(env) // 1024} KB on "
+                     f"the {path} path (> {CAL_MAX // 1024} KB: not a latency sample)")
+                out.append(None)
+                continue
             record("status", path, dt)
             out.append(dt)
         else:

@@ -1108,20 +1108,23 @@ class AnswerFirst:
                      "list, they are another worker's: do not touch them, just stop again.")
         return note
 
-    def start(self, race_done=None):
-        threading.Thread(target=self._run, args=(race_done,), daemon=True, name=f"answer-first-{self.cid}").start()
+    def start(self, race_done=None, residual=None):
+        """residual: (fields, why) known by the caller (D31 #1: the race's unconfirmed ids) -> no race wait, no dry-run
+        residual."""
+        threading.Thread(target=self._run, args=(race_done, residual), daemon=True,
+                         name=f"answer-first-{self.cid}").start()
         return self
 
-    def _run(self, race_done):
+    def _run(self, race_done, residual=None):
         try:
             from . import webtarget
             wait = ANSWER_FIRST_RACE_WAIT_WEB if webtarget.is_live_lane(self.chain.lane) else ANSWER_FIRST_RACE_WAIT
-            if race_done is not None and wait > 0:
+            if race_done is not None and wait > 0 and residual is None:
                 race_done.wait(wait)
             if self.stop_evt.is_set() or cli.is_complete(self.cid):
                 say(f"[{self.cid}] no answer-first worker: the single is already complete")
                 return
-            fields, rwhy = self._residual()
+            fields, rwhy = (list(residual[0]), residual[1]) if residual is not None else self._residual()
             if not fields and len(fields) < len(self.ids) and AF_RESIDUAL:
                 say(f"[{self.cid}] no answer-first worker: nothing left to answer by hand ({rwhy})")
                 return
@@ -1424,6 +1427,71 @@ RACE_FIRST_WAIT = float(os.environ.get("HCTF_RACE_FIRST_WAIT", "12"))
 # before the local bytes land hands the timed modes over at once (race-first), the single's bookkeeping then waits for
 # its download (_single_dl_fut). HB_RACE_WAIT_START: how long it waits for the local start body.
 HB_RACE_WAIT_START = float(os.environ.get("HCTF_HB_RACE_WAIT_START", "30"))
+# D31 #1 (D29 binary single CORRECT at +80 s): the in-network race had 398/406 answers at +23.8 s, the local race its own
+# plan at ~+25 s, yet the first race submit went out at +63 s (local race "in 41.5s"; the in-network one never logged a
+# submit: it reached _race_claimed after the local race and returned). Between "answers in" and "submit" each race re-read
+# every candidate's cases/*/expected.json (solvers._known_ids, 3 x 58 files on binary) -- and the warmups gate the
+# lib.slug vocab harvest -- on a drop-saturated process: every file read drops + re-takes the GIL behind the CPU-bound
+# threads (triage's 26 s extract ...). Measured 10-31: _known_ids x3 0.1 s idle -> 1.1 s beside ONE busy Python thread,
+# 4.3 s beside two (slug harvest 0.1 -> 19.5 s; D29 warmups' race sat 32 s between its plan and its gate line). Earlier
+# days' solvers never change at the drop: their known ids are memoized per (dir, cases/ mtime) and warmed before the
+# release wait (warm_race_known_async; the slug vocab too). Sets > RACE_KNOWN_MEMO_MAX ids are not kept (script: 100-160k
+# per solver = ~50 MB, and its race was not the bottleneck). 0 = the per-merge reads (old).
+RACE_KNOWN_MEMO = os.environ.get("HCTF_RACE_KNOWN_MEMO", "1") != "0"
+RACE_KNOWN_MEMO_MAX = int(os.environ.get("HCTF_RACE_KNOWN_MEMO_MAX", "50000"))
+# D31 #1: a race that banked part of the single (not complete) starts the answer-first worker on its residual (the ids the
+# GM has not confirmed) right there -- D29 binary: 398/406 banked, the 8-field answer-first only at the launch prep (+69 s,
+# behind triage's extract + the prompt build). 0 = answer-first only from the launch prep (old).
+RACE_RESIDUAL_AF = os.environ.get("HCTF_RACE_RESIDUAL_AF", "1") != "0"
+_known_memo, _known_raw = {}, solvers._known_ids
+
+
+def _known_ids_memo(sdir):
+    """solvers._known_ids, memoized per solver dir while its cases/ dir is unchanged (a new case = a new dir entry =
+    a new mtime). A lane solver (no own cases: its set spans every day's cases) is never memoized."""
+    try:
+        if solvers._day_key(sdir) == solvers.LANE_DAY_KEY:
+            return _known_raw(sdir)
+        sig = (Path(sdir) / "cases").stat().st_mtime_ns
+    except (OSError, ValueError):
+        return _known_raw(sdir)
+    hit = _known_memo.get(str(sdir))
+    if hit is not None and hit[0] == sig:
+        return hit[1]
+    known = _known_raw(sdir)
+    if len(known) <= RACE_KNOWN_MEMO_MAX:
+        _known_memo[str(sdir)] = (sig, known)
+    return known
+
+
+if RACE_KNOWN_MEMO:
+    solvers._known_ids = _known_ids_memo   # reuse_merge (its only caller) looks it up at call time
+
+
+def warm_race_known_async(log=None):
+    """Before the release wait: every non-web race lane's candidate solvers' known ids (_known_ids_memo) + lib.slug's
+    vocab, so the race's merge and format gate read no case files at the drop (D31 #1)."""
+    if not (REUSE_RACE and RACE_KNOWN_MEMO) or REUSE_OLD_SOLVERS:
+        return
+
+    def run():
+        t0, n = time.time(), 0
+        try:
+            from . import webtarget
+            for ln in sorted(REUSE_RACE_LANES):
+                if ln == "welcome" or webtarget.is_live_lane(ln):
+                    continue
+                for c in solvers.reuse_cands(ln, limit=REUSE_RACE_SOLVERS)[0]:
+                    solvers._known_ids(c)
+                    n += 1
+            from lib import slug
+            slug.vocab()
+            slug.english()
+            (log or say)(f"[race] known ids of {n} race solver(s) + the slug vocab warmed in {time.time() - t0:.1f}s "
+                         f"({len(_known_memo)} memoized)")
+        except Exception as e:  # noqa: BLE001 - the merge reads them on demand
+            (log or say)(f"[race] known-ids warm note: {str(e)[:200]}")
+    threading.Thread(target=run, daemon=True, name="race-known-warm").start()
 # On a pool with EVIDENCE of no clock (_untimed_evidence) a missed carry-over / new-id field is fixed in-attempt (localize,
 # bank, live answer), so the handoff holds are capped: carry-check wait (was CARRY_CHECK_MAX + 5 = 17 s), synchronous
 # new-id dry run skipped above SKIP_IDS new ids (D23 script: 12k-id contracts) else capped. 0 = no cap / no skip.
@@ -1461,6 +1529,10 @@ WEB_CODIFY_PENDING_WAIT = float(os.environ.get("HCTF_WEB_CODIFY_PENDING_WAIT", "
 # Homebase is ~1.5x slower and the 7-13 s window also pays GM start/download/submit (blind D7 replay: binary 5.9 s ->
 # Time Trial exec_error "too slow", one attempt + ~30 s burned before the speed fix even started). 0 disables.
 SINGLE_SPEED_BUDGET = float(os.environ.get("HCTF_SINGLE_SPEED_BUDGET", "2.5"))
+# D31 #2: speed_harden keeps a speed generalize only if the re-timed slowest case (min of N sequential runs, old vs new
+# solver interleaved) improved by >= this fraction, or the edit made a failing case pass (else .generalize-snapshot/)
+SPEED_RETIME_RUNS = int(os.environ.get("HCTF_SPEED_RETIME_RUNS", "2"))
+SPEED_KEEP_MIN_GAIN = float(os.environ.get("HCTF_SPEED_KEEP_MIN_GAIN", "0.05"))
 # D22 post-mortem: the timed modes run the UNTIMED regular pool (HCTF_RUN_FOR_TIME=auto, every D15-D22 contract
 # deadline=None) -- the clock-era speed gates above only cost wall time there. Rehearsal D22: script's 3.1 s and binary's
 # 6.4 s single solvers (the latter timed on a contended host) set off pre-TT speed generalizes -> TT at T+4:00 / T+10:32
@@ -4327,7 +4399,8 @@ class Chain:
         broken = sorted(getattr(self, "_baseline", set()) - passed)
         if res and not broken:
             self._accepted_res = (self._solver_mtimes(), self._case_names(), res)   # next baseline reuses it
-            shutil.rmtree(snap)
+            if not getattr(self, "_keep_gen_snap", False):   # D31 #2: speed_harden judges the speed itself, then drops it
+                shutil.rmtree(snap)
             gained = sorted(passed - getattr(self, "_baseline", set()))
             if gained:
                 say(f"[{self.base}] generalize accepted: now also passes {gained[:6]}")
@@ -4523,7 +4596,12 @@ class Chain:
     def _race_submit(self, cid, contract, ids, plan, art, t0, tr, where=""):
         """The race's gate -> merge -> submit/bank -> seed snapshot, for a reuse_plan()-shaped plan (local or in-network:
         art=None, then the seed is verified from the plan's own run). where: tags the log lines (" (in-network)")."""
-        if cli.is_complete(cid) or not self._race_claimed(cid):
+        if cli.is_complete(cid):
+            return
+        if not self._race_claimed(cid):
+            # D31 #1: D29's in-network race returned here without a trace (the local race held the claim)
+            say(f"[{cid}] reuse race{where}: stands down at +{time.time() - t0:.1f}s (the other race holds this "
+                "attempt's submit)")
             return
         high, spec = dict(plan["high"]), dict(plan["spec"])
         dropped = self._race_gate(contract, high, spec) if RACE_FORMAT_GATE else []
@@ -4555,8 +4633,46 @@ class Chain:
         else:
             say(f"[{cid}] reuse race{where}: not complete after {used} submit(s) "
                 f"({len(cli.confirmed_answers(cid))}/{len(ids)} confirmed); the worker continues")
+            self._race_residual_af(cid, ids, where)   # D31 #1: before the note (its question text costs seconds)
             if RACE_PARTIAL:
                 self._deliver_note(cid, self._race_note(cid, ids, merged, plan), key="race")
+
+    def _af_launch_lock(self):
+        """One answer-first per single: the race's residual launch (_race_residual_af) vs the launch prep's side workers."""
+        return self.__dict__.setdefault("_af_lock_c", threading.Lock())
+
+    def _race_residual_af(self, cid, ids, where=""):
+        """D31 #1: the race banked part of the single -> the answer-first worker starts NOW on the residual (every id the
+        GM has not confirmed, incl. the race's rejected / unjudged ones), in a thread (its prompt render reads triage).
+        Nothing banked (the launch prep decides, as before) / live-target web / no local bytes yet -> no-op."""
+        from . import webtarget
+        if (not (ANSWER_FIRST and RACE_RESIDUAL_AF) or self.lane == "welcome" or webtarget.is_live_lane(self.lane)
+                or getattr(self, "_af", None) is not None):
+            return
+        conf = cli.confirmed_answers(cid)
+        rest = [a for a in ids if a not in conf]
+        if not conf or not rest or not timed.latest_artifacts(cid):
+            return
+
+        def launch():
+            try:
+                with self._af_launch_lock():
+                    if (getattr(self, "_af", None) is not None or cli.is_complete(cid)
+                            or getattr(self, "_ready_snap", None) is not None):
+                        return
+                    conf = cli.confirmed_answers(cid)
+                    rest = [a for a in ids if a not in conf]
+                    if not rest:
+                        return
+                    ok, why = answer_first_eligible(self.lane, len(rest))
+                    if not ok:
+                        say(f"[{cid}] no answer-first worker on the race residual: {why}")
+                        return
+                    self._af = AnswerFirst(self, cid).start(residual=(
+                        rest, f"the reuse race{where} banked {len(conf)}/{len(ids)} GM-confirmed"))
+            except Exception as e:  # noqa: BLE001 - the launch prep's path still runs
+                say(f"[{cid}] race-residual answer-first note: {str(e)[:200]}")
+        threading.Thread(target=launch, daemon=True, name=f"race-af-{self.base}").start()
 
     def _hb_race_wanted(self):
         """In-network race for this single: the race is on for a lane that is not live-target web, and the lane's newest
@@ -4576,6 +4692,9 @@ class Chain:
             cands, lane_dirs = solvers.reuse_cands(self.lane, exclude=[self.sdir], limit=REUSE_RACE_SOLVERS)
             if not cands:
                 return
+            if RACE_KNOWN_MEMO:   # D31 #1: the merge's known ids while the VM downloads (a no-op when warmed pre-drop)
+                threading.Thread(target=_quiet_errors, args=(lambda: [solvers._known_ids(c) for c in cands], cid),
+                                 daemon=True, name=f"race-known-{self.base}").start()
             # the local start body AND a relay channel, while the local download still runs (rehearsal fair D25: the
             # single started 2 s into the run, the relay channels came up 3-8 s later -> the race gave up at once)
             contract, chan, p = None, None, cli.cdir(cid) / "start.json"
@@ -5477,17 +5596,20 @@ class Chain:
                         say(f"[{cid}] duel launch note: {e}")
                 if ANSWER_FIRST and getattr(self, "_af", None) is None:
                     try:
-                        if cli.is_complete(cid) or getattr(self, "_ready_snap", None) is not None:
-                            return   # async prep: the single finished meanwhile
-                        af = AnswerFirst(self, cid)
-                        # D28 #1: with a dry run the field count is judged on its residual inside af._run
-                        n_af = (min(len(af.ids), 1) if AF_RESIDUAL and getattr(self, "_dry_fut", None) is not None
-                                else len(af.ids))
-                        ok, why = answer_first_eligible(self.lane, n_af)
-                        if ok:
-                            self._af = af.start(race_done=getattr(self, "_race_done", None))
-                        else:
-                            say(f"[{cid}] no answer-first worker: {why}")
+                        with self._af_launch_lock():   # D31 #1: the race may have started it on its residual already
+                            if getattr(self, "_af", None) is not None:
+                                return
+                            if cli.is_complete(cid) or getattr(self, "_ready_snap", None) is not None:
+                                return   # async prep: the single finished meanwhile
+                            af = AnswerFirst(self, cid)
+                            # D28 #1: with a dry run the field count is judged on its residual inside af._run
+                            n_af = (min(len(af.ids), 1) if AF_RESIDUAL and getattr(self, "_dry_fut", None) is not None
+                                    else len(af.ids))
+                            ok, why = answer_first_eligible(self.lane, n_af)
+                            if ok:
+                                self._af = af.start(race_done=getattr(self, "_race_done", None))
+                            else:
+                                say(f"[{cid}] no answer-first worker: {why}")
                     except Exception as e:  # noqa: BLE001 - optional
                         say(f"[{cid}] answer-first launch note: {e}")
             if n == 0 and not welcome:
@@ -8693,27 +8815,27 @@ class _EarlyChains:
 
 
 def _lane_last_single_mb(lane, before_day=None):
-    """MB of the newest earlier Single Solve delivery of `lane` (its artifacts/latest), 0.0 when there is none."""
-    best = None
+    """MB of the newest earlier Single Solve delivery of `lane` (its artifacts/latest), 0.0 when there is none. Several
+    singles of the lane on that day -> the LARGEST (D31: D30 shipped binary campaign-trail 35 MB + the single-only bonus
+    sha1-hulud 0.23 MB; the glob-order pick measured the bonus and disarmed the in-network race for D31's binary)."""
+    best, mb = None, 0.0
     for m in ROOT.glob("challenges/day*/*/meta.json"):
         d = m.parent.parent.name
         if before_day and d >= before_day:
             continue
         latest = m.parent / "single_solve" / "artifacts" / "latest"
-        if not latest.exists() or (best is not None and d <= best[0]):
+        if not latest.exists() or (best is not None and d < best):
             continue
         try:
-            if json.loads(m.read_text()).get("lane") == lane:
-                best = (d, latest)
+            if json.loads(m.read_text()).get("lane") != lane:
+                continue
+            size = sum(f.stat().st_size for f in latest.resolve().iterdir()
+                       if f.is_file() and f.name != "manifest.json") / 1e6
         except (OSError, ValueError):
             continue
-    if best is None:
-        return 0.0
-    try:
-        return sum(f.stat().st_size for f in best[1].resolve().iterdir()
-                   if f.is_file() and f.name != "manifest.json") / 1e6
-    except OSError:
-        return 0.0
+        mb = size if (best is None or d > best) else max(mb, size)
+        best = d
+    return mb
 
 
 def _hb_race_predrop(log=say, wait_s=900):
@@ -8808,6 +8930,7 @@ def run(day=None, only=None, local_slots=5, hb_slots=0, modes=None, prewarm_home
         from . import retrieval
         retrieval.build_async(log=say)
     warm_lane_shapes_async(day, log=say)   # also before the release wait (D22 post-mortem #10)
+    warm_race_known_async(log=say)         # D31 #1: the race's merge / gate read no case files at the drop
     gov = Governor(hb_enabled=bool(hb_slots))
     pools = Pools(local_slots, hb_slots, gov)
     groups = {}
@@ -8979,6 +9102,7 @@ def hof_race(groups):
             return   # web: each race = a fresh live target (one per team) for a board we don't play
         if "mastery" in ids and not cli.gm_solved(ids["mastery"]):
             return
+        raced = False
         for mode in ("mastery", "time_trial"):
             cid = ids.get(mode)
             if not cid or not cli.gm_solved(cid):
@@ -8996,6 +9120,7 @@ def hof_race(groups):
                 if i == 0:
                     best = _gm_ms(cid)   # GM status round trip only when a race actually runs (D14: ~5 s for nothing)
                 set_state(base, stage=f"{mode}:hof-race")
+                raced = True
                 res = timed.run(cid, sdir, log=say, op="retry")
                 ms = _gm_ms(cid) if res == "correct" else None
                 say(f"[hof] {cid} race {i + 1}/{HOF_RACE}: {res}"
@@ -9003,7 +9128,11 @@ def hof_race(groups):
                 if res != "correct":
                     break
                 best = ms if best is None or (ms is not None and ms < best) else best
-        set_state(base, stage="done")
+        # D31 #3: D30 sha1-hulud (a single-only bonus, its single timed out UNSOLVED at single:help) has no Mastery to
+        # gate on and was stamped "done" here -> `hctf why` said "all modes solved". Only a chain this race touched, or
+        # one whose every listed mode the GM has solved, is done; any other keeps its own (honest) stage.
+        if raced or all(cli.gm_solved(c) for c in ids.values()):
+            set_state(base, stage="done")
 
     say(f"[hof] racing passed timed modes for the Hall of Fame (up to {HOF_RACE} each, >= {HOF_RACE_MIN} left, "
         f"reserve {HOF_RESERVE})")
@@ -9417,6 +9546,11 @@ def speed_harden(day=None, cid=None, log=None):
         sdir = paths.solver_dir(base)
         if not (sdir / "solve.py").exists():
             continue
+        if _single_only(sdir.parent):
+            # D31 #2: D30 sha1-hulud (single-only bonus) was seeded from an earlier binary solver, so it "had" Mastery
+            # cases and got a pointless speed generalize: no timed mode of its own -> nothing a speed fix serves
+            log(f"[speed-harden] {base}: single-only challenge (no timed mode state): skipped")
+            continue
         res = solvers.test_solver(sdir)
         bad = [r["case"] for r in res if not r.get("ok") and not r.get("unverified")]
         from . import prebuild as _pb
@@ -9446,12 +9580,79 @@ def speed_harden(day=None, cid=None, log=None):
                 f"({par['per_set']:.2f}s/set) -> parallel-sets generalize")
             diag["parallel_sets"] = par
         chain = chain_for(base, pools, gov)
-        chain.generalize(base, wrong=None, fixed=None, diag=diag)
-        after = max((r["seconds"] for r in solvers.test_solver(sdir) if not r.get("unverified") and not r.get("error")),
-                    default=0.0)
-        log(f"[speed-harden] {base}: slowest case {slow:.1f}s -> {after:.1f}s")
+        keep = hasattr(chain, "_snap_dir")   # (a stand-in chain without the snapshot API: the old single re-time)
+        if keep:
+            chain._keep_gen_snap = True
+        try:
+            chain.generalize(base, wrong=None, fixed=None, diag=diag)
+        finally:
+            if keep:
+                chain._keep_gen_snap = False
+        res_after = solvers.test_solver(sdir)
+        after = max((r["seconds"] for r in res_after if not r.get("unverified") and not r.get("error")), default=0.0)
+        if keep and chain._snap_dir().exists():
+            try:
+                after = _speed_keep_or_restore(chain, base, sdir, res, res_after, worst, log)
+            except Exception as e:  # noqa: BLE001 - the edit passed the correctness gate: keep it, never strand the snapshot
+                shutil.rmtree(chain._snap_dir(), ignore_errors=True)
+                log(f"[speed-harden] {base}: re-time failed ({str(e)[:120]}): generalize kept, slowest {after:.1f}s")
+        else:
+            log(f"[speed-harden] {base}: slowest case {slow:.1f}s -> {after:.1f}s")
         out[base] = (slow, after)
     return out
+
+
+def _single_only(root):
+    """A challenge with Single Solve state and NO timed-mode state at all (its time_trial/ + mastery/ dirs absent or
+    empty: a chain prefetches every listed timed contract at its single's start). Unknown layout -> False."""
+    if not (root / "single_solve").is_dir():
+        return False
+    return not any((root / m).is_dir() and any((root / m).iterdir()) for m in ("time_trial", "mastery"))
+
+
+def _speed_retime(sdir, cases, runs):
+    """{case: min seconds over `runs` sequential replays} of `cases` (errors / unverified skipped)."""
+    best = {}
+    for _ in range(max(1, runs)):
+        for r in solvers.test_solver(sdir, cases=sorted(cases), parallel=1):
+            if r.get("ok") and not r.get("unverified") and not r.get("error"):
+                best[r["case"]] = min(best.get(r["case"], float("inf")), r["seconds"])
+    return best
+
+
+def _speed_keep_or_restore(chain, base, sdir, res_before, res_after, worst_before, log):
+    """D31 #2: the speed generalize was ACCEPTED (correctness-transactional only; the pre-worker solver is still in
+    .generalize-snapshot/ via _keep_gen_snap). D29 binary 5.1 s -> 6.0 s and D30 binary 4.3 s -> 6.5 s were kept: the
+    "after" was ONE suite run beside the other post-run workers. Re-time the slowest case(s) (before's + after's) on
+    BOTH solvers, interleaved, min of SPEED_RETIME_RUNS sequential runs each; keep the edit only if that slowest time
+    improved by >= SPEED_KEEP_MIN_GAIN or it made a previously failing case pass, else restore the snapshot.
+    -> the kept solver's slowest (re-timed) seconds."""
+    snap = chain._snap_dir()
+    timed_after = [r for r in res_after if not r.get("unverified") and not r.get("error")]
+    worst_after = max(timed_after, key=lambda r: r["seconds"], default=None)
+    cases = {r["case"] for r in (worst_before, worst_after) if r}
+    new, old = {}, {}
+    for _ in range(max(1, SPEED_RETIME_RUNS)):   # interleaved: both see the same host load
+        for k, v in _speed_retime(sdir, cases, 1).items():
+            new[k] = min(new.get(k, float("inf")), v)
+        for k, v in _speed_retime(snap, cases, 1).items():
+            old[k] = min(old.get(k, float("inf")), v)
+    t_new, t_old = max(new.values(), default=None), max(old.values(), default=None)
+    gained = sorted({r["case"] for r in res_after if r.get("ok")} - {r["case"] for r in res_before if r.get("ok")})
+    runs = f"min of {max(1, SPEED_RETIME_RUNS)} run(s), {', '.join(sorted(cases))}"
+    if t_new is None or t_old is None:
+        shutil.rmtree(snap, ignore_errors=True)
+        log(f"[speed-harden] {base}: re-time inconclusive ({runs}: new {t_new}, old {t_old}): generalize kept")
+        return t_new if t_new is not None else max((r["seconds"] for r in timed_after), default=0.0)
+    if t_new < t_old * (1 - SPEED_KEEP_MIN_GAIN) or gained:
+        shutil.rmtree(snap, ignore_errors=True)
+        log(f"[speed-harden] {base}: slowest case {t_old:.1f}s -> {t_new:.1f}s ({runs}): kept"
+            + (f" (now also passes {gained[:4]})" if gained and not t_new < t_old * (1 - SPEED_KEEP_MIN_GAIN) else ""))
+        return t_new
+    chain._restore_snapshot(f"speed-harden: slowest case not faster, {t_old:.1f}s -> {t_new:.1f}s ({runs})")
+    log(f"[speed-harden] {base}: slowest case {t_old:.1f}s -> {t_new:.1f}s ({runs}): no speed gain -> pre-generalize "
+        "solver restored")
+    return t_old
 
 
 def chain_for(cid, pools, gov):

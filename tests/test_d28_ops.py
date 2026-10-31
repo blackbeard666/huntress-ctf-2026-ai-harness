@@ -72,10 +72,10 @@ def env(**kv):
 
 # ---------------------------------------------------------------- 17. technique-log turn cap
 with env(HCTF_MAX_TURNS_RATCHET_LOG=None, HCTF_MAX_TURNS_RATCHET_LOG_BINARY_REVERSE_ENGINEERING=None):
-    check("17 ratchet_log cap 40 (D28: binary/mobile/metadata hit 34)", workers._max_turns("ratchet_log") == 40
-          and workers._max_turns("ratchet_log", "mobile-android") == 40, workers._max_turns("ratchet_log"))
-    check("17 binary's technique log: 45 via the per-lane table",
-          workers._max_turns("ratchet_log", "binary-reverse-engineering") == 45)
+    check("17 ratchet_log cap 60 (D28 hit 34, D30 warmups/script/metadata hit 40)", workers._max_turns("ratchet_log") == 60
+          and workers._max_turns("ratchet_log", "mobile-android") == 60, workers._max_turns("ratchet_log"))
+    check("17 binary's technique log: 70 via the per-lane table",
+          workers._max_turns("ratchet_log", "binary-reverse-engineering") == 70)
     check("17 other stages unchanged", workers._max_turns("single", "binary-reverse-engineering") == 80
           and workers._max_turns("generalize") == 50 and workers._max_turns("nosuchstage") == 60)
     with env(HCTF_MAX_TURNS_RATCHET_LOG="50"):
@@ -85,7 +85,7 @@ with env(HCTF_MAX_TURNS_RATCHET_LOG=None, HCTF_MAX_TURNS_RATCHET_LOG_BINARY_REVE
             check("17 a per-lane env beats the stage env", workers._max_turns("ratchet_log", "binary-reverse-engineering") == 55
                   and workers._max_turns("ratchet_log", "warmups") == 50)
     cmd = workers._worker_cmd("ratchet_log", "binary-reverse-engineering", prompt="x")
-    check("17 the worker argv carries the lane's cap", cmd[cmd.index("--max-turns") + 1] == "45", cmd[:6])
+    check("17 the worker argv carries the lane's cap", cmd[cmd.index("--max-turns") + 1] == "70", cmd[:6])
 
 # ---------------------------------------------------------------- 3. _solver_sig prunes cases/
 sol = TMP / "solver"

@@ -242,7 +242,11 @@ ca_out="$(python3 - "$CTF_DAY1" "$CTF_LASTDAY" <<'PY' 2>&1
 import datetime, json, sys, time
 from pathlib import Path
 day1, last = sys.argv[1], int(sys.argv[2])
-end = datetime.datetime.fromisoformat(day1) + datetime.timedelta(days=last)
+# the final drop (09:00 ET = 13:00 UTC on the last day) + a 12 h run/post-run window must fit before the expiry; the
+# old fixed "<= 2 days -> FAIL" failed the 10-31 catch-up preflight for a login (11-01 17:26) that outlives the CTF
+final_drop = datetime.datetime.fromisoformat(day1).replace(hour=13, tzinfo=datetime.timezone.utc) \
+    + datetime.timedelta(days=last - 1)
+end = final_drop + datetime.timedelta(hours=12)
 try:
     o = json.load(open(Path.home() / ".claude/.credentials.json"))["claudeAiOauth"]
 except Exception as e:
@@ -254,12 +258,12 @@ left = (r - time.time()) / 86400
 when = datetime.datetime.fromtimestamp(r).strftime("%Y-%m-%d %H:%M")
 if left <= 0:
     print(f"FAIL Claude login EXPIRED ({when}): run `claude auth login`")
-elif left <= 2:
-    print(f"FAIL Claude login expires {when} ({left:.1f} d): run `claude auth login` NOW (workers die mid-run on an expired refresh token)")
+elif left * 24 < 12:
+    print(f"FAIL Claude login expires {when} ({left * 24:.1f} h): run `claude auth login` NOW (workers die mid-run on an expired refresh token)")
 elif r < end.timestamp():
-    print(f"WARN Claude login expires {when} ({left:.1f} d) -- BEFORE the CTF's last day; `claude auth login` again before then")
+    print(f"WARN Claude login expires {when} ({left:.1f} d) -- BEFORE the CTF's final drop + 12 h; `claude auth login` again before then")
 else:
-    print(f"OK Claude login valid until {when} ({left:.0f} d)")
+    print(f"OK Claude login valid until {when} ({left:.1f} d) -- outlives the final drop + 12 h")
 PY
 )"
 case "$ca_out" in OK*) ok "${ca_out#OK }";; WARN*) warn "${ca_out#WARN }";; *) fail "${ca_out#FAIL }";; esac

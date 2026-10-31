@@ -1253,9 +1253,10 @@ def c_why(a):
     print(f"== {base}  [{chain.get('lane', '?')}]  {chain.get('name', '')}")
     print(f"   stage={chain.get('stage', '?')}  worker={chain.get('worker') or '-'}  "
           f"attempt={chain.get('attempt', '-')}  launches={chain.get('launches', '-')}  updated={chain.get('updated', '?')}")
+    open_modes = []   # D31 #3: modes with local state that are not solved (the verdict never says "all solved" over them)
     for mode in paths.MODES:
         cid = base if mode == "single_solve" else f"{base}/{mode}"
-        d = cdir(cid)
+        d = paths.challenge_root(base) / mode   # (cdir() would create it: a single-only chain has no timed dirs)
         if not d.exists():
             continue
         done = False
@@ -1263,6 +1264,8 @@ def c_why(a):
             done = is_complete(cid)
         except Exception:  # noqa: BLE001
             pass
+        if not done and str(chain.get(mode + "_result") or "").lower() != "correct" and any(d.iterdir()):
+            open_modes.append(mode)
         blocks = len(list(d.glob(".stop-blocks-*")))
         line = f"  - {mode}: {'DONE' if done else (chain.get(mode + '_result') or 'pending')}"
         if blocks:
@@ -1300,8 +1303,11 @@ def c_why(a):
             print(f"      last worker ({wr[0]}): {wr[1][0]} -- {wr[1][1][:180]}")
     # verdict
     stage = str(chain.get("stage", ""))
-    if stage == "done":
+    if stage == "done" and not open_modes:
         verdict = "DONE - all modes solved."
+    elif stage == "done":
+        verdict = (f"NOT DONE - chain.json says done but {', '.join(open_modes)} not solved locally: `hctf reconcile` "
+                   "(GM truth) / `hctf status <id>`, then re-run the chain if the GM agrees.")
     elif stage.endswith(("generalizing", "fixing", "solving", "running", "fetch", "reuse")):
         verdict = "WORKING - a worker/attempt is in progress; compare `updated` to now. If it keeps cycling the SAME wrong field, it's converging on a label (watch vocab.json)."
     elif stage.endswith(("blocked", "help")):
