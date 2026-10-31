@@ -23,7 +23,7 @@ Root of a process: its cwd walked up to the nearest dir holding both hctf/ and b
 HCTF_ROOT (bin/hctf, bin/env.sh); else a `cd <dir>` in its own (shell) or a parent shell's script; else None (never
 counted as another copy). Our own pid and its ancestors are never reported.
 Used by bin/preflight.sh (FAIL; HCTF_SHARED_HOST=1 -> WARN), bin/day.sh step 0 (stops other copies' prebuilds, warns
-on their runs, never aborts), bin/fair_run.sh (refuses to start).
+on their runs, never aborts).
 """
 from __future__ import annotations
 

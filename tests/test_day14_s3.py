@@ -1,6 +1,6 @@
 """Day 14 prep, stream S3 (offline: no GM / no Homebase / no real LLM workers): lane solver dirs, prebuild worker
 plumbing (no GM token, secrets/ hidden, 40 turns), the prebuild gate + transactional revert with STUB workers, the
-budget/deadline math, the post-run hook, bin/day.sh stop, the metadata lane seed, fair_run overlays.
+budget/deadline math, the post-run hook, bin/day.sh stop, the metadata lane seed.
 
 Run:  source bin/env.sh && python3 tests/test_day14_s3.py      (exit 0 = all pass)
 """
@@ -331,28 +331,4 @@ assert "lane_seed_dir(self.lane)" in src and "self._lane_seed_note" in src
 print("ok  lane seed: metadata solver dir seeded from challenges/_lane (runs at a dayNN depth), note names "
       "local_answer(); HCTF_LANE_SEED_LANES empty -> skeleton")
 
-# 10) bin/fair_run.sh: directory overlays + _lane sync + HCTF_META_MAX_DAY (syntax + the overlay loop on a scratch repo)
-fr = (ROOT / "bin" / "fair_run.sh").read_text()
-assert subprocess.run(["bash", "-n", str(ROOT / "bin" / "fair_run.sh")]).returncode == 0
-assert 'cat-file -t "HEAD:$f"' in fr and "challenges/_lane" in fr and "HCTF_META_MAX_DAY={day}" in fr
-loop = fr[fr.index('for f in "${OVERLAYS[@]}"'):]
-loop = loop[:loop.index("\ndone") + 5]
-with tempfile.TemporaryDirectory() as d:
-    main, alt = Path(d) / "main", Path(d) / "alt"
-    (main / "lib" / "meta").mkdir(parents=True)
-    (main / "lib" / "meta" / "a.py").write_text("A=1\n")
-    (main / "lib" / "common.py").write_text("C=1\n")
-    g = ["git", "-C", str(main), "-c", "user.email=t@t", "-c", "user.name=t"]
-    subprocess.run(["git", "init", "-q", str(main)], check=True)
-    subprocess.run(g + ["add", "-A"], check=True)
-    subprocess.run(g + ["commit", "-qm", "x"], check=True)
-    (alt / "lib" / "meta").mkdir(parents=True)
-    (alt / "lib" / "meta" / "stale.py").write_text("S=1\n")
-    script = f'set -euo pipefail\nMAIN={main}\nALT={alt}\nOVERLAYS=(lib/meta/ lib/common.py)\n{loop}\n'
-    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
-    assert r.returncode == 0, r.stderr
-    assert (alt / "lib" / "meta" / "a.py").read_text() == "A=1\n" and not (alt / "lib" / "meta" / "stale.py").exists()
-    assert (alt / "lib" / "common.py").read_text() == "C=1\n" and "overlay (HEAD, dir): lib/meta" in r.stdout
-print("ok  fair_run.sh: overlays take files AND directories (replaced whole), challenges/_lane synced, "
-      "HCTF_META_MAX_DAY=<day> in the env block")
 print("all S3 checks passed")
