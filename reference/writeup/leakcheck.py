@@ -15,20 +15,20 @@ OURS = {"_blackb3ard_and_friends", "_blackb3ard"}
 
 PATTERNS = {
     "internal ip": r"\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
-    "wsl user": r"testpwn",
-    "email/org": r"org|cavila",
-    "harness accounts": r"sec1-huntress|[redacted]|[redacted]",
     "credentials": r"Bearer\s+[A-Za-z0-9._-]{8,}|pairing_token|gm_pairing|\.ovpn\b",
     "aws ids": r"\bami-[0-9a-f]{8,}|\bi-0[0-9a-f]{8,}|EC2BedrockInvoke",
     "uuid": r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
-    "reviewer": r"reviewer|manual analysis",
-    "rehearsal copy": r"\brehearsal copy|rehearsal copy|alt\.ovpn",
     "homebase ssh user": r"HuntressCTF",
     "personal path": r"/mnt/c/Users|/home/\w+",
     "mobile answer": r"\bANS-[0-9a-fA-F]{16}\b",
     "web proof": r"\bproof_[0-9a-f]{8,}",
     "warmups slug": r"\b[a-z]{3,}-[a-z]{3,}-(?!day-)[a-z]{3,}-\d{2}\b",   # not heading anchors (...-day-17)
 }
+# Identity-specific patterns (account handles, org, local user, outside-help words) live in an untracked file so the
+# public repository never names them: {"label": "regex", ...}. Missing file -> only the generic patterns run.
+PRIVATE = os.path.expanduser("~/.config/hctf-writeup/private_patterns.json")
+if os.path.exists(PRIVATE):
+    PATTERNS.update(json.load(open(PRIVATE)))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 # Harness vocabulary the post may name on purpose (API fields, file names): never a GM answer.
 GM_OK = {"accepted_values", "answer_format", "exact_text", "answer_id", "answer_ids", "field_family", "solve.py",

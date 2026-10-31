@@ -476,7 +476,7 @@ def chain_states():
     body.append(arrow(x, bot0, x, top1 - 2))
     body.append(lab(x + 8, ym, "stuck", "start"))
     body += [
-        box(0, 0, "queued", "armed before the drop"),
+        box(0, 0, "queued", "created when it lists"),
         box(1, 0, "single", "fetch · race · solve", "ours"),
         box(2, 0, "time_trial", "running · retrying"),
         box(3, 0, "mastery", "re-pass TT if needed"),
@@ -745,6 +745,8 @@ def main():
         "days": day_table(), "hof-tiles": hof_tiles(), "hof-table": hof_table(), "hb": hb_chart(), "cost-live": a,
         "cost-night": b, "commits": commits_chart(), "growth": growth_chart(), "dayrank": day_rank_chart(),
     }
+    import flows
+    parts.update(flows.build(E, figure, table))
     for k, v in parts.items():
         write(k, v)
     tabs = [
