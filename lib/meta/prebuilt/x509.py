@@ -48,7 +48,6 @@ FIELDS = {
     ("x509", "valid_to_utc"): "not_after_utc",
     ("x509", "valid_until"): "not_after_utc",
     ("x509", "expiry_utc"): "not_after_utc",
-    ("x509", "sha256_fingerprint"): "sha256_fingerprint",
     ("x509", "fingerprint_sha256"): "sha256_fingerprint",
     ("x509", "sha256_thumbprint"): "sha256_fingerprint",
     ("x509", "thumbprint_sha256"): "sha256_fingerprint",

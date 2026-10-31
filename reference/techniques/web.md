@@ -140,6 +140,9 @@ How the lane has looked so far (observations, not guarantees):
   Feature bare -> `target_required` + `query_parameter: target`; topology -> `case_service:
   http://127.0.0.1:8080/status-<hex6>` (direct GET = `internal_only`). `?target=<case_service>?id=<foreign case>` ->
   `ssrf_then_object_authorization`. Single ~77 s; TT 19.6 s, Mastery 5/5 27.5 s, first try.
+- **Cal. 29 folder re-check (cal. 31 post-run, D26 + D27)**: all six modes CORRECT first try; no `solver/NOTES.md`,
+  no `VARIANT AXIS:` lines, guide shapes identical in single/TT/Mastery (only host + `<word>-<hex6>` re-dealt).
+  The auto cases' `live_target.json` hold only `{attempt, targets[url]}` (no bodies) -> not replayable after 410.
 - **D28 Pass the Identity (cal. 30, Axum)**: trusted delegated-identity header (confused deputy / A07). Clues
   `{feature_route: /execute-<hex6>, secondary_route: /result-<hex6>, identity_directory_route: /api/identities}`;
   directory `{caller: analyst, records_owner: executive}`; feature 403 `delegated_identity_rejected` with `Vary:
@@ -173,7 +176,8 @@ How the lane has looked so far (observations, not guarantees):
   POST to `feature_route` must NOT run before the race handler. Recon on a credit/balance kit is GET-only.
 - **Verifying a plugin on a COMPLETED target (D28)**: after CORRECT `/api/clues` returns only `{state}`, so the
   plugin verifier reported "KEY_MAP matches none of ['state']". Not a plugin bug: verify on a fresh TT target or a
-  recorded case; save target responses during the solve (410 afterwards).
+  recorded case; save target responses during the solve (410 afterwards) -- the harness's auto cases
+  (`live_target.json`) store URLs only, so save the clue/guide/error bodies yourself into `solver/cases/`.
 - Shipping a new class without its handler loses the TT. Write `lib/web/handlers/dayNN_*.py` (KEY_MAP on a concept
   KEY + HANDLERS) BEFORE the single submit (D11, D19, D20, D23, D25-D29 did; D22, D24 did not).
 - Ignoring response headers: `curl` without `-i` would have hidden D28's `Vary: x-delegated-user`.

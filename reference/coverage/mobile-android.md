@@ -76,7 +76,8 @@ fold). Solver 3/3, no LLM work (single 3.2 s probe, TT 3.4 s, Mastery 2.9 s / so
 D29 (White Box Key Recovery, `white_box_table` "clean-room table transformation"; prompt "Recover an equivalent key
 operation from challenge-owned table transformations"): single v1 NEW codec `table` = hex then `(b - (key+3i)) & 255`
 (no lookup table at all). TT + 13 sets v2: gate `tableTransform(a,b)=((a*257)^b)&255` in an 8-round walk over the d14
-LCG `Tab.build long[16]` (index = low nibble); no AES T-boxes, no asset tables. Solver 3/3, no LLM (single 13 s probe).
+LCG `Tab.build long[16]` (index = low nibble); no AES T-boxes, no asset tables. Solver 3/3, no LLM (single ~11 s probe:
+the prebuilt row-70 rolling-keystream solver fit `sub key+3i`; D30's extra reverse step made the same probe silent).
 D30 (Layered Protections, `layered_protections` "composed clean-room protections"; prompt "Unwind obfuscation, native
 indirection, runtime decryption, and integrity checks while proving the same backend effect"): single v1 NEW codec
 `layered` = base64 -> `b ^ ((key+i)&255)` -> reverse; the race probe was SILENT (each step known, the STACK was not), LLM

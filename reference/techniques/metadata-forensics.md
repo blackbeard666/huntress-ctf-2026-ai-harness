@@ -8,7 +8,8 @@
 
 How this lane has looked so far (observations, not guarantees):
 - **Timed variants MUTATE** (D8 organizer: "dynamic variations/mutations"; D23 re-rolled the WHOLE carried kit): every
-  carried extractor must parse the general case, not D-day's sample (see "Member values").
+  carried extractor must parse the general case, not D-day's sample (see "Member values"). Since D28 the carried
+  disk + cert re-rolled VALUES only (D29/D30 kits: still GPT / one-block Ed25519 PEM) -- a structural flip can still come.
 - Every day = ONE evidence zip (plain Deflate, no password). D1-7: one tiny member, one fact; D8-9: cumulative kit in
   every mode; D10-14: one field everywhere. **D15+ split the modes**: single = 1 field (the new member), TT = cumulative
   kit (D15 20 -> D28 33 fields, +1/day), Mastery = N kits x the TT set (N=5 to D21, then +1/day: 11 D27, 12 D28), incl. a
@@ -45,7 +46,7 @@ How this lane has looked so far (observations, not guarantees):
   `->` and by sha256, never a hard-coded name.
 - **Field-set / set count** -- D7 TT 11 / Mastery 22; D8-9 12-13 everywhere; D10-14 one; D15 1/20/100, then +1
   field/day and (from D22) +1 set/day: D22 1/27/162 (6 sets) ... D26 1/31/310 (10 -- `set10.` string-sorts before
-  `set2.`: order numerically) ... D30 1/35/490 (14 sets). Enumerate `setN.` prefixes from the live ids. Families: identity + `d04-jpeg` `d05-png` `d06-pdf` `d07-zip` (eocd,
+  `set2.`: order numerically) ... D29 1/34/442 (13) ... D30 1/35/490 (14 sets). Enumerate `setN.` prefixes from the live ids. Families: identity + `d04-jpeg` `d05-png` `d06-pdf` `d07-zip` (eocd,
   CD names) `d09-pe` (machine, entry RVA, OriginalFilename) `d12-dotnet` `d13-msi` `d14-lnk` `d15-ooxml` `d16-email` `d17-audio` `d18-video` `d19-elf`
   `d20-macho` `d21-apk` `d22-jar` `d23-sqlite` `d24-evtx` `d25-registry` `d26-prefetch` `d27-pcap` `d28-disk`
   `d29-x509` `d30-cluster` + synthesis. Dispatch on the answer-id SUFFIX (reference solver answering all 35:
@@ -69,7 +70,8 @@ How this lane has looked so far (observations, not guarantees):
   PCAP classic v2.4 only (LE-us / LE-ns `4d 3c b2 a1` / BE-us `a1 b2 c3 d4`; linktype 1/101/105/147; 3-39 records,
   snapped ones count), DISK (D28, 14 images): protective MBR `ee` + GPT rev 1.0, 512-B sectors, entries @LBA2 128x128,
   valid CRCs, backup hdr at the last LBA, 61-582 KiB, 1-6 used entries contiguous from slot 0, starts 34-367, table
-  order == ascending, partitions ALL ZERO (no FS/EBR/4Kn yet); X.509 (D29, 15 certs): one LF PEM block, Ed25519; corpus
+  order == ascending, partitions ALL ZERO (no FS/EBR/4Kn yet; D29+D30 kits: 29 more images, same shape, 1-5 parts);
+  X.509 (D29 15 + D30 kits 15 certs): one LF PEM block, Ed25519, 692-757 B (DER 479-518 B), never DER/bundle/RSA; corpus
   clusters (D30): see "Corpus member LABELS". Rule: decode the
   general structure (byte order from the file, every slice/chunk/entry, follow every offset, decompress any wrapper
   by its magic), never the D-day sample's constant.
@@ -138,7 +140,7 @@ How this lane has looked so far (observations, not guarantees):
 | `media.*` audio (`RIFF..WAVE`, `ID3`/`ff fb`, `OggS`, `fLaC`, `ftyp`, `1a 45 df a3`, `FORM..AIFF`) | route by MAGIC (D23 TT/Mastery: WAV, MP3, Ogg Opus, Ogg Vorbis all appeared under `audio-001.*`). WAV tag -> FFmpeg names (Conventions); Ogg: first packet `OpusHead` -> `opus`, `\x01vorbis` -> `vorbis`. Truth: bundled `ffmpeg -hide_banner -i f` |
 | `media.*video*` / MP4-MOV (`....ftyp`), MKV/WebM, AVI | box walk `moov` -> first `trak` whose `mdia/hdlr` = `vide` -> `stsd` entry: w,h u16 BE @entry+32; cross-check tkhd, SPS crop. `lib.meta` fmt `media` |
 | `*-synthesis-<algo>-order` / "Files: [...]" in the question | parse the list from the question text, hash each member of the same container, sort by digest, compact JSON of names |
-| `x509.*` / `.pem .crt .cer .der` (`-----BEGIN CERTIFICATE-----` or DER `30 82`) | fingerprint = hash of the DER (decode the PEM base64 body), lowercase hex, no colons: `openssl x509 -in f -noout -fingerprint -sha256`; fields via `openssl x509 -noout -text`; `lib/meta/prebuilt/x509.py` (D29 HIT) |
+| `x509.*` / `.pem .crt .cer .der` (`-----BEGIN CERTIFICATE-----` or DER `30 82`) | fingerprint = hash of the DER (PEM body between the armor lines, whitespace stripped, base64-decoded; FIRST block of a bundle; TRUSTED CERTIFICATE = first TLV only, not the aux), lowercase hex, no colons: `openssl x509 -in f -outform der \| sha256sum` = `openssl x509 -in f -noout -fingerprint -sha256 \| tr -d :`; fields via `openssl x509 -noout -text`; `lib/meta/prebuilt/x509.py` (D29 HIT) |
 | `relation.*` / a corpus zip (`cluster-NNN.zip`, `delivery-manifest.json`, many `artifacts/*`) | one pass over `infolist()`: sha256 of REAL bytes per member, label = manifest `id` (by path/filename) else extensionless basename; skip the manifest; groups len>=2 sorted inside + sorted; compact JSON. Manifest `sha256`/`size_bytes`/`producer_id` are CLAIMS to check, not answers (D30) |
 | GUID field (`*-guid`) | spelling follows the SOURCE: stored string (MSI) verbatim braces+uppercase; binary (.NET) -> lowercase, no braces |
 | exe-extension decoy (`MZ` without `PE\0\0` at e_lfanew) | literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit |
@@ -166,13 +168,14 @@ MBR `ee` -> `EFI PART` @LBA1 -> entries from the HEADER's lba/count/size, non-ze
 TABLE order as JSON ints `[34]`; partitions all zero; race MISS: lib `disk` = VHD/VMDK detector). Live ~17-32 s, race
 hits ~13-29 s; timed first try since D24.
 
-**Day 29 — Trust Issues** (`x509.sha256_fingerprint` of `certificate-001.pem`, kind `pattern` 64 hex,
-`case_insensitive`). Artifact: 709-B PEM, ONE `BEGIN CERTIFICATE` block, LF, Ed25519 (`06 03 2b 65 70`) self-made
-cert; timed 15 certs all the same shape. Answer = sha256 of the DER (base64 body between the armor lines, decoded) --
-`openssl x509 -in f.pem -noout -fingerprint -sha256 | tr -d :` lowercase. Prebuilt `lib/meta/prebuilt/x509.py` HIT the
-race: CORRECT ~23 s, 0 wrong; TT 34 / Mastery 442 (13 sets) first try. Flavor (unasked): "Certificates appear in
-binaries, packages, mail, captures, and disk images. Fingerprint each one, collapse duplicates, and identify the trust
-claim unsupported by evidence."
+**Day 29 — Trust Issues** (`x509.sha256_fingerprint` of `certificate-001.pem`, id `d29-x509-001-x509-sha256-
+fingerprint`, kind `pattern` 64 hex, `case_insensitive`; pun TRUST -> certs). Artifact: 709-B PEM, ONE `BEGIN
+CERTIFICATE` block, LF, Ed25519 (`06 03 2b 65 70`), DER 483 B; TT + 13 Mastery sets + D30 kits same shape (692-757 B).
+Insight: a fingerprint hashes the cert DER, NOT the `.pem` file (armor + newlines change it) -- same as Authenticode/APK
+signer thumbprints. Tools: `openssl x509 -in f.pem -noout -fingerprint -sha256 | tr -d :` lowercased, or
+`sha256(b64decode(body))`. Prebuilt `x509.py` HIT the race: `solved_by` +20 s, 0 wrong; TT 34 / Mastery 442 first try,
+~6 s. Flavor (unasked): "Fingerprint each one, collapse duplicates, and identify the trust claim unsupported by
+evidence" (certs in binaries, packages, mail, captures, disk images) -> cert dedup / trust-claim fields = the depth.
 
 **Day 30 — Seeing Double** (`relation.identical_sha256_groups` for `cluster-001.zip`, id
 `d30-cluster-001-relation-identical-sha256-groups`, kind `json` "compact valid JSON array with exact values and
@@ -211,7 +214,8 @@ identity, semantic identity, containment, and claimed provenance -- then expose 
   `pcm_f32le`, 6 `pcm_alaw`, 7 `pcm_mulaw`, 0x55 `mp3`; MP3 `mp3`; Ogg `opus`/`vorbis` -- all GM-accepted).
 - Corpus labels (D30): a member is named by its manifest `id` (`alpha-01`), never the zip path (`artifacts/alpha-01.txt`)
   or the basename (`alpha-01.txt`) -- both REJECTED; no manifest -> the extensionless basename. Groups = JSON array of
-  arrays, each inner list sorted, outer list sorted (by first id). Cert fingerprints (D29): DER sha256, hex, no `:`.
+  arrays, each inner list sorted, outer list sorted (by first id). Cert fingerprints (D29): sha256 of the cert DER (NOT the .pem
+  file), lowercase hex, no `:`, no algorithm prefix.
 - Rejected: `0x65bd0` (D10 unpadded); brace-less MSI GUID (D13); rels-order targets (D15); bracket-less Message-ID
   (D16); `["arm64"]` (D20); CD-order names (D23); Python repr `['a', 'b']` for any json (D23); zip paths and
   basenames as corpus labels (D30).

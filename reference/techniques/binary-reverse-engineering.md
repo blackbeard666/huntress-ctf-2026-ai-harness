@@ -83,6 +83,7 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   byte-for-byte equal" (D24/D25/D27/D29), D28 "Decode family-a.elf and family-b.elf ... do not use false-friend.elf", D30 "Use
   loader.n's decoded HGRF graph.config object after confirming all three ... match when this_role is omitted": decode exactly the
   named members, normalise as told, assert equal, answer from the named one. The excluded look-alike has its OWN valid config.
+  Equality held in every mode seen (D24-D30 TT + all Mastery sets): a mismatch means a decode/routing bug, not a new variant.
 - **Theme sidecar inside the member (D26)** -- jar entry `crash/trace.json` (`huntress.synthetic_crash.v1`, frames innermost-
   first); entry whose name ends `trace.json`, answer frames[0]; "every frame in the primary classfile method-name set" = inclusion.
 - **Primary vs support members (D3, D22, D23)** -- primary assembly = the `.dll` that is not a framework/dependency (FSharp.Core,
@@ -99,7 +100,8 @@ How this lane has looked so far (OBSERVATIONS, not guarantees):
   PK19 keys, size ids w/o a named magic = the day's own overlay magic (d20 `overlay_size` = len - rfind(`RS20`)). Rule:
   implement the sentence literally (`lib.binary.generic_field`). No backfill #4 on D29/D30.
 - **Speed flags (no answer change)** -- CPU contention: re-measure with `taskset -c 0,1 /usr/bin/time python3 solve.py`;
-  floor = inflate + sha256 of every member (all asked); D30 single solve phase 1.3 s, 14-set Mastery 1.5 s.
+  floor = inflate + sha256 of every member (all asked); D30 single solve phase 1.3 s, 14-set Mastery 1.5 s. Since D29 the
+  GM submit round-trip dominates (TT ~2 s, Mastery 4-4.5 s for 5.3-5.9k ids in ONE <4 MiB POST): solver tuning no longer helps.
 
 ## Recognition cues -> first move
 | You see | First move |
@@ -152,6 +154,10 @@ BACKFILL #3 (54 spec-worded ids) sank 4 all-or-nothing batches on d20 `overlay_s
   members and require ... byte-for-byte equal"), 4 `optimized_config_*`. Insight: the id tags are WORDS, the basenames carry `O0`/
   `O3`; the question's "basename ends O3.elf" routed them. Theme (optimization accounting / semantic equivalence) unasked; trace
   family `freebasic_optimization_variant_trace`. Carried-over solver banked 392, then 6 + 8 new ids.
+- Timed: both members carried the SAME config in every mode (consensus ids == `optimized_config_*`; no D28-style stranger); TT
+  and all 13 Mastery sets re-shaped values per the Variant axes. Run time is now SUBMIT-bound (TT solve 0.67 s + submit 2.34 s;
+  Mastery solve 1.46 s + submit 4.14 s). Digest flagged Mastery "had trouble": that was the harness, not the solver -- all 10
+  generalize/duel workers died on the account's weekly usage limit with no output (read each log's last line before a re-fix).
 
 **D30 "Campaign Trail"** (420 Qs; **CORRECT T+1:18**, 10 rejected = the race harness's `none` placeholder probes on the d30
 config ids, 0 real wrong answers; TT 3.1 s / Mastery 14 sets (5880 ids) 6.1 s, first POST).
@@ -237,5 +243,7 @@ Naming law: native format = container only; managed .NET = `pe_cli`; Java broke 
   one; (5) self-hashing `.text`: never byte-patch, hook in the emulator or shadow `.text`; (6) don't re-implement a hash you
   only need to execute; skip deliberate slow loops instead. Speakeasy (Windows PE emulator with API/PEB/TEB stubs) saves the
   scaffolding; never run the sample natively.
+- **A "had trouble" digest flag is not always the solver** (D29): the generalize workers all hit a usage limit and wrote
+  nothing; check the timed `last_timed.json` result + each worker log's final line before re-fixing a passing solver.
 - **Timed windows**: download dominates (D16 TT 52 s of 64 s). WASM sizes = 5-byte PADDED LEB128; PE machine map must include
   0x8664 -> `x86-64`.

@@ -149,10 +149,14 @@ Surface: full de-escalation, v1 `base64` single + TT, all 11 sets v1, stub `expo
 
 **Day 29 — White Box Key Recovery** (`white_box_table`, "clean-room table transformation"; prompt "Recover an
 equivalent key operation from challenge-owned table transformations, not a third-party protected binary"). 0 wrong, all
-first try, no LLM work: single 13 s race probe (worker printed READY), TT 3.2 s (solve 0.2 s), 13-set Mastery 5.7 s
-(solve 2.8 s, slowest yet). Single v1 NEW codec `table` = hex, `(b - (key + 3i)) & 255` (no real lookup table). TT/sets
-v2: gate `tableTransform(a,b)=((a*257)^b)&255` in an 8-round `walkBox` over the d14-style LCG `Tab.build` `long[16]`;
-decoys `sealSbox*`/`sealTable*`/`KLookup*`. "White box" = words + one table walk; no AES T-box, no asset tables.
+first try, no LLM work: single ~11 s start -> CORRECT on the race probe (submit 2.15 s; worker only printed READY), TT
+3.2 s (solve 0.2 s), 13-set Mastery 5.7 s (solve 2.8 s, slowest yet). Single v1 NEW codec `table` (`key` 41) = hex,
+`(b - (key + 3i)) & 255` (no real lookup table): unhexed bytes minus `ANS-` = 41,44,47,50 -> `key + 3i`. The probe
+hit because the prebuilt rolling-keystream solver (atlas row 70, `rolling_xor_solve`) already fit `sub key+c*i` from the
+`ANS-` known plaintext; d30 `layered` added ONE step (reverse) and the same probe went silent -> prebuild families must
+compose with unwrap + reverse. TT/sets v2: gate `tableTransform(a,b)=((a*257)^b)&255` in an 8-round `walkBox` over the
+d14-style LCG `Tab.build` `long[16]`; decoys `sealSbox*`/`sealTable*`/`KLookup*`. "White box" = words + one table walk;
+no AES T-box, no asset tables. GM spelling unchanged (`answer`/`setN.answer`, `exact`). No NOTES.md / `VARIANT AXIS:`.
 
 **Day 30 — Layered Protections** (`CONTROL="layered_protections"`, STRUCTURAL "composed clean-room protections";
 prompt "Unwind obfuscation, native indirection, runtime decryption, and integrity checks while proving the same backend

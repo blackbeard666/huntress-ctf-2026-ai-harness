@@ -41,7 +41,9 @@ How this lane has looked so far (these are observations, not guarantees):
 Each miss cost one failed timed attempt + a generalize cycle (D6: 4; D7: 1; D15: 1; **D23: TT 5 workers + Mastery 3, ~25 min**;
 all other days 0). Auto cases D20-D22, D24-D26 = value re-rolls; D23 (TT b10c4da4, M e24c070d) = per-file shape; D27 (TT
 6daf90f0, M ee4eeb7f) = semantic shape again; D28 (TT 82ffaaa8, M c4556fc4), D29 (TT 315a492d, M 4b6afd09), D30 (TT 06fc3e03,
-M 4d7b1061) = per-file, all answered first try. No `VARIANT AXIS:` line written D24-D30 (NOTES.md: D7-D8 lines + speed notes).
+M 4d7b1061) = per-file, all answered first try. No `VARIANT AXIS:` line written D24-D30 (NOTES.md: D7-D8 lines + speed notes;
+D29 NOTES got none because its workers hit the usage limit, and its auto cases show value re-rolls only: 4 `polyglot-makefile-<6hex>`
+members x 13 ids, same field set as D28's terraform_hcl).
 - **CONTRACT SHAPE (single vs timed; D23-D26 per-file, D27 semantic, D28 per-file)** -- single: ids `<lang>-<role>-<field>` over
   behaviour-named members. D23-D26 timed: members `<6hex>.<ext>`, ids `<family>-<6hex>-<field>` (families `powershell`,
   `jscript`, `batch`, `vbscript`, `python`, `bash`, `bash-advanced`, `nodejs`, `polyglot-<lang>`); **composite `style`** =
@@ -149,23 +151,20 @@ answered -> `PF_ID`/`pf_value` + LYR peel -> TT CORRECT T+14 min (4 batch `-styl
 solver unpatched every day -- marker routing absorbed a new comment char (`%`), a nameless `build_plan() -> ".."` literal and the
 D27 ARG/LABEL and D28 `locals`/`output` indirections (read the declaration, never the use); hosts were inert stubs; single
 T+14-49 s race wins, 0 wrong. Timed grammar flipped D27 semantic -> D28 per-file (both kept); TT/Mastery first try all five days.
-**D29 Make It Make Sense (base `makefile-variant-diff`; 1747 ids = +44, 183 members)**: +4 `polyglot-makefile-*.mk`, no host.
-Artifact: `# HUNTRESS_ANALYSIS_V1:<TAG>-<data>`, `HUNTRESS_DESCRIPTOR_<8hex> := <data>` (UNQUOTED), `.PHONY: analyze-<8hex>`,
-`analyze-<8hex>:` + TAB `@:` -- no `$(shell)`, no recipe body, nothing to "diff" (16th narrative). Carried solver unpatched:
-single ~T+24 s (race win, 0 wrong); TT 315a492d 1833 first try (8.65 s); Mastery 4b6afd09 13 sets x 1833 first try (11.0 s).
-Ops: the post-run generalize workers and log writers hit the account's weekly usage limit (no D29 notes were written).
-**D30 Spill the Beans (base `beanshell-jsp-graph`; 1802 ids = +55, 188 members, 187 families)**: +4 `polyglot-beanshell-*.bsh`
-(benign-utility/downloader/launcher/staged-chain) + host `host-jsp-beanshell-beanshell.bsh`. Artifact: polyglot = `// marker`,
-`String descriptor_<8hex> = "<data>";`, `Map buildPlan_<8hex>() { Map plan = new HashMap(); plan.put("descriptor", ..); return
-plan; }`; host = a JSP page (`<%@ page import="bsh.Interpreter" %>`) holding the WHOLE .bsh source as an escaped Java string
-constant `INERT_BEANSHELL_<8HEX>` (2nd nested-carrier day after D19 ASPX), then `<%= "inert-analysis-fixture" %>`. Plans
-`language=beanshell`, campaign `BEANSHELL-<8hex>`, url `https://beanshell-<10hex>.example.invalid/stage`,
-`/tmp/huntress-beanshell/.<16hex>.stage`; host plan host_profile `jsp_beanshell`, role staged_chain, attack T1059, stage_profile
-cross_language_handoff, steps profile_host,decode_configuration,dispatch_language, next_language a PRIOR language (jscript).
-Key insight: none needed -- the D19 unescape-and-rescan rule already in the carried solver read the nested host; the "edge that
-holds everything together" was never asked (17th narrative). Commands: race reuse of the carried `solve.py` -> `hctf submit
---from-solver`. **Single CORRECT T+27 s, 0 wrong**; TT 06fc3e03 1898 first try (solve 0.74 s, total 2.89 s); Mastery 4d7b1061
-14 sets x 1898 = 26572 first try (solve 7.25 s, submit 5.9 s, total 14.0 s -- solve time doubled vs D28; watch it). 0 generalize.
+**D29 Make It Make Sense (base `makefile-variant-diff`; 1747 ids = +44, 183 members)**: +4 `polyglot-makefile-*.mk`, no host:
+`# HUNTRESS_ANALYSIS_V1:<TAG>-<data>`, `HUNTRESS_DESCRIPTOR_<8hex> := <data>` (UNQUOTED), `.PHONY: analyze-<8hex>`, TAB `@:`. The
+prompt (same in all 3 modes) promised "layered variables and target flow ... keep the conclusions that hold across every variant";
+the bytes had one `:=`, one target, no prereqs (16th unasked narrative); timed variants = value re-rolls (per-file, LYR, pool of 11
+incl. beanshell). Carried solver unpatched -> `hctf submit --from-solver`: **single T+24 s, 0 wrong**; TT 315a492d 1833 first try
+(8.65 s; solve 5.48 s for one set, host load); Mastery 4b6afd09 13 x 1833 first try (11.0 s: solve 5.72, submit 4.64). Digest
+"Mastery had trouble" = the generalize stage stalled (10 generalize + 4 log workers died "weekly limit"), not a failed mode.
+**D30 Spill the Beans (base `beanshell-jsp-graph`; 1802 ids = +55, 188 members)**: +4 `polyglot-beanshell-*.bsh` (`// marker`,
+`String descriptor_<8hex> = "..";`, `Map buildPlan_<8hex>()` + `plan.put("descriptor", ..)`) + host `host-jsp-beanshell-beanshell.bsh`
+= a JSP page (`<%@ page import="bsh.Interpreter" %>`, never called) whose `<%! %>` constant `INERT_BEANSHELL_<8HEX>` holds the whole
+.bsh as an escaped Java string (2nd nested carrier after D19). Host plan: `jsp_beanshell`, staged_chain, T1059,
+cross_language_handoff, next_language a PRIOR language. The D19 unescape-and-rescan rule in the carried solver read it unchanged;
+"the edge that holds everything together" never asked (17th). **Single T+27 s, 0 wrong**; TT 06fc3e03 1898 first try (solve
+0.74 s); Mastery 4d7b1061 14 x 1898 = 26572 first try (solve 7.25 s, submit 5.9 s, 14.0 s -- doubled vs D28). 0 generalize.
 
 ## GM answer conventions learned
 - **Check `answer_format.kind` first.** `enum` lists values (scenario, role). `mitre_attack_id` takes `T####[.###]` or literal
@@ -242,7 +241,11 @@ holds everything together" was never asked (17th narrative). Commands: race reus
   pool (Makefile then shipped D29, also from the pool). Read the timed `next_language` values (TODAY's auto cases only).
 - **Requiring quotes around the descriptor** (D29 Makefile `X := <data>` bare to EOL): the marker regex is the anchor; a
   descriptor regex may only confirm. **Treating an imported runtime as a call** (D30 `bsh.Interpreter` imported, never used).
-- **Usage-limit outages are not solver failures** (D29: generalize workers + log writers died "weekly limit"): check the worker
-  log's `result` text before diagnosing a "failed" generalize; nothing in the bytes was wrong.
+- **Usage-limit outages are not solver failures** (D29: 10 generalize workers + 4 log writers died "weekly limit"; the digest
+  then marked Mastery "had trouble" though it was CORRECT first try): check `<mode>/last_timed.json` `result`,
+  `confirmed.json`, `chain.json` `stage` and each worker log's final `result` text BEFORE diagnosing. A stage stuck at
+  `single_solve:generalizing` with ~6 KB logs is an outage, not a solver bug.
+- **Reading timed solve time without the host load** (D29 TT solve 5.48 s for ONE set vs D30 0.74 s, same solver): compare the
+  phase against `profile.txt` / a direct `solve.py` run before you open a speed cycle.
 - **Never execute fixtures.** Decode from the Codec const / descriptor plus a restricted interpreter; accept a plan only if it
   parses as `k=v|..` with `steps` (or `feature`).

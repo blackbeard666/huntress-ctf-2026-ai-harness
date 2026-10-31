@@ -113,6 +113,9 @@ _BUILTIN = {
     # D30: cluster zip members (minus delivery-manifest.json) grouped by real-bytes SHA-256, groups >= 2, each the
     # sorted manifest artifact ids, groups sorted -> compact JSON (single, TT, 14/14 Mastery sets)
     ("relation", "identical_sha256_groups"): _v("relation:identical_sha256_groups", 30),
+    # D29: SHA-256 of the WHOLE certificate DER (PEM -> first block base64-decoded), lowercase hex, no colons -- prebuilt
+    # x509.sha256_fingerprint promoted: single b466fdbf.., TT 01851d3a.. and 13/13 Mastery sets (nested evidence zips)
+    ("x509", "sha256_fingerprint"): _v("x509:sha256_fingerprint", 29),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

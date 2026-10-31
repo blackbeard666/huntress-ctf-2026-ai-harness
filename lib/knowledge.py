@@ -88,6 +88,11 @@ DOTNET_FORMAT_REJECTED = [
 # only. Renamed members: stripped = the ELF without `.symtab`, symbolized/unstripped = with it. Values as usual
 # (elf / x86-64 / decimal e_machine "62"; the stripped twin still carries the same HCFG config).
 BINARY_MEMBER_QUALIFIERS = {"stripped": False, "symbolized": True, "unstripped": True}   # -> has .symtab
+# Day 29 "Fraternal Twins" (single 38d29712, TT + Mastery correct first try): same member-qualifier grammar with the
+# OPTIMIZATION level as the tag -- analysis_optimized_* = the member whose basename ends O3.elf (`d29--sample-O3.elf`),
+# analysis_unoptimized_* = the O0.elf twin. Both twins: format "elf", machine decimal e_machine "62", the SAME
+# backward-scanned CRC32-valid HCFG config (campaign/domain/mutex/url). Match the -O token of the file name (regex).
+BINARY_MEMBER_OPT_QUALIFIERS = {"optimized": r"o[1-3sz]|ofast", "unoptimized": r"o0"}   # file-name token, lowercased
 
 # Day 17 "Decoder Ring" (binary, d01..d14 re-asked as dNN_analysis_<field>; single 2d90be2a, TT 3d130172, Mastery 1c0c07be
 # 5 sets): NEW field `hcfg_storage` = HOW the HCFG config is stored, a closed GM enum keyed by the blob's form + home:
