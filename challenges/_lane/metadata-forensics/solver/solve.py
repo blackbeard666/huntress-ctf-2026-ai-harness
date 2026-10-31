@@ -84,9 +84,18 @@ def _fast_member(root, artifact):
     file named like the container, then the member whose parent is the container, then any same-named member).
     None -> fall back to find_artifact (odd shapes)."""
     container, _, member = (x.strip() for x in artifact.partition("->"))
-    if not member:
-        return None
     cbase = Path(container).name
+    if not member:
+        # a bare container ('evidence-03.zip') nested in the Mastery bundle: find_artifact's recursive branch returns
+        # the FIRST entry of that name, but re-walks + inflates every member per set (D28-D30 Mastery, 12-14 sets:
+        # 1.0-1.6 s lane solver, find_artifact 55% of it). Same answer from the index; a top-level file of that name
+        # keeps find_artifact's bundle special cases (D7 evidence-01.zip = {evidence-01.zip, evidence-02.zip}).
+        if any(p.name in (artifact, container, cbase) for p in iter_files(root)):
+            return None
+        for name, parent, load in _entries(root):
+            if name == cbase:
+                return load()
+        return None
     for p in iter_files(root):
         if p.name in (artifact, container, cbase):
             if not zipfile.is_zipfile(p):
@@ -210,6 +219,15 @@ def main():
     out, pool = {}, []
     solverrt.arm_deadline(out, pool)
     jobs = [(a.artifacts, contract, g) for g in groups.values()] if len(groups) >= 2 else [(a.artifacts, contract, pairs)]
+    if len(jobs) >= 2:
+        # build the per-process caches ONCE before the fork pool: every forked set otherwise rebuilt lib.meta's id
+        # patterns (~0.3 s) and the member index (inflating the whole bundle) itself -- 14x on a D30 Mastery
+        meta._id_patterns()
+        if FAST_INDEX:
+            try:
+                _entries(a.artifacts)
+            except Exception:  # noqa: BLE001 - a set builds its own index as before
+                pass
     solverrt.run_sets(jobs, _solve_pairs, out, pool)
     solverrt.emit_and_exit(out, pool)
 

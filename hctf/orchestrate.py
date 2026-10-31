@@ -1448,11 +1448,13 @@ _known_memo, _known_raw = {}, solvers._known_ids
 
 def _known_ids_memo(sdir):
     """solvers._known_ids, memoized per solver dir while its cases/ dir is unchanged (a new case = a new dir entry =
-    a new mtime). A lane solver (no own cases: its set spans every day's cases) is never memoized."""
+    a new mtime) and solvers.KNOWN_NO_SYNTHETIC is unchanged (it decides whether synthetic-* cases count; a memo keyed
+    on the mtime alone served the flag-on set after the flag flipped -- test_meta_lane 4). A lane solver (no own cases:
+    its set spans every day's cases) is never memoized. Callers only read the returned set."""
     try:
         if solvers._day_key(sdir) == solvers.LANE_DAY_KEY:
             return _known_raw(sdir)
-        sig = (Path(sdir) / "cases").stat().st_mtime_ns
+        sig = ((Path(sdir) / "cases").stat().st_mtime_ns, bool(solvers.KNOWN_NO_SYNTHETIC))
     except (OSError, ValueError):
         return _known_raw(sdir)
     hit = _known_memo.get(str(sdir))
