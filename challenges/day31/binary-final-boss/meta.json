@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-31-reversing-gauntlet",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Final Boss",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-31-reversing-gauntlet",
+    "time_trial": "binary-reverse-engineering-day-31-reversing-gauntlet/time_trial",
+    "mastery": "binary-reverse-engineering-day-31-reversing-gauntlet/mastery"
+  }
+}

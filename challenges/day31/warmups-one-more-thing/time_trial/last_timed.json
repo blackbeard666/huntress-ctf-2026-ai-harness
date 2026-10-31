@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "e4665280-3359-4f32-860f-50b90e2c63a9",
+  "window": null,
+  "elapsed": 2.25,
+  "in_window": 2.15,
+  "phases": {
+    "start": 0.1,
+    "download": 0.0,
+    "solve": 0.22,
+    "submit": 1.92
+  },
+  "routed": "local",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "handy-prairie-copper-15"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

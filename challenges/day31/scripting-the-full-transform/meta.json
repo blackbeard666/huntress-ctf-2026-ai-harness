@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-31-xslt-final-gauntlet",
+  "lane": "script-analysis",
+  "name": "📜 The Full Transform",
+  "ids": {
+    "single_solve": "script-analysis-day-31-xslt-final-gauntlet",
+    "time_trial": "script-analysis-day-31-xslt-final-gauntlet/time_trial",
+    "mastery": "script-analysis-day-31-xslt-final-gauntlet/mastery"
+  }
+}

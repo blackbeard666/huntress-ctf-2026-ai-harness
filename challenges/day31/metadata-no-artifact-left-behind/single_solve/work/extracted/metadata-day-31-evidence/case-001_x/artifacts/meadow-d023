@@ -1,0 +1,3 @@
+# falcon stage 423eb0
+$ErrorActionPreference = 'Stop'
+Start-Process '.\jetty-62cc'

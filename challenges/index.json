@@ -185,6 +185,12 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ SHA1-Hulud"
   },
+  "binary-reverse-engineering-day-31-reversing-gauntlet": {
+    "day": 31,
+    "dir": "day31/binary-final-boss",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Final Boss"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -365,6 +371,12 @@
     "lane": "metadata-forensics",
     "name": "🔎 Seeing Double"
   },
+  "metadata-forensics-day-31-no-artifact-left-behind": {
+    "day": 31,
+    "dir": "day31/metadata-no-artifact-left-behind",
+    "lane": "metadata-forensics",
+    "name": "🔎 No Artifact Left Behind"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -544,6 +556,12 @@
     "dir": "day30/mobile-layered-protections",
     "lane": "mobile-android",
     "name": "📱 Layered Protections"
+  },
+  "mobile-android-day-31-mobile-arena-gauntlet": {
+    "day": 31,
+    "dir": "day31/mobile-mobile-arena-gauntlet",
+    "lane": "mobile-android",
+    "name": "📱 Mobile Arena Gauntlet"
   },
   "read-the-rules": {
     "day": 1,
@@ -731,6 +749,12 @@
     "lane": "script-analysis",
     "name": "📜 Spill the Beans"
   },
+  "script-analysis-day-31-xslt-final-gauntlet": {
+    "day": 31,
+    "dir": "day31/scripting-the-full-transform",
+    "lane": "script-analysis",
+    "name": "📜 The Full Transform"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -911,6 +935,12 @@
     "lane": "warmups",
     "name": "👶 Percent Percent"
   },
+  "warmups-day-31": {
+    "day": 31,
+    "dir": "day31/warmups-one-more-thing",
+    "lane": "warmups",
+    "name": "👶 One More Thing"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -1084,6 +1114,18 @@
     "dir": "day30/web-queue-the-confusion",
     "lane": "web",
     "name": "🌐 Queue the Confusion"
+  },
+  "web-exploitation-day-30-framework-roulette": {
+    "day": 31,
+    "dir": "day31/web-framework-roulette",
+    "lane": "web",
+    "name": "🌐 Framework Roulette"
+  },
+  "web-exploitation-day-31-full-stack-incident": {
+    "day": 31,
+    "dir": "day31/web-full-stack-incident",
+    "lane": "web",
+    "name": "🌐 Full Stack Incident"
   },
   "welcome-robots": {
     "day": 1,

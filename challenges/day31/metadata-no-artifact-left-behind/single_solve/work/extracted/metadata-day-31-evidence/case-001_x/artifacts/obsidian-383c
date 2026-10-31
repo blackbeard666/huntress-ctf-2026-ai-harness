@@ -1,0 +1,18 @@
+From: ops <ops@example.test>
+To: desk <desk@example.test>
+Subject: quiet xenon dd4c
+Message-ID: <ef8003633e2128@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="huntress-70fca66023"
+
+--huntress-70fca66023
+Content-Type: text/plain; charset="utf-8"
+
+See attached routing note.
+--huntress-70fca66023
+Content-Type: text/plain
+Content-Disposition: attachment; filename="route.txt"
+Content-Transfer-Encoding: base64
+
+Zm9yd2FyZGVkIHRvOiBsYWdvb24tNzkyZAo=
+--huntress-70fca66023--

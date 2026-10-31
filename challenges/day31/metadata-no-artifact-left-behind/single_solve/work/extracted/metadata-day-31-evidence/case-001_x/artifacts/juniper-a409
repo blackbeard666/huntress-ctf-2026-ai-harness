@@ -1,0 +1,18 @@
+From: ops <ops@example.test>
+To: desk <desk@example.test>
+Subject: archived prairie 984c
+Message-ID: <e27b47c4f8e8af@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="huntress-41897a6647"
+
+--huntress-41897a6647
+Content-Type: text/plain; charset="utf-8"
+
+See attached routing note.
+--huntress-41897a6647
+Content-Type: text/plain
+Content-Disposition: attachment; filename="route.txt"
+Content-Transfer-Encoding: base64
+
+Zm9yd2FyZGVkIHRvOiBtZWFkb3ctZjM2NQo=
+--huntress-41897a6647--

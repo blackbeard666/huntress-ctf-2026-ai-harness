@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-31-full-stack-incident",
+  "lane": "web",
+  "name": "🌐 Full Stack Incident",
+  "ids": {
+    "single_solve": "web-exploitation-day-31-full-stack-incident",
+    "time_trial": "web-exploitation-day-31-full-stack-incident/time_trial",
+    "mastery": "web-exploitation-day-31-full-stack-incident/mastery"
+  }
+}

@@ -1,0 +1,3 @@
+# yarrow stage faba1c
+$ErrorActionPreference = 'Stop'
+Invoke-Item '.\nectar-1767'

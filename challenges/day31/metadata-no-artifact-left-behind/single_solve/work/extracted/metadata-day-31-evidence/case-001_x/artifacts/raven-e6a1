@@ -1,0 +1,18 @@
+From: ops <ops@example.test>
+To: desk <desk@example.test>
+Subject: routine glacier 7016
+Message-ID: <c801a48c2069b9@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="huntress-043f98af1b"
+
+--huntress-043f98af1b
+Content-Type: text/plain; charset="utf-8"
+
+See attached routing note.
+--huntress-043f98af1b
+Content-Type: text/plain
+Content-Disposition: attachment; filename="route.txt"
+Content-Transfer-Encoding: base64
+
+b3BlbjogemVwaHlyLTM4M2UK
+--huntress-043f98af1b--

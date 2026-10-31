@@ -1,0 +1,3 @@
+# quartz stage 69f8e6
+$ErrorActionPreference = 'Stop'
+Start-Process '.\birch-41eb"

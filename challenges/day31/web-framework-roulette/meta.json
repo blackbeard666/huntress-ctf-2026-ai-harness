@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-30-framework-roulette",
+  "lane": "web",
+  "name": "🌐 Framework Roulette",
+  "ids": {
+    "single_solve": "web-exploitation-day-30-framework-roulette",
+    "time_trial": "web-exploitation-day-30-framework-roulette/time_trial",
+    "mastery": "web-exploitation-day-30-framework-roulette/mastery"
+  }
+}

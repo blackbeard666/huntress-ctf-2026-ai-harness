@@ -1,0 +1,172 @@
+{
+ "attempt": "f395c0c5-17af-45bb-b027-d8accf6fd8d8",
+ "rejected": {
+  "set3.d23_analysis_config_campaign": [
+   "BR03-A59F5D70"
+  ],
+  "set3.d23_analysis_config_domain": [
+   "proxy-bf56e10e.day03.example.invalid"
+  ],
+  "set3.d23_analysis_config_mutex": [
+   "Global\\HuntressE1AD49910116"
+  ],
+  "set3.d23_analysis_config_url": [
+   "https://edge-709a726d.day03.example.invalid/vault/f53c269bd7"
+  ],
+  "set3.d23_analysis_config_crc32_hex": [
+   "0x5e8757cb"
+  ],
+  "set3.d23_analysis_xor_key_hex": [
+   "0x8b"
+  ],
+  "set5.d22_analysis_format": [
+   "pe"
+  ],
+  "set5.d22_analysis_machine": [
+   "x86-64"
+  ],
+  "set5.d22_analysis_metadata_version": [
+   "none"
+  ],
+  "set5.d22_analysis_config_campaign": [
+   "BR10-1C324070"
+  ],
+  "set5.d22_analysis_config_domain": [
+   "mesh-b7793639.day10.example.invalid"
+  ],
+  "set5.d22_analysis_config_mutex": [
+   "Global\\HuntressB8161B91F1E8"
+  ],
+  "set5.d22_analysis_config_url": [
+   "https://relay-eb5b9d2d.day10.example.invalid/relay/ab1c4d7e61"
+  ],
+  "set5.d22_analysis_config_crc32_hex": [
+   "0xbb3bbcc9"
+  ],
+  "set6.d24_analysis_corrected_format": [
+   "wasm"
+  ],
+  "set6.d24_analysis_corrected_config_campaign": [
+   "BR16-32C095BE"
+  ],
+  "set6.d24_analysis_corrected_config_domain": [
+   "mesh-17b25083.day16.example.invalid"
+  ],
+  "set6.d24_analysis_corrected_config_mutex": [
+   "Global\\HuntressC253F292F720"
+  ],
+  "set6.d24_analysis_corrected_config_url": [
+   "https://node-73e4d991.day16.example.invalid/cache/eb024c44ac"
+  ],
+  "set8.d15_analysis_stripped_format": [
+   "pe"
+  ],
+  "set8.d15_analysis_stripped_machine": [
+   "x86-64"
+  ],
+  "set8.d25_analysis_vulnerable_format": [
+   "pe_cli"
+  ],
+  "set8.d15_analysis_stripped_config_campaign": [
+   "BR10-8786E12C"
+  ],
+  "set8.d15_analysis_stripped_config_domain": [
+   "core-b14d1518.day10.example.invalid"
+  ],
+  "set8.d15_analysis_stripped_config_mutex": [
+   "Global\\Huntress1638DE0E66F8"
+  ],
+  "set8.d15_analysis_stripped_config_url": [
+   "https://proxy-391bc80f.day10.example.invalid/mesh/2c0015ef01"
+  ],
+  "set8.d23_analysis_config_campaign": [
+   "BR03-A59F5D70"
+  ],
+  "set8.d23_analysis_config_domain": [
+   "proxy-bf56e10e.day03.example.invalid"
+  ],
+  "set8.d23_analysis_config_mutex": [
+   "Global\\HuntressE1AD49910116"
+  ],
+  "set8.d23_analysis_config_url": [
+   "https://edge-709a726d.day03.example.invalid/vault/f53c269bd7"
+  ],
+  "set8.d23_analysis_config_crc32_hex": [
+   "0x5e8757cb"
+  ],
+  "set8.d23_analysis_xor_key_hex": [
+   "0x8b"
+  ],
+  "set8.d25_analysis_config_campaign": [
+   "BR03-EF3765B4"
+  ],
+  "set8.d25_analysis_config_domain": [
+   "edge-eb798411.day03.example.invalid"
+  ],
+  "set8.d25_analysis_config_mutex": [
+   "Global\\Huntress6300417DF198"
+  ],
+  "set8.d25_analysis_config_url": [
+   "https://node-65694b24.day03.example.invalid/vault/62518bde42"
+  ],
+  "set9.d06_analysis_format": [
+   "wasm"
+  ],
+  "set9.d15_analysis_stripped_format": [
+   "pe"
+  ],
+  "set9.d15_analysis_stripped_machine": [
+   "x86-64"
+  ],
+  "set9.d03_analysis_config_campaign": [
+   "BR03-C9EBA292"
+  ],
+  "set9.d03_analysis_config_domain": [
+   "sync-9d26d223.day03.example.invalid"
+  ],
+  "set9.d03_analysis_config_mutex": [
+   "Global\\Huntress2E78E5B708B4"
+  ],
+  "set9.d03_analysis_config_url": [
+   "https://node-c71701a5.day03.example.invalid/edge/1758c509c9"
+  ],
+  "set9.d03_analysis_config_crc32_hex": [
+   "0x11c17da8"
+  ],
+  "set9.d03_analysis_xor_key_hex": [
+   "0x01"
+  ],
+  "set9.d06_analysis_config_campaign": [
+   "BR16-AD907D40"
+  ],
+  "set9.d06_analysis_config_domain": [
+   "core-fb979a51.day16.example.invalid"
+  ],
+  "set9.d06_analysis_config_mutex": [
+   "Global\\Huntress9885E364C7DA"
+  ],
+  "set9.d06_analysis_config_url": [
+   "https://vault-31363a44.day16.example.invalid/sync/f04ee16f09"
+  ],
+  "set9.d06_analysis_config_crc32_hex": [
+   "0x6f43133d"
+  ],
+  "set9.d06_analysis_xor_key_hex": [
+   "0x53"
+  ],
+  "set9.d15_analysis_stripped_config_campaign": [
+   "BR10-8786E12C"
+  ],
+  "set9.d15_analysis_stripped_config_domain": [
+   "core-b14d1518.day10.example.invalid"
+  ],
+  "set9.d15_analysis_stripped_config_mutex": [
+   "Global\\Huntress1638DE0E66F8"
+  ],
+  "set9.d15_analysis_stripped_config_url": [
+   "https://proxy-391bc80f.day10.example.invalid/mesh/2c0015ef01"
+  ]
+ },
+ "require_complete": true,
+ "verified": 1454
+}

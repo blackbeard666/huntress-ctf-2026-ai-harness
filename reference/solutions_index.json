@@ -34605,10 +34605,10 @@
    "notes": "challenges/day30/binary-campaign-trail/solver/NOTES.md",
    "summary": [
     "Prompt: One binary is a clue; a campaign is a story. Reconstruct the loader, library, and config graph across the whole set and map the operation end to end.",
+    "VARIANT AXIS: (speed flag, D30) no answer change -- the 4.28 s \"single\" was measured under the 58-case replay load; solve.py alone on the 420-id single = 0.60 s wall (imports ~90 ms), solver-test single 1.0 s, all 58 cas",
     "# binary-swift-justice solver notes",
     "VARIANT AXIS: Mastery set count (2 on auto-mastery-d1a6613c, up to 5 x 31 MB on D8) -- main() now groups (answer_id, question) pairs with lib.common.group_by_set and solves each set in a fork ProcessP",
-    "VARIANT AXIS: speed only (no answer change) -- the evidence.zip is all WinZip AE-2 (method 99, AES-256, deflate) and its 67 MB d08 Swift ELF was inflated serially through pyzipper (pure-Python HMAC-SH",
-    "VARIANT AXIS: speed only (no answer change; the 9.74 s was the harness's contention-measured Mastery estimate, real single = 0.5-0.6 s, 5-set Mastery 1.7-1.9 s pinned to 2 CPUs) -- per-set CPU trimmed"
+    "VARIANT AXIS: speed only (no answer change) -- the evidence.zip is all WinZip AE-2 (method 99, AES-256, deflate) and its 67 MB d08 Swift ELF was inflated serially through pyzipper (pure-Python HMAC-SH"
    ],
    "tokens": [
     "absent",
@@ -35240,10 +35240,8 @@
    "notes": "challenges/day30/binary-sha1-hulud/solver/NOTES.md",
    "summary": [
     "Prompt: I made this challenge because I was really upset that TeamPCP dropped the ball with this payload name. Anyway, here's Wonder Wall! > The password for this archive is **`infected`**.",
-    "# binary-swift-justice solver notes",
-    "VARIANT AXIS: Mastery set count (2 on auto-mastery-d1a6613c, up to 5 x 31 MB on D8) -- main() now groups (answer_id, question) pairs with lib.common.group_by_set and solves each set in a fork ProcessP",
-    "VARIANT AXIS: speed only (no answer change) -- the evidence.zip is all WinZip AE-2 (method 99, AES-256, deflate) and its 67 MB d08 Swift ELF was inflated serially through pyzipper (pure-Python HMAC-SH",
-    "VARIANT AXIS: speed only (no answer change; the 9.74 s was the harness's contention-measured Mastery estimate, real single = 0.5-0.6 s, 5-set Mastery 1.7-1.9 s pinned to 2 CPUs) -- per-set CPU trimmed"
+    "VARIANT AXIS: (speed cycle, no code change, D30) the \"6.16 s on single_solve\" flag and the auto-mastery-235e63bb 8 s replay timeout were host load (load avg ~8.5; harness cProfile of the single totals 0.149 s, nearly all",
+    "- hctf/solvers.py dispatch(): a question-less contract (D30 single: answer_ids [\"flag\"], no `questions`) normalizes every"
    ],
    "tokens": [
     "aes",

@@ -1,0 +1,88 @@
+[
+ {
+  "url": "https://ctf.huntress.com/api/student/profile",
+  "status": 200,
+  "body": {
+   "profile": {
+    "id": "1ddb274c-19d2-4ef8-89d3-6d1cd3d7c51c",
+    "name": "[redacted]",
+    "email": "carlo.avila+huntress@org.io",
+    "avatar_url": null,
+    "is_linked_to_discord": false,
+    "mfa_required": false,
+    "theme_preference": "light",
+    "is_lti": false,
+    "can_self_delete": true,
+    "academies": [
+     {
+      "name": "Huntress CTF",
+      "domain": "ctf.huntress.com",
+      "brand_color": "#25BFCD",
+      "logo_path": "8950f679-8141-4a94-94d3-442b8aa5bb2f",
+      "square_logo_path": "a7e0f1aa-6efd-40a5-8ab6-cd3de01f2d4c"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "url": "https://ctf.huntress.com/api/exams/owned",
+  "status": 200,
+  "body": {
+   "exams": []
+  }
+ },
+ {
+  "url": "https://ctf.huntress.com/api/student/orgs",
+  "status": 200,
+  "body": {
+   "orgs": []
+  }
+ },
+ {
+  "url": "https://ctf.huntress.com/api/student/events",
+  "status": 200,
+  "body": {
+   "events": [
+    {
+     "id": "92371a95-2ab9-46eb-8f6f-c676bceeed62",
+     "name": "Huntress CTF 2026: AI Arena",
+     "description": "AI Arena",
+     "description_md": "# Huntress CTF 2026: AI Arena\n\nHuntress CTF returns for Cybersecurity Awareness Month in October 2026.\n\nThis year, players use the Huntress AI Arena Homebase to reason through\nchallenge systems, investigate evidence, and submit dynamic completion\ntokens for scoring.\n\n> [!NOTE]\n> New challenge modules unlock every day at **9:00 AM Eastern Time**.\n\nThe event runs October 1 at 9 AM through November 1 at 9 AM Eastern. Registration does not unlock challenges before the event begins.\n",
+     "image_path": "92371a95-2ab9-46eb-8f6f-c676bceeed62/77111932-d07c-4eab-af84-05227c1ae63d",
+     "event_state": "in_progress",
+     "start_date": "2026-10-01T13:00:00.000Z",
+     "end_date": "2026-11-01T14:00:00.000Z",
+     "is_ctf": true,
+     "is_ctf_teams": true,
+     "ctf_team_max_size": null,
+     "included_credits": 150,
+     "content_state": "in_progress",
+     "completion_id": "a1ea61ab08b0d168"
+    }
+   ]
+  }
+ },
+ {
+  "url": "https://ctf.huntress.com/api/student/subscriptions",
+  "status": 200,
+  "body": {
+   "subscriptions": []
+  }
+ },
+ {
+  "url": "https://ctf.huntress.com/api/student/notifications",
+  "status": 200,
+  "body": {
+   "notifications": [],
+   "dismissed_keys": []
+  }
+ },
+ {
+  "url": "https://ctf.huntress.com/api/student/courses",
+  "status": 200,
+  "body": {
+   "courses": []
+  }
+ }
+]
