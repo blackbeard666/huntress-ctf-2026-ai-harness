@@ -1,0 +1,7 @@
+{
+ "entry": "stacked_codec_search",
+ "expected": "ANS-8B052713F582616B",
+ "_why": "3-step stack: base85 -> plain = b + (key+2i) -> reverse (atlas rows 118/70, prebuild v1-composed-codec-search)",
+ "generator_cmd": "python3 -I tests/data/android_fixtures/scs_src/gen_scs.py b85_add2i_rev tests/data/android_fixtures/scs_b85_add2i_rev.apk  # stdlib forward encoder + zipfile writer",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/scs_b85_add2i_rev.apk assets/huntress_puzzle.json | python3 -I tests/data/android_fixtures/scs_src/oracle_scs.py b85_add2i_rev  # unzip + independent stdlib decoder -> ANS-8B052713F582616B"
+}

@@ -1,0 +1,7 @@
+{
+ "entry": "declared_pipeline_candidates",
+ "expected": "ANS-5E74CB0F227DADE5",
+ "_why": "declared 3-step `layers` list in decode order: hex -> {op:sub,key:7,step:3} -> reverse (prebuild v1-declared-layers-pipeline)",
+ "generator_cmd": "python3 -I tests/data/android_fixtures/dpl_src/gen_dpl.py three_step tests/data/android_fixtures/dpl_three_step.apk  # stdlib forward encoder + zipfile writer",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/dpl_three_step.apk assets/huntress_puzzle.json | python3 -I tests/data/android_fixtures/dpl_src/oracle_dpl.py three_step  # unzip + independent stdlib decoder -> ANS-5E74CB0F227DADE5"
+}

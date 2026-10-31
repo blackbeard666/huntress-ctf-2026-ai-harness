@@ -1,0 +1,223 @@
+{
+ "kind": "campaign_set",
+ "case": "challenges/day30/binary-campaign-trail/solver/cases/single_solve (420 ids)",
+ "consensus": {
+  "d01": {
+   "campaign": null,
+   "domain": null,
+   "mutex": null,
+   "url": null
+  },
+  "d02": {
+   "campaign": "BR02-000",
+   "domain": "node-000.day02.example.invalid",
+   "mutex": "Global\\HuntressBR02_000",
+   "url": "https://node-000.day02.example.invalid/api/BR02-000"
+  },
+  "d03": {
+   "campaign": "BR03-000",
+   "domain": "node-000.day03.example.invalid",
+   "mutex": "Global\\HuntressBR03_000",
+   "url": "https://node-000.day03.example.invalid/api/BR03-000"
+  },
+  "d04": {
+   "campaign": "BR04-000",
+   "domain": "node-000.day04.example.invalid",
+   "mutex": "Global\\HuntressBR04_000",
+   "url": "https://node-000.day04.example.invalid/api/BR04-000"
+  },
+  "d05": {
+   "campaign": "BR05-000",
+   "domain": "node-000.day05.example.invalid",
+   "mutex": "Global\\HuntressBR05_000",
+   "url": "https://node-000.day05.example.invalid/api/BR05-000"
+  },
+  "d06": {
+   "campaign": "BR06-000",
+   "domain": "node-000.day06.example.invalid",
+   "mutex": "Global\\HuntressBR06_000",
+   "url": "https://node-000.day06.example.invalid/api/BR06-000"
+  },
+  "d07": {
+   "campaign": "BR07-000",
+   "domain": "node-000.day07.example.invalid",
+   "mutex": "Global\\HuntressBR07_000",
+   "url": "https://node-000.day07.example.invalid/api/BR07-000"
+  },
+  "d08": {
+   "campaign": "BR08-000",
+   "domain": "node-000.day08.example.invalid",
+   "mutex": "Global\\HuntressBR08_000",
+   "url": "https://node-000.day08.example.invalid/api/BR08-000"
+  },
+  "d09": {
+   "campaign": "BR09-000",
+   "domain": "node-000.day09.example.invalid",
+   "mutex": "Global\\HuntressBR09_000",
+   "url": "https://node-000.day09.example.invalid/api/BR09-000"
+  },
+  "d10": {
+   "campaign": "BR10-000",
+   "domain": "node-000.day10.example.invalid",
+   "mutex": "Global\\HuntressBR10_000",
+   "url": "https://node-000.day10.example.invalid/api/BR10-000"
+  },
+  "d11": {
+   "campaign": "BR11-000",
+   "domain": "node-000.day11.example.invalid",
+   "mutex": "Global\\HuntressBR11_000",
+   "url": "https://node-000.day11.example.invalid/api/BR11-000"
+  },
+  "d12": {
+   "campaign": "BR12-000",
+   "domain": "node-000.day12.example.invalid",
+   "mutex": "Global\\HuntressBR12_000",
+   "url": "https://node-000.day12.example.invalid/api/BR12-000"
+  },
+  "d13": {
+   "campaign": "BR13-000",
+   "domain": "node-000.day13.example.invalid",
+   "mutex": "Global\\HuntressBR13_000",
+   "url": "https://node-000.day13.example.invalid/api/BR13-000"
+  },
+  "d14": {
+   "campaign": "BR14-000",
+   "domain": "node-000.day14.example.invalid",
+   "mutex": "Global\\HuntressBR14_000",
+   "url": "https://node-000.day14.example.invalid/api/BR14-000"
+  },
+  "d15": {
+   "campaign": "BR15-000",
+   "domain": "node-000.day15.example.invalid",
+   "mutex": "Global\\HuntressBR15_000",
+   "url": "https://node-000.day15.example.invalid/api/BR15-000"
+  },
+  "d16": {
+   "campaign": "BR16-000",
+   "domain": "node-000.day16.example.invalid",
+   "mutex": "Global\\HuntressBR16_000",
+   "url": "https://node-000.day16.example.invalid/api/BR16-000"
+  },
+  "d17": {
+   "campaign": "BR17-000",
+   "domain": "node-000.day17.example.invalid",
+   "mutex": "Global\\HuntressBR17_000",
+   "url": "https://node-000.day17.example.invalid/api/BR17-000"
+  },
+  "d18": {
+   "campaign": "BR18-000",
+   "domain": "node-000.day18.example.invalid",
+   "mutex": "Global\\HuntressBR18_000",
+   "url": "https://node-000.day18.example.invalid/api/BR18-000"
+  },
+  "d19": {
+   "campaign": "BR19-000",
+   "domain": "node-000.day19.example.invalid",
+   "mutex": "Global\\HuntressBR19_000",
+   "url": "https://node-000.day19.example.invalid/api/BR19-000"
+  },
+  "d20": {
+   "campaign": "BR20-000",
+   "domain": "node-000.day20.example.invalid",
+   "mutex": "Global\\HuntressBR20_000",
+   "url": "https://node-000.day20.example.invalid/api/BR20-000"
+  },
+  "d21": {
+   "campaign": "BR21-000",
+   "domain": "node-000.day21.example.invalid",
+   "mutex": "Global\\HuntressBR21_000",
+   "url": "https://node-000.day21.example.invalid/api/BR21-000"
+  },
+  "d22": {
+   "campaign": "BR22-000",
+   "domain": "node-000.day22.example.invalid",
+   "mutex": "Global\\HuntressBR22_000",
+   "url": "https://node-000.day22.example.invalid/api/BR22-000"
+  },
+  "d23": {
+   "campaign": "BR23-000",
+   "domain": "node-000.day23.example.invalid",
+   "mutex": "Global\\HuntressBR23_000",
+   "url": "https://node-000.day23.example.invalid/api/BR23-000"
+  },
+  "d24": {
+   "campaign": "BR24-000",
+   "domain": "node-000.day24.example.invalid",
+   "mutex": "Global\\HuntressBR24_000",
+   "url": "https://node-000.day24.example.invalid/api/BR24-000"
+  },
+  "d25": {
+   "campaign": "BR25-000",
+   "domain": "node-000.day25.example.invalid",
+   "mutex": "Global\\HuntressBR25_000",
+   "url": "https://node-000.day25.example.invalid/api/BR25-000"
+  },
+  "d26": {
+   "campaign": "BR26-000",
+   "domain": "node-000.day26.example.invalid",
+   "mutex": "Global\\HuntressBR26_000",
+   "url": "https://node-000.day26.example.invalid/api/BR26-000"
+  },
+  "d27": {
+   "campaign": "BR27-000",
+   "domain": "node-000.day27.example.invalid",
+   "mutex": "Global\\HuntressBR27_000",
+   "url": "https://node-000.day27.example.invalid/api/BR27-000"
+  },
+  "d28": {
+   "campaign": "BR28-000",
+   "domain": "node-000.day28.example.invalid",
+   "mutex": "Global\\HuntressBR28_000",
+   "url": "https://node-000.day28.example.invalid/api/BR28-000"
+  },
+  "d29": {
+   "campaign": "BR29-000",
+   "domain": "variant-000.day29.example.invalid",
+   "mutex": "Global\\HuntressBR29-000_000",
+   "url": "https://variant-000.day29.example.invalid/v/BR29-000"
+  },
+  "d30": {
+   "campaign": "BR30-000",
+   "domain": "campaign-000.day30.example.invalid",
+   "mutex": "Global\\HuntressBR30-000",
+   "url": "https://campaign-000.day30.example.invalid/stage/BR30-000"
+  }
+ },
+ "campaign_by_day": [
+  "BR02-000",
+  "BR03-000",
+  "BR04-000",
+  "BR05-000",
+  "BR06-000",
+  "BR07-000",
+  "BR08-000",
+  "BR09-000",
+  "BR10-000",
+  "BR11-000",
+  "BR12-000",
+  "BR13-000",
+  "BR14-000",
+  "BR15-000",
+  "BR16-000",
+  "BR17-000",
+  "BR18-000",
+  "BR19-000",
+  "BR20-000",
+  "BR21-000",
+  "BR22-000",
+  "BR23-000",
+  "BR24-000",
+  "BR25-000",
+  "BR26-000",
+  "BR27-000",
+  "BR28-000",
+  "BR29-000",
+  "BR30-000"
+ ],
+ "distinct_campaign_count": 29,
+ "distinct_member_campaign_count": 30,
+ "campaigns_sorted_lf_sha256": "b19d9ed41e0f137295f9f236494a9009592390e13d1b2685b80ae5b8cb0712ea",
+ "shared_campaign_groups": [],
+ "generator_cmd": "GM Day-30 single_solve evidence.zip (AES zip, opened by the day30 solver's unzip/resolve)",
+ "oracle_cmd": "python3 (stdlib json/hashlib) over the GM-confirmed D30 single_solve/expected.json: per group dNN_analysis_config_<k>, else the agreeing role-qualified dNN_analysis_<role>_config_<k> (false_friend excluded); FF28 added for the per-member count"
+}

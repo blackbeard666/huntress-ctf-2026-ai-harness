@@ -1,0 +1,7 @@
+{
+ "entry": "stacked_codec_search",
+ "expected": "ANS-9E6608D2E12CB891",
+ "_why": "3-step stack: hex -> b ^ (key^i) -> inner base64 (atlas rows 118/70, prebuild v1-composed-codec-search)",
+ "generator_cmd": "python3 -I tests/data/android_fixtures/scs_src/gen_scs.py hex_xorkeyi_b64 tests/data/android_fixtures/scs_hex_xorkeyi_b64.apk  # stdlib forward encoder + zipfile writer",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/scs_hex_xorkeyi_b64.apk assets/huntress_puzzle.json | python3 -I tests/data/android_fixtures/scs_src/oracle_scs.py hex_xorkeyi_b64  # unzip + independent stdlib decoder -> ANS-9E6608D2E12CB891"
+}

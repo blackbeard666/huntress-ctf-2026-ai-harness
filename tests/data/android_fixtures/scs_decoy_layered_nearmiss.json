@@ -1,0 +1,8 @@
+{
+ "entry": "stacked_codec_search",
+ "expected": null,
+ "_why": "D30 `layered` shape (base64 -> xor key+i -> reverse) but the token ends in 'G': a near-miss, no fullmatch (atlas rows 118/70, prebuild v1-composed-codec-search)",
+ "generator_cmd": "python3 -I tests/data/android_fixtures/scs_src/gen_scs.py decoy_layered_nearmiss tests/data/android_fixtures/scs_decoy_layered_nearmiss.apk  # stdlib forward encoder + zipfile writer",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/scs_decoy_layered_nearmiss.apk assets/huntress_puzzle.json | python3 -I tests/data/android_fixtures/scs_src/oracle_scs.py decoy_layered_nearmiss  # unzip + independent stdlib decoder -> NOT-A-TOKEN",
+ "decoy": true
+}

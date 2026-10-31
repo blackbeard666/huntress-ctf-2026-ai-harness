@@ -1,0 +1,7 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-288971671685B8DA",
+ "_why": "onion: base64 -> puzzle JSON declaring [base64, {xor:12,step:1}, base64] -> puzzle JSON `split`+order (wired into puzzle_candidates) (prebuild v1-declared-layers-pipeline)",
+ "generator_cmd": "python3 -I tests/data/android_fixtures/dpl_src/gen_dpl.py onion tests/data/android_fixtures/dpl_onion.apk  # stdlib forward encoder + zipfile writer",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/dpl_onion.apk assets/huntress_puzzle.json | python3 -I tests/data/android_fixtures/dpl_src/oracle_dpl.py onion  # unzip + independent stdlib decoder -> ANS-288971671685B8DA"
+}

@@ -467,6 +467,629 @@ def _puzzle_obj_candidates(p):
     return got
 
 
+# --- composed / stacked v1 codec (coverage atlas rows 118 + 70; D29 `table`, D30 `layered`) ----------------------------
+# One unknown codec name + one int `key` over 2-4 KNOWN steps, each of which lib.android already decodes alone: wrapper
+# unwraps {hex, base64 std/urlsafe (padding-tolerant), base32, base85, a85}, permutations {reverse, swap byte pairs, swap
+# nibbles} and at most ONE keystream step {xor, sub, add} x {key+c*i (c in -7..7), key^i, key*i, key*(i+1), cycled
+# str(key) / key.to_bytes, prev-byte chaining, caesar on letters (+digits)}, plus key+c*i / key^i streams FITTED from the
+# known plaintext at either end (ANS- at 0, -SNA at the tail = reversed after, NA-S = pair-swapped after, QU5T / 414e532d
+# / IFHFGL = an inner base64 / hex / base32). Breadth-first, depth <= 4, shallowest hit wins; a keystream output must be
+# printable ASCII (or its nibble swap); only a whole-reading fullmatch of ANS-<16 HEX> counts, so a stray stack cannot
+# mint a token. D30 `layered` = base64 -> b ^ (key+i) -> reverse; D29 `table` = hex -> b - (key+3i).
+_SCS_ANS = re.compile(rb"ANS-[0-9A-F]{16}")
+_SCS_PRINT = re.compile(rb"[\x20-\x7e]+")
+_SCS_HEX = re.compile(rb"(?:[0-9a-fA-F]{2}[\s:]?)+")
+_SCS_B64 = re.compile(rb"[A-Za-z0-9+/\-_]{2,}=*")
+_SCS_B32 = re.compile(rb"[A-Za-z2-7]{2,}=*")
+_SCS_B85 = re.compile(rb"[\x21-\x7e]{5,}")
+_SCS_ANCHORS = (b"ANS-", b"-SNA", b"NA-S", b"QU5T", b"414e532d", b"414E532D", b"IFHFGL")
+_SCS_DEPTH = 4
+_SCS_NODES = 3000
+_SCS_BUDGET_S = 0.15
+_SCS_MAX = 4096  # payload bytes; a stacked v1 `data` is a few dozen
+_SCS_NIB = bytes(((x << 4) | (x >> 4)) & 255 for x in range(256))
+
+
+def _scs_unwraps(b):
+    t = b.strip()
+    if _SCS_HEX.fullmatch(t):
+        try:
+            yield "hex", bytes.fromhex(re.sub(rb"[\s:]", b"", t).decode())
+        except ValueError:
+            pass
+    if _SCS_B64.fullmatch(t):
+        s = t.rstrip(b"=").translate(bytes.maketrans(b"-_", b"+/"))
+        if len(s) % 4 != 1:
+            try:
+                yield "b64", base64.b64decode(s + b"=" * (-len(s) % 4), validate=True)
+            except (binascii.Error, ValueError):
+                pass
+    if _SCS_B32.fullmatch(t):
+        s = t.rstrip(b"=").upper()
+        if len(s) % 8 in (0, 2, 4, 5, 7):
+            try:
+                yield "b32", base64.b32decode(s + b"=" * (-len(s) % 8))
+            except (binascii.Error, ValueError):
+                pass
+    if _SCS_B85.fullmatch(t):
+        for name, fn in (("b85", base64.b85decode), ("a85", base64.a85decode)):
+            try:
+                yield name, fn(t[2:-2] if name == "a85" and t.startswith(b"<~") and t.endswith(b"~>") else t)
+            except (ValueError, TypeError):
+                pass
+
+
+def _scs_perms(b):
+    n = len(b)
+    yield "rev", b[::-1]
+    yield "swap", bytes(b[i ^ 1] if (i ^ 1) < n else b[i] for i in range(n))
+    yield "nib", b.translate(_SCS_NIB)
+
+
+def _scs_apply(op, b, s):
+    if op == "xor":
+        return (int.from_bytes(b, "big") ^ int.from_bytes(s[:len(b)], "big")).to_bytes(len(b), "big")
+    if op == "sub":  # plain = cipher - stream
+        return bytes((x - y) & 255 for x, y in zip(b, s))
+    return bytes((x + y) & 255 for x, y in zip(b, s))
+
+
+def _scs_fit(op, b):
+    """key+c*i and key^i streams solved from each known-plaintext anchor at the start or the end of `b`."""
+    n, out = len(b), []
+    for a in _SCS_ANCHORS:
+        if len(a) > n:
+            continue
+        j = n - len(a) if a == b"-SNA" else 0
+        if op == "xor":
+            s = [x ^ p for x, p in zip(b[j:], a)]
+        elif op == "sub":
+            s = [(x - p) & 255 for x, p in zip(b[j:], a)]
+        else:
+            s = [(p - x) & 255 for x, p in zip(b[j:], a)]
+        c = (s[1] - s[0]) & 255
+        if all(s[t] == (s[0] + c * t) & 255 for t in range(len(s))):
+            k = (s[0] - c * j) & 255
+            out.append((f"fit{k}+{c}i", bytes((k + c * i) & 255 for i in range(n))))
+        k = s[0] ^ (j & 255)
+        if all(s[t] == (k ^ (j + t)) & 255 for t in range(len(s))):
+            out.append((f"fit{k}^i", bytes((k ^ i) & 255 for i in range(n))))
+    return out
+
+
+def _scs_streams(n, key):
+    out = []
+    if key is None:
+        return out
+    kint, kb = key
+    if kint is not None:
+        k = kint
+        out += [(f"key{c:+d}i", bytes((k + c * i) & 255 for i in range(n))) for c in range(-7, 8)]
+        out += [("key^i", bytes((k ^ i) & 255 for i in range(n))), ("key*i", bytes((k * i) & 255 for i in range(n))),
+                ("key*(i+1)", bytes((k * (i + 1)) & 255 for i in range(n)))]
+        if k > 255 or k < 0:
+            m = abs(k)
+            ln = max(1, (m.bit_length() + 7) // 8)
+            for order in ("big", "little"):
+                kk = m.to_bytes(ln, order)
+                out.append((f"keybytes-{order}", bytes(kk[i % ln] for i in range(n))))
+    if kb and (len(kb) > 1 or kint is None):
+        out.append(("keystr", bytes(kb[i % len(kb)] for i in range(n))))
+    return out
+
+
+def _scs_caesar(b, sh, digits):
+    o = bytearray(b)
+    for i, x in enumerate(o):
+        if 65 <= x <= 90:
+            o[i] = 65 + (x - 65 + sh) % 26
+        elif 97 <= x <= 122:
+            o[i] = 97 + (x - 97 + sh) % 26
+        elif digits and 48 <= x <= 57:
+            o[i] = 48 + (x - 48 + sh) % 10
+    return bytes(o)
+
+
+def _scs_chain(b, iv, op, plain_fb):
+    o, prev = bytearray(), iv & 255
+    for x in b:
+        p = x ^ prev if op == "xor" else (x - prev) & 255
+        o.append(p)
+        prev = p if plain_fb else x
+    return bytes(o)
+
+
+def _scs_keyed(b, key, memo):
+    """Every keystream-step reading of `b` (each candidate stream once per op; `memo` caches streams by length)."""
+    n = len(b)
+    base = memo.get(n)
+    if base is None:
+        base = memo[n] = _scs_streams(n, key)
+    for op in ("xor", "sub", "add"):
+        done = set()
+        for name, s in base + _scs_fit(op, b):
+            if s not in done:
+                done.add(s)
+                yield f"{op}:{name}", _scs_apply(op, b, s)
+    ivs = {b[0] ^ 65, (b[0] - 65) & 255} if n else set()
+    if key is not None and key[0] is not None:
+        ivs.add(key[0] & 255)
+    for iv in sorted(ivs):
+        for op in ("xor", "sub"):
+            for fb in (False, True):
+                yield f"chain-{op}{'-pfb' if fb else ''}:{iv}", _scs_chain(b, iv, op, fb)
+    if _SCS_PRINT.fullmatch(b):
+        shifts = {1, 3, 13} if key is None or key[0] is None else {key[0] % 26, -key[0] % 26}
+        for sh in sorted(shifts):
+            for dg in (False, True):
+                yield f"caesar{sh}{'+d' if dg else ''}", _scs_caesar(b, sh, dg)
+
+
+def _scs_live(b):
+    return bool(b) and (_SCS_PRINT.fullmatch(b) is not None
+                        or _SCS_PRINT.fullmatch(b.translate(_SCS_NIB)) is not None)
+
+
+def _scs_search(data, key, deadline):
+    """{token: step path} at the shallowest depth any stack of <= _SCS_DEPTH steps reaches a fullmatch."""
+    root = data if isinstance(data, bytes) else str(data).encode("utf-8", "replace")
+    if not root or len(root) > _SCS_MAX:
+        return {}
+    seen, frontier, hits, nodes, memo = {(root, False)}, [(root, False, ())], {}, 0, {}
+    for dpt in range(_SCS_DEPTH):
+        nxt, hi = [], 20 * 2 ** (_SCS_DEPTH - dpt - 1) + 8  # an unwrap at most halves: 20 bytes need <= 20*2^r + ws
+        if not 20 <= len(root.strip()) <= 20 * 2 ** _SCS_DEPTH + 8:
+            return hits
+        for b, keyed, path in frontier:
+            last = path[-1] if path else ""
+            kids = list(_scs_unwraps(b)) + [(nm, c) for nm, c in _scs_perms(b) if nm != last]
+            kids = [(nm, c, keyed) for nm, c in kids]
+            if not keyed:
+                kids += [(nm, c, True) for nm, c in _scs_keyed(b, key, memo) if _scs_live(c)]
+            for nm, c, kd in kids:
+                if (c, kd) in seen or not 20 <= len(c) or len(c.strip()) > hi:
+                    continue
+                seen.add((c, kd))
+                t = c.strip()
+                if _SCS_ANS.fullmatch(t):
+                    hits.setdefault(t.decode(), path + (nm,))
+                    continue
+                if kd and not _scs_live(c):  # past the keystream only unwraps / permutations remain
+                    continue
+                nxt.append((c, kd, path + (nm,)))
+                nodes += 1
+            if nodes > _SCS_NODES or time.time() > deadline:
+                return hits
+        if hits:
+            break
+        frontier = nxt
+    return hits
+
+
+def _scs_objs(puzzle):
+    if isinstance(puzzle, dict):
+        return [puzzle]
+    if isinstance(puzzle, (list, tuple)):
+        return [p for p in puzzle if isinstance(p, dict)]
+    if isinstance(puzzle, (bytes, bytearray)) and puzzle[:2] != b"PK" or isinstance(puzzle, str) and puzzle.lstrip()[:1] == "{":
+        p = json.loads(puzzle)
+        return [p] if isinstance(p, dict) else []
+    objs = []
+    with zipfile.ZipFile(io.BytesIO(puzzle) if isinstance(puzzle, (bytes, bytearray)) else puzzle) as z:
+        for i in z.infolist():
+            if i.filename.endswith("huntress_puzzle.json") and i.file_size < 1 << 20:
+                try:
+                    p = json.loads(z.read(i))
+                except ValueError:
+                    continue
+                if isinstance(p, dict):
+                    objs.append(p)
+    return objs
+
+
+def stacked_codec_search(puzzle):
+    """ANS tokens of a composed v1 codec (see the block comment): `puzzle` is a parsed huntress_puzzle.json dict, its
+    JSON text, or an APK path/bytes (its assets/*huntress_puzzle.json). One unique token -> [token]; several (an
+    ambiguous stack) -> all of them, shallowest first, for the ranker; nothing / malformed -> []."""
+    try:
+        deadline = time.time() + _SCS_BUDGET_S
+        found = {}
+        for p in _scs_objs(puzzle):
+            data = p.get("data", p.get("payload"))
+            if not isinstance(data, str) or not data:
+                continue
+            k = p.get("key")
+            kint = k if isinstance(k, int) and not isinstance(k, bool) else \
+                int(k) if isinstance(k, str) and re.fullmatch(r"-?\d{1,12}", k.strip()) else None
+            kb = str(k).encode() if isinstance(k, (int, str)) and not isinstance(k, bool) and str(k) else b""
+            key = (kint, kb) if (kint is not None or kb) else None
+            for t, path in _scs_search(data, key, deadline).items():
+                found.setdefault(t, len(path))
+        return sorted(found, key=lambda t: found[t])
+    except Exception:  # noqa: BLE001 - decoy / truncated / wrong-format input yields nothing
+        return []
+
+
+# --- declared pipeline / onion puzzle JSON (prebuild v1-declared-layers-pipeline; D30 `layered` finale form) -----------
+# A puzzle that NAMES its steps: `layers` / `steps` / `pipeline` / `chain` / `codecs` / `stages` / `ops` (or a list /
+# "a|b|c" `codec`), each step a name ("base64"), [name, param], or a dict ({"xor": 12, "step": 1}, {"op": "xor", "key":
+# 12, "step": 1, "offset": 0}); params a step does not carry come from the puzzle's key / key2.. / iv / step / offset.
+# Registry = every v1 codec of d1-d30 as one decode-direction step (plain, reverse, base64/32/85, hex, xor/add/sub with a
+# key+step*(i+offset) stream, caesar (code point / letters), rot13/47, atbash, vigenere, rail, split/indexed order,
+# packet, table, layered, zlib/gzip/bz2/xz, dynamic entry path). add/sub/caesar are tried both ways (decode- vs
+# encode-listed), the list forward then reversed; an unknown step name hands the value to the composed-codec search; a
+# decoded value that is itself puzzle JSON is recursed into (depth <= 5). Only a whole-reading fullmatch counts.
+_DPL_LIST_KEYS = ("layers", "steps", "pipeline", "chain", "codecs", "stages", "ops", "transforms", "operations")
+_DPL_NAME_KEYS = ("op", "type", "codec", "name", "kind", "fn", "method", "algo", "transform", "operation")
+_DPL_FULL = re.compile(r"\s*(ANS-[0-9A-Fa-f]{16})\s*")
+_DPL_DEPTH, _DPL_FRONT, _DPL_BUDGET_S = 5, 96, 0.4
+_DPL_ALIAS = {
+    "plain": "plain", "none": "plain", "raw": "plain", "identity": "plain", "noop": "plain", "native": "plain",
+    "reflection": "plain", "analysis": "plain",
+    "reverse": "rev", "reversed": "rev", "rev": "rev", "flip": "rev",
+    "base64": "b64", "b64": "b64", "base64url": "b64", "b64url": "b64", "urlsafe_b64": "b64",
+    "base32": "b32", "b32": "b32", "base85": "b85", "b85": "b85", "ascii85": "a85", "a85": "a85",
+    "hex": "hex", "base16": "hex", "unhex": "hex", "hexlify": "hex",
+    "xor": "xor", "rolling_xor": "xor", "xor_index": "xor", "xor_rolling": "xor",
+    "add": "add", "plus": "add", "sub": "sub", "subtract": "sub", "minus": "sub",
+    "caesar": "caesar", "shift": "caesar", "char_shift": "caesar", "rot": "caesar",
+    "rot13": "rot13", "rot-13": "rot13", "rot47": "rot47", "atbash": "atbash",
+    "vigenere": "vig", "vigenère": "vig", "rail": "rail", "railfence": "rail", "rail_fence": "rail", "zigzag": "rail",
+    "split": "order", "indexed": "order", "order": "order", "permute": "order", "permutation": "order",
+    "shuffle": "order", "index": "order",
+    "packet": "packet", "frame": "packet", "tlv": "packet", "table": "table", "layered": "layered",
+    "zlib": "unz", "gzip": "unz", "deflate": "unz", "inflate": "unz", "bz2": "unz", "bzip2": "unz", "lzma": "unz",
+    "xz": "unz", "decompress": "unz", "dynamic": "entry", "entry": "entry", "asset": "entry", "file": "entry",
+    "path": "entry", "load": "entry", "swap": "swap", "nibble": "nib", "not": "not", "invert": "not",
+    "url": "url", "urldecode": "url", "percent": "url", "chain_xor": "cbc", "cbc": "cbc", "feedback": "cbc",
+    "decimal": "ints", "charcodes": "ints", "ints": "ints", "bytes": "ints",
+}
+
+
+def _dpl_int(v):
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str) and re.fullmatch(r"\s*-?(?:0x[0-9a-fA-F]+|\d{1,12})\s*", v):
+        return int(v.strip(), 0)
+    return None
+
+
+def _dpl_step(s, puz, ki):
+    """(registry op | None, raw name, params) of one declared step; `ki` = this step's index among the keyed steps."""
+    name, prm = None, {}
+    if isinstance(s, str):
+        m = re.fullmatch(r"\s*([A-Za-z0-9_\-è]+)\s*(?:[:=(]\s*([^)]*?)\s*\)?)?\s*", s)
+        name, val = (m.group(1), m.group(2)) if m else (s, None)
+        if val not in (None, ""):
+            prm["key"] = val
+    elif isinstance(s, (list, tuple)) and s and isinstance(s[0], str):
+        name = s[0]
+        if len(s) > 1:
+            prm["key"] = s[1]
+        if len(s) > 2:
+            prm["step"] = s[2]
+    elif isinstance(s, dict):
+        prm = {str(k).lower(): v for k, v in s.items()}
+        for k in _DPL_NAME_KEYS:
+            if isinstance(prm.get(k), str) and prm[k].strip().lower() in _DPL_ALIAS:
+                name = prm.pop(k)
+                break
+        if name is None:
+            for k in list(prm):
+                if k in _DPL_ALIAS:
+                    name, v = k, prm.pop(k)
+                    if not isinstance(v, (bool, dict)) and v is not None and "key" not in prm:
+                        prm["key"] = v
+                    break
+        if name is None and isinstance(prm.get("step"), str):
+            name = prm.pop("step")
+        if name is None:
+            name = next((prm[k] for k in _DPL_NAME_KEYS if isinstance(prm.get(k), str)), None)
+    if not isinstance(name, str):
+        return None, None, prm
+    nm = name.strip().lower()
+    op = _DPL_ALIAS.get(nm)
+    # params the step itself does not carry: the puzzle's key / key2 / key3 (by keyed-step index), step, offset, iv
+    if "key" not in prm:
+        for alt in ("k", "value", "shift", "rails", "seed"):
+            if alt in prm:
+                prm["key"] = prm[alt]
+                break
+    if "key" not in prm:
+        for kn in ([f"key{ki + 1}"] if ki else []) + ["key", "shift", "k"]:
+            if kn in puz and not isinstance(puz[kn], (dict, bool)):
+                prm["key"] = puz[kn]
+                break
+    for kn in ("step", "offset", "iv", "order", "rails"):
+        if kn not in prm and kn in puz and not isinstance(puz[kn], (dict, bool)):
+            prm[kn] = puz[kn]
+    return op, nm, prm
+
+
+def _dpl_bytes(v):
+    return v if isinstance(v, bytes) else str(v).encode("utf-8", "replace")
+
+
+def _dpl_stream(key, step, off, n):
+    """Keystream readings for a key param: int key -> key+step*(i+off) (step given) or key, key+i, key^i (step absent);
+    a non-numeric string / list -> its bytes cycled."""
+    ki = _dpl_int(key)
+    if ki is not None:
+        st = _dpl_int(step)
+        o = _dpl_int(off) or 0
+        steps = [st] if st is not None else [0, 1]
+        outs = [bytes((ki + c * (i + o)) & 255 for i in range(n)) for c in steps]
+        if st is None:
+            outs.append(bytes((ki ^ (i + o)) & 255 for i in range(n)))
+        if ki > 255 or ki < 0:
+            m = abs(ki)
+            kb = m.to_bytes(max(1, (m.bit_length() + 7) // 8), "big")
+            outs += [bytes(kb[i % len(kb)] for i in range(n)), bytes(kb[::-1][i % len(kb)] for i in range(n))]
+        return outs
+    if isinstance(key, list) and key and all(_dpl_int(x) is not None for x in key):
+        kb = bytes(_dpl_int(x) & 255 for x in key)
+    elif isinstance(key, str) and key:
+        kb = key.encode("utf-8")
+    else:
+        return []
+    return [bytes(kb[i % len(kb)] for i in range(n))]
+
+
+def _dpl_unwrap(op, b):
+    t = re.sub(rb"\s", b"", b)
+    if op == "b64":
+        s = t.rstrip(b"=").translate(bytes.maketrans(b"-_", b"+/"))
+        return [base64.b64decode(s + b"=" * (-len(s) % 4), validate=True)] if len(s) % 4 != 1 else []
+    if op == "b32":
+        s = t.rstrip(b"=").upper()
+        return [base64.b32decode(s + b"=" * (-len(s) % 8))]
+    if op == "b85":
+        return [base64.b85decode(t)]
+    if op == "a85":
+        return [base64.a85decode(t[2:-2] if t.startswith(b"<~") else t)]
+    return [bytes.fromhex(re.sub(rb"[:\-,]|0x", b"", t).decode())]
+
+
+def _dpl_apply(op, b, prm, zf):
+    """Every decode-direction reading of one registry step on bytes `b`."""
+    key, step, off = prm.get("key"), prm.get("step"), prm.get("offset")
+    n = len(b)
+    if op == "plain":
+        return [b]
+    if op == "rev":
+        return [b[::-1]]
+    if op in ("b64", "b32", "b85", "a85", "hex"):
+        return _dpl_unwrap(op, b)
+    if op in ("xor", "add", "sub"):
+        outs = []
+        streams = _dpl_stream(key, step, off, n)
+        for s in streams:
+            if op == "xor":
+                outs.append(bytes(x ^ y for x, y in zip(b, s)))
+            else:  # decode-listed (add = add now) or encode-listed (add = subtract to undo): both
+                outs.append(bytes((x - y) & 255 for x, y in zip(b, s)))
+                outs.append(bytes((x + y) & 255 for x, y in zip(b, s)))
+                if op == "add":
+                    outs[-2], outs[-1] = outs[-1], outs[-2]
+        return outs
+    if op == "cbc":
+        iv = _dpl_int(prm.get("iv", key))
+        return [_scs_chain(b, iv or 0, "xor", fb) for fb in (False, True)] if n else []
+    if op == "caesar":
+        k = _dpl_int(key)
+        if k is None:
+            k = _dpl_int(off)
+        if k is None:
+            return []
+        t = b.decode("utf-8", "replace")
+        outs = ["".join(chr((ord(c) - s) % 0x110000) for c in t).encode("utf-8") for s in (k, -k)]
+        return outs + [_scs_caesar(b, s % 26, d) for s in (-k, k) for d in (False, True)]
+    if op == "rot13":
+        return [codecs.decode(b.decode("latin-1"), "rot13").encode("latin-1")]
+    if op == "rot47":
+        return [_rot47(b.decode("latin-1")).encode("latin-1")]
+    if op == "atbash":
+        return [_atbash(b.decode("latin-1")).encode("latin-1")]
+    if op == "vig":
+        t = b.decode("latin-1")
+        return [r.encode("latin-1") for r in (_vigenere(t, key), _vigenere(t, key, True)) if r]
+    if op == "rail":
+        r = _dpl_int(prm.get("rails", key))
+        x = _rail_fence(b.decode("latin-1"), r) if r else None
+        return [x.encode("latin-1")] if x else []
+    if op == "order":
+        o = _int_list(prm.get("order") if prm.get("order") is not None else key)
+        if not o or sorted(o) != list(range(n)):
+            return []
+        sc = bytearray(n)
+        for i, pos in enumerate(o):
+            sc[pos] = b[i]
+        return [bytes(sc), bytes(b[x] for x in o)]
+    if op == "packet":
+        if re.fullmatch(rb"(?:[0-9a-fA-F]{2})+", b.strip()):
+            b = bytes.fromhex(b.strip().decode())
+        outs = [b[j + 1:j + 1 + b[j]] for j in range(min(5, len(b))) if 0 < b[j] <= len(b) - j - 1]
+        return [o for o in outs if o]
+    if op == "table":
+        if re.fullmatch(rb"(?:[0-9a-fA-F]{2})+", b.strip()):
+            b = bytes.fromhex(b.strip().decode())
+        k = _dpl_int(key) or 0
+        st = _dpl_int(step)
+        return [bytes((x - (k + c * i)) & 255 for i, x in enumerate(b)) for c in ([st] if st is not None else [3, 1, 0])]
+    if op == "layered":
+        o = []
+        for r in _dpl_unwrap("b64", b):
+            o += [x[::-1] for x in _dpl_apply("xor", r, {"key": key, "step": 1 if step is None else step,
+                                                        "offset": off}, zf)]
+        return o
+    if op == "unz":
+        r = _unz(b)
+        return [r] if r else []
+    if op == "swap":
+        return [bytes(b[i ^ 1] if (i ^ 1) < n else b[i] for i in range(n))]
+    if op == "nib":
+        return [b.translate(_SCS_NIB)]
+    if op == "not":
+        return [bytes(x ^ 255 for x in b)]
+    if op == "url":
+        return [urllib.parse.unquote_to_bytes(b)]
+    if op == "ints":
+        p = re.split(rb"[\s,;]+", b.strip())
+        return [bytes(int(x) & 255 for x in p)] if all(x.isdigit() for x in p) else []
+    if op == "entry" and zf is not None:
+        nm = b.decode("utf-8", "replace").strip().lstrip("/")
+        try:
+            i = zf.getinfo(nm)
+        except KeyError:
+            return []
+        return [zf.read(i)] if i.file_size < 8 << 20 else []
+    return []
+
+
+def _dpl_steps(p):
+    for k in _DPL_LIST_KEYS:
+        v = p.get(k)
+        if isinstance(v, list) and v:
+            return v
+    c = p.get("codec")
+    if isinstance(c, list) and c:
+        return c
+    if isinstance(c, str) and re.search(r"[|>,+;]|->", c):
+        parts = [x for x in re.split(r"\s*(?:->|=>|[|>,+;])\s*", c.strip()) if x]
+        if len(parts) > 1 and any(x.lower() in _DPL_ALIAS for x in parts):
+            return parts
+    return None
+
+
+def _dpl_finish(v, depth, zf, deadline, hits):
+    """Record a fullmatch token; recurse into a value that is itself puzzle JSON; scan an entry's bytes literally."""
+    if isinstance(v, (bytes, bytearray)):
+        v = bytes(v)
+        try:
+            t = v.decode("utf-8")
+        except UnicodeDecodeError:
+            t = None
+        if t is None:
+            if v[:4] in (b"dex\n", b"PK\x03\x04"):
+                for m in ANS_RE_B.finditer(v):
+                    hits.setdefault(m.group(0).decode().upper(), depth)
+            return
+    else:
+        t = str(v)
+    m = _DPL_FULL.fullmatch(t)
+    if m:
+        hits.setdefault(m.group(1).upper(), depth)
+        return
+    s = t.strip()
+    if depth < _DPL_DEPTH and s[:1] in "{[" and len(s) < 1 << 20:
+        try:
+            o = json.loads(s)
+        except ValueError:
+            return
+        for q in (o if isinstance(o, list) else [o])[:16]:
+            if isinstance(q, dict):
+                _dpl_obj(q, depth + 1, zf, deadline, hits)
+
+
+def _dpl_run(steps, puz, data, zf, deadline, hits, depth):
+    """Apply `steps` in order to the start readings `data`; True when anything was applied."""
+    front = list(data)
+    for op, nm, prm in steps:
+        if op is None:  # unknown step name: the composed-codec search over what is left
+            k = prm.get("key", puz.get("key"))
+            kint = _dpl_int(k)
+            kb = str(k).encode() if isinstance(k, (int, str)) and not isinstance(k, bool) and str(k) else b""
+            for b in front[:8]:
+                for t in _scs_search(b, (kint, kb) if (kint is not None or kb) else None,
+                                     min(deadline, time.time() + _SCS_BUDGET_S)):
+                    hits.setdefault(t.upper(), depth)
+            return
+        nxt, seen = [], set()
+        for b in front:
+            try:
+                outs = _dpl_apply(op, b, prm, zf)
+            except Exception:  # noqa: BLE001 - this reading is not that step's input
+                outs = []
+            for o in outs:
+                if o and o not in seen:
+                    seen.add(o)
+                    nxt.append(o)
+        front = nxt[:_DPL_FRONT]
+        if not front or time.time() > deadline:
+            return
+    for b in front:
+        _dpl_finish(b, depth, zf, deadline, hits)
+
+
+def _dpl_obj(p, depth, zf, deadline, hits):
+    data = p.get("data", p.get("payload", p.get("blob")))
+    if isinstance(data, dict):  # the onion's next layer inline
+        if depth < _DPL_DEPTH:
+            _dpl_obj(data, depth + 1, zf, deadline, hits)
+        return
+    starts = []
+    if isinstance(p.get("parts"), list) and p["parts"] and not data:
+        starts = [x.encode("utf-8") for x in _split_assemblies(p["parts"], p.get("order"))]
+    elif isinstance(data, str) and data:
+        starts = [data.encode("utf-8")]
+    if not starts or time.time() > deadline:
+        return
+    steps, ki = [], 0
+    for s in _dpl_steps(p) or ():  # params resolved in DECLARED order (key, key2.. per keyed step), then run either way
+        steps.append(_dpl_step(s, p, ki))
+        ki += steps[-1][0] in ("xor", "add", "sub", "caesar", "vig", "table", "layered", "cbc")
+    if steps:
+        n0 = len(hits)
+        _dpl_run(steps, p, starts, zf, deadline, hits, depth)
+        if len(hits) == n0 and len(steps) > 1:  # listed in the encoder's order
+            _dpl_run(steps[::-1], p, starts, zf, deadline, hits, depth)
+        return
+    if depth == 0:  # a bare top-level codec is the v1 paths' job; only its decoded onion layer is ours
+        c = p.get("codec")
+        op = _DPL_ALIAS.get(str(c).strip().lower()) if isinstance(c, str) else None
+        if op is None or op == "plain":
+            return
+        _dpl_run([_dpl_step(c, p, 0)], p, starts, zf, deadline, hits, depth)
+        return
+    for s in _puzzle_obj_candidates(p):  # an inner layer: the v1 codec paths, then a stack search
+        _dpl_finish(s, depth, zf, deadline, hits)
+    if not hits:
+        for t in stacked_codec_search(p):
+            hits.setdefault(t.upper(), depth)
+
+
+def declared_pipeline_candidates(puzzle):
+    """ANS tokens of a puzzle JSON that declares its own pipeline or nests another puzzle JSON in its decoded data (see
+    the block comment). `puzzle` = a parsed dict / list, its JSON text, or an APK path/bytes (assets/*huntress_puzzle
+    .json; a `dynamic` step reads the named entry). Shallowest layer first; nothing / malformed -> []."""
+    try:
+        deadline = time.time() + _DPL_BUDGET_S
+        hits, zf = {}, None
+        if isinstance(puzzle, (str, Path)) and not str(puzzle).lstrip().startswith("{") \
+                or isinstance(puzzle, (bytes, bytearray)) and bytes(puzzle[:2]) == b"PK" or hasattr(puzzle, "read"):
+            try:
+                zf = zipfile.ZipFile(io.BytesIO(bytes(puzzle)) if isinstance(puzzle, (bytes, bytearray)) else puzzle)
+            except (OSError, zipfile.BadZipFile, ValueError):
+                return []
+            objs = []
+            for i in zf.infolist():
+                if i.filename.endswith("huntress_puzzle.json") and i.file_size < 1 << 20:
+                    try:
+                        p = json.loads(zf.read(i))
+                    except ValueError:
+                        continue
+                    if isinstance(p, dict):
+                        objs.append(p)
+        else:
+            objs = _scs_objs(puzzle)
+        for p in objs:
+            _dpl_obj(p, 0, zf, deadline, hits)
+        return sorted(hits, key=lambda t: hits[t])
+    except Exception:  # noqa: BLE001 - decoy / truncated / wrong-format input yields nothing
+        return []
+
 # --- position / rolling-key xor keystreams (coverage atlas row 70; D18 TT `decryptByte`) -------------------------------
 # A per-byte helper whose key varies with the index: c^(k+s*i), c^k^i, (c-k-s*i), c^key[i%n] (key from the JSON or a dex
 # string), cipher/plain-feedback chaining (IV = key), an LCG keystream (any 2^n LCG's low byte solved from the known
@@ -1547,6 +2170,10 @@ def _puzzle_candidates(apk, depth=3, seen=None, top=True):
         out += dex_eval_scan(apk, deep=True)
         if not any(ANS_RE_T.search(c) for c in out):  # v2: the chain reads assets / resources / PackageInfo via its Context
             out += context_chain_scan(apk)
+    if names and not any(ANS_RE_T.search(c) for c in out):  # declared `layers`/`steps` pipeline, or an onion puzzle JSON
+        out += declared_pipeline_candidates(apk)
+    if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec: a stack of known steps (D29 table, D30 layered)
+        out += stacked_codec_search([p for p in objs if isinstance(p, dict)])
     if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec / xor mismatch: a per-index rolling keystream
         out += rolling_xor_scan(apk, [p for p in objs if isinstance(p, dict)])
     if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec: a custom base-n alphabet from dex / assets

@@ -674,6 +674,8 @@ def decode(material, rep, transform, key=None):
         return _hclg_decode(material, transform, key)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("orderanomaly", "orderanomalies", "outoforder", "changeorder"):   # change-order-anomaly
         return _oa_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("corpusgraph", "languagegraph", "executiongraph", "bridgegraph"):   # corpus-language-graph-bridge
+        return _cg_decode(material, transform, key)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -27786,3 +27788,429 @@ def _hclg_decode(material, transform=None, key=None):
         cmds = [x["command"] for x in g["local_exec"] if not k or x["address"] == k]
         return "\n".join(c.rstrip("\n") for c in cmds) if cmds else "none"
     return None
+
+
+# Target corpus-language-graph-bridge (D30 `beanshell-jsp-graph`: "rebuild the complete execution, host, and evidence
+# graph, and find the edge that holds everything together"). corpus_graph(plans, texts, scope) -> one typed graph over
+# members AND languages: `execution` (plan next_stage / PS $NextStage / $HandoffId -> the member carrying that
+# handoff_id -> member; else next_language -> language), `host` (host_profile container -> inner language:
+# jsp_beanshell = jsp>beanshell, classic_asp>vbscript, jenkins_pipeline>groovy, ...), `evidence` (two members sharing
+# a campaign token / url host / file_path), `member_of` (member -> its own language). graph_answer() projects it to the
+# language / member / mixed level and answers bridges (Tarjan, multigraph-safe), articulation points, max edge
+# betweenness (Brandes), degrees, component count, the language reached by most chains.
+_CG_HOST = {   # host_profile -> (container node, default inner language)
+    "jsp_beanshell": ("jsp", "beanshell"), "classic_asp": ("classic_asp", "vbscript"),
+    "aspx_inline_csharp": ("aspx_inline_csharp", "csharp_script"), "jenkins_pipeline": ("jenkins_pipeline", "groovy"),
+    "wsf": ("wsf", "jscript"), "hta": ("hta", "vbscript"), "sct": ("sct", "jscript"),
+    "php_webshell": ("php_webshell", "php"), "lua_openresty": ("lua_openresty", "lua"), "perl_cgi": ("perl_cgi", "perl"),
+    "ruby_rack": ("ruby_rack", "ruby"), "google_docs_sidebar": ("google_docs_sidebar", "google_apps_script"),
+    "elixir_phoenix": ("elixir_phoenix", "elixir"), "jsp_webshell": ("jsp_webshell", "java"),
+}
+_CG_EXT = {"jsp": "jsp", "bsh": "beanshell", "groovy": "groovy", "asp": "vbscript", "aspx": "csharp_script",
+           "csx": "csharp_script", "ex": "elixir", "exs": "elixir", "java": "java", "jenkinsfile": "groovy"}
+_CG_NOHOST = ("", "standalone", "none", "native", "local", "default", "null", "n/a")
+
+
+def _cg_lang(x):
+    k = re.sub(r"[^0-9a-z]+", "_", str(x or "").strip().lower()).strip("_")
+    return (hg_lang(k) or k) if k and k not in _HG_NONE else None
+
+
+def _cg_member_lang(m):
+    base = str(m or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+    ext = base.rsplit(".", 1)[-1] if "." in base else base
+    return _CG_EXT.get(ext) or _hg_member_lang(m)
+
+
+def _cg_scope(m):
+    n = str(m).replace("\\", "/")
+    return n.rsplit("/", 1)[0] if "/" in n else ""
+
+
+def corpus_graph(plans_by_member, texts_by_member=None, set_scope=None):
+    """plans {member: plan dict / 'k=v|..' / JSON}, texts {member: source} (optional), set_scope: a container prefix
+    ('evidence-02.zip') -> only its members (None = all). Returns {members: {m: {language, scope}}, languages: [..],
+    edges: [(src, dst, type, via)], node_kind: {node: 'member'|'language'}} (members and languages share one node
+    namespace; a member name always carries its path / extension). None when no member has a plan or text."""
+    try:
+        plans_by_member, texts_by_member = plans_by_member or {}, texts_by_member or {}
+        names = sorted(set(plans_by_member) | set(texts_by_member), key=str)
+        if set_scope is not None:
+            sc = str(set_scope).replace("\\", "/").rstrip("/")
+            names = [m for m in names if _cg_scope(m) == sc or str(m).replace("\\", "/").startswith(sc + "/")]
+        if not names:
+            return None
+        info = {}
+        for m in names:
+            try:
+                d = {_rc_field(k): v for k, v in _rc_dict(plans_by_member.get(m)).items()}
+            except Exception:  # noqa: BLE001
+                d = {}
+            t = texts_by_member.get(m)
+            t = t.decode("utf-8", "replace") if isinstance(t, (bytes, bytearray)) else str(t or "")
+            try:
+                cv = _cl_vars(t[:500_000]) if t else {}
+            except Exception:  # noqa: BLE001
+                cv = {}
+            info[m] = (d, t, cv)
+        mem = {m: {"language": _cg_lang(info[m][0].get("language")) or _cg_member_lang(m), "scope": _cg_scope(m)}
+               for m in names}
+        stem = lambda s: re.sub(r"\.[A-Za-z0-9_]+$", "", str(s).replace("\\", "/").rsplit("/", 1)[-1]).lower()
+        by_name = {}
+        for m in names:
+            for k in {str(m).replace("\\", "/").rsplit("/", 1)[-1].lower(), stem(m)}:
+                by_name.setdefault(k, set()).add(m)
+        hid = {}   # handoff id -> members that receive it (plan handoff_id)
+        for m, (d, t, cv) in info.items():
+            h = str(d.get("handoff_id") or "").strip()
+            if h:
+                hid.setdefault(h, set()).add(m)
+        edges, seen = [], set()
+
+        def add(a, b, typ, via):
+            if a and b and a != b and (a, b, typ) not in seen:
+                seen.add((a, b, typ))
+                edges.append((a, b, typ, via))
+        for m, (d, t, cv) in info.items():
+            got = False
+            ns = str(d.get("next_stage") or (cv.get("nextstage") or (None, ""))[1] or "").strip()
+            if ns and ns.lower() not in _HG_NONE:
+                b = ns.replace("\\", "/").rsplit("/", 1)[-1].lower()
+                for k in (b, stem(b)):
+                    if len(by_name.get(k, ())) == 1 and m not in by_name[k]:
+                        add(m, next(iter(by_name[k])), "execution", "next_stage")
+                        got = True
+                        break
+            h = str((cv.get("handoffid") or (None, ""))[1] or "").strip()
+            if h and not str(d.get("handoff_id") or "").strip():   # producer side: $HandoffId -> its consumer
+                tgt = hid.get(h) or {o for o, (_, ot, _) in info.items() if o != m and ot and h in ot}
+                for o in sorted(tgt - {m}):
+                    add(m, o, "execution", "handoff_id")
+                    got = True
+            nl = _cg_lang(d.get("next_language"))
+            if nl and not got and nl != "same_language":
+                add(m, nl, "execution", "next_language")
+            hp = re.sub(r"[^0-9a-z]+", "_", str(d.get("host_profile") or "").strip().lower()).strip("_")
+            if hp not in _CG_NOHOST:
+                cont, inner = _CG_HOST.get(hp, (hp, None))
+                inner = mem[m]["language"] or inner
+                if inner and cont != inner:
+                    add(cont, inner, "host", hp)
+        ev = {}
+        for m, (d, t, cv) in info.items():
+            toks = set()
+            for k in ("campaign_id", "campaign"):
+                if str(d.get(k) or "").strip():
+                    toks.add("campaign:" + str(d[k]).strip())
+            if str(d.get("file_path") or "").strip():
+                toks.add("file_path:" + str(d["file_path"]).strip().replace("\\", "/").lower())
+            urls = [str(d.get(k)) for k in ("url", "upload_url") if d.get(k)] + \
+                [u.group(0) for u in _CL_URL.finditer(t[:500_000])]
+            for u in urls:
+                mm = re.match(r"(?i)https?://([^/:?#\s'\"]+)", u)
+                if mm and not _CL_URL_NS.match(u):
+                    toks.add("host:" + mm.group(1).lower())
+            for tok in toks:
+                ev.setdefault(tok, set()).add(m)
+        for tok in sorted(ev):
+            ms = sorted(ev[tok])
+            for i, a in enumerate(ms):
+                for b in ms[i + 1:]:
+                    add(a, b, "evidence", tok)
+        for m in names:
+            if mem[m]["language"]:
+                add(m, mem[m]["language"], "member_of", "language")
+        langs = sorted({mem[m]["language"] for m in names if mem[m]["language"]} |
+                       {x for a, b, ty, _ in edges for x in (a, b) if x not in mem})
+        kind = {**{m: "member" for m in names}, **{x: "language" for x in langs if x not in mem}}
+        return {"members": mem, "languages": langs, "edges": edges, "node_kind": kind}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def corpus_graph_sets(plans_by_member, texts_by_member=None):
+    """{scope: corpus_graph} per Mastery set (members grouped by their container path)."""
+    names = set(plans_by_member or {}) | set(texts_by_member or {})
+    out = {}
+    for sc in sorted({_cg_scope(m) for m in names}):
+        g = corpus_graph(plans_by_member, texts_by_member, sc)
+        if g:
+            out[sc] = g
+    return out
+
+
+def _cg_project(g, level="language", types=None):
+    """(nodes, [(src, dst, type)]) at a level: language (members folded into their language), member (language
+    endpoints expanded to that language's members), mixed (everything, member_of included)."""
+    mem = g["members"]
+    types = set(types) if types else None
+    raw = [(a, b, t) for a, b, t, _ in g["edges"] if types is None or t in types]
+    out = []
+    if level == "mixed":
+        nodes = set(g["node_kind"])
+        out = raw
+    elif level == "member":
+        nodes = set(mem)
+        of = {}
+        for m, x in mem.items():
+            if x["language"]:
+                of.setdefault(x["language"], []).append(m)
+        for a, b, t in raw:
+            if t == "member_of":
+                continue
+            for x in ([a] if a in mem else of.get(a, [])):
+                for y in ([b] if b in mem else of.get(b, [])):
+                    if x != y:
+                        out.append((x, y, t))
+    else:
+        nodes = set(g["languages"])
+        f = lambda x: mem[x]["language"] if x in mem else x
+        for a, b, t in raw:
+            if t == "member_of":
+                continue
+            x, y = f(a), f(b)
+            if x and y and x != y:
+                out.append((x, y, t))
+    nodes |= {x for a, b, _ in out for x in (a, b)}
+    return sorted(nodes), list(dict.fromkeys(out))
+
+
+def _cg_undirected(nodes, edges):
+    adj = {n: [] for n in nodes}
+    for i, (a, b, _) in enumerate(edges):
+        adj[a].append((b, i))
+        adj[b].append((a, i))
+    return adj
+
+
+def _cg_bridges_ap(nodes, edges):
+    """Tarjan over the undirected multigraph (parallel edges are never bridges): (bridge edge ids, articulation nodes)."""
+    adj = _cg_undirected(nodes, edges)
+    disc, low, br, ap, cnt = {}, {}, set(), set(), [0]
+    for root in nodes:
+        if root in disc:
+            continue
+        disc[root] = low[root] = cnt[0]
+        cnt[0] += 1
+        stack, kids = [(root, -1, iter(adj[root]))], 0
+        while stack:
+            u, pe, it = stack[-1]
+            nxt = next(it, None)
+            if nxt is None:
+                stack.pop()
+                if stack:
+                    p = stack[-1][0]
+                    low[p] = min(low[p], low[u])
+                    if low[u] > disc[p]:
+                        br.add(pe)
+                    if p != root and low[u] >= disc[p]:
+                        ap.add(p)
+                continue
+            v, ei = nxt
+            if ei == pe:
+                continue
+            if v in disc:
+                low[u] = min(low[u], disc[v])
+            else:
+                disc[v] = low[v] = cnt[0]
+                cnt[0] += 1
+                if u == root:
+                    kids += 1
+                stack.append((v, ei, iter(adj[v])))
+        if kids > 1:
+            ap.add(root)
+    return br, ap
+
+
+def _cg_components(nodes, edges, skip=None):
+    adj = _cg_undirected(nodes, edges)
+    seen, comps = set(), []
+    for n in nodes:
+        if n in seen:
+            continue
+        comp, st = [], [n]
+        seen.add(n)
+        while st:
+            u = st.pop()
+            comp.append(u)
+            for v, ei in adj[u]:
+                if ei != skip and v not in seen:
+                    seen.add(v)
+                    st.append(v)
+        comps.append(comp)
+    return comps
+
+
+def _cg_edge_betweenness(nodes, edges):
+    """Brandes edge betweenness on the undirected simple graph; {(a, b) sorted: score}."""
+    nb = {n: set() for n in nodes}
+    for a, b, _ in edges:
+        nb[a].add(b)
+        nb[b].add(a)
+    eb = {}
+    for s in nodes:
+        stack, pred, sig, dist = [], {n: [] for n in nodes}, dict.fromkeys(nodes, 0), {s: 0}
+        sig[s] = 1
+        q = [s]
+        while q:
+            v = q.pop(0)
+            stack.append(v)
+            for w in sorted(nb[v]):
+                if w not in dist:
+                    dist[w] = dist[v] + 1
+                    q.append(w)
+                if dist[w] == dist[v] + 1:
+                    sig[w] += sig[v]
+                    pred[w].append(v)
+        delta = dict.fromkeys(nodes, 0.0)
+        while stack:
+            w = stack.pop()
+            for v in pred[w]:
+                c = sig[v] / sig[w] * (1 + delta[w])
+                k = tuple(sorted((v, w)))
+                eb[k] = eb.get(k, 0.0) + c
+                delta[v] += c
+    return {k: v / 2 for k, v in eb.items()}
+
+
+def _cg_argmax(scores):
+    if not scores:
+        return None
+    top = max(scores.values())
+    best = [k for k, v in scores.items() if abs(v - top) < 1e-9]
+    return best[0] if len(best) == 1 else None
+
+
+def graph_answer(g, question, level=None, types=None, sep=">"):
+    """One answer from corpus_graph(): question in bridge | bridges | bridge_count | articulation | articulation_points
+    | articulation_count | max_betweenness_edge | components | node_count | edge_count | in_degree:<node> |
+    out_degree:<node> | degree:<node> | max_in_degree | max_out_degree | max_degree | most_reached_language. A
+    `level:` prefix (language / member / mixed) overrides `level` (default language); `@execution+host` filters edge
+    types. Edges answer `src>dst` (declared direction), nodes their name, counts an int. 'none' = the graph has no
+    such element, None = cannot answer (ambiguous tie / no graph)."""
+    try:
+        if not g:
+            return None
+        q = str(question or "").strip().lower()
+        if "@" in q:
+            q, ts = q.split("@", 1)
+            types = [t for t in re.split(r"[+,\s]+", ts) if t]
+        mm = re.match(r"(language|member|mixed)s?\s*:\s*(.+)$", q)
+        if mm:
+            level, q = mm.group(1), mm.group(2)
+        level = level or "language"
+        arg = None
+        if ":" in q:
+            q, arg = q.split(":", 1)
+            arg = arg.strip()
+        q = re.sub(r"[^a-z]+", "_", q).strip("_")
+        nodes, edges = _cg_project(g, level, types)
+        dedge = lambda e: f"{e[0]}{sep}{e[1]}"
+        if q in ("node_count", "nodes"):
+            return len(nodes)
+        if q in ("edge_count", "edges"):
+            return len({(a, b) for a, b, _ in edges})
+        if q in ("components", "component_count", "connected_components"):
+            return len(_cg_components(nodes, edges))
+        br, ap = _cg_bridges_ap(nodes, edges)
+        if q in ("bridge_count", "bridges_count"):
+            return len(br)
+        if q in ("articulation_count", "cut_vertex_count"):
+            return len(ap)
+        if q in ("bridges", "all_bridges"):
+            return ",".join(sorted(dedge(edges[i]) for i in br)) or "none"
+        if q in ("articulation_points", "articulations", "cut_vertices"):
+            return ",".join(sorted(ap)) or "none"
+        if q in ("bridge", "the_bridge", "holding_edge", "critical_edge"):
+            if not br:
+                return "none"
+            base = len(_cg_components(nodes, edges))
+            score = {}
+            for i in br:   # the bridge that splits its component most evenly
+                parts = [len(c) for c in _cg_components(nodes, edges, skip=i)]
+                score[i] = sorted(parts)[-2] if len(parts) > base else 0
+            i = _cg_argmax(score)
+            return dedge(edges[i]) if i is not None else None
+        if q in ("articulation", "articulation_point", "cut_vertex"):
+            if not ap:
+                return "none"
+            if len(ap) == 1:
+                return next(iter(ap))
+            score = {}
+            for n in ap:
+                rest = [x for x in nodes if x != n]
+                comps = _cg_components(rest, [e for e in edges if n not in e[:2]])
+                score[n] = sorted(len(c) for c in comps)[-2] if len(comps) > 1 else 0
+            return _cg_argmax(score)
+        if q in ("max_betweenness_edge", "betweenness_edge", "max_betweenness"):
+            eb = _cg_edge_betweenness(nodes, edges)
+            k = _cg_argmax(eb)
+            if k is None:
+                return None
+            e = next((e for e in edges if tuple(sorted(e[:2])) == k), None)
+            return dedge(e) if e else None
+        ind, outd = dict.fromkeys(nodes, 0), dict.fromkeys(nodes, 0)
+        for a, b in {(a, b) for a, b, _ in edges}:
+            outd[a] += 1
+            ind[b] += 1
+        if q in ("in_degree", "out_degree", "degree"):
+            if arg is None:
+                return None
+            n = next((x for x in nodes if x.lower() == arg), None) or \
+                next((x for x in nodes if x.replace("\\", "/").rsplit("/", 1)[-1].lower() == arg), None)
+            if n is None:
+                n = _cg_lang(arg) if _cg_lang(arg) in nodes else None
+            if n is None:
+                return None
+            return ind[n] if q == "in_degree" else outd[n] if q == "out_degree" else ind[n] + outd[n]
+        if q in ("max_in_degree", "max_out_degree", "max_degree"):
+            sc = ind if q == "max_in_degree" else outd if q == "max_out_degree" else \
+                {n: ind[n] + outd[n] for n in nodes}
+            return _cg_argmax(sc)
+        if q in ("most_reached_language", "most_reached", "language_reached_by_most_chains"):
+            succ = {}
+            for a, b, t in _cg_project(g, "language", types or ("execution", "host"))[1]:
+                succ.setdefault(a, set()).add(b)
+            cnt = {}
+            for m, x in g["members"].items():
+                if not x["language"] or not any(e[0] == m and e[2] == "execution" for e in g["edges"]):
+                    continue
+                seen, st = set(), [x["language"]]
+                while st:
+                    for v in succ.get(st.pop(), ()):
+                        if v not in seen:
+                            seen.add(v)
+                            st.append(v)
+                for v in seen - {x["language"]}:
+                    cnt[v] = cnt.get(v, 0) + 1
+            return _cg_argmax(cnt) if cnt else "none"
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cg_decode(material, transform=None, key=None):
+    """decode() hook for rep 'corpus_graph': material = JSON {"plans": {member: plan}, "texts": {member: text},
+    "scope": container} (or a flat {member: plan}); transform = the graph_answer question; key = level ('language' /
+    'member' / 'mixed', optionally ';execution+host')."""
+    try:
+        import json
+        d = json.loads(material) if isinstance(material, (str, bytes, bytearray)) else material
+        if not isinstance(d, dict):
+            return None
+        if "plans" in d or "texts" in d:
+            plans, texts, scope = d.get("plans") or {}, d.get("texts") or {}, d.get("scope")
+        else:
+            plans, texts, scope = d, {}, None
+        if not isinstance(plans, dict) or not isinstance(texts, dict):
+            return None
+        g = corpus_graph(plans, texts, scope)
+        lvl, types = None, None
+        if key:
+            parts = str(key).split(";", 1)
+            lvl = parts[0].strip() or None
+            types = [t for t in re.split(r"[+,\s]+", parts[1]) if t] if len(parts) > 1 else None
+        got = graph_answer(g, transform, lvl, types)
+        return None if got is None else str(got)
+    except Exception:  # noqa: BLE001
+        return None

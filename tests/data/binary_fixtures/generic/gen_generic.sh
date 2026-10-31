@@ -64,3 +64,12 @@ emit gf_c_events.bin has_decoy_branch "${U}Evaluate this public predicate and su
 
 emit gf_decoy_random.bin section_count "${U}Read ELF e_shnum and count the corresponding section-header-table entries, including section index 0. Submit the count in base 10." "$INT" "null" "$GEN_RAND" "file gf_decoy_random.bin  # data: no ELF/PE/Mach-O header -> no section table (None)" decoy
 ls -1 *.json
+
+# cross-group-campaign-correlation (prebuild): stdlib zipfile writer, expected from the independent cs_oracle.py reader
+python3 cs_gen.py cs_evidence.zip cs_decoy_oneday.zip
+python3 cs_fixtures.py
+
+# campaign-graph-record-facts (prebuild): D30 Neko members (GM) + gcc ELFs with a stdlib-written GRPH record and a
+# bad-crc decoy; expected from the independent cg_oracle.sh reader (python crc check + jq)
+python3 cg_gen.py
+python3 cg_fixtures.py

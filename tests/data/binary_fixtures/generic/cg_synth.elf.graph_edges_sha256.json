@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "cg_synth.elf",
+ "field": "graph_edges_sha256",
+ "question": "In evidence.zip, Use the unique d31-- member whose basename ends .elf. Locate the unique CRC32-valid GRPH record by scanning backward from the end of the member. Its byte-4 version, byte-5 XOR key, little-endian length and CRC32 fields, XOR decoding, and UTF-8 JSON payload use the same 12-byte layout as HCFG. Collect the decoded GRPH graph edges strings, sort them by ascending code-unit order, join with one LF byte and no trailing LF, then SHA-256 those UTF-8 bytes.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "exactly 64 lowercase hexadecimal characters; no prefix, whitespace, or explanatory text"
+ },
+ "expected": "802ce6617b76d1fe08881ae1be351ac3479f90a627dc49ee49261643190b91c9",
+ "generator_cmd": "python3 cg_gen.py  # d30 members copied from the GM evidence; ELFs: gcc + stdlib struct/zlib record writer",
+ "oracle_cmd": "./cg_oracle.sh cg_synth.elf GRPH '.edges|sort|join(\"\\n\")' | head -c -1 | sha256sum"
+}

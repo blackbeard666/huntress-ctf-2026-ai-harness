@@ -34015,6 +34015,8 @@ def generic_field(data, field_suffix, question="", member=None, *, group=None, a
     try:
         f = re.sub(r"^analysis_", "", str(field_suffix or "").strip().lower())
         if not f or f.startswith("config_") or f in ("xor_key_hex", "hcfg_version", "hcfg_offset", "hcfg_storage"):
+            if f.startswith("config_") and data is not None and len(data):
+                return _cg_owned(data, f, question, member, group, answer_format)   # non-HCFG record + JSON path
             return None   # HCFG fields: the lane solver's hcfg path owns them (a miss there is no generic question)
         if data is None or not len(data):
             return None
@@ -34048,3 +34050,558 @@ def generic_field(data, field_suffix, question="", member=None, *, group=None, a
         return None
     except Exception:  # noqa: BLE001
         return None
+
+
+# --- cross-group campaign correlation (prebuild target "cross-group-campaign-correlation", D31 capstone guess) --------
+# D30 asked to "reconstruct the loader, library, and config graph across the whole set"; the last day may ask SET-level
+# questions over every group's decoded HCFG/HGRF config: distinct campaigns/domains/mutexes, groups sharing a value,
+# members with NO config (role members such as the d21 loader), campaigns ordered by day, sha256 of a sorted / ordered
+# join, member counts per container format. campaign_set_facts() is pure aggregation over per-member decoded configs
+# (the day solver can feed its own decodes); campaign_set_field() reads the question (group range "d01-- through
+# d30--" / "every group" / "all members", per-member vs per-group consensus, sort / order, the join rule). The
+# registered generic rule fires only when the member IS the evidence ZIP (or the group spans >= 2 days): it decodes each
+# member's first crc-valid HCFG (hcfg_find) or a raw `<MAGIC>` record (HGRF layout, JSON path `config`) and answers.
+_CS_KEYS = ("campaign", "domain", "ipv4", "url", "mutex", "windows_path", "linux_path", "service", "host_model")
+_CS_FMTS = ("neko_bytecode", "pe_cli", "elf", "pe", "macho", "class", "jar", "wasm", "zip")
+
+
+def _cs_fmt(b):
+    if bytes(b[:4]) == b"NEKO":
+        return "neko_bytecode"
+    try:
+        return _gf_fmt(b) or "other"
+    except Exception:  # noqa: BLE001
+        return "other"
+
+
+def _cs_record(b, magics=(b"HGRF",)):
+    """The config dict of the LAST crc32-valid raw `<magic><u8 ver><u8 xor><u16le len><u32le crc>` JSON record
+    (HCFG layout; D30 HGRF: the record's `config` object), scanning backward from EOF; None when absent."""
+    for mg in magics:
+        o = len(b)
+        for _ in range(64):
+            o = b.rfind(mg, 0, o)
+            if o < 0 or o + 12 > len(b):
+                break
+            k, (n, c) = b[o + 5], struct.unpack_from("<HI", b, o + 6)
+            p = bytes(x ^ k for x in b[o + 12:o + 12 + n])
+            if n and len(p) == n and zlib.crc32(p) == c:
+                try:
+                    obj = json.loads(p.decode("utf-8"))
+                except ValueError:
+                    continue
+                if isinstance(obj, dict):
+                    cfg = obj.get("config") if isinstance(obj.get("config"), dict) else obj
+                    if any(key in cfg for key in _CS_KEYS):
+                        return cfg
+    return None
+
+
+def campaign_member_config(b, magics=(b"HGRF",)):
+    """One member's decoded config dict (first crc-valid HCFG in any known storage, else a raw magic record), or None
+    when it carries none (role members, sidecars, decoys)."""
+    try:
+        if bytes(b[:2]) == b"PK" or bytes(b[:4]) == b"\xca\xfe\xba\xbe":   # D6/D7/D24-D26 jars: class constants
+            cfg = _cs_jar_config(b)
+            if cfg:
+                return cfg
+        h = hcfg_find(b)
+        if h and isinstance(h.config, dict):
+            return h.config
+        return _cs_record(b, magics)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cs_jar_config(b):
+    """The first crc-valid HCFG of a jar's classes (Main-Class first, then archive order; at most 256 classes) or of a
+    bare .class, as a dict; None when absent."""
+    b = bytes(b)
+    if b[:4] == b"\xca\xfe\xba\xbe":
+        clss = [b]
+    else:
+        zf = zipfile.ZipFile(io.BytesIO(b))
+        names = [n for n in zf.namelist() if n.endswith(".class")]
+        main = ""
+        if "META-INF/MANIFEST.MF" in zf.namelist():
+            m = re.search(rb"(?m)^Main-Class:\s*(\S+)", zf.read("META-INF/MANIFEST.MF"))
+            main = m.group(1).decode("utf-8", "replace").replace(".", "/") + ".class" if m else ""
+        names = sorted(names, key=lambda n: (n != main, not n.startswith(main[:-6] + "$") if main else True))[:256]
+        clss = (zf.read(n) for n in names)
+    for c in clss:
+        hc = classfile_hcfg(c).get("hcfg_config")
+        if hc and hc != "none":
+            try:
+                v = json.loads(hc)
+                if isinstance(v, dict):
+                    return v
+            except ValueError:
+                pass
+    return None
+
+
+def _cs_day(name):
+    m = re.match(r"d(\d\d)--", str(name).rsplit("/", 1)[-1])
+    return int(m.group(1)) if m else None
+
+
+def _cs_val(cfg, key):
+    if not isinstance(cfg, dict):
+        return None
+    v = cfg.get(key)
+    return None if v in (None, "") else str(v)
+
+
+def _cs_consensus(vals):
+    """The group's consensus value: all members agree, else the strict majority (D28: family_a+family_b vs the false
+    friend); None on a tie / nothing decoded."""
+    vals = [v for v in vals if v is not None]
+    if not vals:
+        return None
+    best = max(set(vals), key=vals.count)
+    return best if vals.count(best) * 2 > len(vals) or len(set(vals)) == 1 else None
+
+
+def campaign_set_facts(members, configs=None, days=None):
+    """Set-level facts over the evidence set. members: [(name, bytes|None)] in ZIP central-directory order; configs:
+    optional {name: config dict | None} (the solver's own decodes; missing names are decoded here); days: optional
+    (lo, hi) inclusive group range. Returns {groups: {dNN: {members, consensus{key: v}, agree{key: bool}}},
+    configless_members, format_counts, distinct_<key>_count (consensus and per-member), shared_<key>_groups,
+    <key>_by_day}."""
+    configs = dict(configs or {})
+    groups, fmts, nocfg = {}, {}, []
+    for name, b in members:
+        d = _cs_day(name)
+        if d is None or (days and not days[0] <= d <= days[1]):
+            continue
+        if name not in configs:
+            configs[name] = campaign_member_config(b) if b is not None else None
+        if b is not None:
+            f = _cs_fmt(b)
+            fmts[f] = fmts.get(f, 0) + 1
+        g = groups.setdefault(f"d{d:02d}", {"members": [], "configs": []})
+        g["members"].append(name)
+        g["configs"].append(configs[name])
+        if not isinstance(configs[name], dict):
+            nocfg.append(name)
+    out = {"groups": {}, "configless_members": nocfg, "format_counts": fmts, "group_count": len(groups),
+           "member_count": sum(len(g["members"]) for g in groups.values())}
+    for gk in sorted(groups):
+        g = groups[gk]
+        out["groups"][gk] = {"members": g["members"], "values": {k: [_cs_val(c, k) for c in g["configs"]]
+                                                                for k in _CS_KEYS},
+                             "consensus": {k: _cs_consensus([_cs_val(c, k) for c in g["configs"]]) for k in _CS_KEYS},
+                             "agree": {k: len({_cs_val(c, k) for c in g["configs"] if isinstance(c, dict)}) <= 1
+                                       for k in _CS_KEYS}}
+    for k in _CS_KEYS:
+        cons = [(gk, out["groups"][gk]["consensus"][k]) for gk in sorted(groups)]
+        per = [_cs_val(c, k) for gk in sorted(groups) for c in groups[gk]["configs"]]
+        vals = [v for _, v in cons if v is not None]
+        out[f"{k}_by_day"] = vals
+        out[f"distinct_{k}_count"] = len(set(vals))
+        out[f"distinct_member_{k}_count"] = len({v for v in per if v is not None})
+        out[f"shared_{k}_groups"] = [gk for gk, v in cons if v is not None and vals.count(v) > 1]
+    return out
+
+
+_CS_FMT_WORDS = {"neko": "neko_bytecode", "neko_bytecode": "neko_bytecode", "pe_cli": "pe_cli", ".net": "pe_cli",
+                 "managed": "pe_cli", "elf": "elf", "pe": "pe", "mach-o": "macho", "macho": "macho", "jar": "jar",
+                 "wasm": "wasm", "webassembly": "wasm", "class": "class"}
+
+
+def _cs_range(q):
+    """(lo, hi) day range of the question; None = the whole set."""
+    m = re.search(r"(?i)\bd(\d\d)--?\s*(?:through|to|thru|-|until)\s*d(\d\d)--", q or "")
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    if re.search(r"(?i)\b(?:every|each|all)\s+(?:group|day|member)s?\b|\bwhole (?:evidence )?set\b|\bacross the "
+                 r"(?:whole|entire)\b|\ball dNN\b", q or ""):
+        return None
+    m = re.search(r"(?i)\ball d(\d\d)-- members\b", q or "")
+    return (int(m.group(1)),) * 2 if m else None
+
+
+def campaign_set_field(field, question, members, configs=None):
+    """One set-level answer string from campaign_set_facts, driven by the field name + the GM sentence; None when the
+    question does not parse or nothing was decoded."""
+    f = re.sub(r"^(?:analysis_|capstone_|set_|campaign_set_|evidence_|cross_group_)+", "", str(field).lower())
+    q = question or ""
+    ql = q.lower()
+    facts = campaign_set_facts(members, configs, _cs_range(q))
+    if not facts["groups"]:
+        return None
+    # container-format member counts: '<fmt>_member_count' / 'Count members whose container format is X'
+    m = re.fullmatch(r"(\w+?)_(?:member|artifact|file)_count", f)
+    fw = m and _CS_FMT_WORDS.get(m.group(1))
+    if not fw:
+        m2 = re.search(r"(?i)\b(?:format|magic)\b[^.]{0,40}?\b(neko_bytecode|pe_cli|elf|pe|macho|jar|wasm|class)\b", q)
+        fw = m2 and re.search(r"(?i)\bcount\b", q) and m2.group(1).lower()
+    if fw:
+        return str(facts["format_counts"].get(fw, 0))
+    key = next((k for k in _CS_KEYS if k in f), None) or next((k for k in _CS_KEYS if re.search(
+        rf"\b{k.replace('_', '[ _]')}s?\b", ql)), None)
+    per_member = bool(re.search(r"(?i)\bper[- ]member\b|\bevery member'?s\b|\beach member'?s\b", q))
+    if re.search(r"configless|no_config|without_config|missing_config", f) or re.search(
+            r"(?i)\b(?:no|without|lack\w*|missing)\s+(?:a\s+|any\s+)?(?:decod\w+\s+|valid\s+)?(?:config|hcfg)", q):
+        names = [n.rsplit("/", 1)[-1] for n in facts["configless_members"]]
+        if "count" in f or re.search(r"(?i)\bcount\b|\bhow many\b", q):
+            return str(len(names))
+        return _cs_emit(names, f, q, sort_default=False)
+    if key is None:
+        return None
+    if re.search(r"shar|common|reuse", f) or re.search(r"(?i)\bshar\w*\b|\bin common\b|\breus", q):
+        gs = facts[f"shared_{key}_groups"]
+        if "count" in f or re.search(r"(?i)\bcount\b|\bhow many\b", q):
+            return str(len(gs))
+        return _cs_emit(gs, f, q, sort_default=False)
+    if re.search(r"agree|consistent|consensus_ok|match", f) and re.search(r"(?i)\bagree|\bmatch|\bidentical", q):
+        bad = [gk for gk, g in facts["groups"].items() if not g["agree"][key]]
+        if "count" in f or re.search(r"(?i)\bcount\b|\bhow many\b", q):
+            return str(len(bad) if re.search(r"(?i)\bdisagree|\bdiffer", q) else len(facts["groups"]) - len(bad))
+        return "true" if not bad else "false"
+    if "count" in f or re.search(r"(?i)\bcount\b|\bhow many\b", q):
+        if re.search(r"(?i)\bdistinct\b|\bunique\b|\bdifferent\b", q) or "distinct" in f or "unique" in f:
+            return str(facts[f"distinct_member_{key}_count" if per_member else f"distinct_{key}_count"])
+        return None
+    vals = facts[f"{key}_by_day"]
+    if per_member:
+        vals = [v for g in facts["groups"].values() for v in g["values"][key] if v is not None]
+    if re.search(r"(?i)\bdistinct\b|\bunique\b|\bdeduplicat", q) or "distinct" in f or "unique" in f:
+        vals = list(dict.fromkeys(vals))
+    return _cs_emit(vals, f, q, sort_default=True)
+
+
+def _cs_emit(vals, f, q, sort_default=True):
+    """sha256 of the join (sorted unless the question orders by day / archive order) or the joined text itself."""
+    ordered = re.search(r"(?i)\b(?:by day|day order|ascending day|central-directory order|archive order|group order|"
+                        r"in order of)\b", q) and not re.search(r"(?i)\bsort\w*\b", q)
+    if re.search(r"(?i)\bsort\w*\b", q) or (sort_default and not ordered and "sha" in f):
+        vals = sorted(vals)
+    j = _gf_join(q)
+    sep, tail = j if j else ("\n", False)
+    text = sep.join(vals) + (sep if tail and vals else "")
+    if "sha256" in f or re.search(r"(?i)\bsha-?256\b", q):
+        import hashlib
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if not vals:
+        return "none"
+    return text if j else (",".join(vals) if len(vals) > 1 else vals[0])
+
+
+def _cs_generic(ctx, match):
+    """Generic rule: the member is the evidence ZIP (stdlib-readable) or the group spans >= 2 days."""
+    q = ctx.q
+    if not re.search(r"(?i)campaign|domain|mutex|ipv4|\burl|service|host_model|config|hcfg|\bformat\b", q + ctx.field):
+        return None
+    if not re.search(r"(?i)\bthrough\b|\bevery\b|\ball\b|\bwhole\b|\bacross\b|\beach\b|\bgroups?\b", q):
+        return None
+    members = None
+    if len({_cs_day(n) for n, _ in ctx.group} - {None}) >= 2:
+        members = ctx.group
+    elif ctx.fmt in ("zip", "jar") and len(ctx.data) <= (24 << 20):
+        def make():
+            zf = zipfile.ZipFile(io.BytesIO(bytes(ctx.data)))
+            infos = [i for i in zf.infolist() if not i.is_dir()]
+            if len({_cs_day(i.filename) for i in infos} - {None}) < 2:
+                return None   # a jar / plain zip member, not the evidence set: nothing inflated
+            if sum(i.file_size for i in infos) > (24 << 20) or any(i.flag_bits & 1 for i in infos):
+                return None   # bounded work inside the Mastery clock; encrypted sets belong to the solver
+            return [(i.filename, zf.read(i)) for i in infos]
+        members = ctx.memo("cs_members", make)
+    if not members or len({_cs_day(n) for n, _ in members} - {None}) < 2:
+        return None
+    return campaign_set_field(ctx.field, q, members)
+
+
+register_generic("cross-group-campaign-correlation",
+                 r"(?:capstone_|set_|campaign_set_|evidence_|cross_group_)?(?:\w*_)?"
+                 r"(?:campaign|domain|mutex|ipv4|url|service|host_model|config|member)\w*",
+                 _cs_generic, first=True)
+
+
+# --- campaign-graph record facts (prebuild target "campaign-graph-record-facts", D30 `HGRF`) ---------------------------
+# D30's Neko trio (loader.n / library.n / config.n) each END with a raw HCFG-layout record under another magic:
+# `<4-char magic>|u8 ver|u8 xor key|u16le len|u32le crc32(plain)|xor'd JSON @12`, JSON = campaign_graph.v1
+# {campaign_id, nodes[], edges['a->b'], load_order[], config{...}, this_role, network, effects}. The GM asks
+# `graph.config.<key>` (the JSON has NO `graph` key: the first segment names the record), per member and as the
+# consensus "after confirming all three canonical campaign graphs match when this_role is omitted", plus (guessed)
+# graph shape questions: node/edge counts, edges / load order joined or SHA-256'd, roots / leaves, this_role.
+_CG_MAGIC = re.compile(rb"(?=[A-Z0-9]{4})")
+_CG_TAIL = 256 << 10   # magic=None scans only the last 256 KiB (the D30 records sit at EOF; bounded inside the clock)
+
+
+_CG_XT = {}   # xor key -> bytes.translate table
+_CG_SECOND = frozenset(b'"}] \t\r\n{[-0123456789tfn')   # the JSON byte after the opening { or [
+
+
+def _cg_try(b, o):
+    """(ver, key, obj) of a crc32-valid non-empty JSON record at offset o, else None."""
+    if o < 0 or o + 13 > len(b):
+        return None
+    k = b[o + 5]
+    n, c = struct.unpack_from("<HI", b, o + 6)
+    if not n or o + 12 + n > len(b) or (b[o + 12] ^ k) not in (0x7B, 0x5B):
+        return None
+    if n > 1 and (b[o + 13] ^ k) not in _CG_SECOND:
+        return None
+    if k not in _CG_XT:
+        _CG_XT[k] = bytes(x ^ k for x in range(256))
+    p = bytes(b[o + 12:o + 12 + n]).translate(_CG_XT[k])
+    if zlib.crc32(p) != c:
+        return None
+    try:
+        obj = json.loads(p.decode("utf-8"))
+    except ValueError:
+        return None
+    return (b[o + 4], k, obj) if obj not in ({}, []) else None
+
+
+def _cg_tail_offsets(b):
+    """Overlapping [A-Z0-9]{4} offsets in the last _CG_TAIL bytes, nearest EOF first, 64 KiB chunks at a time
+    (a generator: record_scan stops at its limit), pre-filtered on the xor'd first payload byte being { or [."""
+    hi = len(b)
+    lo_all = max(0, hi - _CG_TAIL)
+    while hi > lo_all:
+        lo = max(lo_all, hi - (64 << 10))
+        offs = [m.start() for m in _CG_MAGIC.finditer(b, lo, min(len(b), hi + 3)) if m.start() < hi]
+        for o in reversed(offs):
+            if o + 13 <= len(b) and (b[o + 12] ^ b[o + 5]) in (0x7B, 0x5B):
+                yield o
+        hi = lo
+
+
+def record_scan(data, magic=None, direction="backward", limit=16):
+    """[(off, magic, ver, key, obj)] of raw HCFG-layout records whose header crc-validates non-empty JSON. magic: a
+    4-byte/str magic (e.g. 'HGRF') or None = any [A-Z0-9]{4} (last 256 KiB only). direction 'backward' lists the record
+    nearest EOF first ('forward': file order). At most `limit` records; never raises."""
+    out = []
+    try:
+        b = data if isinstance(data, (bytes, bytearray)) else bytes(data)
+        if magic is not None:
+            mg = magic.encode("latin-1") if isinstance(magic, str) else bytes(magic)
+            if len(mg) != 4:
+                return []
+            offs, o = [], len(b)
+            for _ in range(256):
+                o = b.rfind(mg, 0, o)
+                if o < 0:
+                    break
+                offs.append(o)
+        else:
+            offs = _cg_tail_offsets(b)
+        for o in offs:
+            r = _cg_try(b, o)
+            if r:
+                out.append((o, bytes(b[o:o + 4]).decode("latin-1"), r[0], r[1], r[2]))
+                if len(out) >= limit:
+                    break
+        if direction == "forward":
+            out.sort(key=lambda t: t[0])
+    except Exception:  # noqa: BLE001 -- untrusted bytes
+        return out
+    return out
+
+
+def json_path(obj, path, record_names=("graph", "record", "root")):
+    """Resolve a dotted JSON path ('graph.config.campaign', 'nodes[0]', 'nodes.0') in obj. A first segment that is not
+    a top-level key but is one of record_names (the record's own name, e.g. 'graph' / the magic lowercased) is
+    dropped. Returns the value or None when absent."""
+    try:
+        segs = [s for s in re.split(r"\.|\[(\d+)\]", str(path)) if s]
+        if segs and isinstance(obj, dict) and segs[0] not in obj and \
+                segs[0].lower() in {r.lower() for r in record_names}:
+            segs = segs[1:]
+        cur = obj
+        for s in segs:
+            if isinstance(cur, dict) and s in cur:
+                cur = cur[s]
+            elif isinstance(cur, list) and re.fullmatch(r"-?\d+", s) and -len(cur) <= int(s) < len(cur):
+                cur = cur[int(s)]
+            else:
+                return None
+        return cur
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cg_edges(obj):
+    out = []
+    for e in obj.get("edges") or []:
+        if isinstance(e, str) and "->" in e:
+            a, _, z = e.partition("->")
+            out.append((a.strip(), z.strip()))
+        elif isinstance(e, dict) and ("from" in e or "src" in e or "source" in e):
+            out.append((str(e.get("from", e.get("src", e.get("source")))),
+                        str(e.get("to", e.get("dst", e.get("target"))))))
+        elif isinstance(e, (list, tuple)) and len(e) == 2:
+            out.append((str(e[0]), str(e[1])))
+    return out
+
+
+def graph_facts(obj):
+    """Campaign-graph facts of one decoded record dict: node_count, edge_count, nodes, edges (record order, 'a->b'),
+    edges_sorted, load_order, roots / leaves (node order: no incoming / no outgoing edge), first/last node and load,
+    this_role, campaign_id, schema, network, effects, config. {} when obj is not a graph."""
+    if not isinstance(obj, dict) or not isinstance(obj.get("nodes"), list):
+        return {}
+    nodes = [str(n) for n in obj["nodes"]]
+    ed = _cg_edges(obj)
+    edges = [f"{a}->{z}" for a, z in ed]
+    lo = [str(n) for n in obj.get("load_order") or []]
+    srcs, dsts = {a for a, _ in ed}, {z for _, z in ed}
+    f = {"node_count": len(nodes), "edge_count": len(edges), "nodes": nodes, "edges": edges,
+         "edges_sorted": sorted(edges), "load_order": lo, "load_order_count": len(lo),
+         "roots": [n for n in nodes if n not in dsts], "leaves": [n for n in nodes if n not in srcs],
+         "first_node": nodes[0] if nodes else None, "last_node": nodes[-1] if nodes else None,
+         "first_load": lo[0] if lo else None, "last_load": lo[-1] if lo else None,
+         "config": obj.get("config") if isinstance(obj.get("config"), dict) else {}}
+    for k in ("this_role", "campaign_id", "schema", "network", "effects"):
+        f[k] = obj.get(k)
+    f["root_count"], f["leaf_count"] = len(f["roots"]), len(f["leaves"])
+    return f
+
+
+def consensus_without(objs, drop_keys=("this_role",)):
+    """True when every decoded record is the same canonical JSON once drop_keys are removed (D30: 'all three
+    canonical campaign graphs match when this_role is omitted'); None when fewer than 2 dicts."""
+    objs = [o for o in objs if isinstance(o, dict)]
+    if len(objs) < 2:
+        return None
+    canon = {json.dumps({k: v for k, v in o.items() if k not in drop_keys}, sort_keys=True, separators=(",", ":"),
+                        ensure_ascii=False) for o in objs}
+    return len(canon) == 1
+
+
+_CG_STOP = {"HCFG", "JSON", "UTF8", "CRC3", "ELF6", "SHA2", "NEKO", "ASCI", "XOR"}
+
+
+def _cg_magics(q):
+    """Record magics the question names ('the ... HGRF record', 'decoded HGRF JSON'), HCFG last."""
+    toks = re.findall(r"\b([A-Z][A-Z0-9]{3})\b(?=\s+(?:record|graph|json|magic|payload|object|blob|header)\b)", q or "")
+    toks += re.findall(r"(?i:\b(?:literal|magic|ascii)\s+)([A-Z][A-Z0-9]{3})\b", q or "")
+    out = list(dict.fromkeys(t for t in toks if t not in _CG_STOP))
+    return out
+
+
+def _cg_record(b, q):
+    """(magic, obj) of the member's graph record: the question's magic first, else any magic in the tail."""
+    for mg in _cg_magics(q) or [None]:
+        for _, m, _, _, obj in record_scan(b, mg, limit=4):
+            if isinstance(obj, dict) and (graph_facts(obj) or mg):
+                return m, obj
+    return None
+
+
+def _cg_render(v, ctx, *, sort=False, ordered=True, sha=False):
+    if v is None or isinstance(v, dict):
+        return None
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, str):
+        return hashlib_sha256_text(v) if sha else v
+    if not isinstance(v, list) or not all(isinstance(x, (str, int)) for x in v):
+        return None
+    vals = [str(x) for x in v]
+    q = ctx.q
+    if sort or re.search(r"(?i)\bsort\w*\b", q) or (sha and not ordered):
+        vals = sorted(vals)
+    j = _gf_join(q)
+    if sha:
+        sep, tail = j if j else ("\n", False)
+        return hashlib_sha256_text(sep.join(vals) + (sep if tail and vals else ""))
+    if j:
+        return j[0].join(vals) + (j[0] if j[1] and vals else "")
+    if re.search(r"(?i)\bjson (?:string )?array\b", q + " " + str(ctx.af.get("syntax", ""))) or \
+            (ctx.af.get("kind") or "").lower() in ("json", "json_array", "list"):
+        return json.dumps(vals, separators=(",", ":"), ensure_ascii=False)
+    return ",".join(vals) if re.search(r"(?i)\bcomma", q) else None
+
+
+def hashlib_sha256_text(s):
+    import hashlib
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+_CG_ROLE = r"(?:(?P<role>[a-z0-9]+(?:_capsule)?)_)?"
+
+
+def _cg_generic(ctx, match):
+    """Generic rule over a member's raw graph record (any magic). Role-prefixed fields ('loader_this_role') read the
+    group member whose basename ends <role>.<ext> when the group is known."""
+    f, q = ctx.field, ctx.q
+    role = match.group("role")
+    rest = f[len(role) + 1:] if role and f.startswith(role + "_") else f
+    b = ctx.data
+    if role and ctx.group:
+        for n, mb in ctx.group:
+            base = str(n).rsplit("/", 1)[-1].lower()
+            if re.search(rf"(?:^|[-_.]){re.escape(role.replace('_capsule', ''))}\.\w+$", base):
+                b = mb
+                break
+    rec = ctx.memo(("cg_record", tuple(_cg_magics(q))), lambda: _cg_record(b, q)) if b is ctx.data else \
+        _cg_record(b, q)
+    if not rec:
+        return None
+    mg, obj = rec
+    gf = graph_facts(obj)
+    names = ("graph", "record", "root", "json", "payload", mg.lower())
+    # consensus gate: "after confirming all ... graphs match when this_role is omitted"
+    if re.search(r"(?i)\bgraphs? match\b|\bmatch when\b", q) and ctx.group:
+        objs = [r[1] for r in (_cg_record(mb, q) for _, mb in ctx.group) if r]
+        drop = tuple(re.findall(r"(?i)\b(\w+) is omitted\b|\bomit(?:ting)? (\w+)\b", q)[0:1][0]) if \
+            re.search(r"(?i)\b\w+ is omitted\b|\bomit(?:ting)? \w+\b", q) else ("this_role",)
+        drop = tuple(d for d in drop if d) or ("this_role",)
+        if len(objs) >= 2 and consensus_without(objs, drop) is False:
+            return None
+    # the question names the JSON path: '... JSON property graph.config.campaign'
+    m = re.search(r"(?i)\bproperty\s+`?([A-Za-z_][\w]*(?:(?:\.[A-Za-z_]\w*)|\[\d+\])+|[A-Za-z_]\w*)`?", q)
+    if m and not re.search(r"(?i)\bcount\b|\bsha-?256\b|\bhow many\b", q):
+        v = json_path(obj, m.group(1), names)
+        if v is not None:
+            return _cg_render(v, ctx)
+    sha = "sha256" in rest or bool(re.search(r"(?i)\bsha-?256\b", q))
+    r = re.sub(r"^(?:graph_|campaign_graph_)", "", re.sub(r"_sha256$", "", rest))
+    if r.startswith("config_") and gf:
+        return _cg_render(gf["config"].get(r[7:]), ctx)
+    if not gf:
+        return None
+    alias = {"nodes_count": "node_count", "edges_count": "edge_count", "root_nodes": "roots", "leaf_nodes": "leaves",
+             "root": "roots", "leaf": "leaves", "role": "this_role", "load_order_length": "load_order_count",
+             "edges_sorted": "edges_sorted", "sorted_edges": "edges_sorted", "nodes": "nodes", "node_names": "nodes",
+             "roots_count": "root_count", "leaves_count": "leaf_count", "id": "campaign_id"}
+    r = alias.get(r, r)
+    if re.fullmatch(r"graphs?_match\w*|match\w*", r) and ctx.group:
+        objs = [x[1] for x in (_cg_record(mb, q) for _, mb in ctx.group) if x]
+        return _cg_render(consensus_without(objs), ctx)
+    if r not in gf or r == "config":
+        return None
+    v = gf[r]
+    if isinstance(v, list) and r in ("roots", "leaves") and len(v) == 1 and not sha:
+        return v[0] if not _gf_join(q) else _cg_render(v, ctx)
+    if isinstance(v, list) and not sha and _gf_join(q) is None and r in ("load_order", "edges", "nodes", "edges_sorted"):
+        # no join rule in the sentence: a JSON array answer or the comma form the GM's own examples use
+        out = _cg_render(v, ctx, sort=r == "edges_sorted")
+        return out if out is not None else None
+    return _cg_render(v, ctx, sort=r == "edges_sorted", ordered=r in ("load_order", "nodes") or bool(
+        re.search(r"(?i)\b(?:record|load|listed|entry|stored|table) order\b", q)), sha=sha)
+
+
+def _cg_owned(data, f, question, member, group, answer_format):
+    """config_* fields normally belong to the lane solver's HCFG path; a question that names a NON-HCFG record and a
+    dotted JSON property (D30 'decoded HGRF JSON property graph.config.campaign') is answered here instead."""
+    try:
+        if not [m for m in _cg_magics(question) if m != "HCFG"] or \
+                not re.search(r"(?i)\bproperty\s+`?[A-Za-z_]\w*\.", question or ""):
+            return None
+        ctx = GenericCtx(data, f, question, member, group, answer_format)
+        return _gf_valid(_cg_generic(ctx, _CG_FIELD.fullmatch(f) or re.match(r"(?P<role>)", "")), ctx.af)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_CG_FIELD = re.compile(_CG_ROLE + r"(?:campaign_)?(?:graph_\w+|load_order\w*|this_role|edges?_\w+|edges|nodes?_\w+|"
+                                  r"nodes|campaign_id|roots?\w*|leaf\w*|leaves\w*|first_(?:node|load)|"
+                                  r"last_(?:node|load)|graphs?_match\w*|config_\w+)")
+register_generic("campaign-graph-record-facts", _CG_FIELD.pattern, _cg_generic, first=True)

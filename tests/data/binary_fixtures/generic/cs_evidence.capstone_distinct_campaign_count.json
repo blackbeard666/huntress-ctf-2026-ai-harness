@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "cs_evidence.zip",
+ "field": "capstone_distinct_campaign_count",
+ "question": "In evidence.zip, Use every group d01-- through d05-- in ZIP central-directory order. For each group take the consensus decoded HCFG/HGRF config (the value most of its members agree on) and count the distinct config.campaign values across all groups. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "4",
+ "generator_cmd": "python3 cs_gen.py cs_evidence.zip cs_decoy_oneday.zip",
+ "oracle_cmd": "python3 cs_oracle.py cs_evidence.zip  # key: distinct_campaign_count"
+}

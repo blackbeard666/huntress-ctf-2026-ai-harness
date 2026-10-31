@@ -1,0 +1,8 @@
+{
+ "entry": "declared_pipeline_candidates",
+ "expected": null,
+ "_why": "same onion layout, innermost token ends in 'Z' (not hex): a near-miss, no fullmatch (prebuild v1-declared-layers-pipeline)",
+ "generator_cmd": "python3 -I tests/data/android_fixtures/dpl_src/gen_dpl.py decoy_onion_nearmiss tests/data/android_fixtures/dpl_decoy_onion_nearmiss.apk  # stdlib forward encoder + zipfile writer",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/dpl_decoy_onion_nearmiss.apk assets/huntress_puzzle.json | python3 -I tests/data/android_fixtures/dpl_src/oracle_dpl.py decoy_onion_nearmiss  # unzip + independent stdlib decoder -> NOT-A-TOKEN",
+ "decoy": true
+}

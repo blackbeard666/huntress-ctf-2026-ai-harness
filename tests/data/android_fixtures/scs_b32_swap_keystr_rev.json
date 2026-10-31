@@ -1,0 +1,7 @@
+{
+ "entry": "stacked_codec_search",
+ "expected": "ANS-4DD55E70990047B0",
+ "_why": "4-step stack: unpadded base32 -> swap byte pairs -> xor cycled str(key) -> reverse (atlas rows 118/70, prebuild v1-composed-codec-search)",
+ "generator_cmd": "python3 -I tests/data/android_fixtures/scs_src/gen_scs.py b32_swap_keystr_rev tests/data/android_fixtures/scs_b32_swap_keystr_rev.apk  # stdlib forward encoder + zipfile writer",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/scs_b32_swap_keystr_rev.apk assets/huntress_puzzle.json | python3 -I tests/data/android_fixtures/scs_src/oracle_scs.py b32_swap_keystr_rev  # unzip + independent stdlib decoder -> ANS-4DD55E70990047B0"
+}

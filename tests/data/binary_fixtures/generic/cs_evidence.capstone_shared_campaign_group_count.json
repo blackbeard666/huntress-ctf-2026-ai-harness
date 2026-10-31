@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "cs_evidence.zip",
+ "field": "capstone_shared_campaign_group_count",
+ "question": "In evidence.zip, Use every group d01-- through d05-- in ZIP central-directory order. Count the groups whose consensus config.campaign is shared with at least one other group. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "2",
+ "generator_cmd": "python3 cs_gen.py cs_evidence.zip cs_decoy_oneday.zip",
+ "oracle_cmd": "python3 cs_oracle.py cs_evidence.zip  # key: shared_groups (length)"
+}

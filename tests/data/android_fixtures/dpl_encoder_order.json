@@ -1,0 +1,7 @@
+{
+ "entry": "declared_pipeline_candidates",
+ "expected": "ANS-FA77A60E01500166",
+ "_why": "`steps` listed in the ENCODER's order (caesar, reverse, xor, base32) with puzzle-level key/key2 -> the reversed-order retry (prebuild v1-declared-layers-pipeline)",
+ "generator_cmd": "python3 -I tests/data/android_fixtures/dpl_src/gen_dpl.py encoder_order tests/data/android_fixtures/dpl_encoder_order.apk  # stdlib forward encoder + zipfile writer",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/dpl_encoder_order.apk assets/huntress_puzzle.json | python3 -I tests/data/android_fixtures/dpl_src/oracle_dpl.py encoder_order  # unzip + independent stdlib decoder -> ANS-FA77A60E01500166"
+}

@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "cg_decoy_badcrc.elf",
+ "field": "graph_node_count",
+ "question": "In evidence.zip, Use the unique d31-- member whose basename ends .elf. Locate the unique CRC32-valid GRPH record by scanning backward from the end of the member. Its byte-4 version, byte-5 XOR key, little-endian length and CRC32 fields, XOR decoding, and UTF-8 JSON payload use the same 12-byte layout as HCFG. Count the entries of the decoded GRPH graph nodes array. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": null,
+ "generator_cmd": "python3 cg_gen.py  # d30 members copied from the GM evidence; ELFs: gcc + stdlib struct/zlib record writer",
+ "oracle_cmd": "./cg_oracle.sh cg_decoy_badcrc.elf GRPH '.nodes|length'",
+ "decoy": true
+}

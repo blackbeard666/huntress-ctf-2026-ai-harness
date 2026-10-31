@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "cs_evidence.zip",
+ "field": "capstone_campaigns_sha256",
+ "question": "In evidence.zip, Use every group d01-- through d05-- in ZIP central-directory order. Take each group's consensus config.campaign, sort the values in ascending code-unit order, join them with one LF byte and no trailing LF, then compute SHA-256.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "exactly 64 lowercase hexadecimal characters; no prefix, whitespace, or explanatory text"
+ },
+ "expected": "ed82810b1e56bcd7f8ba9efebb40f907a3f4449add7c78d0d3629e5cf4cf72b2",
+ "generator_cmd": "python3 cs_gen.py cs_evidence.zip cs_decoy_oneday.zip",
+ "oracle_cmd": "python3 cs_oracle.py cs_evidence.zip  # key: sorted_lf_sha256"
+}

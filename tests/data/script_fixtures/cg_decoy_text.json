@@ -1,0 +1,11 @@
+{
+ "decoy": true,
+ "material": "$HandoffId = 'PSPY-0A1B'  # a script, not a corpus",
+ "rep": "corpus_graph",
+ "transform": "bridge",
+ "key": "language",
+ "expected": null,
+ "note": "corpus-language-graph-bridge: lib.codec.corpus_graph + graph_answer over a toy {plans, texts} corpus",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cg_gen.py tests/data/script_fixtures  (stdlib json)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/cg_oracle.py tests/data/script_fixtures/cg_decoy_text.json  (own k=v parsing + networkx bridges/articulation_points/edge_betweenness/descendants)"
+}

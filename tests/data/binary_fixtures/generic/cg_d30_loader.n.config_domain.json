@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "cg_d30_loader.n",
+ "field": "config_domain",
+ "question": "In evidence.zip, Use loader.n's decoded HGRF graph.config object after confirming all three canonical campaign graphs match when this_role is omitted. Locate the unique CRC32-valid HGRF record by scanning backward from the end of the member. Its byte-4 version, byte-5 XOR key, little-endian length and CRC32 fields, XOR decoding, and UTF-8 JSON payload use the same 12-byte layout as HCFG. Submit the exact JSON string at loader.n decoded HGRF JSON property graph.config.domain, without JSON quotes.",
+ "answer_format": {
+  "kind": "exact_text",
+  "syntax": "exact case-sensitive artifact-derived text only; no quotes or explanatory text"
+ },
+ "expected": "campaign-000.day30.example.invalid",
+ "generator_cmd": "python3 cg_gen.py  # d30 members copied from the GM evidence; ELFs: gcc + stdlib struct/zlib record writer",
+ "oracle_cmd": "./cg_oracle.sh cg_d30_loader.n HGRF '.config.domain'"
+}

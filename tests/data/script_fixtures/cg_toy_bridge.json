@@ -1,0 +1,11 @@
+{
+ "decoy": false,
+ "material": "{\n \"plans\": {\n  \"set1/a.ps1\": \"v=3|language=powershell|next_language=python|campaign_id=camp-77\",\n  \"set1/b.py\": \"v=3|language=python|handoff_id=PSPY-0A1B|next_language=jsp|campaign_id=camp-77\",\n  \"set1/d.bsh\": \"v=3|language=beanshell|host_profile=jsp_beanshell\",\n  \"set1/e.jsp\": \"v=3|language=jsp|next_language=powershell\",\n  \"set1/f.ps1\": \"v=3|language=powershell|next_language=python\"\n },\n \"texts\": {\n  \"set1/a.ps1\": \"$HandoffId = 'PSPY-0A1B'\\n$Interpreter = 'python.exe'\\n\",\n  \"set1/g.txt\": \"inert analyst note\\n\"\n }\n}",
+ "rep": "corpus_graph",
+ "transform": "bridge",
+ "key": "language",
+ "expected": "jsp>beanshell",
+ "note": "corpus-language-graph-bridge: lib.codec.corpus_graph + graph_answer over a toy {plans, texts} corpus",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/cg_gen.py tests/data/script_fixtures  (stdlib json)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/cg_oracle.py tests/data/script_fixtures/cg_toy_bridge.json  (own k=v parsing + networkx bridges/articulation_points/edge_betweenness/descendants)"
+}
