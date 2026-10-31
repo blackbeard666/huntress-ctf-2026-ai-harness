@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "pec_mingw_g.exe",
+ "field": "raw_section_names_sha256",
+ "question": "Collect the raw PE section-header Name fields (do not resolve '/N' references), join them in header order with one LF byte and no trailing LF, then SHA-256.",
+ "answer_format": {
+  "kind": "sha256",
+  "syntax": "64 lowercase hex characters"
+ },
+ "expected": "23d79552f35cf80ff6fa211d8ad93dca94762359ccfe652fd78779aa9df09252",
+ "generator_cmd": "PEC_REBUILD=1 bash pec_src/pec_fixtures.sh  # mingw-w64 gcc 13 (see pec_src/pec_fixtures.sh: -O1 -g1 / -O2 -s / head -c 512 decoy)",
+ "oracle_cmd": "python3 -c 'import pefile,hashlib,sys;p=pefile.PE(sys.argv[1]);print(hashlib.sha256(b\"\\n\".join(s.Name.rstrip(b\"\\0\") for s in p.sections)).hexdigest())' pec_mingw_g.exe"
+}

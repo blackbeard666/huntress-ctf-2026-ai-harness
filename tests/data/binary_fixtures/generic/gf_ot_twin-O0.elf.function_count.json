@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_ot_twin-O0.elf",
+ "field": "function_count",
+ "question": "In evidence.zip, Use the unique d31-- member whose basename ends O0.elf. Count the STT_FUNC entries of its SHT_SYMTAB symbol table that are defined (st_shndx is not SHN_UNDEF). A stripped member has none. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "11",
+ "generator_cmd": "sh ot_gen.sh  # gcc -O0 -g / gcc -O3 -g of ot_twin.c; d29--sample-O0/O3.elf copied from the D29 GM evidence",
+ "oracle_cmd": "readelf -sW gf_ot_twin-O0.elf | awk '/Symbol table .\\.symtab/{s=1} s && $4==\"FUNC\" && $7!=\"UND\"' | wc -l"
+}

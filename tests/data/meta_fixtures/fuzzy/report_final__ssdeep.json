@@ -1,0 +1,7 @@
+{
+ "field": "fuzzy.ssdeep",
+ "expected": "384:rQ2LWfBpHWsC2IcNh+iev6S83hScnAfG1CYu/f:02CPHHri+07GMV",
+ "generator_cmd": "python3 gen.py c/artifacts (random.Random(2026) word docs: report-final, report-draft=6 edits, report-old=14 edits, memo, memo-copy=9 edits, notes, config.log); cd c && zip -q -X -r ../corpus.zip artifacts (member report-final.txt)",
+ "oracle_cmd": "ssdeep -s -b report-final.txt (ssdeep 2.14.1 / libfuzzy) | cut -d, -f1",
+ "decoy": false
+}

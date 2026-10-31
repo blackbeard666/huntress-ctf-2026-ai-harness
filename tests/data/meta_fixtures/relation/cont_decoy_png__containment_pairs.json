@@ -1,0 +1,1 @@
+{"field":"relation.containment_pairs","expected":"none","generator_cmd":"python3 -c \"from PIL import Image; Image.new('RGB',(4,4),(9,9,9)).save('decoy.png')\" (a PNG delivered as the cluster zip)","oracle_cmd":"file -b decoy.png -> PNG image data, 4 x 4 (not a Zip archive: no members, containment absent)","decoy":true,"member":"cluster-099.zip"}

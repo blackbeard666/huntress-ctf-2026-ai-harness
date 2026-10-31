@@ -1,0 +1,8 @@
+{
+ "field": "x509.unsupported_trust_claim",
+ "expected": "none",
+ "generator_cmd": "printf hello > a.txt; openssl pkey -in root.key -pubout > root-pub.pem (a PUBLIC KEY, not a cert); zip -X decoy.zip",
+ "oracle_cmd": "openssl x509 -in root-pub.pem -> 'Could not find certificate'; unzip -l shows no certificate member -> field absent",
+ "decoy": true,
+ "member": "decoy.zip"
+}

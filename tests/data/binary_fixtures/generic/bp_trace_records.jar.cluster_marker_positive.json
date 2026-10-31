@@ -1,0 +1,17 @@
+{
+ "kind": "generic_field",
+ "member": "bp_trace_records.jar",
+ "field": "cluster_marker_positive",
+ "question": "Submit true when the embedded trace records carry cluster_marker_positive true, else false.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "false",
+ "generator_cmd": "javac --release 8 TraceRec.java && jar cfm bp_trace_records.jar m.txt TraceRec.class  # two static final String records (gen_generic.sh)",
+ "oracle_cmd": "unzip -p bp_trace_records.jar TraceRec.class | strings -a | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs '[.[].cluster_marker_positive]|unique|.[0]|tostring'",
+ "oracle_output": "false"
+}

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "pec_mingw_s.exe",
+ "field": "text_raw_zero_byte_count",
+ "question": "In the PE .text section bytes, count every 0x00 byte; scan the section's full raw data (SizeOfRawData bytes from PointerToRawData). Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "4650",
+ "generator_cmd": "PEC_REBUILD=1 bash pec_src/pec_fixtures.sh  # mingw-w64 gcc 13 (see pec_src/pec_fixtures.sh: -O1 -g1 / -O2 -s / head -c 512 decoy)",
+ "oracle_cmd": "python3 -c 'import pefile,sys;d=open(sys.argv[1],\"rb\").read();p=pefile.PE(data=d);s=[s for s in p.sections if s.Name.rstrip(b\"\\0\")==b\".text\"][0];print(d[s.PointerToRawData:s.PointerToRawData+s.SizeOfRawData].count(bytes([int(sys.argv[2],16)])))' pec_mingw_s.exe 00"
+}

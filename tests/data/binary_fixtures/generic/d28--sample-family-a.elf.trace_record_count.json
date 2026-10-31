@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "d28--sample-family-a.elf",
+ "field": "trace_record_count",
+ "question": "Count the complete huntress.binary.dynamic_trace.v1 JSON trace records embedded in the member.",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": "4",
+ "generator_cmd": "GM artifact: Huntress D28 single_solve evidence.zip member d28--sample-family-a.elf (copied verbatim)",
+ "oracle_cmd": "strings -a d28--sample-family-a.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs 'length'",
+ "oracle_output": "4"
+}

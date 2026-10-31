@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "d28--sample-false-friend.elf",
+ "field": "trace_campaign",
+ "question": "Submit the campaign value of the embedded dynamic trace records.",
+ "answer_format": {
+  "kind": "exact_text"
+ },
+ "expected": "FF28-000",
+ "generator_cmd": "GM artifact: Huntress D28 single_solve evidence.zip member d28--sample-false-friend.elf (copied verbatim)",
+ "oracle_cmd": "strings -a d28--sample-false-friend.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs '[.[].campaign]|unique|.[0]'",
+ "oracle_output": "FF28-000"
+}

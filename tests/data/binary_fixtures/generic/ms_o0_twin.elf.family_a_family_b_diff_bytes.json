@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "ms_o0_twin.elf",
+ "field": "family_a_family_b_diff_bytes",
+ "question": "Compare family-a.elf and family-b.elf and count the differing bytes.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer"
+ },
+ "expected": null,
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "file ms_o0_twin.elf  # one ELF alone, no group / evidence zip: field absent",
+ "decoy": true
+}

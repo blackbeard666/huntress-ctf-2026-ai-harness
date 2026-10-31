@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "mo_fat.bin",
+ "field": "nsyms",
+ "question": "In evidence.zip, use the d99-- member. Use the arm64 slice. Submit the LC_SYMTAB nsyms value in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "7316",
+ "generator_cmd": "sh mo_src/mo_gen.sh (zig cc -target x86_64-macos / aarch64-macos [-g] [-c], llvm-lipo-18 -create)",
+ "oracle_cmd": "llvm-objdump-18 --macho --arch=arm64 --private-headers mo_fat.bin | awk '/nsyms/{print $2}'"
+}

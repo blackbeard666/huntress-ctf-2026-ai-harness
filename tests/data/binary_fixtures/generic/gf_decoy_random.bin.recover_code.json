@@ -1,0 +1,15 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "recover_code",
+ "question": "In evidence.zip, Use all d01-- members in ZIP central-directory order. Look for a FUNC symbol named recover_code in the Day 1 ELF's .symtab symbol table. If there is no such symbol, submit the literal token none. A stripped ELF (one without a .symtab section) has no recover_code symbol, even if the function's code is still present and can be found by disassembly; it still takes none, not the disassembled immediate. Otherwise decode that symbol's exact bytes as mov eax, imm32 followed by ret and submit the immediate as an unsigned base-10 integer.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "unsigned base-10 integer, or the literal token none when the recover_code FUNC symbol is absent"
+ },
+ "expected": null,
+ "generator_cmd": "head -c 4096 /dev/urandom > gf_decoy_random.bin  # fb_src/fb_gen.sh",
+ "oracle_cmd": "file gf_decoy_random.bin",
+ "oracle_output": "",
+ "decoy": true
+}

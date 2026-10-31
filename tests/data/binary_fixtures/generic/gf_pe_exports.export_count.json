@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_exports.dll",
+ "field": "export_count",
+ "question": "In evidence.zip, use the d99-- member. Count the named exports in the PE export directory. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "7",
+ "generator_cmd": "python3 -m ziglang cc -target x86_64-windows-gnu -O1 -shared -o gf_pe_exports.dll gf_exports.c",
+ "oracle_cmd": "objdump -p gf_pe_exports.dll | sed -n '/\\[Ordinal\\/Name Pointer\\] Table/,/^$/p' | awk '/\\+base/{print $NF}' | wc -l"
+}

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "d28--sample-family-a.elf",
+ "field": "event_counts",
+ "question": "Submit the event_count of every embedded dynamic trace record in file order as a compact JSON integer array.",
+ "answer_format": {
+  "kind": "json"
+ },
+ "expected": "[1,57,40,35]",
+ "generator_cmd": "GM artifact: Huntress D28 single_solve evidence.zip member d28--sample-family-a.elf (copied verbatim)",
+ "oracle_cmd": "strings -a d28--sample-family-a.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs 'map(.event_count)|tojson'",
+ "oracle_output": "[1,57,40,35]"
+}

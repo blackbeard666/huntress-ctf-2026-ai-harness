@@ -1,0 +1,10 @@
+{
+ "material": "{\"member\":\"python-4c1097.py\",\"plans\":{\"python-4c1097.py\":{\"v\":3,\"language\":\"python\",\"next_language\":\"jscript\",\"stage_profile\":\"cross_language_handoff\",\"handoff_id\":\"a41f0e\",\"url\":\"http://203.0.113.9/p\"},\"0e77b3.js\":{\"v\":3,\"language\":\"jscript\",\"scenario\":\"launcher\",\"handoff_id\":\"b90c12\",\"url\":\"http://203.0.113.9/q\"},\"d27c90.js\":{\"v\":3,\"language\":\"jscript\",\"scenario\":\"downloader\",\"handoff_id\":\"a41f0e\"}}}",
+ "rep": "handoff_target",
+ "transform": "stem",
+ "key": null,
+ "expected": "d27c90",
+ "generator_cmd": "jq -cn '{member:\"python-4c1097.py\",plans:{\"python-4c1097.py\":{v:3,language:\"python\",next_language:\"jscript\",stage_profile:\"cross_language_handoff\",handoff_id:\"a41f0e\",url:\"http://203.0.113.9/p\"},\"0e77b3.js\":{v:3,language:\"jscript\",scenario:\"launcher\",handoff_id:\"b90c12\",url:\"http://203.0.113.9/q\"},\"d27c90.js\":{v:3,language:\"jscript\",scenario:\"downloader\",handoff_id:\"a41f0e\"}}}'",
+ "oracle_cmd": "printf '%s' \"$material\" | jq -r '.member as $h | .plans[$h] as $p | .plans | to_entries | map(select(.key != $h and .value.language == $p.next_language and .value.handoff_id == $p.handoff_id)) | .[0].key | sub(\"\\\\.[A-Za-z0-9_]+$\"; \"\")'",
+ "note": "per-file mode: <6hex> stem; shared handoff_id beats shared url host + launcher role on the other candidate"
+}

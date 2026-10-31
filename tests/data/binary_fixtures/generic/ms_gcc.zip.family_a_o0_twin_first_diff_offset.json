@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_gcc.zip",
+ "field": "family_a_o0_twin_first_diff_offset",
+ "question": "In evidence.zip, Use all d31-- members in ZIP central-directory order. Report the zero-based file offset of the first byte that differs between family-a.elf and o0-twin.elf, in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer"
+ },
+ "expected": "24",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "cmp family-a.elf o0-twin.elf  # byte N -> N-1"
+}

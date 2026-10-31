@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "telfhash",
+ "question": "What is the telfhash of the sample?",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": null,
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "python3 -c 'import telfhash,sys;print(telfhash.telfhash(sys.argv[1])[0][\"telfhash\"])' gf_pe_imports.exe  # telfhash 0.9.8",
+ "decoy": true,
+ "note": "PE, not ELF -> None"
+}

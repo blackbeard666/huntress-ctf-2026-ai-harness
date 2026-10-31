@@ -1,0 +1,8 @@
+{
+ "field": "x509.issuer_not_present_ids",
+ "expected": "[\"cert-05\"]",
+ "generator_cmd": "openssl genpkey/req/x509 (gen.sh): Ed25519 root + Ed25519 issuing CA + RSA leaf (PEM and DER copy), P-256 leaf under an absent 'Ghost CA', Ed25519 leaf whose issuer DN = issuing CA but signed by an impostor key, root DER copy, openssl crl2pkcs7 of the issuing CA, a text file; zip -X corpus.zip artifacts/*",
+ "oracle_cmd": "python3 -I oracle.py corpus.zip (cryptography: load_pem/der certs + pkcs7.load_der_pkcs7_certificates, sha256 of DER, verify_directly_issued_by over subject==issuer candidates); cross-checked with openssl verify -CAfile cert-01.pem -untrusted cert-02.pem cert-03.pem (OK) / cert-06.pem (error 20)",
+ "decoy": false,
+ "member": "corpus.zip"
+}

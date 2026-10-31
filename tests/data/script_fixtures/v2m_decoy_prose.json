@@ -1,0 +1,9 @@
+{
+ "target": "analysis-v2-marker-schema",
+ "note": "DECOY: V2 marker whose material decodes to prose (contains ; and >), not a plan",
+ "decoy": true,
+ "expected_plain": null,
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v2m_gen.py  (stdlib base64/binascii/json encode of a v=4 / v=5 / JSON plan under a HUNTRESS_ANALYSIS_V2 marker)",
+ "oracle_cmd": "sed -n 's/^# HUNTRESS_ANALYSIS_V2:B64-//p' tests/data/script_fixtures/v2m_decoy_prose.py | base64 -d   # prose with ; and >, no v= plan",
+ "oracle_output": "edges are fine; nothing to see > here"
+}

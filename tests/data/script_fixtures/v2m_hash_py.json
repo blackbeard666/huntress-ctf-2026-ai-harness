@@ -1,0 +1,8 @@
+{
+ "target": "analysis-v2-marker-schema",
+ "note": "V2 marker in a `#` comment host, v=4 plan with edges `;`-list, parent/parents, host_language, inner, nested meta k:v",
+ "decoy": false,
+ "expected_plain": "v=4|language=python|role=relay|edges=stager>loader;loader>beacon|parent=dropper.ps1|host_language=jsp|inner=python|parents=dropper.ps1,loader.js|meta=mode:fork,depth:2|verdict=malicious|next_language=",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v2m_gen.py  (stdlib base64/binascii/json encode of a v=4 / v=5 / JSON plan under a HUNTRESS_ANALYSIS_V2 marker)",
+ "oracle_cmd": "sed -n 's/^# HUNTRESS_ANALYSIS_V2:B64-//p' tests/data/script_fixtures/v2m_hash_py.py | base64 -d"
+}

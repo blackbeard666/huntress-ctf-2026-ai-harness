@@ -1,0 +1,11 @@
+{
+ "_doc": "mixed-grammar-single-contract: decode(material, 'grammar_route', <answer id>) routes each id through its own grammar (per-file iff its hex token is a member stem of the same set). DECOY: no contract -> None",
+ "material": "{\"plans\":{\"a.ps1\":\"v=3|url=https://x.example/\"}}",
+ "rep": "grammar_route",
+ "transform": "powershell-84522a-url",
+ "key": null,
+ "generator_cmd": "python3 tests/data/script_fixtures/mg_gen.py tests/data/script_fixtures",
+ "oracle_cmd": "python3 tests/data/script_fixtures/mg_oracle.py tests/data/script_fixtures/mg_decoy_not_contract.json",
+ "decoy": true,
+ "expected": null
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-DFA52672CDA5ACC5",
+ "decoy": false,
+ "_why": "D7/D14 caesar: code point + key 6",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_caesar_plus  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_caesar_plus.apk assets/huntress_puzzle.json | jq -r -r '.data, .key' | python3 -I -c 'import sys;d,k=sys.stdin.read().split(chr(10))[:2];print(\"\".join(chr(ord(c)-int(k)) for c in d))'"
+}

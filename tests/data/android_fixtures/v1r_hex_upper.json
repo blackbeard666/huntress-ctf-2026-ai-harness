@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-C13DCF3C02E215C6",
+ "decoy": false,
+ "_why": "hex, uppercase digits (re-roll of D12)",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_hex_upper  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_hex_upper.apk assets/huntress_puzzle.json | jq -r .data | xxd -r -p"
+}

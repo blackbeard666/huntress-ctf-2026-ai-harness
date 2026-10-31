@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "text_size",
+ "question": "In evidence.zip, Use the unique d29-- member whose basename ends O3.elf. Read the section header of the .text section and submit its sh_size in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "existing gf_decoy_random.bin (head -c random bytes, see gen_generic.sh)",
+ "oracle_cmd": "file gf_decoy_random.bin  # data, not ELF -> field cannot be answered"
+}

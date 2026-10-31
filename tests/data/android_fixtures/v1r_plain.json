@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-610A4BCCC9EAC29B",
+ "decoy": false,
+ "_why": "D1 plain",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_plain  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_plain.apk assets/huntress_puzzle.json | jq -r .data"
+}

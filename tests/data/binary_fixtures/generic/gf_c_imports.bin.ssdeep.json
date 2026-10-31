@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_imports.bin",
+ "field": "ssdeep",
+ "question": "What is the ssdeep (CTPH) fuzzy hash of the sample?",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": "96:RAo9eB+B3vIB+IeihnzToI0dw7/6B0rB/FOmNi+yQZwM8h:R4wZc9h1Ou1NNiz",
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "tools/ssdeep/ssdeep.sh -s -b gf_c_imports.bin  # libfuzzy 2.14.1"
+}

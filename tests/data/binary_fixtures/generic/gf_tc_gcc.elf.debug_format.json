@@ -1,0 +1,17 @@
+{
+ "kind": "generic_field",
+ "member": "gf_tc_gcc.elf",
+ "field": "debug_format",
+ "question": "In evidence.zip, Use the unique d27-- member whose basename ends gcc.elf. Classify the debug-information format the build carries: dwarf when a .debug_info section is present, stabs when a .stab section is present, none when neither. Submit exactly one listed lowercase token.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "dwarf",
+   "stabs",
+   "none"
+  ]
+ },
+ "expected": "dwarf",
+ "generator_cmd": "sh tc_gen.sh  # gcc -g -Wl,--hash-style=gnu | gcc -S + as --gstabs + gcc -Wl,--hash-style=sysv | gcc -Wl,--hash-style=both",
+ "oracle_cmd": "sh -c 'd=$(readelf -SW gf_tc_gcc.elf | grep -c \"\\] \\.debug_info \"); s=$(readelf -SW gf_tc_gcc.elf | grep -c \"\\] \\.stab \"); [ $d -gt 0 ] && echo dwarf || { [ $s -gt 0 ] && echo stabs || echo none; }'"
+}

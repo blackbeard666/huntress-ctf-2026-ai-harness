@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_exports.so",
+ "field": "export_count",
+ "question": "In evidence.zip, use the d99-- member. Count the exported symbols (defined dynamic symbols). Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "4",
+ "generator_cmd": "gcc -O1 -shared -fPIC -o gf_c_exports.so gf_exports.c",
+ "oracle_cmd": "nm -D --defined-only gf_c_exports.so | awk '{print $3}' | wc -l"
+}

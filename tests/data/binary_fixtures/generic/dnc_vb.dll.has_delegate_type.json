@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "dnc_vb.dll",
+ "field": "has_delegate_type",
+ "question": "In delivery 1: evidence.zip, Use the unique d22-- primary managed assembly whose basename starts d22-- and ends .dll. Submit true exactly when some TypeDef extends System.MulticastDelegate. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": "false",
+ "generator_cmd": "bash dnc_src/dnc_gen.sh  # dotnet 10 SDK (Roslyn vbc), net8.0 Release, dnc_src/Program.vb",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/generic/dnc_src/dnc_oracle.sh tests/data/binary_fixtures/generic/dnc_vb.dll  # -> delegate_count>0"
+}

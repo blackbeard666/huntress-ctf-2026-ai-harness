@@ -1,0 +1,8 @@
+{
+ "field": "cluster.identical_sha256_groups",
+ "expected": "[[\"kilo-01\",\"kilo-02\",\"lima-03\"]]",
+ "generator_cmd": "printf payloads into b/artifacts/{kilo-01.txt,kilo-02.txt,lima-03.txt (identical),mike-04.txt,november-05.bin}; cd b && zip -q -0 -r -X ../cluster-012.zip artifacts; then the stored CRC of mike-04.txt overwritten with 0xefbeadde in its LFH + CD (unzip -t: bad CRC) -- no manifest",
+ "oracle_cmd": "oracle.sh ZIP TOOL: unzip -Z1 members (no dirs, no *manifest*.json) -> label = jq manifest id by .path then .filename, else basename sans ext; key = unzip -p member | sha256sum -> jq group_by(key), len>1, each sorted, sorted",
+ "decoy": false,
+ "member": "cluster-012.zip"
+}

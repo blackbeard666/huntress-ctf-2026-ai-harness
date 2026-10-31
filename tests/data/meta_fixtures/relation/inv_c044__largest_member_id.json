@@ -1,0 +1,8 @@
+{
+  "field": "inventory.largest_member_id",
+  "expected": "disk",
+  "generator_cmd": "gen.sh (lib/meta/prebuilt/relation_inventory.py docstring corpus): Pillow PNG/JPEG/PDF/GIF, sqlite3 CLI, openssl req -x509 (+x509 -outform DER), zip -X jar/docx/zip, sfdisk GPT, python wave, printf eml/json/ps1, + tool-generated lane fixtures (pe exe, /bin/true ELF, pcap, evtx, regf SAM, MAM prefetch, msibuild MSI, pylnk LNK, APK, Mach-O); liars: PE->holiday.png, JPEG->notes.txt, JSON->photo.jpg (031), PNG->readme.md (044); cluster-031 = delivery-manifest.json ids inv-NN by path; cluster-044 has no manifest; zip -q -r -X",
+  "oracle_cmd": "oracle.sh: unzip -q member tree; per member file -b (+ unzip -Z1 META-INF/MANIFEST.MF for jar, xxd MAM\\\\x04/SCCA for prefetch which file(1) calls 'data') -> family; label = jq manifest id by .path then .filename else basename sans ext; size = stat -c%s; expect.sh: jq over the TSV (family map / group_by counts / unique / ext-claim map / sort_by(-size,label) / add)",
+  "decoy": false,
+  "member": "cluster-044.zip"
+}

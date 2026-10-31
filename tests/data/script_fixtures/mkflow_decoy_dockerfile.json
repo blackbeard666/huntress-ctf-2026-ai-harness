@@ -1,0 +1,11 @@
+{
+ "decoy": true,
+ "material": "FROM alpine:3.20\nARG HUNTRESS_DESCRIPTOR_0badf00d=deadbeef\nRUN echo build && make all\nCMD [\"/bin/sh\", \"-c\", \"echo run\"]\n",
+ "rep": "make_model",
+ "transform": "run_order",
+ "key": null,
+ "expected": null,
+ "note": "make-target-flow-variant-diff decoy: a Dockerfile impostor (FROM a:b parses as a rule, the rest is no make) -> None",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mkflow_gen.py tests/data/script_fixtures/  (stdlib str writer; variant B = A with `CHANNEL := stable` ahead of `CHANNEL ?= beta`, `all: launch report` -> `all: report launch`, no .DEFAULT_GOAL)",
+ "oracle_cmd": "cd tests/data/script_fixtures/ && python3 -I mkflow_oracle.py valid mkflow_impostor.dockerfile  -> mkflow_impostor.dockerfile:2: *** missing separator.  Stop."
+}

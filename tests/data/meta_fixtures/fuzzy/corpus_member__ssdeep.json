@@ -1,0 +1,8 @@
+{
+ "field": "fuzzy.ssdeep",
+ "expected": "384:9id9m11Ttk8b/z4l6OieIiCFYRA+HFFQeN615uBlDL2w:9c9mvB/z4lqae2FFQ+KABl32w",
+ "generator_cmd": "python3 gen.py c/artifacts (random.Random(2026) word docs: report-final, report-draft=6 edits, report-old=14 edits, memo, memo-copy=9 edits, notes, config.log); cd c && zip -q -X -r ../corpus.zip artifacts",
+ "oracle_cmd": "unzip corpus.zip artifacts/memo.txt; ssdeep -s -b memo.txt (ssdeep 2.14.1 / libfuzzy) | cut -d, -f1",
+ "decoy": false,
+ "member": "memo.txt"
+}

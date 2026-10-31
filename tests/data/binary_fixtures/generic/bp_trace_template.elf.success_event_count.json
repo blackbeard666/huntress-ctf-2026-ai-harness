@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "bp_trace_template.elf",
+ "field": "success_event_count",
+ "question": "Parse the embedded huntress.binary.dynamic_trace.v1 records and submit the event_count of the success branch record.",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": null,
+ "generator_cmd": "gcc -O0 -o bp_trace_template.elf tpl.c  # printf template only, no complete record (gen_generic.sh)",
+ "oracle_cmd": "strings -a bp_trace_template.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -s 'length'  # 0 complete records -> null",
+ "oracle_output": "0",
+ "decoy": true
+}

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_exports.so",
+ "field": "exports_sha256",
+ "question": "In evidence.zip, use the d99-- member. Collect every exported symbol name, sort strings by ascending code-unit order, join with one LF byte and no trailing LF, then SHA-256 those UTF-8 bytes.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "exactly 64 lowercase hexadecimal characters; no prefix, whitespace, or explanatory text"
+ },
+ "expected": "d399c8554ef06ae37261daccc03597ccfc92750f02e3f40b2ac114d84c8529b7",
+ "generator_cmd": "gcc -O1 -shared -fPIC -o gf_c_exports.so gf_exports.c",
+ "oracle_cmd": "printf %s \"$(nm -D --defined-only gf_c_exports.so | awk '{print $3}' | LC_ALL=C sort)\" | sha256sum | cut -c1-64"
+}

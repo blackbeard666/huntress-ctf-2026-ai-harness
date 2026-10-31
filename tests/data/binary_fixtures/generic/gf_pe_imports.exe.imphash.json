@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "imphash",
+ "question": "What is the imphash of the PE?",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": "1b9f1a8c182d1a4d05a247f0e71ec319",
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "python3 -c 'import pefile,sys;print(pefile.PE(sys.argv[1]).get_imphash())' gf_pe_imports.exe"
+}

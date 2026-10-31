@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-c85d4be018136c5a",
+ "decoy": false,
+ "_why": "regression: static Release.code(Context) stores ctx; token() = big-endian fold of SHA-256(getPackageInfo(GET_SIGNATURES).signatures[0].toByteArray())[0:8] ^ CRC32(ZipFile(getPackageCodePath()).classes.dex via update(byte[],0,n) loop).getValue() << 13 ^ ByteBuffer.wrap(d,8,8).getLong() >>> 7; dex_eval_scan alone leaks hex(0) = ANS-0000000000000000",
+ "generator_cmd": "python3 tests/data/android_fixtures/ckx_src/gen_ckx.py dex_cert tests/data/android_fixtures/ckx_dex_cert.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 link (manifest) + zipfile (assets, classes.dex) + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), aapt dump badging (package), then java -Dctx.apk=<signed apk> -Dctx.cert=<der> -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM with the REAL java.util.zip.CRC32 / Adler32 / ZipFile, java.security.MessageDigest, java.nio.ByteBuffer -> 'ANS-c85d4be018136c5a'"
+}

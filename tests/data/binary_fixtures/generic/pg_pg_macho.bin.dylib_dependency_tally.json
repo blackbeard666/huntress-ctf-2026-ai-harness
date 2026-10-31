@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "pg_macho.bin",
+ "field": "dylib_dependency_tally",
+ "question": "In evidence.zip, use the d99-- member. Count the Mach-O dylib load commands (LC_LOAD_DYLIB dependencies). Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "1",
+ "generator_cmd": "tools/ziglang/ziglang/zig cc -target x86_64-macos -O1 -o pg_macho.bin pg_src/pg_macho.c (pg_src/pg_gen.sh)",
+ "oracle_cmd": "python3 -c \"from macholib.MachO import MachO; [print(c[2].rstrip(b'\\0').decode()) for h in MachO('pg_macho.bin').headers for c in h.commands if c[0].cmd in (0xc, 0x80000018, 0x8000001f, 0x20, 0x80000023)]\" | wc -l"
+}

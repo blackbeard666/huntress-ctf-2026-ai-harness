@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-C5AF3624DDE492C2",
+ "decoy": false,
+ "_why": "stack: base64 -> reverse -> hex (decode: unhex, reverse, b64decode)",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_stack_hex_reverse_b64  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_stack_hex_reverse_b64.apk assets/huntress_puzzle.json | jq -r .data | xxd -r -p | rev | base64 -d"
+}

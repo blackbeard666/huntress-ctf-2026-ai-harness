@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_exports.dll",
+ "field": "exports_sha256",
+ "question": "In evidence.zip, use the d99-- member. Collect every PE export name, sort strings by ascending code-unit order, join with one LF byte and no trailing LF, then SHA-256 those UTF-8 bytes.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "exactly 64 lowercase hexadecimal characters; no prefix, whitespace, or explanatory text"
+ },
+ "expected": "81cb9ff2337c2f5bdfdcee5641424fa1d5c6434fcceb326f67fda783fb2ccca1",
+ "generator_cmd": "python3 -m ziglang cc -target x86_64-windows-gnu -O1 -shared -o gf_pe_exports.dll gf_exports.c",
+ "oracle_cmd": "printf %s \"$(objdump -p gf_pe_exports.dll | sed -n '/\\[Ordinal\\/Name Pointer\\] Table/,/^$/p' | awk '/\\+base/{print $NF}' | LC_ALL=C sort)\" | sha256sum | cut -c1-64"
+}

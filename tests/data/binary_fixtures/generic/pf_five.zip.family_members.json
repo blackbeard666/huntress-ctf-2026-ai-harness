@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "pf_five.zip",
+ "field": "family_members",
+ "question": "In evidence.zip, Use all members in ZIP central-directory order. Decode each member's HCFG record (scan backward for HCFG magic, XOR payload, verify CRC32) and group members whose decoded config objects are byte-for-byte equal; the family is the largest group. Submit the family's basenames as a JSON array sorted lexicographically.",
+ "answer_format": {
+  "kind": "json",
+  "syntax": "compact JSON array of basenames"
+ },
+ "expected": "[\"sample-1.elf\",\"sample-3.elf\"]",
+ "decoy": false,
+ "generator_cmd": "sh pf_src/pf_gen.sh  # mkblob.py (stdlib zlib.crc32 HCFG writer) + gcc -O2 fam.c / other.c, zip -X; D28 trio renamed",
+ "oracle_cmd": "python3 pf_src/pf_fixtures.py  # stdlib HCFG backward scan (xor, zlib.crc32, json) / objcopy --only-section=.text + sha256"
+}

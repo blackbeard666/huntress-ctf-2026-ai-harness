@@ -1,0 +1,8 @@
+{
+ "field": "relation.crc_mismatch_ids",
+ "expected": "[]",
+ "generator_cmd": "cluster-032: kilo-11/lima-12 = alpha-01, mike-13/november-14 = intact hotel-08.zip, oscar-15 = golf-07; cd c && zip -q -r -X ../cluster-032.zip artifacts",
+ "oracle_cmd": "oracle.sh: unzip -q cluster -d D; sha256sum * -> exact groups (>=2), rep = smallest name; for each non-grouped member of equal size: cmp -l rep member | wc -l <= 4 -> NEAR rep member; for each PK member: unzip -tq fails with 'bad CRC' -> BADCRC member. cluster-031 -> NEAR alpha-01 charlie-03 1 / delta-04 foxtrot-06 2 / hotel-08 juliet-10 1; BADZIP juliet-10 (unzip: bad CRC 42a2432f should be ed4bd58c) cluster-032 -> unzip -tq clean on mike-13/november-14",
+ "decoy": true,
+ "member": "cluster-032.zip"
+}

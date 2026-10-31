@@ -1,0 +1,8 @@
+{
+ "field": "relation.semantic_identity_groups",
+ "expected": "none",
+ "generator_cmd": "Pillow PNG (img-01.png of cluster-041) renamed cluster-043.zip",
+ "oracle_cmd": "file -b -> PNG image data; unzip -l -> 'End-of-central-directory signature not found' (not a zip: field absent)",
+ "decoy": true,
+ "member": "cluster-043.zip"
+}

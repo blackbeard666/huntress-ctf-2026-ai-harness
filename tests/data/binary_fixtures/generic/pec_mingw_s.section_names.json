@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "pec_mingw_s.exe",
+ "field": "section_names",
+ "question": "List the PE section names in section-header order, resolving '/N' long names through the COFF string table as objdump -h does. Submit a JSON array.",
+ "answer_format": {
+  "kind": "json_array",
+  "syntax": "compact JSON array of strings"
+ },
+ "expected": "[\".text\",\".data\",\".rdata\",\".pdata\",\".xdata\",\".bss\",\".idata\",\".tls\",\".reloc\"]",
+ "generator_cmd": "PEC_REBUILD=1 bash pec_src/pec_fixtures.sh  # mingw-w64 gcc 13 (see pec_src/pec_fixtures.sh: -O1 -g1 / -O2 -s / head -c 512 decoy)",
+ "oracle_cmd": "x86_64-w64-mingw32-objdump -h pec_mingw_s.exe | awk '/^ +[0-9]+ /{print $2}'"
+}

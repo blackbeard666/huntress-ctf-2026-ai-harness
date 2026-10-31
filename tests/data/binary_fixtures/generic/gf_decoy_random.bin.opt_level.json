@@ -1,0 +1,20 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "opt_level",
+ "question": "In evidence.zip, Use the unique d29-- member whose basename ends O3.elf. Report the compiler optimization level this role member was built with, as one listed token.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "O0",
+   "O1",
+   "O2",
+   "O3",
+   "Os"
+  ]
+ },
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "existing gf_decoy_random.bin (head -c random bytes, see gen_generic.sh)",
+ "oracle_cmd": "file gf_decoy_random.bin  # data, not ELF -> field cannot be answered"
+}

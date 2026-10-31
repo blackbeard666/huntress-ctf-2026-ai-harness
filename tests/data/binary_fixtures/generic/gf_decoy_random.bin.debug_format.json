@@ -1,0 +1,18 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "debug_format",
+ "question": "In evidence.zip, Use the unique d27-- member whose basename ends gcc.elf. Classify the debug-information format the build carries: dwarf when a .debug_info section is present, stabs when a .stab section is present, none when neither. Submit exactly one listed lowercase token.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "dwarf",
+   "stabs",
+   "none"
+  ]
+ },
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "existing gf_decoy_random.bin (head -c random bytes, see gen_generic.sh)",
+ "oracle_cmd": "file gf_decoy_random.bin  # data, not ELF -> field cannot be answered"
+}

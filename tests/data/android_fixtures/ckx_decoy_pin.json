@@ -1,0 +1,8 @@
+{
+ "entry": "context_chain_scan",
+ "expected": null,
+ "decoy": true,
+ "_why": "dex_cert chain behind a SHA-256 cert pin that is a near-miss (last hex digit bumped) of the real signer: the clean install returns 'tampered', no token",
+ "generator_cmd": "python3 tests/data/android_fixtures/ckx_src/gen_ckx.py decoy_pin tests/data/android_fixtures/ckx_decoy_pin.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 link (manifest) + zipfile (assets, classes.dex) + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), aapt dump badging (package), then java -Dctx.apk=<signed apk> -Dctx.cert=<der> -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM with the REAL java.util.zip.CRC32 / Adler32 / ZipFile, java.security.MessageDigest, java.nio.ByteBuffer -> 'tampered' (pin from openssl dgst -sha256 of keytool -exportcert, last digit bumped)"
+}

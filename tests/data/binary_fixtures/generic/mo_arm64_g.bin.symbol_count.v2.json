@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "mo_arm64_g.bin",
+ "field": "symbol_count",
+ "question": "In evidence.zip, use the d99-- member. Count the LC_SYMTAB nlist entries whose name is nonempty, N_STAB entries included. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "3458",
+ "generator_cmd": "sh mo_src/mo_gen.sh (zig cc -target x86_64-macos / aarch64-macos [-g] [-c], llvm-lipo-18 -create)",
+ "oracle_cmd": "python3 -c \"from macholib.MachO import MachO; from macholib.SymbolTable import SymbolTable; m=MachO('mo_arm64_g.bin'); h=m.headers[0]; print(sum(1 for n,s in SymbolTable(m,h).nlists if s))\""
+}

@@ -1,0 +1,8 @@
+{
+ "field": "x509.unique_fingerprint_count",
+ "expected": "3",
+ "generator_cmd": "same corpus2.zip as smime_pcap__duplicate_fingerprint_groups",
+ "oracle_cmd": "openssl x509 -fingerprint -sha256: root B6:08.., issuing CA 37:FD.., leaf C4:17.. (eml #2 and pcap) -> 3 distinct",
+ "decoy": false,
+ "member": "corpus2.zip"
+}

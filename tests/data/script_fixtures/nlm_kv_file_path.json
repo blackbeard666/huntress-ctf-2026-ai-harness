@@ -1,0 +1,10 @@
+{
+ "material": "{\"member\":\"host-8e21aa.bat\",\"plans\":{\"7d0b3f.js\":\"v=3|language=jscript|scenario=dropper\",\"c4e2a9.js\":\"v=3|language=jscript|scenario=launcher\",\"host-8e21aa.bat\":\"v=3|language=batch|next_language=jscript|stage_profile=cross_language_handoff|file_path=%APPDATA%\\\\\\\\7d0b3f.js\"}}",
+ "rep": "handoff_target",
+ "transform": "member",
+ "key": null,
+ "expected": "7d0b3f.js",
+ "generator_cmd": "perl -MJSON::PP -e 'print JSON::PP->new->canonical->encode({member=>\"host-8e21aa.bat\",plans=>{\"host-8e21aa.bat\"=>\"v=3|language=batch|next_language=jscript|stage_profile=cross_language_handoff|file_path=%APPDATA%\\\\\\\\7d0b3f.js\",\"7d0b3f.js\"=>\"v=3|language=jscript|scenario=dropper\",\"c4e2a9.js\"=>\"v=3|language=jscript|scenario=launcher\"}})'",
+ "oracle_cmd": "printf '%s' \"$material\" | perl -MJSON::PP -0777 -ne '$d=decode_json($_); %h=map{split /=/,$_,2} split /\\|/, $d->{plans}{$d->{member}}; ($s)=$h{file_path}=~/([^\\\\\\/]+)$/; print $s'",
+ "note": "k=v|.. plans; host file_path names the target member (over the launcher-role candidate)"
+}

@@ -1,0 +1,7 @@
+{
+ "field": "relation.ssdeep_similar_groups",
+ "expected": "none",
+ "generator_cmd": "PIL Image.new('RGB',(8,8)).save(PNG) -- a single non-zip file, no corpus",
+ "oracle_cmd": "file(1): PNG image data -> not a zip corpus -> field absent",
+ "decoy": true
+}

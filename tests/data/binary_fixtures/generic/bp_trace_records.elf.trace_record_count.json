@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "bp_trace_records.elf",
+ "field": "trace_record_count",
+ "question": "Count the complete huntress.binary.dynamic_trace.v1 JSON trace records embedded in the member (templates with format holes do not count).",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": "3",
+ "generator_cmd": "gcc -O0 -o bp_trace_records.elf tr.c  # three const char[] JSON records + one %s/%d template (gen_generic.sh)",
+ "oracle_cmd": "strings -a bp_trace_records.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs 'length'",
+ "oracle_output": "3"
+}

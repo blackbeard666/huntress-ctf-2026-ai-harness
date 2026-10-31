@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "rtm_d27_v_gcc.elf",
+ "field": "telfhash",
+ "question": "What is the telfhash of the ELF?",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": "t181f02701957cc3d8896a1e50d44c9ed14d57c51712a1d700ef69ceca883d117f29cf0f",
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "python3 -c 'import telfhash,sys;print(telfhash.telfhash(sys.argv[1])[0][\"telfhash\"])' rtm_d27_v_gcc.elf  # telfhash 0.9.8"
+}

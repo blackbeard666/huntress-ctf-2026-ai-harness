@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "dt_needed_entries",
+ "question": "In evidence.zip, use the d99-- member. Count the DT_NEEDED entries of the ELF dynamic section. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": null,
+ "generator_cmd": "python3 -m ziglang cc -target x86_64-windows-gnu -O1 -o gf_pe_imports.exe gf_pe_imports.c -luser32 -lws2_32 (existing member)",
+ "oracle_cmd": "file -b gf_pe_imports.exe  # PE32+: an ELF DT_NEEDED question does not apply",
+ "decoy": true
+}

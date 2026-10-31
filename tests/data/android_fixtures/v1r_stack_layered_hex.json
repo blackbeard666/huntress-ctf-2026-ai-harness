@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-F8BDB75F3C6CA925",
+ "decoy": false,
+ "_why": "stack: D30 layered but hex outer instead of base64, key 16",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_stack_layered_hex  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_stack_layered_hex.apk assets/huntress_puzzle.json | jq -r -r '.data, .key' | python3 -I -c 'import sys;d,k=sys.stdin.read().split(chr(10))[:2];k=int(k);print(bytes(c^((k+i)&255) for i,c in enumerate(bytes.fromhex(d)))[::-1].decode())'"
+}

@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_exports.dll",
+ "field": "tlsh",
+ "question": "What is the TLSH digest of the sample?",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": "T173245B4634A26EB8C53240B9D507796AA53E3C080330C9FB17E27F5D3DB6DE296B7624",
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "python3 -c 'import tlsh,sys;print(tlsh.hash(open(sys.argv[1],\"rb\").read()))' gf_pe_exports.dll  # py-tlsh"
+}

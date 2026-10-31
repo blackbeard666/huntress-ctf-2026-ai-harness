@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-5F4F846349D98C39",
+ "decoy": false,
+ "_why": "stack: 1-byte xor 37 then hex (xor without base64)",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_stack_xor_hex  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_stack_xor_hex.apk assets/huntress_puzzle.json | jq -r -r '.data, .key' | python3 -I -c 'import sys;d,k=sys.stdin.read().split(chr(10))[:2];print(bytes(c^int(k) for c in bytes.fromhex(d)).decode())'"
+}

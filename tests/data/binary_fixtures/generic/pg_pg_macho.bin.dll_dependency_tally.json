@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "pg_macho.bin",
+ "field": "dll_dependency_tally",
+ "question": "In evidence.zip, use the d99-- member. What is the imported DLL count? Count the PE import descriptors. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": null,
+ "generator_cmd": "tools/ziglang/ziglang/zig cc -target x86_64-macos -O1 -o pg_macho.bin pg_src/pg_macho.c (pg_src/pg_gen.sh)",
+ "oracle_cmd": "file -b pg_macho.bin  # Mach-O: no PE import descriptors",
+ "decoy": true
+}

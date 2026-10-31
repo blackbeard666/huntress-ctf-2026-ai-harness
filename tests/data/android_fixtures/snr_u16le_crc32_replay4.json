@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-D106CDE858FB22F7",
+ "decoy": false,
+ "_why": "4-frame hex blob: A5 5A 01 | u16le len | u16le seq | 8-byte nonce | piece | CRC32 LE after magic; frame 1 bad CRC, frame 4 a replay of frame 2",
+ "generator_cmd": "python3 tests/data/android_fixtures/snr_src/gen_snr.py  # snr_u16le_crc32_replay4; python zipfile + bitwise CRC32/CRC16/sum8",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/snr_u16le_crc32_replay4.apk assets/huntress_puzzle.json | jq -r .data | python3 -I -c 'import sys,zlib,re\nb=bytes.fromhex(sys.stdin.read().strip());i=0;seen=set();got={}\nwhile i<len(b):\n n=int.from_bytes(b[i+3:i+5],\"little\");body=b[i+3:i+15+n];c=b[i+15+n:i+19+n];i+=19+n\n if zlib.crc32(body).to_bytes(4,\"little\")!=c or body[4:12] in seen: continue\n seen.add(body[4:12]);got.setdefault(int.from_bytes(body[2:4],\"little\"),body[12:].decode())\nj=\"\".join(got[k] for k in sorted(got));print(j if re.fullmatch(\"ANS-[0-9A-F]{16}\",j) else \"NOMATCH\")'"
+}

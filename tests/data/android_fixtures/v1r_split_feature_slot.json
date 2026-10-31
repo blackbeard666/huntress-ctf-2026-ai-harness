@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-673444D517F18E33",
+ "decoy": false,
+ "_why": "D26 .apks: base split with EMPTY slot 2, filled from feature.apk huntress_feature.json",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_split_feature_slot  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "d=$(mktemp -d); unzip -q -o tests/data/android_fixtures/v1r_split_feature_slot.zip -d $d; python3 -I -c 'import sys,json,zipfile;b=json.loads(zipfile.ZipFile(sys.argv[1]).read(\"assets/huntress_puzzle.json\"));f=json.loads(zipfile.ZipFile(sys.argv[2]).read(\"assets/huntress_feature.json\"));b[\"parts\"][f[\"part_index\"]]=f[\"part\"];r=[None]*3\nfor i,o in enumerate(b[\"order\"]): r[o]=b[\"parts\"][i]\nprint(\"\".join(r))' $d/base.apk $d/feature.apk"
+}

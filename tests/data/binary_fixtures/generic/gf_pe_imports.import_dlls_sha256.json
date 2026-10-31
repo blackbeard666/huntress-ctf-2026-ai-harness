@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "import_dlls_sha256",
+ "question": "In evidence.zip, use the d99-- member. Collect every imported DLL name from the PE import directory, lowercase each DLL name, sort strings by ascending code-unit order, join with one LF byte and no trailing LF, then SHA-256 those UTF-8 bytes.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "exactly 64 lowercase hexadecimal characters; no prefix, whitespace, or explanatory text"
+ },
+ "expected": "30f90d89b1410677749dddce84c540a6ef49c5bacd2fd91f23a5b1f6bfb78f7a",
+ "generator_cmd": "python3 -m ziglang cc -target x86_64-windows-gnu -O1 -o gf_pe_imports.exe gf_pe_imports.c -luser32 -lws2_32",
+ "oracle_cmd": "printf %s \"$(objdump -p gf_pe_imports.exe | sed -n 's/^\\tDLL Name: //p' | tr A-Z a-z | LC_ALL=C sort)\" | sha256sum | cut -c1-64"
+}

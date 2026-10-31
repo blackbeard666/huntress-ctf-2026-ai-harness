@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-178E787FF41F81F5",
+ "decoy": false,
+ "_why": "D11/D18/D23 xor = base64 + 1-byte key 230",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_xor_b64  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_xor_b64.apk assets/huntress_puzzle.json | jq -r -c '[.data,.key]' | python3 -I -c 'import sys,json,base64;d,k=json.load(sys.stdin);print(bytes(b^k for b in base64.b64decode(d)).decode())'"
+}

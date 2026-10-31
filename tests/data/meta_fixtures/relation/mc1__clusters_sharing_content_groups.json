@@ -1,0 +1,8 @@
+{
+ "field": "relation.clusters_sharing_content_groups",
+ "expected": "[[\"cluster-001.zip\",\"cluster-003.zip\"]]",
+ "generator_cmd": "bash mc_gen.sh (printf payloads + delivery-manifest.json via sha256sum/stat; `zip -q -r -X` per cluster, `zip -q -X` evidence; mc2 inner zip -0 CRC zeroed in LFH+CD, cluster-011 entries touch -d 2031)",
+ "oracle_cmd": "bash mc_oracle.sh EVIDENCE.zip (unzip + jq manifest claims vs sha256sum/wc -c, unzip -tq inner zips, zipinfo -T entry dates > outer entry date, SHA lines grouped across clusters) -> fabricated = the single cluster with the max claims/badcrc/future excess over the other clusters; SHA f8c2.. spans cluster-001 + cluster-003 ",
+ "decoy": false,
+ "member": "evidence.zip"
+}

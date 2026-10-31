@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_exports.dll",
+ "field": "has_three_ie_exports",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when at least 3 exported symbol names start with ie_. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": "true",
+ "generator_cmd": "zig cc -target x86_64-windows-gnu -shared -o gf_pe_exports.dll gf_exports.c (existing member)",
+ "oracle_cmd": "[ $(python3 -c \"import pefile; p=pefile.PE('gf_pe_exports.dll'); [print(s.name.decode()) for s in p.DIRECTORY_ENTRY_EXPORT.symbols if s.name]\" | grep -c '^ie_') -ge 3 ] && echo true || echo false"
+}

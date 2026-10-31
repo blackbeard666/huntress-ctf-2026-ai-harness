@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-C44DB8F2BD43548D",
+ "decoy": false,
+ "_why": "D12/D25 hex (lowercase)",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_hex_lower  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_hex_lower.apk assets/huntress_puzzle.json | jq -r .data | xxd -r -p"
+}

@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_imports.bin",
+ "field": "imphash",
+ "question": "What is the imphash of the sample?",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": null,
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "python3 -c 'import pefile,sys;print(pefile.PE(sys.argv[1]).get_imphash())' gf_c_imports.bin",
+ "decoy": true,
+ "note": "ELF, not PE: imphash undefined -> None"
+}

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "bp_trace_records.jar",
+ "field": "success_event_count",
+ "question": "Parse the embedded huntress.binary.dynamic_trace.v1 records and submit the event_count of the success branch record.",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": "63",
+ "generator_cmd": "javac --release 8 TraceRec.java && jar cfm bp_trace_records.jar m.txt TraceRec.class  # two static final String records (gen_generic.sh)",
+ "oracle_cmd": "unzip -p bp_trace_records.jar TraceRec.class | strings -a | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs '[.[]|select(.branch==\"success\")|.event_count][0]'",
+ "oracle_output": "63"
+}

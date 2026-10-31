@@ -1,0 +1,19 @@
+{
+ "kind": "generic_field",
+ "member": "ta_d27_gcc.elf",
+ "field": "libc",
+ "question": "In evidence.zip, Use the unique d27-- member whose basename ends d27_gcc.elf. Name the C library the image is built against (PT_INTERP / DT_NEEDED, or the static libc banner). Submit exactly one listed lowercase token.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "glibc",
+   "musl",
+   "bionic",
+   "msvcrt",
+   "ucrt"
+  ]
+ },
+ "expected": "musl",
+ "generator_cmd": "sh ta_gen.sh  # gcc -g | clang-18 -g -no-pie | gcc -static -s | aarch64-linux-gnu-gcc -g -static | zig cc -target x86_64-linux-musl | gcc + strip -s -R .comment; ta_d27_{gcc,tcc}.elf = D27 GM members verbatim",
+ "oracle_cmd": "sh -c 'l=$(readelf -lW ta_d27_gcc.elf | grep -o \"interpreter: [^]]*\"); d=$(readelf -d ta_d27_gcc.elf | grep NEEDED); case \"$l$d\" in *musl*) echo musl;; *ld-linux*|*libc.so.6*) echo glibc;; *system/bin/linker*) echo bionic;; *) if strings -a ta_d27_gcc.elf | grep -qE \"GNU C Library|Fatal glibc error\"; then echo glibc; elif strings -a ta_d27_gcc.elf | grep -qx __init_libc; then echo musl; else echo none; fi;; esac'"
+}

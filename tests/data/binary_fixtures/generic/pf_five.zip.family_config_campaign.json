@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "pf_five.zip",
+ "field": "family_config_campaign",
+ "question": "In evidence.zip, Use all members in ZIP central-directory order. Decode each member's HCFG record (scan backward for HCFG magic, XOR payload, verify CRC32) and group members whose decoded config objects are byte-for-byte equal; the family is the largest group. Submit the family's common decoded campaign value.",
+ "answer_format": {
+  "kind": "exact_text",
+  "syntax": "exact case-sensitive artifact-derived text only"
+ },
+ "expected": "BR31-0A1",
+ "decoy": false,
+ "generator_cmd": "sh pf_src/pf_gen.sh  # mkblob.py (stdlib zlib.crc32 HCFG writer) + gcc -O2 fam.c / other.c, zip -X; D28 trio renamed",
+ "oracle_cmd": "python3 pf_src/pf_fixtures.py  # stdlib HCFG backward scan (xor, zlib.crc32, json) / objcopy --only-section=.text + sha256"
+}

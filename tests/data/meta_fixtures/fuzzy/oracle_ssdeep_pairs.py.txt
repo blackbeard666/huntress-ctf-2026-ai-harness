@@ -1,0 +1,19 @@
+# independent oracle: parses `ssdeep -s -b -a -p` (libfuzzy) output; label = basename sans extension
+import re, sys, json
+thr = int(sys.argv[2]) if len(sys.argv) > 2 else 50
+sc = {}
+for l in sys.stdin:
+    m = re.match(r'(\S+) matches (\S+) \((\d+)\)', l)
+    if m:
+        a, b = sorted(x.rsplit('.', 1)[0] for x in m.groups()[:2]); sc[(a, b)] = int(m.group(3))
+best = min(sc, key=lambda k: (-sc[k], k))
+labs = sorted({x for k in sc for x in k}); par = {x: x for x in labs}
+def f(x):
+    while par[x] != x: x = par[x]
+    return x
+for k, v in sc.items():
+    if v >= thr: par[f(k[0])] = f(k[1])
+g = {}
+[g.setdefault(f(x), []).append(x) for x in labs]
+print(json.dumps({"pair": list(best), "score": sc[best],
+                  "groups": sorted(sorted(v) for v in g.values() if len(v) > 1)}, separators=(',', ':')))

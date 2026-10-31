@@ -1,0 +1,8 @@
+{
+ "field": "x509.duplicate_fingerprint_groups",
+ "expected": "[[\"capture-02\",\"mail-01#2\"]]",
+ "generator_cmd": "openssl smime -sign -signer leaf.pem -certfile int.pem -text > mail-01.eml; python3 struct pcap with the leaf DER inside a TLS Certificate handshake > capture-02.pcap; root.pem > root-03.pem; zip -X corpus2.zip",
+ "oracle_cmd": "openssl smime -pk7out | openssl pkcs7 -print_certs | openssl x509 -fingerprint -sha256 (cert #2 = leaf C4:17:..) == openssl x509 -inform DER -in cert-04.der -fingerprint -sha256 (C4:17:..)",
+ "decoy": false,
+ "member": "corpus2.zip"
+}

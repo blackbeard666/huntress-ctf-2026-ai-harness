@@ -1,0 +1,19 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "hash_style",
+ "question": "In evidence.zip, Use the unique d27-- member whose basename ends gcc.elf. Read the dynamic section and classify the symbol hash table style: gnu when only DT_GNU_HASH is present, sysv when only DT_HASH is present, both when both are, none when neither.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "gnu",
+   "sysv",
+   "both",
+   "none"
+  ]
+ },
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "existing gf_decoy_random.bin (head -c random bytes, see gen_generic.sh)",
+ "oracle_cmd": "file gf_decoy_random.bin  # data, not ELF -> field cannot be answered"
+}

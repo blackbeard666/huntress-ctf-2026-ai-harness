@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "d29--sample-O3.elf",
+ "field": "tlsh",
+ "question": "Submit the TLSH (T1) hash of the binary.",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": "T1B0133A07F591C53DC5D583F1587705B160B3B1B0DF62292B2948E0BA3E82BACDE9DB68",
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "python3 -c 'import tlsh,sys;print(tlsh.hash(open(sys.argv[1],\"rb\").read()))' d29--sample-O3.elf  # py-tlsh"
+}

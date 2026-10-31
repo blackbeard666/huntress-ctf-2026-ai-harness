@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-FF65A0FB2FD98E76",
+ "decoy": false,
+ "_why": "D2/D21 reverse",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_reverse  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_reverse.apk assets/huntress_puzzle.json | jq -r .data | rev"
+}

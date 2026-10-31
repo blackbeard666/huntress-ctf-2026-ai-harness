@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-B6A7BC5FE6BF276D",
+ "decoy": false,
+ "_why": "HA ver=2 | u16 LE len | base64(token) | CRC16-CCITT-FALSE LE over payload (base64 frame)",
+ "generator_cmd": "python3 tests/data/android_fixtures/pfc_src/gen_pfc.py pfc_ver_u16le_crc16_b64  # python zipfile + bitwise CRC32/CRC16/sum8",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/pfc_ver_u16le_crc16_b64.apk assets/huntress_puzzle.json | jq -r .data | base64 -d | python3 -I -c 'import sys,binascii,base64;b=sys.stdin.buffer.read();n=int.from_bytes(b[3:5],\"little\");p=b[5:5+n];ok=binascii.crc_hqx(p,0xFFFF).to_bytes(2,\"little\")==b[5+n:7+n];print(base64.b64decode(p).decode() if ok else \"BADSUM\")'"
+}

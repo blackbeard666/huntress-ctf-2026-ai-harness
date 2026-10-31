@@ -1,0 +1,8 @@
+{
+ "entry": "identity_seed_candidates",
+ "expected": "ANS-a4e9137c0d2f6b58",
+ "decoy": false,
+ "_why": "v1 xor with no `key`: key = bytes.fromhex(manifest package suffix v9e3b5d71a2c4) 6 B repeating",
+ "generator_cmd": "python3 tests/data/android_fixtures/idv_src/gen_idv.py pkg_suffix tests/data/android_fixtures/idv_pkg_suffix.apk  # JVM Seal.java (real String.hashCode / Integer.parseInt) seals the token; javac --release 8 + d2j-jar2dex (Ids consts) + apktool's aapt2 link (manifest) + zipfile",
+ "oracle_cmd": "same generator, oracle stage: identity re-read from the built APK (unzip -p assets/huntress_puzzle.json build | aapt dump badging package | unzip -p classes.dex | strings -a | grep MOB-), then java Open (host JVM: Base64 decode + xor with the derived key) -> 'ANS-a4e9137c0d2f6b58'"
+}

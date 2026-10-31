@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_gcc.zip",
+ "field": "family_members",
+ "question": "In evidence.zip, Use all d31-- members in ZIP central-directory order. Cluster the members by identical .text SHA-256 and submit the members of the family (the largest cluster) as a JSON array of basenames in ZIP order.",
+ "answer_format": {
+  "kind": "json",
+  "syntax": "compact JSON array"
+ },
+ "expected": "[\"d31--sample-family-a.elf\",\"d31--sample-family-b.elf\"]",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "objcopy -O binary --only-section=.text <m> | sha256sum for each member; group equal digests"
+}

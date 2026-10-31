@@ -1,0 +1,11 @@
+{
+ "decoy": false,
+ "material": "# variant C: conditional layers, call/foreach, target SHELL handoff\nMODE ?= dev\nifeq ($(MODE),dev)\n  PAYLOAD := $(call wrap,dev)\n  STEPS = one two\nelse ifdef CI\n  STEPS = ci\nelse\n  STEPS = never\nendif\nwrap = [$(1)-$(words $(STEPS))]\nPAYLOAD2 = $(call wrap,late)\nLIST := $(foreach s,$(STEPS),step_$(s))\nifndef UNSET_X\n  STEPS += three\nendif\n.RECIPEPREFIX = >\ndeploy: $(LIST) ; @echo deploy\nstep_%:\n>@echo $@\nstage: SHELL := /usr/bin/python3\nstage: .SHELLFLAGS := -c\nstage: deploy\n>print(\"$(PAYLOAD2)\")\n",
+ "rep": "make_model",
+ "transform": "run_order",
+ "key": "stage",
+ "expected": "step_one>step_two>deploy>stage",
+ "note": "make-target-flow-variant-diff: ifeq/else ifdef/ifndef layers, $(foreach), `step_%` pattern rule, .RECIPEPREFIX",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mkflow_gen.py tests/data/script_fixtures/  (stdlib str writer; variant B = A with `CHANNEL := stable` ahead of `CHANNEL ?= beta`, `all: launch report` -> `all: report launch`, no .DEFAULT_GOAL)",
+ "oracle_cmd": "cd tests/data/script_fixtures/ && python3 -I mkflow_oracle.py order mkflow_variant_c.mk stage  (GNU make 4.4.1 -n --trace / --eval $(info ..) / -qp)"
+}

@@ -1,0 +1,16 @@
+{
+ "kind": "generic_field",
+ "member": "rtm_d27_v_gcc.elf",
+ "field": "has_v_runtime",
+ "question": "In evidence.zip, use the d99-- member. Does the member carry the V (vlang) runtime? Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "true",
+ "generator_cmd": "GM D28 corpus: d27--sample-v_g.elf (V program, C backend), copied verbatim",
+ "oracle_cmd": "{ strings -a rtm_d27_v_gcc.elf | grep -c '^V panic: '; nm rtm_d27_v_gcc.elf 2>/dev/null | grep -cE ' (_vinit|builtin__)'; } | paste -sd+ | bc   # V C-backend; >0 -> true"
+}

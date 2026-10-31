@@ -1,0 +1,8 @@
+{
+ "field": "relation.contained_ids",
+ "expected": "[\"alpha-01\",\"bravo-02\",\"charlie-03\"]",
+ "generator_cmd": "zip/gzip/tar CLI: see .run/tmp/cont recipe -- printf payloads into a/artifacts/{alpha-01,bravo-02(=alpha),charlie-03}; zip -q -0 -X hotel.zip saffron.txt -> hotel-08 and juliet-10 (printf X | dd seek=44 conv=notrunc -> bad CRC); zip -q -X india.zip charlie.txt(=charlie-03) -> india-09; gzip -c alpha.log (FNAME alpha.log, bytes=alpha-01) -> kilo-11; tar --format=ustar -cf lima.tar inner2.zip(zip -0 mango.txt) charlie -> lima-12; touch -d fixed; cd a && zip -q -r -X ../cluster-041.zip artifacts",
+ "oracle_cmd": "oracle.sh: unzip -q cluster -d D; sha256sum every member; per member by 'file -b': Zip -> unzip -qq (extracts despite bad CRC), gzip -> gzip -dcN (name from gzip -lN), tar -> tar -xf; recurse <=3; sha256sum each inner file vs other members. Output: hotel-08/saffron.txt match=[], india-09/charlie.txt match=[charlie-03], juliet-10/saffron.txt match=[], kilo-11/alpha.log match=[alpha-01 bravo-02], lima-12/charlie match=[charlie-03], lima-12/inner2.zip match=[], lima-12/inner2.zip/mango.txt match=[] (depth 2)",
+ "decoy": false,
+ "member": "cluster-041.zip"
+}

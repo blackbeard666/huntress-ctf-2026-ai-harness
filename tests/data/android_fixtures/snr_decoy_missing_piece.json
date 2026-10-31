@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: stream of A, the only seq-1 frame has a bad CRC16 -> no complete token",
+ "generator_cmd": "python3 tests/data/android_fixtures/snr_src/gen_snr.py  # snr_decoy_missing_piece; python zipfile + bitwise CRC32/CRC16/sum8",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/snr_decoy_missing_piece.apk assets/stream.bin | python3 -I -c 'import sys,binascii,re\nb=sys.stdin.buffer.read();i=0;seen=set();got={}\nwhile i<len(b):\n n=b[i+7];f=b[i:i+8+n];c=b[i+8+n:i+10+n];i+=10+n\n if binascii.crc_hqx(f,0).to_bytes(2,\"big\")!=c or f[3:7] in seen: continue\n seen.add(f[3:7]);got.setdefault(f[2],f[8:].decode())\nj=\"\".join(got[k] for k in sorted(got));print(j if re.fullmatch(\"ANS-[0-9A-F]{16}\",j) else \"NOMATCH\")'"
+}

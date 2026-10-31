@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: xor b64 of a 15-hex + 'G' near-miss",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_decoy_xor_nearmiss  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_decoy_xor_nearmiss.apk assets/huntress_puzzle.json | jq -r -c '[.data,.key]' | python3 -I -c 'import sys,json,base64,re;d,k=json.load(sys.stdin);s=bytes(b^k for b in base64.b64decode(d)).decode();print(re.findall(\"ANS-[0-9A-Fa-f]{16}\",s) or \"none\")'"
+}

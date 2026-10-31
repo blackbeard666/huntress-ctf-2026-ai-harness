@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "pf_d28_shuffled.zip",
+ "field": "family_size",
+ "question": "In evidence.zip, Use all members in ZIP central-directory order. Decode each member's HCFG record (scan backward for HCFG magic, XOR payload, verify CRC32) and group members whose decoded config objects are byte-for-byte equal; the family is the largest group. How many members belong to the family?",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer"
+ },
+ "expected": "2",
+ "decoy": false,
+ "generator_cmd": "sh pf_src/pf_gen.sh  # mkblob.py (stdlib zlib.crc32 HCFG writer) + gcc -O2 fam.c / other.c, zip -X; D28 trio renamed",
+ "oracle_cmd": "python3 pf_src/pf_fixtures.py  # stdlib HCFG backward scan (xor, zlib.crc32, json) / objcopy --only-section=.text + sha256"
+}

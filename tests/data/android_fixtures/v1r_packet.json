@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-08EDA65922E6DB29",
+ "decoy": false,
+ "_why": "D28 packet: hex of HA | u8 len | ascii | xor checksum",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_packet  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_packet.apk assets/huntress_puzzle.json | jq -r .data | xxd -r -p | python3 -I -c 'import sys;b=sys.stdin.buffer.read();print(b[3:3+b[2]].decode())'"
+}

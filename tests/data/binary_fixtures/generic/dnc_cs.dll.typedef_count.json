@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "dnc_cs.dll",
+ "field": "typedef_count",
+ "question": "In delivery 1: evidence.zip, Use the unique d22-- primary managed assembly whose basename starts d22-- and ends .dll. Count every TypeDef table row, including the <Module> pseudo-type, nested and compiler-generated types. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "17",
+ "generator_cmd": "bash dnc_src/dnc_gen.sh  # dotnet 10 SDK (Roslyn csc), net8.0 Release, dnc_src/Program.cs",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/generic/dnc_src/dnc_oracle.sh tests/data/binary_fixtures/generic/dnc_cs.dll  # -> typedef_count"
+}

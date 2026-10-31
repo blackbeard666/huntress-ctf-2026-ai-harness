@@ -1,0 +1,7 @@
+{
+ "field": "ssdeep.hash",
+ "expected": "96:CRJWXk4KjsLgi1RXAJLJWi3VgE3utiuk8ajDhQ1iLhBjjPPRk2TqzYlyRy:CRJWXk4KwLg4GL1utPuD3lRMW9",
+ "generator_cmd": "python3 gen.py c/artifacts (random.Random(2026) word docs: report-final, report-draft=6 edits, report-old=14 edits, memo, memo-copy=9 edits, notes, config.log); cd c && zip -q -X -r ../corpus.zip artifacts (member notes.txt)",
+ "oracle_cmd": "ssdeep -s -b notes.txt (ssdeep 2.14.1 / libfuzzy) | cut -d, -f1",
+ "decoy": false
+}

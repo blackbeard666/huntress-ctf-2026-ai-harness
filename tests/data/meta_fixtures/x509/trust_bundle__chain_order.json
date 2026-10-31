@@ -1,0 +1,8 @@
+{
+ "field": "x509.chain_order",
+ "expected": "[\"bundle#1\",\"bundle#2\",\"bundle#3\"]",
+ "generator_cmd": "cat leaf.pem int.pem root.pem > bundle.pem (openssl-generated chain from gen.sh)",
+ "oracle_cmd": "openssl verify -CAfile root.pem -untrusted int.pem leaf.pem -> OK; block order of the file = leaf, issuing CA, root (labels <stem>#n, 1-based)",
+ "decoy": false,
+ "member": "bundle.pem"
+}

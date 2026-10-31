@@ -1,0 +1,7 @@
+{
+ "field": "ssdeep.most_similar_pair",
+ "expected": "none",
+ "generator_cmd": "python3 -c gzip.compress(b'not a corpus\\n'*50, mtime=0)",
+ "oracle_cmd": "file(1): gzip compressed data -> not a zip corpus -> field absent",
+ "decoy": true
+}

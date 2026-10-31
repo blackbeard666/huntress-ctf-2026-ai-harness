@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "mo_x64.bin",
+ "field": "external_symbol_count",
+ "question": "In evidence.zip, use the d99-- member. Count the external (N_EXT) non-debug symbols. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "7",
+ "generator_cmd": "sh mo_src/mo_gen.sh (zig cc -target x86_64-macos / aarch64-macos [-g] [-c], llvm-lipo-18 -create)",
+ "oracle_cmd": "llvm-nm-18 -g mo_x64.bin | wc -l"
+}

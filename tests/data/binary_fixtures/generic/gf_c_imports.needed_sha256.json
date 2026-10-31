@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_imports.bin",
+ "field": "needed_sha256",
+ "question": "In evidence.zip, use the d99-- member. Collect every ELF DT_NEEDED library name, sort strings by ascending code-unit order, join with one LF byte and no trailing LF, then SHA-256 those UTF-8 bytes.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "exactly 64 lowercase hexadecimal characters; no prefix, whitespace, or explanatory text"
+ },
+ "expected": "f70384ac47f281ec7904cd94f1e214a53ccd000ce2ea6340a27c8b9c413286a2",
+ "generator_cmd": "gcc -O1 -o gf_c_imports.bin gf_imports.c -lm -lz",
+ "oracle_cmd": "printf %s \"$(readelf -d -W gf_c_imports.bin | sed -n 's/.*(NEEDED).*\\[\\(.*\\)\\]/\\1/p' | LC_ALL=C sort)\" | sha256sum | cut -c1-64"
+}

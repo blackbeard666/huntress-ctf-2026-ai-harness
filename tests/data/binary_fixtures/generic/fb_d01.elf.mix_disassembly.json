@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "fb_d01.elf",
+ "field": "mix_disassembly",
+ "question": "In the bundled Day 1 ELF, find the mix FUNC symbol in the symbol table and disassemble its bytes. Submit its decoded instructions in execution order as a JSON array of strings, without addresses or byte columns. If that symbol is absent, submit []. Unrelated format example: [\"nop\",\"ret\"]. A stripped ELF (one without a .symtab section) has no mix symbol, even if the function's code is still present and can be found by disassembly; it still takes [].",
+ "answer_format": {
+  "kind": "json",
+  "syntax": "JSON array of instruction strings in execution order; an empty array if the recover_code symbol is absent. Intel or AT&T spelling of the same constant-return instructions is accepted."
+ },
+ "expected": null,
+ "generator_cmd": "gcc -O2 -fcf-protection=none -fno-asynchronous-unwind-tables -o fb_d01.elf fb_src/fb.c  # fb_src/fb_gen.sh",
+ "oracle_cmd": "objdump -d -M intel --no-show-raw-insn --disassemble=mix fb_d01.elf | python3 -c 'import sys,re,json; print(json.dumps([re.sub(r\"0x[0-9a-f]+\",lambda h:str(int(h.group(0),16)),re.sub(r\",\",\", \",\" \".join(l.split(\"\\t\")[-1].split()))) for l in sys.stdin if re.match(r\"\\s+[0-9a-f]+:\\t\",l)],separators=(\",\",\":\")))'",
+ "oracle_output": "[\"lea eax, [rdi*8+0]\",\"sub eax, edi\",\"add eax, 3\",\"ret\"]"
+}

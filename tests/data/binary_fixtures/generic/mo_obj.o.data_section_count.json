@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "mo_obj.o",
+ "field": "data_section_count",
+ "question": "In evidence.zip, use the d99-- member. Count the sections in the __DATA segment. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "2",
+ "generator_cmd": "sh mo_src/mo_gen.sh (zig cc -target x86_64-macos / aarch64-macos [-g] [-c], llvm-lipo-18 -create)",
+ "oracle_cmd": "llvm-otool-18 -l mo_obj.o | grep -A1 '^  sectname' | grep -c 'segname __DATA$'"
+}

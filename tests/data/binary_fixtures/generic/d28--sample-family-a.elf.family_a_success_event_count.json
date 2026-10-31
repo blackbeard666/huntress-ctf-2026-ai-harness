@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "d28--sample-family-a.elf",
+ "field": "family_a_success_event_count",
+ "question": "Use the unique d28-- member whose basename ends family-a.elf. Parse its embedded dynamic trace records and submit the success branch record's event_count.",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": "57",
+ "generator_cmd": "GM artifact: Huntress D28 single_solve evidence.zip member d28--sample-family-a.elf (copied verbatim)",
+ "oracle_cmd": "strings -a d28--sample-family-a.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs '[.[]|select(.branch==\"success\")|.event_count][0]'",
+ "oracle_output": "57"
+}

@@ -33508,20 +33508,185 @@ def _gf_clause(ctx, c):
     return None
 
 
+# --- predicate / count grammar extensions (prebuild "gf-predicate-grammar") -----------------------------------------
+# Conjunctions ('A and any B'; mixed and/or -> unsure), negation ('no symbol name ...', 'none of the ...', 'the final
+# bytes do not contain X'), 'every' / 'at least N' / 'at most N' / 'exactly N' / 'more|fewer than N' quantifiers, and
+# clauses / counts over the native import tables (native_import_facts: DT_NEEDED / PE import-descriptor DLL names /
+# Mach-O dylib paths; imported function names; exported names). A clause still outside the grammar stays None.
+_GF_QW = (r"(?:any|a|an|the|its|some|no|none|every|each|all|at\s+(?:least|most)|exactly|more\s+than|fewer\s+than|"
+          r"less\s+than)")
+_GF_NUMW = {"zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+            "nine": 9, "ten": 10}
+_GF_QUANT = (r"(?P<q>any|a|an|some|no|none\s+of\s+the|every|each|all(?:\s+of\s+the)?|"
+             r"(?:at\s+least|at\s+most|exactly|more\s+than|fewer\s+than|less\s+than)\s+(?P<n>\d+|"
+             + "|".join(_GF_NUMW) + r"))")
+_GF_SET_RX = (
+    ("exports", re.compile(r"(?i)\bexport(?:ed|s)?\b")),
+    ("imports", re.compile(r"(?i)\bimport(?:ed)?\s+(?:functions?|symbols?|apis?|function\s+names?|symbol\s+names?)\b|"
+                           r"\bundefined\s+(?:dynamic\s+)?symbols?\b")),
+    ("needed", re.compile(r"(?i)\bdt_needed\b|\bneeded\s+(?:entr|librar|names?)|\bimport(?:ed)?\s+(?:dlls?|librar|"
+                          r"modules?)|\bdll\s+(?:names?|imports?)\b|\bimport\s+descriptors?\b|\bdylibs?\b|"
+                          r"\blc_load_(?:weak_)?dylib\b|(?:linked|shared|dynamic)[- ](?:shared[- ])?librar|"
+                          r"\b(?:library\s+)?dependenc(?:y|ies)\b|\bimported\s+dlls?\b")),
+)
+_GF_FMT_RX = (("elf", r"\bELF\b|\bDT_NEEDED\b|\.dynsym\b|\.symtab\b"),
+              ("pe", r"\bPE\b|\bDLLs?\b|\bimport\s+descriptors?\b|\bCOFF\b"),
+              ("macho", r"\bMach-O\b|\bdylibs?\b|\bLC_[A-Z_]+"))
+
+
+def _gf_fmt_ok(ctx, text):
+    """False when the text names container formats and the member is none of them."""
+    named = [f for f, rx in _GF_FMT_RX if re.search(rx, text or "", re.I if f != "pe" else 0)]
+    fam = {"pe_cli": "pe"}.get(ctx.fmt, ctx.fmt)
+    return not named or fam in named
+
+
+def _gf_native_set(ctx, text):
+    """'needed' | 'imports' | 'exports' when the text names exactly one native import-table set, else None."""
+    hit = [k for k, rx in _GF_SET_RX if rx.search(text or "")]
+    if hit[:1] == ["exports"] and re.search(r"(?i)\bimport|\bneeded\b|\bdt_needed\b", text):
+        return None
+    if len(hit) == 2 and hit == ["imports", "needed"] and re.search(r"(?i)\bimport(?:ed)?\s+(?:functions?|symbols?|"
+                                                                     r"apis?)\b", text) and \
+            not re.search(r"(?i)\bdt_needed\b|\bdylibs?\b|\bimport\s+descriptors?\b|\bdll\s+names?\b", text):
+        hit = ["imports"]
+    return hit[0] if len(hit) == 1 else None
+
+
+def _gf_native_names(ctx, which, q):
+    """The named set's entries (table order) with the question's lowercase / unique rules, or None."""
+    nf = ctx.memo("native_imports", lambda: native_import_facts(ctx.data))
+    if not nf:
+        return None
+    v = nf.get(which)
+    names = [] if v in (None, "none") else list(v)
+    if re.search(r"(?i)lower-?case(?:d)?\s+(?:each\s+|every\s+|all\s+|the\s+)?(?:dll|librar|module|import|export|name|"
+                 r"function|symbol|dependenc|path|entr|dylib)|\bcase-?insensitive\b|\bignoring\s+case\b", q):
+        names = [n.lower() for n in names]
+    if re.search(r"(?i)\bunique\b|\bdistinct\b|\bdeduplicat", q) or which == "exports":
+        names = list(dict.fromkeys(names))
+    return names
+
+
+def _gf_noun_names(ctx, noun, q):
+    """Entries a clause's noun phrase ranges over: native import sets, symbol names, section names; None = unknown."""
+    if not _gf_fmt_ok(ctx, noun):
+        return None
+    if re.search(r"(?i)\b(?:jar|zip|archive|central|member|class|method|bytes?|string|resource|entry\s+names?\s+in)\b",
+                 noun):
+        return None
+    which = _gf_native_set(ctx, noun)
+    if which:
+        return _gf_native_names(ctx, which, q) if ctx.fmt in ("elf", "pe", "pe_cli", "macho") else None
+    if any(rx.search(noun) for _, rx in _GF_SET_RX) or re.search(r"(?i)\bimport", noun):
+        return None   # an import-ish noun this grammar does not pin down
+    n = re.sub(r"(?i)\b(?:non-?empty|resolved|ELF|PE|COFF|Mach-O)\b", " ", noun).strip()
+    if re.fullmatch(r"(?i)(?:(?P<k>dynamic)\s+)?symbol(?:-table)?\s+(?:entry\s+)?names?|(?:dynamic\s+)?symbols?", n):
+        kind = "dynamic" if re.search(r"(?i)\bdynamic\b", n) else _gf_symkind(noun)
+        return ctx.symbols(kind)
+    if re.fullmatch(r"(?i)section(?:-header)?\s+names?|sections?", n):
+        secs = ctx.sections()
+        return None if secs is None else [s[0] for s in secs]
+    return None
+
+
+def _gf_cmp(q, n, k):
+    q = re.sub(r"\s+", " ", q.lower())
+    return {"at least": k >= n, "at most": k <= n, "exactly": k == n, "more than": k > n, "fewer than": k < n,
+            "less than": k < n}[q]
+
+
+def _gf_set_clause(ctx, c):
+    """Quantified clause over a named set -> True / False, or None when not understood."""
+    ci = bool(re.search(r"(?i)\bcase-insensitive\b|\bignoring case\b", c))
+    c = re.sub(r"(?i)\s*\(?\s*(?:case-insensitive(?:ly)?|ignoring case)\s*\)?\s*$", "", c).strip()
+    m = re.match(rf"(?i)^{_GF_QUANT}\s+(?P<noun>.+?)(?:\s+(?:are|is)\s+(?:present|listed|recorded|declared)|"
+                 rf"\s+exists?)?$", c)
+    if m and m.group("n") and not re.search(r"(?i)\s(?:contains?|starts?|begins?|ends?|match(?:es)?|equals?|is)\s",
+                                            " " + m.group("noun") + " "):
+        names = _gf_noun_names(ctx, m.group("noun"), ctx.q)
+        if names is None:
+            return None
+        n = m.group("n").lower()
+        return _gf_cmp(m.group("q").rsplit(None, 1)[0], int(_GF_NUMW.get(n, n)), len(names))
+    m = re.match(rf"(?i)^the\s+(?:number|count)\s+of\s+(?P<noun>.+?)\s+is\s+(?P<c>at\s+least|at\s+most|exactly|"
+                 rf"more\s+than|fewer\s+than|less\s+than|greater\s+than|equal\s+to)?\s*(?P<n>\d+)$", c)
+    if m:
+        names = _gf_noun_names(ctx, m.group("noun"), ctx.q)
+        if names is None:
+            return None
+        cq = {"greater than": "more than", "equal to": "exactly"}.get((m.group("c") or "exactly").lower(),
+                                                                       m.group("c") or "exactly")
+        return _gf_cmp(cq, int(m.group("n")), len(names))
+    m = re.match(rf"(?i)^{_GF_QUANT}\s+(?P<noun>.+?)\s+(?P<op>contains?|starts?|begins?|ends?|match(?:es)?|equals?|is)"
+                 r"(?:\s+with)?\s+(?:the\s+)?(?:(?:case-sensitive\s+)?(?:text|substring|prefix|suffix|string|name|"
+                 r"value)\s+)?(?P<lits>.+)$", c)
+    if not m:
+        return None
+    names = _gf_noun_names(ctx, m.group("noun"), ctx.q)
+    raw = m.group("lits").strip()
+    op = m.group("op").lower().rstrip("s")
+    op = {"matche": "match", "equal": "equal"}.get(op, op)
+    if raw.startswith("/") and op == "match":
+        rx = _gf_regex("matches " + raw)
+        lits = [rx] if rx else None
+    elif raw.startswith("/"):   # a path literal ('starts with /usr/lib/'), not a /re/
+        lits = [t.strip("`'\"“”") for t in re.split(r"\s*,\s*(?:or\s+)?|\s+or\s+", raw)]
+        lits = None if any(not t or " " in t for t in lits) else lits
+    else:
+        lits = _gf_literals(raw)
+    if names is None or not lits:
+        return None
+    hit = [any(_gf_test(op, x, lit, ci) for lit in lits) for x in names]
+    q = re.sub(r"\s+", " ", m.group("q").lower())
+    if q in ("any", "a", "an", "some"):
+        return any(hit)
+    if q in ("no", "none of the"):
+        return not any(hit)
+    if q in ("every", "each", "all", "all of the"):
+        return all(hit)
+    n = m.group("n").lower()
+    return _gf_cmp(q.rsplit(None, 1)[0], int(_GF_NUMW.get(n, n)), sum(hit))
+
+
+def _gf_clause_ext(ctx, c):
+    """_gf_clause plus negation ('do not contain'), quantifiers and native import-table sets."""
+    c = c.strip().rstrip(".").strip()
+    neg = re.search(r"(?i)\s(?:do(?:es)?\s+not|don't|doesn't)\s+(contain|start|begin|end|match|equal)\b", c)
+    if neg:
+        verb = neg.group(1).lower()
+        pos = c[:neg.start()] + " " + {"match": "matches"}.get(verb, verb + "s" if "does" in neg.group(0).lower() or
+                                                                 "doesn't" in neg.group(0).lower() else verb) + \
+            c[neg.end():]
+        r = _gf_clause_ext(ctx, pos)
+        return None if r is None else not r
+    r = _gf_clause(ctx, c)
+    if r is not None:
+        return r
+    return _gf_set_clause(ctx, c)
+
+
 def _gf_predicate(ctx):
     m = re.search(r"(?is)\btrue\s+(?:exactly\s+|only\s+|if\s+and\s+only\s+)?(?:when|if)\s+(.+)$", ctx.q)
     if not m:
         return None
     body = m.group(1).strip()
     body = re.split(r"(?<=[^.])\.\s+(?=[A-Z])", body, maxsplit=1)[0].rstrip(".")
+    ors = re.split(rf"(?i),?\s+or\s+(?={_GF_QW}\s)", body)
+    ands = [re.split(rf"(?i),?\s+and\s+(?={_GF_QW}\s)", c) for c in ors]
+    if len(ors) > 1 and any(len(a) > 1 for a in ands):
+        return None   # mixed and / or: precedence not stated, unsure
     res = []
-    for c in re.split(r"(?i),?\s+or\s+(?=(?:any|a|an|the|its|some)\s)", body):
-        if re.search(r"(?i)\band\s+(?:any|a|an|the)\s", c):
-            return None   # conjunctions are not in the grammar yet: unsure
-        r = _gf_clause(ctx, c)
-        if r is None:
-            return None
-        res.append(r)
+    for conj in ands:
+        part = []
+        for c in conj:
+            if len(conj) > 1 and re.search(r"(?i)\bor\s+(?:any|a|an|the)\s", c):
+                return None
+            r = _gf_clause_ext(ctx, c)
+            if r is None:
+                return None
+            part.append(r)
+        res.append(all(part))
     return "true" if any(res) else "false"
 
 
@@ -33582,6 +33747,21 @@ def _gf_count(ctx):
     if re.search(r"(?i)\be_shnum\b|section-header-table\s+entries|\bnumberofsections\b|\bsection\s+count\b", q):
         excl = re.search(r"(?i)\bexcluding\b[^.]*\b(?:index\s+0|null|section\s+0)|\bnon-?null\b|other\s+than\s+the\s+null", q)
         return _gf_s(ctx.section_count(include_null=not excl))
+    nouns = [x for x in re.findall(r"(?i)\b(?:count|number\s+of)\s+(?:the\s+|all\s+|every\s+|each\s+)?([^.;:]{1,80})", q)
+             + re.findall(r"(?i)((?:[\w-]+\s+){1,4})count\b", q) if _gf_native_set(ctx, x)]
+    which = _gf_native_set(ctx, nouns[0]) if nouns else None
+    if which and re.search(r"(?i)\b(?:graph|edges?|nodes?|campaign|config|records?|roles?|members?|load\s+order)\b",
+                           nouns[0]):
+        return None
+    if which:
+        if not _gf_fmt_ok(ctx, q) or ctx.fmt not in ("elf", "pe", "pe_cli", "macho") or \
+                re.search(r"(?i)\b(?:ordinal|forwarded|forwarder|hint|thunk\s+rva|iat\b|delay)", q):
+            return None
+        names = _gf_native_names(ctx, which, q)
+        if names is None:
+            return None
+        rx = _gf_regex(q)
+        return str(sum(1 for n in names if rx.search(n)) if rx else len(names))
     if re.search(r"(?i)\bsymbol", q) and re.search(r"(?i)\bcount\b", q):
         names = ctx.symbols(_gf_symkind(q))
         if names is None:
@@ -34605,3 +34785,2169 @@ _CG_FIELD = re.compile(_CG_ROLE + r"(?:campaign_)?(?:graph_\w+|load_order\w*|thi
                                   r"nodes|campaign_id|roots?\w*|leaf\w*|leaves\w*|first_(?:node|load)|"
                                   r"last_(?:node|load)|graphs?_match\w*|config_\w+)")
 register_generic("campaign-graph-record-facts", _CG_FIELD.pattern, _cg_generic, first=True)
+
+
+# --- import / dependency / export sets (prebuild "backfill-spec-grammar-extensions", D31 backfill #4 guess) ----------
+# Next likely re-asks on every native group: DT_NEEDED / PE import-descriptor DLL / Mach-O dylib counts and name-set
+# sha256, imported-function counts (ELF undefined named .dynsym, @version dropped; PE descriptor-order function names),
+# export counts. Read over native_import_facts (no new parser); the question picks the set when the field name is
+# ambiguous (bare import_count: DLLs vs functions) and may add a /re/ filter, unique, lowercase, order or join rule.
+# Name-set sha256 follows the GM convention (sorted code-unit order, LF-joined, no trailing LF) unless the question
+# says otherwise. wasm import/export counts stay with wasm_fields (_gf_exact_key).
+_GF_IMPEXP = re.compile(
+    r"(?P<set>dt_needed|needed(?:_librar(?:y|ies)|_libs?)?|dependenc(?:y|ies)|(?:shared_|linked_|dynamic_)?librar(?:y|ies)"
+    r"|dylibs?|(?:imported_|import_|delay_import_|delay_load_|delayed_)?(?:dll|module)s?|import(?:ed)?_librar(?:y|ies)"
+    r"|imports?|imported_(?:function|symbol|name|api)s?|import_(?:function|symbol|name|api)s?"
+    r"|exports?|exported_(?:function|symbol|name)s?|export_(?:function|symbol|name)s?)"
+    r"_(?P<op>count|num|total|sha256|names_sha256|(?:sorted_)?(?:set_)?sha256)")
+
+
+def _gf_impexp_set(ctx, key):
+    q, ql = ctx.q, ctx.q.lower()
+    if re.search(r"\bdelay", key) or re.search(r"\bdelay[- ]?load|\bdelay[- ]import", ql):
+        return "delay_import_dlls" if ctx.fmt in ("pe", "pe_cli") else None
+    if key.startswith("export"):
+        return None if re.search(r"\bimport|\bneeded\b|\bundefined\b", ql) else "exports"
+    nd = bool(re.search(r"dt_needed|\bneeded\b|\bdll\s+names?\b|\bdlls?\b|import\s+descriptors?|librar(?:y|ies)|"
+                        r"dependenc|\bdylibs?\b|lc_load_dylib|\bmodules?\b", ql))
+    fn = bool(re.search(r"\bfunctions?\b|\bsymbols?\b|\bapis?\b|\bthunks?\b|\bundefined\b", ql))
+    if re.fullmatch(r"imports?|imported_names?|import_names?", key):   # ambiguous: the question must pick
+        if nd == fn:
+            return None
+        return "needed" if nd else "imports"
+    if re.search(r"function|symbol|api", key):
+        return None if nd and not fn else "imports"
+    return None if fn and not nd and not re.search(r"\bnames?\b", ql) else "needed"
+
+
+def _gf_impexp(ctx, m):
+    """needed / imported-function / export counts and name-set sha256 over the native image's own tables."""
+    import hashlib
+    q, ql = ctx.q, ctx.q.lower()
+    if re.search(r"\bexport", ql) and m.group("set").startswith(("import", "dll", "needed", "dependenc", "librar")) \
+            and not re.search(r"\bimport|\bneeded\b|\bdll|librar|dependenc", ql):
+        return None   # the question talks about something else: unsure
+    if re.search(r"\b(?:ordinal|forwarded|forwarder|hint|thunk\s+rva|iat\b|version(?:ed|s)?\s+(?:need|requirement))", ql):
+        return None   # a sub-table this rule does not model
+    which = _gf_impexp_set(ctx, m.group("set"))
+    if which is None:
+        return None
+    nf = ctx.memo("native_imports", lambda: native_import_facts(ctx.data))
+    if not nf:
+        return None
+    v = nf.get(which)
+    names = [] if v in (None, "none") else list(v)
+    if re.search(r"lower-?case(?:d)?\s+(?:each\s+|every\s+|all\s+|the\s+)?(?:dll|librar|module|import|export|name|"
+                 r"function|symbol|dependenc)|case-?insensitive|ignoring\s+case", ql):
+        names = [n.lower() for n in names]
+    rx = _gf_regex(q)
+    if rx is not None:
+        names = [n for n in names if rx.search(n)]
+    if re.search(r"\bunique\b|\bdistinct\b|\bdeduplicat", ql) or which == "exports":
+        names = list(dict.fromkeys(names))
+    if m.group("op") in ("count", "num", "total"):
+        return str(len(names))
+    srt = re.search(r"\bsort", ql) and not re.search(r"\b(?:do\s+not|don't|without)\s+sort", ql)
+    if srt or not re.search(r"\b(?:table|descriptor|load|import|entry|header|dt_needed|dynamic[- ]section)\s+order\b",
+                            ql):
+        names = sorted(names, key=lambda s: s.encode("utf-16-be"))   # ascending code-unit order
+    sep, tail = _gf_join(q) or ("\n", False)
+    return hashlib.sha256((sep.join(names) + (sep if tail and names else "")).encode()).hexdigest()
+
+
+register_generic("backfill-spec-grammar-extensions", _GF_IMPEXP.pattern, _gf_impexp,
+                 formats=("elf", "pe", "pe_cli", "macho"), first=True)
+
+
+# --- per-role toolchain fingerprints (prebuild "theme-backfill-d18-d28-fields", D27 gcc.elf vs tcc.elf) ---------------
+# D27 attributed two builds of one program to their toolchain: the gcc role carries DWARF (.debug_info, DW_AT_producer
+# "GNU C99 12.2.1 ...") and only DT_GNU_HASH; the tcc role carries stabs (.stab/.stabstr), only the SysV DT_HASH and no
+# producer. A capstone re-ask names these as fields on the old group: debug_format (dwarf | stabs | none; both present
+# -> "both" only when the answer_format offers it), hash_style (gnu | sysv | both | none, read from the PT_DYNAMIC /
+# .dynamic tags DT_GNU_HASH / DT_HASH, a static image -> none), dwarf_producer (first CU DW_AT_producer via
+# provenance_facts; no DWARF -> none). Enum answers are mapped onto the question's own accepted spelling.
+_TC_FIELD = re.compile(r"(?P<k>debug_(?:info_)?format|debug_info_kind|debug_kind|debug_info_type|debug_type|"
+                       r"(?:symbol_|dynamic_|dynsym_)?hash_(?:style|table_style|table_kind|kind|type)|"
+                       r"(?:dwarf_|debug_|dw_at_|cu_)producer|producer)")
+_TC_SPELL = {"dwarf": ("dwarf",), "stabs": ("stabs", "stab"), "none": ("none", "absent", "no_debug", "stripped"),
+             "both": ("both", "dwarf+stabs", "gnu+sysv"), "gnu": ("gnu", "gnu_hash", "dt_gnu_hash"),
+             "sysv": ("sysv", "hash", "dt_hash", "sysv_hash", "elf")}
+
+
+def _tc_enum(ctx, v):
+    acc = ctx.af.get("accepted_values") if (ctx.af.get("kind") or "").lower() == "enum" else None
+    if not acc:
+        return v
+    for a in acc:
+        if str(a).strip().lower().replace("-", "_").replace(" ", "_") in _TC_SPELL.get(v, (v,)):
+            return a
+    return None
+
+
+def _tc_hash_style(ctx):
+    b = ctx.data
+    e = "<" if b[5] == 1 else ">"
+    dyn = ctx.section_bytes(".dynamic")
+    if dyn is None:   # sectionless / renamed: the section names are the only other cue
+        names = {s[0] for s in ctx.sections() or []}
+        if not names:
+            return None
+        g, h = ".gnu.hash" in names, ".hash" in names
+    else:
+        w = 16 if b[4] == 2 else 8
+        g = h = False
+        for o in range(0, len(dyn) - w + 1, w):
+            t = struct.unpack_from(e + ("q" if w == 16 else "i"), dyn, o)[0]
+            if t == 0:
+                break
+            g |= t == 0x6ffffef5
+            h |= t == 4
+    return "both" if g and h else "gnu" if g else "sysv" if h else "none"
+
+
+def _tc_generic(ctx, m):
+    """debug_format / hash_style / dwarf_producer of one ELF role member (D27 toolchain attribution)."""
+    k = m.group("k")
+    if ctx.fmt != "elf":
+        return None
+    if "producer" in k:
+        secs = ctx.sections()
+        if secs is None:
+            return None
+        if not any(nm == ".debug_info" and n > 0 for nm, _, n in secs):
+            return None if any(nm == ".zdebug_info" for nm, _, _ in secs) else "none"
+        out = {}
+        _dwarf_prov(ctx.data, out, max_cus=1, budget=0.05)   # first CU only (provenance_facts' rule)
+        v = out.get("dwarf_producer")
+        return None if v in (None, "none") else v   # DWARF the walker cannot read: unsure
+    if "hash" in k:
+        v = _tc_hash_style(ctx)
+        return None if v is None else _tc_enum(ctx, v)
+    secs = ctx.sections()
+    if secs is None:
+        return None
+    sz = {}
+    for nm, _, n in secs:
+        sz[nm] = sz.get(nm, 0) + n
+    dw = any(sz.get(n, 0) > 0 for n in (".debug_info", ".zdebug_info"))
+    st = sz.get(".stab", 0) > 0
+    v = "both" if dw and st else "dwarf" if dw else "stabs" if st else "none"
+    return _tc_enum(ctx, v)
+
+
+register_generic("theme-backfill-d18-d28-fields", _TC_FIELD.pattern, _tc_generic, formats=("elf",), first=True)
+
+
+# --- optimization-level twins (prebuild "optimization-equivalence-facts", D29 Fraternal Twins) -------------------------
+# D29 shipped ONE program built twice (FreeBASIC d29--sample-O0.elf / -O3.elf, equal size, 12 differing bytes; roles
+# unoptimized_ / optimized_) and asked to "diff the variants, account for every optimization, and prove they're
+# semantically the same program". opt_twin_facts(a, b) answers the pair questions: diff_byte_count (equal-length pairs
+# only; cmp -l semantics), first_diff_offset, diff_sections (section names owning a differing byte, header order),
+# function counts (defined STT_FUNC entries of SHT_SYMTAB = readelf -s FUNC minus UND), funcs_only_in_a/b (inlined away),
+# .text/.rodata size + sha256 equality, same_config (crc-valid HCFG configs equal), same_trace_profile (the embedded
+# huntress.binary.dynamic_trace.v1 JSON records, as a multiset), semantically_equivalent = same config AND same trace
+# profile (None when either side has neither). opt_level_guess(blob): -O flag of the DWARF producer (gcc
+# -grecord-gcc-switches), else None (heuristics are only reported under heuristic=True, never as an answer).
+import hashlib  # noqa: E402
+
+
+def _ot_shdrs(b):
+    """[(name, sh_type, sh_offset, sh_size)] in header order (index 0 included) or None."""
+    try:
+        if bytes(b[:4]) != b"\x7fELF" or b[4] not in (1, 2) or b[5] not in (1, 2):
+            return None
+        e, c64 = "<" if b[5] == 1 else ">", b[4] == 2
+        shoff = struct.unpack_from(e + ("Q" if c64 else "I"), b, 0x28 if c64 else 0x20)[0]
+        shes, shn, shstr = struct.unpack_from(e + "HHH", b, 0x3A if c64 else 0x2E)
+        if not shoff or shes < (64 if c64 else 40) or shoff + shn * shes > len(b):
+            return None
+        fmt = e + ("IIQQQQ" if c64 else "IIIIII")
+        raw = [struct.unpack_from(fmt, b, shoff + k * shes) for k in range(min(shn, 65535))]
+        names = b""
+        if shstr < len(raw):
+            names = bytes(b[raw[shstr][4]:raw[shstr][4] + raw[shstr][5]])
+        out = []
+        for nm, ty, _, _, off, size in raw:
+            z = names.find(b"\0", nm)
+            out.append((names[nm:z if z >= 0 else len(names)].decode("latin-1") if nm < len(names) else "", ty, off,
+                        size))
+        return out
+    except (struct.error, IndexError):
+        return None
+
+
+def _ot_funcs(b, defined=True, nonzero=False):
+    """STT_FUNC entries of SHT_SYMTAB only [(name, value, size)] (stripped -> []); None when not a parsable ELF."""
+    secs = _ot_shdrs(b)
+    if secs is None:
+        return None
+    e, c64 = "<" if b[5] == 1 else ">", b[4] == 2
+    out = []
+    for nm, ty, off, size in secs:
+        if ty != 2:
+            continue
+        link = struct.unpack_from(e + "I", b, struct.unpack_from(e + ("Q" if c64 else "I"), b, 0x28 if c64 else 0x20)[0]
+                                  + secs.index((nm, ty, off, size)) * (64 if c64 else 40) + (40 if c64 else 24))[0]
+        if link >= len(secs) or off + size > len(b):
+            return None
+        so, sn = secs[link][2], secs[link][3]
+        ent = 24 if c64 else 16
+        for k in range(1, min(size // ent, 400_000)):
+            o = off + k * ent
+            if c64:
+                st, info, shndx, val, sz = struct.unpack_from(e + "IBxHQQ", b, o)
+            else:
+                st, val, sz, info, shndx = struct.unpack_from(e + "IIIBxH", b, o)
+            if info & 0xF != 2 or (defined and shndx == 0) or (nonzero and not sz):
+                continue
+            z = b.find(b"\0", so + st, so + sn) if st < sn else -1
+            out.append((bytes(b[so + st:z if z >= 0 else so + sn]).decode("utf-8", "replace") if st < sn else "",
+                        val, sz))
+    return out
+
+
+def _ot_section(b, name):
+    for nm, ty, off, size in _ot_shdrs(b) or []:
+        if nm == name:
+            return b"" if ty == 8 else bytes(b[off:off + size]), size, ty
+    return None
+
+
+_OT_TRACE = re.compile(rb'\{\\?"schema\\?":\\?"huntress\.binary\.dynamic_trace\.v1\\?"[^{}\n]{0,800}\}')
+
+
+def _ot_traces(b):
+    out = []
+    for m in _OT_TRACE.finditer(b):
+        try:
+            out.append(json.dumps(json.loads(m.group(0).replace(b'\\"', b'"').decode("utf-8")), sort_keys=True))
+        except ValueError:
+            continue
+    return sorted(out)
+
+
+def _ot_config(b):
+    try:
+        h = hcfg_find(b)
+    except Exception:  # noqa: BLE001
+        return None
+    return None if h is None else json.dumps(h.config, sort_keys=True)
+
+
+def opt_level_guess(blob, heuristic=False):
+    """'O0'..'O3' / 'Os' / 'Oz' / 'Og' / 'Ofast' from the DWARF producer's last -O flag; None when unrecorded.
+    heuristic=True: else a weak guess from code shape (packed xmm/ymm ops -> 'O3', rbp frames in most functions -> 'O0')."""
+    try:
+        out = {}
+        if _ot_section(blob, ".debug_info"):
+            _dwarf_prov(blob, out, max_cus=8, budget=0.1)
+        ps = " ".join(str(v) for k, v in out.items() if "producer" in k)
+        fl = re.findall(r"(?:^|\s)-O(fast|[0-3sgz]?)(?=\s|$)", ps)
+        if fl:
+            return "O" + (fl[-1] or "1")
+        if not heuristic or not (txt := _ot_section(blob, ".text")):
+            return None
+        code = txt[0][:4 << 20]
+        if re.search(rb"(?:\x66\x0f|\xc5[\xf9\xfd]|\xc4\xe2.)(?:\xfe|\xd4|\xfa|\xfb|\xef|\xdb)", code, re.S):
+            return "O3"
+        fn = _ot_funcs(blob) or []
+        fr = sum(1 for _ in re.finditer(rb"(?:\xf3\x0f\x1e\xfa)?\x55\x48\x89\xe5", code))
+        return "O0" if fn and fr >= 0.8 * len(fn) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def opt_twin_facts(a, b):
+    """Pair facts of two builds of one program (see block comment). None when either is not a parsable ELF."""
+    try:
+        sa, sb = _ot_shdrs(a), _ot_shdrs(b)
+        fa, fb = _ot_funcs(a), _ot_funcs(b)
+        if sa is None or sb is None or fa is None or fb is None:
+            return None
+        n = min(len(a), len(b))
+        first = next((i for i in range(n) if a[i] != b[i]), None) if a[:n] != b[:n] else None
+        if first is None and len(a) != len(b):
+            first = n
+        out = {"func_count_a": len(fa), "func_count_b": len(fb), "first_diff_offset": first,
+               "diff_bytes": None, "diff_sections": None}
+        na, nb = {x[0] for x in fa if x[0]}, {x[0] for x in fb if x[0]}
+        out["funcs_only_in_a"], out["funcs_only_in_b"] = sorted(na - nb), sorted(nb - na)
+        if len(a) == len(b):
+            diffs = [i for i in range(first, n) if a[i] != b[i]] if first is not None else []
+            out["diff_bytes"] = len(diffs)
+            if sa == sb or [(s[0], s[2], s[3]) for s in sa] == [(s[0], s[2], s[3]) for s in sb]:
+                owned, ok = [], True
+                for i in diffs:
+                    hit = next((s[0] for s in sa[1:] if s[1] != 8 and s[2] <= i < s[2] + s[3]), None)
+                    ok &= hit is not None
+                    if hit and hit not in owned:
+                        owned.append(hit)
+                order = [s[0] for s in sa]
+                out["diff_sections"] = sorted(owned, key=order.index) if ok else None
+        for sec in ("text", "rodata"):
+            xa, xb = _ot_section(a, "." + sec), _ot_section(b, "." + sec)
+            out[f"{sec}_size_a"], out[f"{sec}_size_b"] = (xa[1] if xa else None), (xb[1] if xb else None)
+            out[f"{sec}_sha256_equal"] = None if not (xa and xb) else hashlib.sha256(xa[0]).digest() == \
+                hashlib.sha256(xb[0]).digest()
+        ca, cb = _ot_config(a), _ot_config(b)
+        ta, tb = _ot_traces(a), _ot_traces(b)
+        out["same_config"] = None if ca is None or cb is None else ca == cb
+        out["same_trace_profile"] = None if not ta or not tb else ta == tb
+        sc, st = out["same_config"], out["same_trace_profile"]
+        out["semantically_equivalent"] = (False if False in (sc, st) else
+                                          True if sc is True and st is True else None)
+        out["opt_level_a"], out["opt_level_b"] = opt_level_guess(a), opt_level_guess(b)
+        return out
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_OT_FIELD = re.compile(
+    r"(?P<fc>(?:defined_)?func(?:tion)?s?_(?:symbol_)?count)|"
+    r"(?P<sec>text|rodata|data|bss|plt|init|fini)_(?:section_)?(?P<sk>size|sha256)|"
+    r"(?P<ol>opt(?:imi[sz]ation)?_level|o_level)|"
+    r"(?P<db>diff(?:ering)?_byte_count|byte_diff_count|diff_bytes|differing_bytes(?:_count)?|changed_byte_count)|"
+    r"(?P<fd>first_diff(?:ering)?_(?:byte_)?offset|first_difference_offset)|"
+    r"(?P<ds>diff(?:ering)?_sections|changed_sections)|"
+    r"(?P<eq>semantically_equivalent|semantic_equivalence|same_config|config_equal|same_trace_profile|"
+    r"trace_profile_equal|(?:text|rodata)_(?:sha256_equal|identical)|function_counts?_equal)|"
+    r"(?P<only>funcs?|functions)_only_in_(?P<side>a|b|unoptimized|optimized|o0|o3)")
+
+
+def _ot_pair(ctx):
+    """(a, b) = the two ELF members of the group, unoptimized (O0) first when the names tell; else archive order."""
+    els = [(n, x) for n, x in ctx.group if bytes(x[:4]) == b"\x7fELF"]
+    if len(els) != 2:
+        return None
+    if re.search(r"(?i)o0\.[a-z]+$|unopt", els[1][0]) and not re.search(r"(?i)o0\.[a-z]+$|unopt", els[0][0]):
+        els.reverse()
+    return els[0][1], els[1][1]
+
+
+def _ot_enum(ctx, v):
+    acc = ctx.af.get("accepted_values") if (ctx.af.get("kind") or "").lower() == "enum" else None
+    if not acc:
+        return v
+    for x in acc:
+        if str(x).strip().lower().lstrip("-") == v.lower().lstrip("-"):
+            return x
+    return None
+
+
+def _ot_bool(ctx, v):
+    return None if v is None else _ot_enum(ctx, "true" if v else "false")
+
+
+def _ot_num(ctx, v):
+    if v is None:
+        return None
+    return hex(v) if re.search(r"(?i)\b0x\b|0x prefix|hexadecimal", ctx.q) and \
+        (ctx.af.get("kind") or "").lower() != "integer" else str(v)
+
+
+def _ot_generic(ctx, m):
+    """Per-role (function_count, text_size/sha256, opt_level) and pair (diff_byte_count, first_diff_offset,
+    diff_sections, semantically_equivalent, ...) facts of D29-style optimization twins."""
+    if ctx.fmt != "elf":
+        return None
+    q = ctx.q.lower()
+    if m.group("fc"):
+        if "dynsym" in q or "dynamic symbol" in q or "dwarf" in q or "subprogram" in q:
+            return None   # not the .symtab FUNC rule
+        fn = _ot_funcs(ctx.data, defined=not re.search(r"includ\w* (?:undefined|imported)|undefined too", q),
+                       nonzero=bool(re.search(r"non-?zero (?:st_)?size|positive (?:st_)?size", q)))
+        if fn is None:
+            return None
+        if re.search(r"\b(?:distinct|unique) (?:function |symbol )?names?\b", q):
+            return str(len({x[0] for x in fn if x[0]}))
+        return str(len(fn))
+    if m.group("sec"):
+        s = _ot_section(ctx.data, "." + m.group("sec"))
+        if s is None:
+            return None if _ot_shdrs(ctx.data) is None else "none"
+        if m.group("sk") == "size":
+            return _ot_num(ctx, s[1])
+        return None if s[2] == 8 else hashlib.sha256(s[0]).hexdigest()
+    if m.group("ol"):
+        v = opt_level_guess(ctx.data)
+        if v is None:
+            t = re.search(r"(?i)[-_.]O(fast|[0-3sgz])\.[a-z0-9]+$", ctx.member or "")
+            v = "O" + t.group(1) if t and ctx.member else None
+        if v is None:
+            return None
+        return _ot_enum(ctx, ("-" + v) if "-o" in q and not ctx.af.get("accepted_values") else v)
+    pair = _ot_pair(ctx)
+    if pair is None:
+        return None
+    facts = ctx.memo(("opt_twin", len(pair[0]), len(pair[1]), hashlib.sha256(pair[0][:4096] + pair[1][:4096])
+                      .hexdigest()), lambda: opt_twin_facts(*pair))
+    if not facts:
+        return None
+    if m.group("db"):
+        return _ot_num(ctx, facts["diff_bytes"])
+    if m.group("fd"):
+        return _ot_num(ctx, facts["first_diff_offset"]) if facts["first_diff_offset"] is not None else "none"
+    if m.group("ds"):
+        return None if facts["diff_sections"] is None else json.dumps(facts["diff_sections"], separators=(",", ":"))
+    if m.group("only"):
+        side = "b" if m.group("side") in ("b", "optimized", "o3") else "a"
+        return json.dumps(facts["funcs_only_in_" + side], separators=(",", ":"))
+    k = m.group("eq")
+    if k.startswith("semantic"):
+        return _ot_bool(ctx, facts["semantically_equivalent"])
+    if k in ("same_config", "config_equal"):
+        return _ot_bool(ctx, facts["same_config"])
+    if "trace" in k:
+        return _ot_bool(ctx, facts["same_trace_profile"])
+    if k.startswith("function"):
+        return _ot_bool(ctx, facts["func_count_a"] == facts["func_count_b"])
+    return _ot_bool(ctx, facts[k.split("_")[0] + "_sha256_equal"])
+
+
+register_generic("optimization-equivalence-facts", _OT_FIELD.pattern, _ot_generic, formats=("elf",), first=True)
+
+
+# --- behaviour profiles from embedded trace records (prebuild "behavior-profile-from-trace-templates", D28) -----------
+# Most members since D2 embed `huntress.binary.dynamic_trace.v1` TEMPLATES ("%s"/"%d" holes, split fragments); D28
+# members embed complete JSON RECORDS, 4 each in rodata (family-a/-b: failure/1, success/57, decoy/40, failure/35; the
+# false friend: failure/1, decoy/12, decoy/10, failure/8 under the SAME family `odin_family_cluster_trace`, campaign
+# FF28-000 vs BR28-000). trace_records(blob): every record that json.loads, in file order (Latin-1 bytes, UTF-16LE text
+# such as a .NET #US heap or -fshort-wchar literals, and jar class constant pools in entry order); templates are skipped.
+# behavior_profile(blob) = tuple of (branch, event_count) in file order; two members behave alike iff equal profiles.
+_BP_SCHEMA = b"huntress.binary.dynamic_trace.v1"
+_BP_REC = re.compile(r'\{\s*\\?"schema\\?"\s*:\s*\\?"huntress\.binary\.dynamic_trace\.v1\\?"[^{}\x00\n]{0,800}\}')
+
+
+def _bp_scan_text(s, base, out):
+    for m in _BP_REC.finditer(s):
+        t = m.group(0)
+        try:
+            r = json.loads(t)
+        except ValueError:
+            try:
+                r = json.loads(t.replace('\\"', '"'))
+            except ValueError:
+                continue
+        if isinstance(r, dict) and r.get("schema") == _BP_SCHEMA.decode():
+            out.append((base + m.start(), r))
+
+
+def _bp_scan(b, out, base=0):
+    """Records of one byte buffer: Latin-1 hits and UTF-16LE hits, (offset, record) appended."""
+    i = b.find(_BP_SCHEMA)
+    while i >= 0:   # Latin-1: look back for the opening brace, parse forward
+        lo = b.rfind(b"{", max(0, i - 24), i)
+        if lo >= 0:
+            _bp_scan_text(bytes(b[lo:i + 1024]).decode("latin-1").split("\n")[0], base + lo, out)
+        i = b.find(_BP_SCHEMA, i + len(_BP_SCHEMA))
+    w = _BP_SCHEMA.decode().encode("utf-16le")
+    i = b.find(w)
+    while i >= 0:
+        for par in (0, 1):   # keep the UTF-16 code-unit alignment of the hit
+            lo = b.rfind("{".encode("utf-16le"), max(0, i - 48), i)
+            if lo >= 0 and (i - lo) % 2 == 0:
+                _bp_scan_text(bytes(b[lo:i + 2048]).decode("utf-16le", "replace").split("\n")[0], base + lo, out)
+                break
+        i = b.find(w, i + len(w))
+
+
+def trace_records(blob):
+    """Complete `huntress.binary.dynamic_trace.v1` JSON records (dicts) in file order; [] when none; None if unusable."""
+    try:
+        b = blob if isinstance(blob, (bytes, bytearray)) else bytes(blob)
+        out = []
+        if b[:2] == b"PK":
+            try:   # application classes only (bundled kotlin/scala/... libraries skipped: bounded on a 5 MB jar)
+                zipfile.ZipFile(io.BytesIO(bytes(b)))
+                for k, (_, c) in enumerate(jar_app_classes(bytes(b))[:4096]):
+                    _bp_scan(c, out, (k + 1) << 32)
+            except Exception:  # noqa: BLE001 -- not a readable zip: scan the raw bytes
+                out = []
+                _bp_scan(b, out)
+        else:
+            _bp_scan(b, out)
+        seen, res = set(), []
+        for off, r in sorted(out, key=lambda x: x[0]):
+            if off not in seen:
+                seen.add(off)
+                res.append(r)
+        return res
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def behavior_profile(blob):
+    """Tuple of (branch, event_count) per trace record in file order; () when the member embeds no record."""
+    recs = trace_records(blob)
+    if recs is None:
+        return None
+    return tuple((r.get("branch"), r.get("event_count")) for r in recs)
+
+
+_BP_BRANCHES = ("success", "failure", "decoy")
+_BP_FIELD = re.compile(
+    r"(?:(?P<role>[a-z0-9_]+?)_)??(?:"
+    r"(?P<rc>(?:dynamic_)?trace_(?:record_)?count|trace_records_count|behavior_record_count|event_record_count)|"
+    r"(?P<ec>(?:(?P<agg>total|sum|max|min|first|last)_)?(?:(?P<br>success|failure|decoy)_)?"
+    r"(?:branch_)?event_count(?P<pl>s)?(?:_(?P<agg2>total|sum|max|min|first|last))?)|"
+    r"(?P<lit>(?:trace|behavior)_(?P<key>family|effects|campaign|network))|"
+    r"(?P<cm>cluster_marker_positive|cluster_marker)|"
+    r"(?P<prof>behavior_profile|trace_profile|branch_sequence|trace_branches_ordered)|"
+    r"(?P<same>same_behavior_as_(?P<other>[a-z0-9_]+)|same_behavior(?:_profile)?)|"
+    r"(?P<cl>behavior_cluster|cluster|cluster_label|behavior_class)|"
+    r"(?P<cc>behavior_cluster_count|cluster_count|distinct_behavior_profiles?(?:_count)?)|"
+    r"(?P<cs>behavior_cluster_size|cluster_size|same_behavior_count))")
+
+
+def _bp_role_norm(s):
+    return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+
+def _bp_find(ctx, role):
+    """Bytes of the group member whose basename ends with `role` (family_a -> *family-a.elf); None when no match."""
+    r = _bp_role_norm(role)
+    for n, b in ctx.group:
+        base = _bp_role_norm(re.sub(r"\.[A-Za-z0-9]+$", "", n.rsplit("/", 1)[-1]))
+        if base == r or base.endswith("_" + r):
+            return b
+    return None
+
+
+def _bp_recs(ctx, b):
+    return ctx.memo(("bp_recs", len(b), hashlib.sha256(bytes(b[:4096]) + bytes(b[-4096:])).hexdigest()),
+                    lambda: trace_records(b))
+
+
+def _bp_bool(ctx, v):
+    acc = ctx.af.get("accepted_values")
+    s = "true" if v else "false"
+    if acc:
+        return next((x for x in acc if str(x).lower() == s), None)
+    return s
+
+
+def _bp_generic(ctx, m):
+    """Per-member trace facts (record count, per-branch event_count, family/effects/campaign, cluster marker) and
+    group behaviour clustering (same_behavior_as_<role>, family / false_friend / stranger) over trace records."""
+    q = ctx.q.lower()
+    role = m.group("role")
+    data = ctx.data
+    if role and ctx.group:
+        hit = _bp_find(ctx, role)
+        if hit is None and not m.group("same"):
+            return None
+        data = hit if hit is not None else data
+    recs = _bp_recs(ctx, data)
+    if not recs:
+        return None
+    if m.group("rc"):
+        return str(len(recs))
+    if m.group("ec"):
+        br = m.group("br") or next((x for x in _BP_BRANCHES if re.search(r"\b%s\b" % x, q)), None) \
+            if not m.group("pl") else m.group("br")
+        sel = [r.get("event_count") for r in recs if br is None or r.get("branch") == br]
+        if not sel or not all(isinstance(x, int) and not isinstance(x, bool) for x in sel):
+            return None
+        if m.group("pl"):
+            return json.dumps(sel, separators=(",", ":"))
+        agg = m.group("agg") or m.group("agg2") or next(
+            (a for a, w in (("sum", r"\b(?:sum|total|add)\b"), ("max", r"\b(?:max(?:imum)?|largest|highest)\b"),
+                            ("min", r"\b(?:min(?:imum)?|smallest|lowest)\b"), ("first", r"\bfirst\b"),
+                            ("last", r"\blast|final\b")) if re.search(w, q)), None)
+        if agg in ("sum", "total"):
+            return str(sum(sel))
+        if agg in ("max", "min"):
+            return str(max(sel) if agg == "max" else min(sel))
+        if agg in ("first", "last"):
+            return str(sel[0] if agg == "first" else sel[-1])
+        return str(sel[0]) if len(sel) == 1 else None
+    if m.group("lit"):
+        vals = {r.get(m.group("key")) for r in recs}
+        v = vals.pop() if len(vals) == 1 else None
+        return v if isinstance(v, str) and v else None
+    if m.group("cm"):
+        vals = [r["cluster_marker_positive"] for r in recs if "cluster_marker_positive" in r]
+        if not vals or not all(isinstance(x, bool) for x in vals) or len(set(vals)) != 1:
+            return None
+        return _bp_bool(ctx, vals[0])
+    prof = tuple((r.get("branch"), r.get("event_count")) for r in recs)
+    if m.group("prof"):
+        if (ctx.af.get("kind") or "").lower() != "json":
+            return None
+        return json.dumps([list(p) for p in prof], separators=(",", ":"))
+    if not ctx.group:
+        return None
+    profs = []
+    for n, b in ctx.group:
+        rr = _bp_recs(ctx, b) or []
+        if rr:
+            profs.append((n, tuple((r.get("branch"), r.get("event_count")) for r in rr),
+                          {r.get("family") for r in rr}))
+    if m.group("same"):
+        other = m.group("other") or next((g for g in re.findall(r"\b(?:as|to|with) (?:the )?([a-z0-9_-]+)", q)
+                                          if _bp_find(ctx, g) is not None), None)
+        ob = _bp_find(ctx, other) if other else None
+        orr = _bp_recs(ctx, ob) if ob is not None else None
+        if not orr:
+            return None
+        return _bp_bool(ctx, prof == tuple((r.get("branch"), r.get("event_count")) for r in orr))
+    if m.group("cc"):
+        return str(len({p for _, p, _ in profs})) if profs else None
+    if m.group("cs"):
+        return str(sum(1 for _, p, _ in profs if p == prof))
+    # cluster label: the family = the profile most group members share; same family name, other profile = false
+    # friend; no shared family name = stranger. Only for an enum naming these roles (else unsure).
+    acc = ctx.af.get("accepted_values") or []
+    if len(profs) < 3:
+        return None
+    cnt = {}
+    for _, p, _ in profs:
+        cnt[p] = cnt.get(p, 0) + 1
+    top = sorted(cnt.values(), reverse=True)
+    if len(top) > 1 and top[0] == top[1]:
+        return None
+    major = max(cnt, key=cnt.get)
+    fam = set().union(*(f for _, p, f in profs if p == major))
+    mine = {r.get("family") for r in recs}
+    lab = "family" if prof == major else "false_friend" if mine & fam else "stranger"
+    for x in acc:
+        xs = _bp_role_norm(str(x))
+        if xs == lab or (lab == "family" and xs in ("family_member", "related", "same_family", "cluster_member"))\
+                or (lab == "false_friend" and xs in ("false_friend", "lookalike", "look_alike", "impostor")) \
+                or (lab == "stranger" and xs in ("stranger", "unrelated", "outsider")):
+            return x
+    return None
+
+
+register_generic("behavior-profile-from-trace-templates", _BP_FIELD.pattern, _bp_generic, first=True)
+
+
+# --- toolchain attribution verdicts (prebuild "toolchain-attribution-verdicts", D27/D28 "name the toolchain") ---------
+# One ELF member -> compiler (gcc | clang | tcc | zig | rustc), compiler_version, linker (bfd | gold | lld | mold | tcc),
+# libc (glibc | musl | bionic | uclibc), linkage (static | dynamic), pie (true | false), dwarf_version (2-5 | none).
+# Evidence, strongest first: the first-CU DW_AT_producer ("GNU C99 12.2.1 ..." / "clang version 18.1.3 ..."), the
+# .comment banners (a "GCC: (...)" banner next to a clang / rustc one comes from the libc crt objects -> the other one
+# wins; clang built by zig-bootstrap -> zig only when the enum offers it), .stab with neither DWARF nor a banner -> tcc
+# (tcc also links itself). Linker: .note.gnu.gold-version -> gold, "Linker: LLD" -> lld, "mold" banner -> mold; GNU ld
+# leaves no mark, so bfd only for an attributed gcc/clang image. libc: PT_INTERP / DT_NEEDED (ld-musl / libc.musl ->
+# musl, ld-linux / libc.so.6 -> glibc, /system/bin/linker -> bionic), static images by their embedded banner. Unsure
+# (stripped banner, no DWARF, non-ELF) -> None; enum answers are mapped onto the question's own accepted spelling.
+_TA_FIELD = re.compile(r"(?:(?!is_|has_|uses_)[a-z0-9]+_){0,2}?(?P<k>(?:c_)?compiler(?:_family|_name|_vendor|_id|_kind)?|compiler_version|(?:c_)?compiler_ver|"
+                       r"linker(?:_family|_name|_kind|_id)?|static_linker|libc(?:_family|_name|_kind|_impl|_flavou?r)?|"
+                       r"c_library|c_runtime_library|linkage(?:_kind|_type)?|link_(?:type|kind|mode)|static_or_dynamic|"
+                       r"linking(?:_mode|_type)?|pie(?:_enabled)?|is_pie_executable|position_independent(?:_executable)?|"
+                       r"dwarf_version|debug_info_version)$")
+_TA_SPELL = {"gcc": ("gcc", "gnu", "gnu_gcc", "gnu_cc"), "clang": ("clang", "llvm", "llvm_clang"),
+             "tcc": ("tcc", "tinycc", "tiny_c_compiler"), "zig": ("zig", "zig_cc"), "rustc": ("rustc", "rust"),
+             "bfd": ("bfd", "ld.bfd", "gnu_ld", "ld", "gnu_bfd", "binutils_ld"), "gold": ("gold", "ld.gold", "gnu_gold"),
+             "lld": ("lld", "ld.lld", "llvm_lld"), "mold": ("mold",), "glibc": ("glibc", "gnu_libc", "gnu"),
+             "musl": ("musl", "musl_libc"), "bionic": ("bionic",), "uclibc": ("uclibc", "uclibc_ng"),
+             "static": ("static", "statically_linked", "static_linked"),
+             "dynamic": ("dynamic", "dynamically_linked", "dynamic_linked", "shared"),
+             "true": ("true", "yes", "pie"), "false": ("false", "no", "non_pie", "no_pie"),
+             "none": ("none", "absent", "no_debug", "stripped")}
+
+
+def _ta_enum(ctx, v):
+    acc = ctx.af.get("accepted_values") if (ctx.af.get("kind") or "").lower() == "enum" else None
+    if not acc:
+        return v
+    for a in acc:
+        if str(a).strip().lower().replace("-", "_").replace(" ", "_") in _TA_SPELL.get(v, (v,)):
+            return a
+    return None
+
+
+def _ta_facts(ctx):
+    """{compiler, compiler_version, linker, libc, linkage, pie, dwarf_version, zig} of one ELF (values None = unsure)."""
+    b = ctx.data
+    secs = ctx.sections()
+    if secs is None:
+        return None
+    names = {}
+    for nm, _, n in secs:
+        names[nm] = names.get(nm, 0) + n
+    out = dict.fromkeys(("compiler", "compiler_version", "linker", "libc", "linkage", "pie", "dwarf_version"))
+    out["zig"] = False
+    com = (ctx.section_bytes(".comment") or b"")[:4096].decode("latin-1")
+    banners = [s for s in com.split("\0") if s.strip()]
+    gcc_v = clang_v = None
+    for s in banners:
+        mm = re.match(r"GCC: \(.*?\) (\d+\.\d+(?:\.\d+)?)", s)
+        if mm and gcc_v is None:
+            gcc_v = mm.group(1)
+        mm = re.search(r"(?:^|\s)clang version (\d+\.\d+(?:\.\d+)?)", s)
+        if mm and not s.startswith("Linker:") and clang_v is None:
+            clang_v = mm.group(1)
+            out["zig"] |= "ziglang" in s
+    rust = any(s.startswith("rustc version") for s in banners)
+    # DWARF producer of the first CU + the CU header version
+    dw = names.get(".debug_info", 0) > 0
+    prod = None
+    if dw:
+        info = ctx.section_bytes(".debug_info") or b""
+        if len(info) >= 6:
+            e = "<" if b[5] == 1 else ">"
+            off = 12 if struct.unpack_from(e + "I", info, 0)[0] == 0xffffffff else 4
+            ver = struct.unpack_from(e + "H", info, off)[0] if len(info) >= off + 2 else 0
+            out["dwarf_version"] = str(ver) if 2 <= ver <= 5 else None
+        p = {}
+        _dwarf_prov(b, p, max_cus=1, budget=0.05)
+        prod = p.get("dwarf_producer")
+        prod = None if prod in (None, "none") else prod
+    elif names.get(".zdebug_info", 0) <= 0:
+        out["dwarf_version"] = "none"
+    if prod and not rust:   # a Rust image's DWARF starts with its C crt CUs
+        mm = re.match(r"GNU (?:C|C\+\+|Objective-C)[0-9+]* (\d+\.\d+(?:\.\d+)?)", prod)   # not "GNU AS 2.x"
+        mc = re.search(r"clang version (\d+\.\d+(?:\.\d+)?)", prod)
+        if mc:
+            out["compiler"], out["compiler_version"] = "clang", mc.group(1)
+            out["zig"] |= "ziglang" in prod
+        elif mm:
+            out["compiler"], out["compiler_version"] = "gcc", mm.group(1)
+    if out["compiler"] is None:
+        if rust:
+            out["compiler"] = "rustc"
+        elif clang_v:
+            out["compiler"], out["compiler_version"] = "clang", clang_v
+        elif gcc_v:
+            out["compiler"], out["compiler_version"] = "gcc", gcc_v
+        elif names.get(".stab", 0) > 0 and not dw and not banners:
+            out["compiler"] = "tcc"
+    if out["compiler"] == "clang" and not out["zig"]:   # zig cc: its compiler_rt / bundled-libc paths
+        out["zig"] = b"zig_probe_stack" in b or b"/lib/zig/libc/" in b or b"/ziglang/lib/libc/" in b
+    # linker
+    lk = [s for s in banners if s.startswith("Linker:")]
+    if ".note.gnu.gold-version" in names:
+        out["linker"] = "gold"
+    elif any("LLD" in s for s in lk):
+        out["linker"] = "lld"
+    elif any(re.search(r"(?:^|\W)mold \d", s) for s in banners):
+        out["linker"] = "mold"
+    elif out["compiler"] == "tcc":
+        out["linker"] = "tcc"
+    elif rust:
+        pass   # rustc drives the system cc: no linker verdict
+    elif out["compiler"] in ("gcc", "clang") and not out["zig"] and not lk:
+        out["linker"] = "bfd"
+    # libc / linkage / pie from the header facts
+    hf = ctx.memo("ta_hdr", lambda: elf_header_facts(b, hcfg=False)) or {}
+    interp = str(hf.get("interpreter") or "")
+    needed = [str(x) for x in hf.get("needed") or []]
+    if hf.get("is_static") in ("true", "false"):
+        out["linkage"] = "static" if hf["is_static"] == "true" else "dynamic"
+    if hf.get("is_pie") in ("true", "false"):
+        out["pie"] = hf["is_pie"]
+    cue = " ".join([interp] + needed)
+    if "ld-musl" in cue or "libc.musl" in cue:
+        out["libc"] = "musl"
+    elif "/system/bin/linker" in cue:
+        out["libc"] = "bionic"
+    elif "ld-uClibc" in cue:
+        out["libc"] = "uclibc"
+    elif re.search(r"ld-linux|ld64\.so|libc\.so\.6", cue):
+        out["libc"] = "glibc"
+    elif out["linkage"] == "static":
+        g = b"GNU C Library" in b or b"GLIBC_PRIVATE" in b or b"Fatal glibc error" in b
+        m = b"\0__init_libc\0" in b or b"\0__libc_start_init\0" in b   # musl-only crt/start symbols
+        out["libc"] = "glibc" if g and not m else "musl" if m and not g else None
+    return out
+
+
+def _ta_generic(ctx, m):
+    """Toolchain attribution verdict of one ELF member (compiler / version / linker / libc / linkage / pie / dwarf)."""
+    if ctx.fmt != "elf":
+        return None
+    f = ctx.memo("ta_facts", lambda: _ta_facts(ctx))
+    if not f:
+        return None
+    k = m.group("k")
+    if "version" in k or k.endswith("_ver"):
+        v = f["dwarf_version"] if ("dwarf" in k or "debug" in k) else f["compiler_version"]
+        if v and v != "none" and "dwarf" in k and re.search(r"\bdwarf ?[2-5]\b", ctx.q, re.I):
+            v = "dwarf" + v   # "dwarf4"-style spelling when the question uses it
+        return v
+    if "compiler" in k:
+        v = f["compiler"]
+        if v == "clang" and f["zig"]:
+            acc = [str(a).lower() for a in (ctx.af.get("accepted_values") or [])]
+            if "zig" in acc:
+                v = "zig"
+        if v == "rustc" and (ctx.af.get("kind") or "").lower() != "enum":
+            return None   # a C-compiler question over a Rust image: leave it to the worker
+    elif "linker" in k:
+        v = f["linker"]
+    elif "libc" in k or "c_library" in k or "c_runtime" in k:
+        v = f["libc"]
+    elif "pie" in k or "position" in k:
+        v = f["pie"]
+    else:
+        v = f["linkage"]
+    return None if v is None else _ta_enum(ctx, v)
+
+
+register_generic("toolchain-attribution-verdicts", _TA_FIELD.pattern, _ta_generic, formats=("elf",), first=True)
+
+
+# --- symbol-addressed function-body facts (prebuild target "gf-func-body") -------------------------------------------
+# D1 family and its generalisation: "find the <sym> FUNC symbol ... disassemble its bytes" (JSON array, capstone Intel,
+# DECIMAL immediates, execution order up to the first ret: GM D30 ["mov eax, 34847","ret"]), "decode that symbol's exact
+# bytes as mov eax, imm32 followed by ret" (unsigned base-10), <sym>_size (st_size) / <sym>_address (st_value). ELF
+# SHT_SYMTAB only: a stripped ELF (no .symtab) or no such FUNC -> "none" / [] (GM D30 d01 sets 5-7, 10). Symbol bytes:
+# st_value -> file offset through the symbol's own section (ET_REL: section-relative). Bodies with branches / calls /
+# memory operands, or a recover_code body that is not (endbr / frame) mov eax, imm; ret -> None (left to the worker).
+_FB_FIELD = re.compile(r"(?:(?P<sym>[a-z_][\w.$]*?)_)?(?P<what>disassembly|disasm|instructions|recover_code|return_value|"
+                       r"return_constant|size|address|addr|vaddr|offset|file_offset)")
+_FB_QSYM = (re.compile(r"(?:FUNC|function) symbol named [`'\"]?([A-Za-z_.$][\w.$@]*)"),
+            re.compile(r"\b(?:find|locate|disassemble|decode) (?:the )?[`'\"]?([A-Za-z_.$][\w.$@]*)[`'\"]? (?:FUNC|function)"
+                       r" symbol"),
+            re.compile(r"\b[`'\"]?([A-Za-z_.$][\w.$@]*?)[`'\"]?'s (?:exact )?bytes"))
+_FB_FRAME = {"endbr64", "endbr32", "nop", "push rbp", "push ebp", "mov rbp, rsp", "mov ebp, esp", "pop rbp", "pop ebp"}
+
+
+def elf_func_symbol(data, name):
+    """(st_value, st_size, file offset or None, e_machine, elfclass 32/64) of the first SHT_SYMTAB FUNC symbol `name`
+    (defined, section-relative offset resolved through its section); "none" without .symtab / such a FUNC; None when
+    not an ELF / malformed."""
+    try:
+        if bytes(data[:4]) != b"\x7fELF" or data[4] not in (1, 2) or data[5] not in (1, 2):
+            return None
+        b64, e = data[4] == 2, "<" if data[5] == 1 else ">"
+        etype, mach = struct.unpack_from(e + "HH", data, 16)
+        shoff = struct.unpack_from(e + ("Q" if b64 else "I"), data, 40 if b64 else 32)[0]
+        shes, shn = struct.unpack_from(e + "HH", data, 58 if b64 else 46)
+        sh = (e + "4xI8xQQQI") if b64 else (e + "4xI4xIIII")   # type, addr, offset, size, link
+        if not shoff or not shn or shes < (64 if b64 else 40) or shoff + shn * shes > len(data):
+            return None
+        secs = [struct.unpack_from(sh, data, shoff + k * shes) for k in range(min(shn, 65535))]
+        want = name.encode()
+        for ty, _, off, size, link in secs:
+            if ty != 2 or not 0 <= link < len(secs):
+                continue
+            so, sn = secs[link][2], secs[link][3]
+            strt = bytes(data[so:so + sn])
+            hits, i = set(), strt.find(b"\0" + want + b"\0")
+            while i >= 0:
+                hits.add(i + 1)
+                i = strt.find(b"\0" + want + b"\0", i + 1)
+            if not hits:
+                continue
+            ent = 24 if b64 else 16
+            raw = bytes(data[off:off + size // ent * ent])
+            for t in struct.iter_unpack((e + "IBxHQQ") if b64 else (e + "IIIBxH"), raw):
+                nm, val, sz, info, shndx = (t[0], t[3], t[4], t[1], t[2]) if b64 else (t[0], t[1], t[2], t[3], t[4])
+                if nm not in hits or info & 0xF != 2 or not shndx or shndx >= 0xff00:
+                    continue
+                if shndx >= len(secs):
+                    return val, sz, None, mach, 64 if b64 else 32
+                sty, saddr, soff, ssz, _ = secs[shndx]
+                rel = val if etype == 1 else val - saddr
+                fo = soff + rel if sty != 8 and 0 <= rel <= ssz and soff + rel <= len(data) else None
+                return val, sz, fo, mach, 64 if b64 else 32
+        return "none"
+    except _PARSE_ERR:
+        return None
+
+
+def _fb_disasm(data, sym):
+    """[(mnemonic, op_str with decimal immediates)] of an x86 / x86-64 FUNC body up to and including the first ret;
+    None when unsupported (other arch, no bytes, no ret within st_size, branches / calls / memory operands)."""
+    if not isinstance(sym, tuple) or sym[2] is None or sym[3] not in (3, 62):
+        return None
+    import capstone
+    val, sz, fo, mach, bits = sym
+    code = bytes(data[fo:fo + (sz if 0 < sz <= 65536 else 4096)])
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64 if mach == 62 else capstone.CS_MODE_32)
+    out, n = [], 0
+    for ins in md.disasm(code, val):
+        n += ins.size
+        mn, ops = ins.mnemonic, ins.op_str
+        if "[" in ops or mn.startswith(("j", "call", "loop")) or mn in ("int", "syscall", "sysenter", "hlt", "ud2"):
+            return None
+        out.append((mn, re.sub(r"\b0x[0-9a-f]+\b", lambda m: str(int(m.group(0), 16)), ops)))
+        if mn in ("ret", "retf"):
+            return out
+    return None
+
+
+def _fb_generic(ctx, m):
+    what = m.group("what")
+    sym = None
+    for rx in _FB_QSYM:
+        hit = rx.search(ctx.q)
+        if hit and hit.group(1).lower() not in ("the", "its", "that", "this", "symbol", "function"):
+            sym = hit.group(1)
+            break
+    from_q = sym is not None
+    if sym is None:
+        sym = m.group("sym") or ("recover_code" if what == "recover_code" else None)
+    if sym is None and what in ("disassembly", "disasm", "instructions") and (
+            re.match(r"(?i)d0?1(?:\D|$)", ctx.member or "") or re.search(r"(?i)\bday 1\b|recover_code", ctx.q)):
+        sym = "recover_code"   # the D1 family's designated symbol (vague "exact analysis disassembly value" wording)
+    if sym is None:
+        return None
+    asked = from_q or re.search(r"(?i)\bsymbol\b|\bfunction\b|\bFUNC\b", ctx.q)
+    if what in ("size", "address", "addr", "vaddr", "offset", "file_offset") and not asked:
+        return None   # overlay_size / section offsets ... belong to other families
+    s = ctx.memo(("fb_sym", sym), lambda: elf_func_symbol(ctx.data, sym))
+    if s is None or (s == "none" and not asked and sym != "recover_code"):
+        return None
+    lst = what in ("disassembly", "disasm", "instructions")
+    if s == "none":
+        return "[]" if lst else "none"
+    val, sz, fo, mach, bits = s
+    if what == "size":
+        return str(sz)
+    if what in ("address", "addr", "vaddr"):
+        syn = (ctx.af.get("syntax") or "").lower()
+        dec = ctx.af.get("kind") == "integer" or re.search(r"base-10|\bdecimal\b", syn)
+        return str(val) if dec and "0x" not in syn and "hex" not in syn else hex(val)
+    if what in ("offset", "file_offset"):
+        if fo is None:
+            return None
+        syn = (ctx.af.get("syntax") or "").lower()
+        return hex(fo) if "0x" in syn or "hex" in syn else str(fo)
+    body = ctx.memo(("fb_dis", sym), lambda: _fb_disasm(ctx.data, s))
+    if not body:
+        return None
+    if lst:
+        return _gf_s([f"{mn} {ops}".strip() for mn, ops in body])
+    core = [(mn, ops) for mn, ops in body if f"{mn} {ops}".strip() not in _FB_FRAME]
+    if len(core) == 2 and core[0][0] == "mov" and core[1][0] == "ret" and re.fullmatch(r"eax, \d+", core[0][1]):
+        return core[0][1].split(", ")[1]
+    return None
+
+
+register_generic("gf-func-body", _FB_FIELD.pattern, _fb_generic, formats=("elf",))
+
+
+# --- PE conventions the GM has not confirmed yet (prebuild target "gf-pe-conventions") --------------------------------
+# The DEFAULT PE readings stay where they are (GenericCtx / pe_header_facts / coff_symbol_names): section names with
+# "/N" long names resolved through the COFF string table (objdump -h), section bytes = min(VirtualSize, SizeOfRawData)
+# from PointerToRawData, symbol count = nonempty primary COFF records (aux skipped; GM D28 d02 vtable_symbol), section
+# count = NumberOfSections (GM D28 d10 TT). This rule answers ONLY when the question spells out the OTHER convention:
+#   raw names   "raw / unresolved / 8-byte Name field / as stored / without resolving" -> '/4' kept (raw pefile Name)
+#   raw extent  "SizeOfRawData" / "raw data" / "file-aligned" in a byte-scan count -> PointerToRawData..+SizeOfRawData
+#               (past EOF -> None, never a short count); "VirtualSize" alone -> min(VirtualSize, SizeOfRawData)
+#   raw records "NumberOfSymbols" / "auxiliary records included / counted" -> the COFF header's NumberOfSymbols
+_PEC_RAWNAME = re.compile(r"(?i)\braw\b[^.]*\bnames?\b|\bnames?\b[^.]*\b(?:unresolved|as\s+stored|verbatim)\b|"
+                          r"\b(?:without|do\s+not|don't|not)\s+resolv|\b8-byte\s+name\b|\bname\s+fields?\b")
+_PEC_RAWEXT = re.compile(r"(?i)\bsizeofrawdata\b|\braw[- ]data\b|\bfile[- ]aligned\b|\braw\s+(?:size|extent)\b")
+_PEC_AUX = re.compile(r"(?i)\bnumberofsymbols\b|\baux(?:iliary)?\s+(?:symbol\s+)?records?\b[^.]*\b(?:includ|count)|"
+                      r"\bincluding\b[^.]*\baux(?:iliary)?\b")
+_PEC_AUXSKIP = re.compile(r"(?i)\b(?:skip|skipping|exclud|excluding|ignor|without)\w*\b[^.]*\baux")
+
+
+def _pec_hdr(b):
+    pe = int.from_bytes(b[0x3c:0x40], "little")
+    return pe if bytes(b[:2]) == b"MZ" and bytes(b[pe:pe + 4]) == b"PE\0\0" else None
+
+
+def _pec_generic(ctx, m):
+    b, q, f = ctx.data, ctx.q, ctx.field
+    pe = _pec_hdr(b)
+    if pe is None:
+        return None
+    if re.search(r"(?i)\bsection\s+names?\b", q) or "section_names" in f:
+        neg = re.search(r"(?i)\b(?:without|do\s+not|don't|not|never)\s+(?:\w+\s+)?resolv", q)
+        if not neg and (re.search(r"(?i)\bresolv", q) or not _PEC_RAWNAME.search(q)):
+            return None   # the default (resolved, objdump) reading belongs to the built-in rules
+        lay = _pe_layout(b)
+        if not lay or len(lay[1]) != int.from_bytes(b[pe + 6:pe + 8], "little"):
+            return None
+        names = [s[0] for s in lay[1]]
+        if f.endswith("sha256") or re.search(r"(?i)sha-?256", q):
+            sub = GenericCtx.__new__(GenericCtx)
+            sub.__dict__.update(ctx.__dict__)
+            sub._m, sub.q = {"secs": [(n, 0, 0) for n in names]}, q.rstrip() + " (section names)"
+            return _gf_sha(sub)   # same sort / join grammar as the resolved set, over the raw names
+        if re.search(r"(?i)\bcount\b", q) or f.endswith("count"):
+            return None
+        return _gf_s(names)
+    mc = re.search(r"(?i)\bin\s+the\s+(?:PE\s+)?(\.?[\w$.]+)\s+(?:section\s+)?bytes,\s+count\s+(?:every|each|all)"
+                   r"\s+(.+?)(?:;|$)", q)
+    if mc and _PEC_RAWEXT.search(q) and not re.search(r"(?i)\bvirtual\s*size\b", q):   # VirtualSize: the default
+        pats = _gf_byte_patterns(mc.group(2))
+        lay = _pe_layout(b)
+        if not pats or not lay:
+            return None
+        names = (pe_header_facts(b) or {}).get("section_names") or []
+        for nm, s in zip(names, lay[1]):
+            if nm == mc.group(1):
+                if s[3] + s[4] > len(b):
+                    return None
+                tx = b[s[3]:s[3] + s[4]]
+                return str(sum(len(p.findall(tx)) for p in pats))
+        return None
+    if re.search(r"(?i)\bsymbol", q) and (re.search(r"(?i)\bcount\b", q) or f.endswith("count")) and \
+            _PEC_AUX.search(q) and not _PEC_AUXSKIP.search(q):
+        ptr, n = struct.unpack_from("<II", b, pe + 12)
+        if ptr and n and ptr + 18 * n > len(b):
+            return None
+        return str(n if ptr else 0)
+    return None
+
+
+register_generic("gf-pe-conventions", r"[a-z0-9_]*(?:section|text|symbol|byte|opcode|count|names|sha256)[a-z0-9_]*",
+                 _pec_generic, formats=("pe", "pe_cli"), first=True)
+
+
+# --- gf-dotnet-counts (prebuild): .NET (pe_cli) metadata counts / name sets / kind + #US predicates ------------------
+# Field family (pe_cli members only; d03/d22/d23 C# / F# / VB.NET assemblies): <kind>_count, <kind>_names_sha256 /
+# <kind>s_sha256, has_<kind>_type, has_<name>_type|class|method|field, has_user_strings, has_<x>_user_string,
+# user_string_count / user_strings_sha256, assembly_ref / typeref / memberref / namespace counts. Decisions (dnfile
+# rows, cross-checked against System.Reflection.Metadata in tests/data/binary_fixtures/generic/dnc_src):
+#   typedef_count / type_count   EVERY TypeDef row, <Module> (row 1), nested and compiler-generated types included (the
+#                                raw ECMA table, like ELF e_shnum counting index 0); class_count = the same minus <Module>
+#                                (ECMA "class" covers interfaces / value types / enums / delegates too); a question cue
+#                                ("excluding <Module>" / "nested" / "compiler-generated", "top-level", "user-defined",
+#                                "including <Module>", "TypeDef rows", /re/ on the name) overrides either default.
+#   compiler-generated type      [CompilerGenerated] on the TypeDef, OR a name / namespace starting '<' (<>c, <Gen>d__4,
+#                                <PrivateImplementationDetails>, F# <StartupCode$..>), OR nested (transitively) in one
+#                                (__StaticArrayInitTypeSize=N); <Module> is never counted as compiler-generated.
+#   kinds                        interface = tdInterface; enum = extends System.Enum; struct/value_type = extends
+#                                System.ValueType; delegate = extends System.MulticastDelegate; attribute / exception =
+#                                DIRECT base System.Attribute / System.Exception; generic = name carries '`'; nested =
+#                                NestedClass row; static = abstract+sealed class.
+#   methods / fields             every MethodDef / Field row; "excluding constructors" drops .ctor/.cctor; compiler-
+#                                generated member = name with '<' or owner type compiler-generated.
+#   user strings                 #US entries in heap order, empty entries skipped (dotnet_meta_facts user_strings).
+#   name sets                    simple Name unless the question says namespace-qualified / full name (Namespace.Name,
+#                                nested rows keep their empty namespace); sorted (code-unit), LF-joined, no trailing LF
+#                                unless the question says otherwise. has_<name>_type/method/field only ever says "true"
+#                                from the field name (absence of an unnamed thing is None); an explicit /re/ or quoted
+#                                literal in the question answers both ways.
+def _dnc_facts(b):
+    import dnfile
+    pe = dnfile.dnPE(data=bytes(b), fast_load=False)
+    t = pe.net.mdtables if pe.net is not None else None
+    if t is None:
+        return None
+    rows = lambda tab: list(getattr(t, tab, None) or ())   # noqa: E731
+    s = lambda x: "" if x is None else str(x)   # noqa: E731
+    tds, mds, fds = rows("TypeDef"), rows("MethodDef"), rows("Field")
+    types = []
+    for i, r in enumerate(tds):
+        base = ""
+        if getattr(r.struct, "Extends_CodedIndex", 0) and r.Extends is not None and r.Extends.row is not None:
+            er = r.Extends.row
+            ns = s(getattr(er, "TypeNamespace", ""))
+            base = (ns + "." if ns else "") + s(getattr(er, "TypeName", ""))
+        fl = int(getattr(r.struct, "Flags", 0) or 0)
+        types.append({"ns": s(r.TypeNamespace), "name": s(r.TypeName), "flags": fl, "base": base, "module": i == 0,
+                      "methods": [x.row_index for x in (r.MethodList or ())],
+                      "fields": [x.row_index for x in (r.FieldList or ())], "enc": None, "cga": False})
+    for n in rows("NestedClass"):
+        ni, ei = n.NestedClass.row_index, n.EnclosingClass.row_index
+        if 0 < ni <= len(types):
+            types[ni - 1]["enc"] = ei
+    for ca in rows("CustomAttribute"):
+        par, ty = ca.Parent, ca.Type
+        if not par or not ty or getattr(par.table, "name", "") != "TypeDef" or not 0 < par.row_index <= len(types):
+            continue
+        cls = getattr(ty.row, "Class", None) if getattr(ty.table, "name", "") == "MemberRef" else None
+        if cls is not None and s(getattr(cls.row, "TypeName", "")) == "CompilerGeneratedAttribute":
+            types[par.row_index - 1]["cga"] = True
+
+    def cg(i, depth=0):
+        x = types[i]
+        if x["module"]:
+            return False
+        if x["cga"] or x["name"].startswith("<") or x["ns"].startswith("<"):
+            return True
+        e = x["enc"]
+        return bool(e and depth < 64 and 0 < e <= len(types) and e - 1 != i and cg(e - 1, depth + 1))
+    for i, x in enumerate(types):
+        x["cg"] = cg(i)
+    mown, fown = {}, {}
+    for i, x in enumerate(types):
+        for k in x["methods"]:
+            mown[k] = i
+        for k in x["fields"]:
+            fown[k] = i
+    meths = [(s(r.Name), mown.get(k + 1)) for k, r in enumerate(mds)]
+    flds = [(s(r.Name), fown.get(k + 1)) for k, r in enumerate(fds)]
+    us = json.loads((dotnet_meta_facts(b) or {}).get("user_strings") or "null")
+    return {"types": types, "methods": meths, "fields": flds, "us": us,
+            "refs": {"assembly_ref": len(rows("AssemblyRef")), "typeref": len(rows("TypeRef")),
+                     "memberref": len(rows("MemberRef")), "module_ref": len(rows("ModuleRef"))}}
+
+
+_DNC_NEG = r"(?:exclud\w*|except(?:\s+for)?|other\s+than|without|not\s+count\w*|omit\w*|ignor\w*|skip\w*|minus|drop\w*)"
+_DNC_KINDS = ("interface", "enum", "struct", "value_type", "valuetype", "delegate", "attribute", "exception", "generic",
+              "nested", "nested_type", "compiler_generated", "static", "abstract", "sealed", "top_level", "user")
+_DNC_FIELD = re.compile(
+    r"(?:(?P<kind>typedef|type_def|type|class|interface|enum|struct|value_type|delegate|attribute|exception|generic"
+    r"|nested|nested_type|nested_class|top_level|top_level_type|top_level_class|user|user_type|user_defined_type|"
+    r"compiler_generated|compiler_generated_type|compiler_generated_class|method|methoddef|method_def|field|fielddef|"
+    r"user_string|us_string|us|assembly_ref|typeref|type_ref|memberref|member_ref|module_ref|namespace)s?"
+    r"(?:_type|_class)?s?(?P<what>_count|_names?_sha256|_sha256|_set_sha256))"
+    r"|has_(?P<hx>\w+?)_(?P<hk>type|class|method|field|user_string|us_string|string_literal)s?|has_user_strings?")
+
+
+def _dnc_cue(q, word):
+    return re.search(rf"(?i){_DNC_NEG}[^.;]{{0,60}}?{word}", q) is not None
+
+
+def _dnc_kind_test(x, kind):
+    k = kind.replace("valuetype", "value_type")
+    if k == "interface":
+        return bool(x["flags"] & 0x20)
+    if k == "enum":
+        return x["base"] == "System.Enum"
+    if k in ("struct", "value_type"):
+        return x["base"] == "System.ValueType"
+    if k == "delegate":
+        return x["base"] == "System.MulticastDelegate"
+    if k in ("attribute", "exception"):
+        return x["base"] == "System." + k.capitalize()
+    if k == "generic":
+        return "`" in x["name"]
+    if k in ("nested", "nested_type", "nested_class"):
+        return x["enc"] is not None
+    if k.startswith("compiler_generated"):
+        return x["cg"]
+    if k == "static":
+        return x["flags"] & 0x180 == 0x180 and not x["flags"] & 0x20
+    if k == "abstract":
+        return bool(x["flags"] & 0x80) and not x["flags"] & 0x20
+    if k == "sealed":
+        return bool(x["flags"] & 0x100)
+    if k.startswith("top_level"):
+        return x["enc"] is None and not x["module"]
+    if k.startswith("user"):
+        return not x["cg"] and not x["module"]
+    return None
+
+
+def _dnc_types(f, q, kind):
+    """TypeDef rows the field / question select (list of type dicts), None when not understood."""
+    ts = list(f["types"])
+    incl_mod = re.search(r"(?i)\binclud\w*[^.;]{0,40}?<Module>|<Module>[^.;]{0,30}\binclud", q)
+    rows_cue = re.search(r"(?i)\bTypeDef\s+(?:table\s+)?rows?\b|\bTypeDef\s+table\b|\bevery\s+TypeDef\b", q)
+    if kind in ("typedef", "type_def", "type"):
+        drop_mod = _dnc_cue(q, "<Module>") or re.search(r"(?i)\bmodule\s+(?:pseudo-?)?type\b[^.;]{0,30}\bexclud", q)
+    else:
+        test = None if kind == "class" else kind
+        if test is not None:
+            ts = [x for x in ts if _dnc_kind_test(x, test)]
+        drop_mod = not (incl_mod or (kind == "class" and rows_cue and not _dnc_cue(q, "<Module>")))
+    if drop_mod and not incl_mod:
+        ts = [x for x in ts if not x["module"]]
+    if _dnc_cue(q, "nested") or re.search(r"(?i)\btop-?level\b", q):
+        ts = [x for x in ts if x["enc"] is None]
+    if _dnc_cue(q, r"compiler[- ]generated") or re.search(r"(?i)\buser-?(?:defined|declared)\b|\bsource-?declared",
+                                                            q):
+        ts = [x for x in ts if not x["cg"]]
+    if _dnc_cue(q, "interfaces?"):
+        ts = [x for x in ts if not x["flags"] & 0x20]
+    if re.search(r"(?i)\bnested\s+types?\s+only\b|\bonly\s+nested\b", q):
+        ts = [x for x in ts if x["enc"] is not None]
+    return ts
+
+
+def _dnc_full(x, q):
+    return (x["ns"] + "." if x["ns"] else "") + x["name"] if re.search(
+        r"(?i)namespace-?qualified|\bfull(?:y\s+qualified)?\s+(?:type\s+)?names?|\bNamespace\.Name\b|\bqualified\s+names?",
+        q) else x["name"]
+
+
+def _dnc_members(f, q, which):
+    xs = f["methods"] if which == "method" else f["fields"]
+    if _dnc_cue(q, r"(?:constructors?|\.ctor|\.cctor|initializers?)"):
+        xs = [m for m in xs if m[0] not in (".ctor", ".cctor")]
+    if _dnc_cue(q, r"compiler[- ]generated") or re.search(r"(?i)\buser-?(?:defined|declared)\b|\bsource-?declared",
+                                                            q):
+        ts = f["types"]
+        xs = [m for m in xs if "<" not in m[0] and not (m[1] is not None and ts[m[1]]["cg"])]
+    if _dnc_cue(q, "<Module>"):
+        xs = [m for m in xs if m[1] != 0]
+    return [m[0] for m in xs]
+
+
+def _dnc_sha(names, q):
+    import hashlib
+    if re.search(r"(?i)\bunique\b|\bdistinct\b|\bdeduplicat", q):
+        names = list(dict.fromkeys(names))
+    keep = re.search(r"(?i)\b(?:table|row|metadata|heap|declaration|definition)\s+order\b|\b(?:do\s+not|don't|without)\s+"
+                     r"sort", q)
+    if not keep:
+        names = sorted(names, key=lambda s: s.encode("utf-16-be"))
+    sep, tail = _gf_join(q) or ("\n", False)
+    return hashlib.sha256((sep.join(names) + (sep if tail and names else "")).encode()).hexdigest()
+
+
+def _dnc_generic(ctx, m):
+    q = ctx.q or ""
+    if re.search(r"(?i)\b(?:ELF|Mach-O|JAR|classfile|wasm|COFF\s+symbol|section)\b", q):
+        return None   # another family's spec sentence
+    f = ctx.memo("dncnt", lambda: _dnc_facts(ctx.data))
+    if not f:
+        return None
+    rx = _gf_regex(q)
+    if m.group("kind"):
+        kind, what = m.group("kind"), m.group("what")
+        if kind in ("assembly_ref", "typeref", "type_ref", "memberref", "member_ref", "module_ref"):
+            k = kind.replace("type_ref", "typeref").replace("member_ref", "memberref")
+            return str(f["refs"][k]) if what == "_count" and rx is None else None
+        if kind in ("user_string", "us_string", "us"):
+            us = f["us"]
+            if us is None:
+                return None
+            us = [u for u in us if rx is None or rx.search(u)]
+            if what == "_count":
+                return str(len(dict.fromkeys(us)) if re.search(r"(?i)\bunique\b|\bdistinct\b", q) else len(us))
+            return _dnc_sha(us, q)
+        if kind in ("method", "methoddef", "method_def", "field", "fielddef"):
+            names = [n for n in _dnc_members(f, q, kind[:5] if kind.startswith("field") else "method")
+                     if rx is None or rx.search(n)]
+            return str(len(names)) if what == "_count" else _dnc_sha(names, q)
+        if kind == "namespace":
+            nss = list(dict.fromkeys(x["ns"] for x in _dnc_types(f, q, "user") if x["ns"]))
+            return str(len(nss)) if what == "_count" else _dnc_sha(nss, q)
+        kind = {"type_def": "typedef", "user_type": "user", "user_defined_type": "user", "nested_type": "nested",
+                "nested_class": "nested", "top_level_type": "top_level", "top_level_class": "top_level",
+                "compiler_generated_type": "compiler_generated",
+                "compiler_generated_class": "compiler_generated"}.get(kind, kind)
+        ts = _dnc_types(f, q, kind)
+        if ts is None:
+            return None
+        names = [_dnc_full(x, q) for x in ts]
+        names = [n for n in names if rx is None or rx.search(n)]
+        return str(len(names)) if what == "_count" else _dnc_sha(names, q)
+    lits = None
+    lm = re.search(r"(?i)\b(?:contains?|equals?|named|is|matches)\s+((?:[`'\"“][^`'\"”]+[`'\"”](?:\s*,?\s*(?:or\s+)?)?)+)",
+                   q)
+    if lm:
+        lits = [x for x in (_gf_literals(lm.group(1)) or []) if isinstance(x, str)] or None
+    ci = re.search(r"(?i)case-?insensitiv|ignoring\s+case", q) is not None
+    if m.group("hk") is None or m.group("hk") in ("user_string", "us_string", "string_literal"):
+        us = f["us"]
+        if us is None:
+            return None
+        if m.group("hx") is None:   # has_user_strings: any nonempty #US entry
+            return _gf_s(bool(us))
+        if rx is not None:
+            return _gf_s(any(rx.search(u) for u in us))
+        if lits:
+            return _gf_s(any((l.lower() in u.lower()) if ci else (l in u) for u in us for l in lits))
+        w = m.group("hx").replace("_", "").lower()
+        return "true" if any(w in re.sub(r"[^0-9a-z]", "", u.lower()) for u in us) else None
+    hx, hk = m.group("hx"), m.group("hk")
+    if hk in ("type", "class") and hx.replace("_type", "").replace("_class", "") in _DNC_KINDS:
+        kind = hx.replace("_type", "").replace("_class", "")
+        return _gf_s(any(_dnc_kind_test(x, kind) for x in f["types"]))
+    if hk in ("type", "class"):
+        pool = [_dnc_full(x, q) for x in f["types"] if not x["module"]]
+    else:
+        pool = [n for n, _ in (f["methods"] if hk == "method" else f["fields"])]
+    if rx is not None:
+        return _gf_s(any(rx.search(n) for n in pool))
+    if lits:
+        return _gf_s(any((n.lower() == l.lower()) if ci else (n == l) for n in pool for l in lits))
+    w = hx.replace("_", "").lower()
+    return "true" if any(re.sub(r"[^0-9a-z]", "", n.lower().rsplit(".", 1)[-1]) == w for n in pool) else None
+
+
+register_generic("gf-dotnet-counts", _DNC_FIELD.pattern, _dnc_generic, formats=("pe_cli",), first=True)
+
+
+# gf-runtime-markers: has_<lang>_runtime "true" cues the name rules miss, each proven on the whole D28 corpus (true on
+# every member of its own family, absent from all others). zig: std panic texts -- the d10 PE twin has no .comment and
+# no "ziglang" bytes; v: V's C backend (d27 gcc + tcc builds: builtin___v_malloc in .strtab, _vinit / _vcleanup).
+# A miss returns None so lang_facts / _GF_RUNTIME still decide "false"; a GM spec sentence in the question wins.
+_GF_RT_MARKERS = {   # one marker each keeps the miss path ~17 ms on a 67 MB member
+    "zig": ((b"attempt to unwrap error",), ()),
+    "v": ((b"builtin___v_malloc",), ("_vinit", "_vcleanup")),
+}
+_GF_RT_MARKERS["vlang"] = _GF_RT_MARKERS["v"]
+
+
+def _gf_rt_markers(ctx, m):
+    try:
+        if re.search(r"(?i)\btrue\s+(?:exactly\s+|only\s+|if\s+and\s+only\s+)?(?:when|if)\b", ctx.q or ""):
+            return None
+        byts, pre = _GF_RT_MARKERS[m.group(1)]
+        if any(x in ctx.data for x in byts):
+            return "true"
+        return "true" if pre and any(n.startswith(pre) for n in (ctx.symbols() or [])) else None
+    except Exception:   # noqa: BLE001 -- unsure: leave it to the name rules / the day's worker
+        return None
+
+
+register_generic("gf-runtime-markers", r"has_(zig|vlang|v)_runtime", _gf_rt_markers,
+                 formats=("elf", "pe", "macho"), first=True)
+
+
+# gf-macho: Mach-O structure counts, question-aware (thin / fat / MH_OBJECT). Slice: the arch the field or question
+# names (arm64 / x86_64 / i386, "first|second|last slice", "slice N"), else the FIRST slice ("all|every slice" sums);
+# a named arch the file lacks -> None. segment_count = LC_SEGMENT(_64) load commands (__PAGEZERO / __LINKEDIT
+# included unless the question excludes them; an MH_OBJECT has ONE unnamed segment), load_command_count = ncmds,
+# section_count = sum of nsects (<seg>_section_count / "in the __TEXT segment" = sections whose segname matches),
+# symbol_count = nonempty LC_SYMTAB names with N_STAB entries IN (the existing convention) unless the question says
+# otherwise (excluding stabs / debug -> n_type & 0xe0 == 0; nsyms / every nlist entry -> raw nsyms), stab /
+# external / undefined / defined / local variants, has_<x>_section ("SEG,__x" in the question pins the segment;
+# no slice named -> any slice), slice_count / is_fat. Oracles: llvm-otool -l / -f, llvm-nm -a / -g / -u / -U, macholib.
+_MO_ARCH = (("arm64", 0x0100000c, r"arm64e?|aarch64"), ("x86_64", 0x01000007, r"x86[_-]64|amd64|x64"),
+            ("i386", 7, r"i[36]86"), ("arm", 12, r"armv7s?|arm32"))
+_MO_FIELD = re.compile(r"(?P<fixed>slice_count|fat_arch_count|nfat_arch|arch_count|architecture_count|is_fat|"
+                       r"is_universal|fat|universal|lc_segment_count|segment_command_count)|"
+                       r"(?:(?P<arch>arm64|aarch64|x86_64|x64|amd64|i386)_)?(?:(?:fat_)?slice_|macho_|mach_o_)?"
+                       r"(?:(?P<seg>\w+?)_)?(?P<kind>section_count|nsects|segment_count|load_command_count|ncmds|"
+                       r"symbol_count|nsyms|nlist_count)|has_(?P<sect>\w+?)_section")
+_MO_SYMKIND = {"stab": "stab", "stabs": "stab", "debug": "stab", "n_stab": "stab", "external": "ext",
+               "extern": "ext", "global": "ext", "exported": "def_ext", "undefined": "undef", "imported": "undef",
+               "defined": "def", "local": "local", "nonstab": "nostab", "non_stab": "nostab", "non_debug": "nostab"}
+
+
+def _mo_cmds(data, s):
+    """[(cmd, offset, size)] of one _macho_thin slice's load commands (bounded by ncmds / sizeofcmds)."""
+    base, end = s["slice_offset"], s["endian"]
+    u32 = lambda o: int.from_bytes(data[o:o + 4], end)   # noqa: E731
+    ncmds, p = u32(base + 16), base + (32 if s["bits"] == 64 else 28)
+    stop, out = min(len(data), p + u32(base + 20)), []
+    for _ in range(min(ncmds, 4096)):
+        if p + 8 > stop:
+            break
+        cmd, size = u32(p), u32(p + 4)
+        if size < 8:
+            break
+        out.append((cmd, p, size))
+        p += size
+    return ncmds, out
+
+
+def _mo_nlist(data, s, cmds):
+    """[(name, n_type)] of the slice's LC_SYMTAB in table order (empty names kept); None without LC_SYMTAB."""
+    base, end = s["slice_offset"], s["endian"]
+    u32 = lambda o: int.from_bytes(data[o:o + 4], end)   # noqa: E731
+    for cmd, p, _ in cmds:
+        if cmd == 0x2:
+            symoff, nsyms, stroff, strsize = (u32(p + 8 + 4 * k) for k in range(4))
+            ent = 16 if s["bits"] == 64 else 12
+            if nsyms > (1 << 21) or base + symoff + nsyms * ent > len(data):
+                return None
+            strt, out = bytes(data[base + stroff:base + stroff + strsize]), []
+            for k in range(nsyms):
+                o = base + symoff + k * ent
+                nx = u32(o)
+                z = strt.find(b"\0", nx) if 0 < nx < len(strt) else -1
+                nm = strt[nx:z if z >= 0 else len(strt)].decode("utf-8", "replace") if 0 < nx < len(strt) else ""
+                out.append((nm, data[o + 4]))
+            return out
+    return None
+
+
+def _mo_slices(lay, arch, q):
+    """Slices the question / field selects: [slice] or every slice ("all"/"every"/"each" slice); None = unsure."""
+    sl = lay["slices"]
+    if re.search(r"(?i)\b(?:all|every|each|both)\s+(?:of\s+the\s+)?(?:fat\s+)?(?:slices|architectures|archs)\b|"
+                 r"\bacross\s+(?:all\s+)?(?:the\s+)?(?:fat\s+)?(?:slices|architectures)\b", q):
+        return sl
+    want = None
+    names = [arch] if arch else []
+    names += re.findall(r"(?i)\b(arm64e?|aarch64|x86[_-]64|amd64|i[36]86|armv7s?)\b(?:\s+|-)(?:slice|arch|"
+                        r"architecture|fat_arch|image|build|binary)", q)
+    names += re.findall(r"(?i)\b(?:slice|arch|architecture)\s+(?:for\s+|of\s+)?[\"'`(]?(arm64e?|aarch64|x86[_-]64|"
+                        r"amd64|i[36]86|armv7s?)\b", q)
+    if names:
+        cpus = {next((c for _, c, rx in _MO_ARCH if re.fullmatch(rx, n, re.I)), None) for n in names}
+        if len(cpus) != 1 or None in cpus:
+            return None
+        cpu = cpus.pop()
+        want = [s for s in sl if int(s["cputype"], 16) == cpu]
+        return want[:1] or None
+    m = re.search(r"(?i)\b(first|second|third|last)\s+(?:fat\s+)?(?:slice|fat_arch|architecture)\b|"
+                  r"\bslice\s+(?:index\s+)?#?(\d)\b", q)
+    if m:
+        k = {"first": 0, "second": 1, "third": 2, "last": len(sl) - 1}.get((m.group(1) or "").lower(),
+                                                                          int(m.group(2) or 0))
+        return [sl[k]] if 0 <= k < len(sl) else None
+    return sl[:1]
+
+
+def _gf_macho(ctx, m):
+    try:
+        q, d = ctx.q or "", ctx.data
+        if re.search(r"(?i)/[^/\s][^/]*/|\b(?:matching|containing|contains|starts?\s+with|ends?\s+with|prefix|suffix|"
+                     r"sha-?256|bytes?)\b", q):
+            return None   # a spec sentence: the predicate / count / sha grammar owns it
+        lay = ctx.memo("mo_lay", lambda: macho_layout(d))
+        if not lay:
+            return None
+        kind, seg = m.group("fixed") or m.group("kind"), (m.group("seg") or "").lower()
+        if kind in ("slice_count", "fat_arch_count", "nfat_arch", "arch_count", "architecture_count"):
+            if seg:
+                return None
+            if not lay["fat"]:
+                return None if re.search(r"(?i)fat_arch|nfat", q + kind) else "1"
+            return str(int.from_bytes(d[4:8], "big"))
+        if kind in ("is_fat", "is_universal", "fat", "universal"):
+            return None if seg else ("true" if lay["fat"] else "false")
+        slices = _mo_slices(lay, m.group("arch"), q)
+        if not slices:
+            return None
+        if m.group("sect") is not None:
+            x = m.group("sect").lower()
+            if m.group("arch") is None and len(slices) == 1 and slices[0] is lay["slices"][0] and not \
+                    re.search(r"(?i)\b(?:first|slice)\b|\barm64|\bx86|\baarch64", q):
+                slices = lay["slices"]   # no slice named: any slice (macho_layout's has_hcfg_section convention)
+            pin = re.search(r"\b(__[A-Z_]+)\s*,\s*(__?\w{1,16})\b", q)
+            want_seg, want_sec = (pin.group(1), pin.group(2)) if pin else (None, None)
+            if pin and want_sec.lstrip("_").lower() != x.lstrip("_"):
+                return None   # the question pins a different section than the field names
+            for s in slices:
+                for c in s["sections"]:
+                    nm = c["section"]
+                    if (nm == want_sec if pin else nm.lower() in ("__" + x, x, "." + x)) and \
+                            (want_seg is None or c["segment"] == want_seg):
+                        return "true"
+            return "false"
+        if kind in ("section_count", "nsects"):
+            m2 = re.search(r"\b(?:in|of|within|under)\s+(?:the\s+)?[`'\"]?(__[A-Z_]+)[`'\"]?\s+segment\b", q)
+            segname = m2.group(1) if m2 else ("__" + seg.upper() if seg else None)
+            if seg and m2 and m2.group(1) != "__" + seg.upper():
+                return None
+            return str(sum(1 for s in slices for c in s["sections"] if segname is None or c["segment"] == segname))
+        if seg and kind not in ("symbol_count", "nlist_count"):
+            return None
+        tot = 0
+        for s in slices:
+            ncmds, cmds = _mo_cmds(d, s)
+            if kind in ("load_command_count", "ncmds"):
+                tot += ncmds
+            elif kind in ("segment_count", "lc_segment_count", "segment_command_count"):
+                segs = [bytes(d[p + 8:p + 24]).split(b"\0")[0].decode("latin-1") for c, p, _ in cmds if c in (1, 0x19)]
+                for nm in ("__PAGEZERO", "__LINKEDIT"):
+                    if re.search(r"(?i)\b(?:excluding|except|without|not\s+counting|other\s+than|ignoring)\b[^.]{0,40}"
+                                 + nm, q):
+                        segs = [x for x in segs if x != nm]
+                if re.search(r"(?i)\b(?:with|having|that\s+(?:have|contain))\s+(?:at\s+least\s+one\s+|any\s+)?"
+                             r"sections?\b|nonzero\s+nsects|nsects\s*>\s*0", q):
+                    return None   # a sections-bearing subset: not this rule's reading
+                tot += len(segs)
+            else:   # symbol counts
+                syms = _mo_nlist(d, s, cmds)
+                if syms is None:
+                    return None if any(c == 0x2 for c, _, _ in cmds) else "0"
+                k = _MO_SYMKIND.get(seg, "all" if not seg else None)
+                if k is None:
+                    return None
+                ql = q.lower()
+                if k == "all" and re.search(r"exclud\w*\s+(?:the\s+)?(?:n_stab|stabs?|debug)|non-?(?:stab|debug)|"
+                                            r"without\s+(?:the\s+)?(?:n_stab|stabs?|debug)|not\s+n_stab", ql):
+                    k = "nostab"
+                raw = kind == "nsyms" or bool(re.search(r"\bnsyms\b|including\s+(?:the\s+)?(?:empty|unnamed)|"
+                                                        r"every\s+nlist|all\s+nlist|raw\s+nlist", ql))
+                raw = raw or k == "stab"   # stabs are entries (N_FUN / N_SO end markers have empty names)
+                if raw and re.search(r"nonempty|non-empty|named", ql):
+                    raw = False
+                keep = {"all": lambda t: True, "stab": lambda t: t & 0xe0, "nostab": lambda t: not t & 0xe0,
+                        "ext": lambda t: not t & 0xe0 and t & 1,
+                        "undef": lambda t: not t & 0xe0 and (t & 0x0e) == 0,
+                        "def": lambda t: not t & 0xe0 and (t & 0x0e) != 0,
+                        "def_ext": lambda t: not t & 0xe0 and t & 1 and (t & 0x0e) != 0,
+                        "local": lambda t: not t & 0xe0 and not t & 1}[k]
+                tot += sum(1 for nm, t in syms if keep(t) and (raw or nm))
+        return str(tot)
+    except Exception:   # noqa: BLE001 -- untrusted bytes: unsure, leave it to the built-ins / the day's worker
+        return None
+
+
+register_generic("gf-macho", _MO_FIELD.pattern, _gf_macho, formats=("macho",), first=True)
+
+
+# --- family cluster similarity facts (prebuild "family-cluster-similarity-facts", D28 look-alike trio generalised) ----
+# member_similarity([(name, bytes)]) -> {(na, nb): {diff_bytes, first_diff, same_sections, text_sha256_equal,
+# text_norm_equal, func_hash_overlap, func_hash_ratio, string_jaccard}} for every pair in group order. diff_bytes /
+# first_diff: positionwise over the common prefix (+ the size delta when sizes differ, `cmp -l | wc -l` + tail);
+# same_sections: section names (header order) whose bytes are identical in both (NOBITS skipped); functions = .eh_frame
+# FDE pc ranges (pyelftools CFI, works on stripped ELFs), each hashed as sha256 of capstone mnemonic + operand kinds
+# (r / i / m: immediates, displacements and rip-relative targets masked; every FDE in an executable section, PLT stubs
+# included, unless the question says "in .text"); strings = `strings -a -n 4` runs (printable
+# ASCII + TAB). cluster_members(members, rule): rule "text" (equal .text sha256) | "text_norm" (equal normalised .text) |
+# "hcfg" (equal HCFG config JSON) | "trace" (equal behaviour profile) | "bytes:N" (diff_bytes <= N, single linkage) |
+# "jaccard:X" / "func:X" (>= X, single linkage) -> [[names...], ...] in first-member order. cluster_rule(q) reads it from
+# the question. Fields: <a>_<b>_<metric> (roles by basename suffix), family_members, false_friend, strangers,
+# cluster_count / clusters (rule named in the question; behaviour/trace wording stays with the trace-profile rule).
+def _ms_strings(b, n=4):
+    return {m.group(0) for m in re.finditer(rb"[\t\x20-\x7e]{%d,}" % n, bytes(b))}
+
+
+def _ms_text_tokens(code, addr):
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_64
+    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    out = []
+    for _, _, mn, ops in md.disasm_lite(bytes(code), addr):
+        kinds = []
+        for o in ops.split(", ") if ops else []:
+            kinds.append("m" if "[" in o else "i" if re.fullmatch(r"-?(?:0x[0-9a-f]+|\d+)", o) else "r")
+        out.append(mn + " " + ",".join(kinds))
+    return out
+
+
+def _ms_member(b):
+    """Per-member views: sections {name: (sha256 | None for NOBITS)}, text sha256, normalised text hash, FDE function
+    hashes (multiset as sorted list), string set. None when not a parsable x86-64 ELF."""
+    secs = _ot_shdrs(b)
+    if secs is None:
+        return None
+    out = {"size": len(b), "secs": [(nm, None if ty == 8 else hashlib.sha256(bytes(b[off:off + sz])).hexdigest())
+                                    for nm, ty, off, sz in secs[1:]]}
+    t = _ot_section(b, ".text")
+    out["text_sha"] = hashlib.sha256(t[0]).hexdigest() if t else None
+    out["text_norm"] = out["funcs"] = out["text_funcs"] = None
+    if t and b[4] == 2 and struct.unpack_from("<H", b, 18)[0] == 62 and len(t[0]) <= (8 << 20):
+        from elftools.elf.elffile import ELFFile
+        ef = ELFFile(io.BytesIO(bytes(b)))
+        ts = ef.get_section_by_name(".text")
+        ta, to = ts["sh_addr"], ts["sh_offset"]
+        out["text_norm"] = hashlib.sha256("\n".join(_ms_text_tokens(t[0], ta)).encode()).hexdigest()
+        if ef.get_section_by_name(".eh_frame") is not None:
+            xs = [(x.name, x["sh_addr"], x["sh_offset"], x["sh_size"]) for x in ef.iter_sections()
+                  if x["sh_flags"] & 4 and x["sh_type"] == "SHT_PROGBITS"]
+            fns, tfns = [], []
+            for e in ef.get_dwarf_info().EH_CFI_entries()[:50000]:
+                h = getattr(e, "header", None)
+                if h is None or "initial_location" not in h:
+                    continue
+                lo, n = h["initial_location"], h["address_range"]
+                sec = next((x for x in xs if x[1] <= lo and lo + n <= x[1] + x[3]), None)
+                if sec and n and sec[2] + lo - sec[1] + n <= len(b):
+                    toks = _ms_text_tokens(b[sec[2] + lo - sec[1]:sec[2] + lo - sec[1] + n], lo)
+                    fns.append(hashlib.sha256("\n".join(toks).encode()).hexdigest())
+                    if sec[0] == ".text":
+                        tfns.append(fns[-1])
+            out["funcs"], out["text_funcs"] = sorted(fns), sorted(tfns)
+    out["strings"] = _ms_strings(b)
+    return out
+
+
+def _ms_views(members, cache=None):
+    cache = {} if cache is None else cache
+    res = []
+    for n, b in members:
+        k = (len(b), hashlib.sha256(bytes(b)).hexdigest())
+        if k not in cache:
+            try:
+                cache[k] = _ms_member(b)
+            except Exception:  # noqa: BLE001 -- untrusted bytes
+                cache[k] = None
+        res.append((n, b, cache[k]))
+    return res
+
+
+def _ms_pair(a, b, va, vb, text_only=False):
+    n = min(len(a), len(b))
+    ba, bb = bytes(a[:n]), bytes(b[:n])
+    if ba == bb:
+        diff, first = 0, None
+    else:
+        x = int.from_bytes(ba, "big") ^ int.from_bytes(bb, "big")
+        first = n - (x.bit_length() + 7) // 8
+        diff = sum(1 for i in range(first, n) if ba[i] != bb[i])
+    if len(a) != len(b):
+        diff += abs(len(a) - len(b))
+        first = n if first is None else first
+    out = {"diff_bytes": diff, "first_diff": first}
+    if va and vb:
+        da = {}
+        for nm, h in va["secs"]:
+            da.setdefault(nm, h)
+        same = [nm for nm, h in vb["secs"] if h is not None and da.get(nm) == h]
+        out["same_sections"] = [nm for nm, _ in va["secs"] if nm in same]
+        out["text_sha256_equal"] = None if not (va["text_sha"] and vb["text_sha"]) else va["text_sha"] == vb["text_sha"]
+        out["text_norm_equal"] = None if not (va["text_norm"] and vb["text_norm"]) else \
+            va["text_norm"] == vb["text_norm"]
+        fk = "text_funcs" if text_only else "funcs"
+        if va[fk] is not None and vb[fk] is not None:
+            ca, cb = {}, {}
+            for h in va[fk]:
+                ca[h] = ca.get(h, 0) + 1
+            for h in vb[fk]:
+                cb[h] = cb.get(h, 0) + 1
+            sh = sum(min(c, cb.get(h, 0)) for h, c in ca.items())
+            out["func_hash_overlap"] = sh
+            m = max(len(va[fk]), len(vb[fk]))
+            out["func_hash_ratio"] = sh / m if m else None
+        else:
+            out["func_hash_overlap"] = out["func_hash_ratio"] = None
+        u = va["strings"] | vb["strings"]
+        out["string_jaccard"] = len(va["strings"] & vb["strings"]) / len(u) if u else None
+    return out
+
+
+def member_similarity(members, _cache=None, text_only=False):
+    """{(name_a, name_b): pair facts} for every pair of [(name, bytes)] in group order (see block comment); {} on junk.
+    text_only: function facts over the FDEs inside .text only (default: every FDE in an executable section, PLT incl.)."""
+    try:
+        vs = _ms_views(members, _cache)
+        return {(vs[i][0], vs[j][0]): _ms_pair(vs[i][1], vs[j][1], vs[i][2], vs[j][2], text_only)
+                for i in range(len(vs)) for j in range(i + 1, len(vs))}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def cluster_rule(q):
+    """The clustering rule a question states (see block comment), or None when it names none."""
+    ql = (q or "").lower()
+    m = re.search(r"(?:at most|no more than|<=|up to|fewer than|less than)\s+(\d+)\s+(?:differing\s+)?bytes?", ql)
+    if m:
+        return "bytes:%d" % (int(m.group(1)) - (1 if re.search(r"fewer|less", m.group(0)) else 0))
+    m = re.search(r"jaccard[^.]{0,60}?(?:at least|>=|of at least|no less than)\s+(0?\.\d+|1(?:\.0+)?)", ql)
+    if m:
+        return "jaccard:" + m.group(1)
+    m = re.search(r"(?:shared|common)[- ]function (?:ratio|share|fraction)[^.]{0,40}?(?:at least|>=)\s+(0?\.\d+|1(?:\.0+)?)",
+                  ql)
+    if m:
+        return "func:" + m.group(1)
+    if re.search(r"campaign[^.]{0,60}?prefix|prefix[^.]{0,60}?campaign", ql):
+        return "campaign_prefix"
+    if re.search(r"behaviou?r|trace (?:record|profile)|dynamic trace|event count", ql):
+        return "trace"
+    if re.search(r"normali[sz]ed (?:instruction|disassembl|code|mnemonic)|mnemonic|opcode sequence", ql):
+        return "text_norm"
+    if re.search(r"\.text\b[^.]{0,60}(?:sha-?256|hash|digest|identical|equal|byte-for-byte)|"
+                 r"(?:sha-?256|hash|digest|identical)[^.]{0,30}\.text\b", ql):
+        return "text"
+    if re.search(r"\bhcfg\b|config(?:uration)? (?:object|record|json|blob)s?\b[^.]{0,40}(?:equal|identical|same)|"
+                 r"same config", ql):
+        return "hcfg"
+    return None
+
+
+def cluster_members(members, rule, _cache=None):
+    """[[names]] clusters of [(name, bytes)] under `rule` (see block comment), first-member order; None when unsure."""
+    try:
+        vs = _ms_views(members, _cache)
+        names = [n for n, _, _ in vs]
+        kind, _, arg = (rule or "").partition(":")
+        if kind in ("text", "text_norm", "hcfg", "trace", "campaign_prefix"):
+            keys = []
+            for _, b, v in vs:
+                if kind == "campaign_prefix":
+                    c = _pf_campaign(b)
+                    k = c.split("-", 1)[0] if c and "-" in c else None
+                elif kind == "hcfg":
+                    k = _ot_config(b)
+                elif kind == "trace":
+                    k = behavior_profile(b) or None
+                else:
+                    k = v and v["text_sha" if kind == "text" else "text_norm"]
+                if k is None:
+                    return None
+                keys.append(k)
+            link = lambda i, j: keys[i] == keys[j]   # noqa: E731
+        elif kind in ("bytes", "jaccard", "func"):
+            thr = float(arg)
+            pf = member_similarity(members, _cache)
+            key = {"bytes": "diff_bytes", "jaccard": "string_jaccard", "func": "func_hash_ratio"}[kind]
+            vals = {}
+            for (na, nb), f in pf.items():
+                if f.get(key) is None:
+                    return None
+                vals[(na, nb)] = vals[(nb, na)] = f[key]
+            link = (lambda i, j: vals[(names[i], names[j])] <= thr) if kind == "bytes" else \
+                (lambda i, j: vals[(names[i], names[j])] >= thr - 1e-12)
+        else:
+            return None
+        par = list(range(len(vs)))
+
+        def root(i):
+            while par[i] != i:
+                i = par[i]
+            return i
+        for i in range(len(vs)):
+            for j in range(i + 1, len(vs)):
+                if link(i, j):
+                    par[root(j)] = root(i)
+        out = {}
+        for i in range(len(vs)):
+            out.setdefault(root(i), []).append(names[i])
+        return sorted(out.values(), key=lambda c: names.index(c[0]))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_MS_METRIC = (r"diff_bytes|byte_diff_count|diff(?:ering)?_byte_count|differing_bytes(?:_count)?|"
+              r"first_diff(?:ering)?(?:_byte)?(?:_offset)?|first_difference_offset|"
+              r"same_sections|identical_sections|text_sha256_equal|text_identical|text_hash_equal|"
+              r"(?:normali[sz]ed_)?text_norm(?:ali[sz]ed)?_(?:hash_)?equal|"
+              r"func(?:tion)?_hash_overlap|shared_func(?:tion)?s?_count|shared_func(?:tion)?_ratio|func_hash_ratio|"
+              r"string_jaccard|strings?_jaccard(?:_index)?")
+_MS_FIELD = re.compile(
+    r"(?P<pair>(?P<ab>[a-z0-9_]+?)_(?P<met>" + _MS_METRIC + r"))|"
+    r"(?P<fc>family_(?:config_)?campaign)|"
+    r"(?P<fam>family_members|family_member_names|family_member_count|family_size)|"
+    r"(?P<ff>false_friends?|false_friend_member|false_friend_name|lookalike|look_alike)|"
+    r"(?P<st>strangers?|stranger_members?|unrelated_members?)|"
+    r"(?P<cc>(?:similarity_|code_|text_|config_)?cluster_count|clusters|cluster_assignment)")
+
+
+def _ms_group(ctx):
+    els = [(n, b) for n, b in ctx.group if bytes(b[:4]) == b"\x7fELF"]
+    if len(els) >= 2:
+        return els
+    if ctx.fmt != "zip" or len(ctx.data) > (24 << 20):
+        return None
+
+    def make():
+        zf = zipfile.ZipFile(io.BytesIO(bytes(ctx.data)))
+        infos = [i for i in zf.infolist() if not i.is_dir() and not i.flag_bits & 1 and i.file_size <= (16 << 20)]
+        day = re.search(r"\b(d\d\d)--", ctx.q)
+        if day:
+            infos = [i for i in infos if i.filename.rsplit("/", 1)[-1].startswith(day.group(1) + "--")]
+        out = [(i.filename, zf.read(i)) for i in infos]
+        return [(n, b) for n, b in out if b[:4] == b"\x7fELF"]
+    g = ctx.memo("ms_zip_members", make)
+    return g if g and len(g) >= 2 else None
+
+
+def _ms_fmt_num(ctx, v):
+    if isinstance(v, float):
+        m = re.search(r"(\d+)\s+decimal (?:places|digits)", ctx.q + " " + str(ctx.af.get("syntax") or ""))
+        return None if not m else "%.*f" % (int(m.group(1)), v)
+    return _ot_num(ctx, v)
+
+
+def _ms_names(ctx, names):
+    if (ctx.af.get("kind") or "").lower() == "integer" or re.search(r"(?i)\bcount\b|\bhow many\b", ctx.q):
+        return str(len(names))
+    base = [n.rsplit("/", 1)[-1] for n in names]
+    if (ctx.af.get("kind") or "").lower() == "json" or len(base) != 1:
+        if re.search(r"(?i)\bsort", ctx.q):
+            base = sorted(base)
+        return json.dumps(base, separators=(",", ":"))
+    return base[0]
+
+
+def _ms_role(name, role):
+    base = _bp_role_norm(re.sub(r"\.[A-Za-z0-9]+$", "", name.rsplit("/", 1)[-1]))
+    return base == role or base.endswith("_" + role)
+
+
+def _ms_generic(ctx, m):
+    g = _ms_group(ctx)
+    if not g:
+        return None
+    cache = ctx.memo("ms_cache", dict)
+    if m.group("pair"):
+        ab, pick = m.group("ab"), None
+        parts = ab.split("_")
+        for k in range(1, len(parts)):
+            ra, rb = "_".join(parts[:k]), "_".join(parts[k:])
+            fa = [(n, b) for n, b in g if _ms_role(n, ra)]
+            fb = [(n, b) for n, b in g if _ms_role(n, rb)]
+            if len(fa) == 1 and len(fb) == 1 and fa[0][0] != fb[0][0]:
+                if pick is not None:
+                    return None   # two readings of the role pair
+                pick = (fa[0], fb[0])
+        if pick is None:
+            return None
+        tonly = bool(re.search(r"(?i)\b(?:in|within|inside|from)\s+(?:the\s+)?\.text\b|excluding\s+(?:the\s+)?plt|"
+                               r"\bnon-?plt\b", ctx.q))
+        f = member_similarity(list(pick), cache, tonly).get((pick[0][0], pick[1][0]))
+        if not f:
+            return None
+        met = m.group("met")
+        if "jaccard" in met:
+            return _ms_fmt_num(ctx, f.get("string_jaccard"))
+        if met.startswith("first"):
+            return "none" if f["first_diff"] is None else _ms_fmt_num(ctx, f["first_diff"])
+        if "byte" in met:
+            return _ms_fmt_num(ctx, f["diff_bytes"])
+        if "sections" in met:
+            return None if f.get("same_sections") is None else json.dumps(f["same_sections"], separators=(",", ":"))
+        if "ratio" in met:
+            return _ms_fmt_num(ctx, f.get("func_hash_ratio"))
+        if "func" in met:
+            v = f.get("func_hash_overlap")
+            return None if v is None else str(v)
+        v = f.get("text_norm_equal" if "norm" in met else "text_sha256_equal")
+        return _ot_bool(ctx, v)
+    rule = cluster_rule(ctx.q)
+    if m.group("cc"):
+        if rule in (None, "trace"):
+            return None   # behaviour wording: the trace-profile rule's question
+        cl = cluster_members(g, rule, cache)
+        if cl is None:
+            return None
+        return str(len(cl)) if "count" in m.group("cc") else json.dumps(
+            [[n.rsplit("/", 1)[-1] for n in c] for c in cl], separators=(",", ":"))
+    try:
+        pf = partition_family(g, ctx.q, cache)
+    except ValueError:
+        return None   # no unique family
+    if not pf:
+        return None
+    if m.group("fam"):
+        return _ms_names(ctx, pf["family"])
+    if m.group("fc"):
+        return pf["family_config_campaign"]
+    if m.group("ff"):
+        if len(pf["false_friends"]) > 1 and (ctx.af.get("kind") or "").lower() != "json" and \
+                not re.search(r"(?i)\bcount\b|\bhow many\b", ctx.q):
+            return None   # one name asked, several odd members
+        return _ms_names(ctx, pf["false_friends"]) if pf["false_friends"] else "none"
+    return _ms_names(ctx, pf["strangers"]) if pf["strangers"] else "none"
+
+
+def _pf_campaign(b):
+    c = _ot_config(b)
+    v = json.loads(c).get("campaign") if c else None
+    return v if isinstance(v, str) and v else None
+
+
+def partition_family(members, question, _cache=None):
+    """Odd-one-out partition of [(name, bytes)] (CD order) by the equivalence the question names (cluster_rule: HCFG
+    config equality, campaign prefix before the first hyphen, .text sha256, normalised code, behaviour profile,
+    byte / jaccard / shared-function thresholds; no stated rule -> .text sha256). family = the largest class (ties or a
+    largest class of 1 -> ValueError); false_friends = non-family members with the family's size or section-name table
+    (look-alikes), strangers = the rest. -> {rule, classes, family, family_size, false_friends, strangers,
+    family_config_campaign (the family's common HCFG campaign, else None)}; None when a member's key is unreadable."""
+    rule = cluster_rule(question) or "text"
+    cl = cluster_members(members, rule, _cache)
+    if not cl:
+        return None
+    sizes = sorted((len(c) for c in cl), reverse=True)
+    if sizes[0] < 2 or (len(sizes) > 1 and sizes[0] == sizes[1]):
+        raise ValueError("no unique family under %s: class sizes %s" % (rule, sizes))
+    fam = next(c for c in cl if len(c) == sizes[0])
+    vs = {n: v for n, _, v in _ms_views(members, _cache)}
+    fsig = {(vs[n]["size"], tuple(s for s, _ in vs[n]["secs"])) for n in fam if vs.get(n)}
+    fsize = {s for s, _ in fsig}
+    fsecs = {t for _, t in fsig}
+    odd = [n for n, _ in members if n not in fam]
+    if re.search(r"(?i)section[- ](?:names?|headers?|tables?|layout|list)|\bsizes?\b|look-?alike|resembl",
+                 question or ""):
+        alike = [n for n in odd if vs.get(n) and
+                 (vs[n]["size"] in fsize or tuple(s for s, _ in vs[n]["secs"]) in fsecs)]
+        strangers = [n for n in odd if n not in alike]
+    else:   # no look-alike criterion stated: every non-family member is the odd one out under either name
+        alike = strangers = odd
+    camps = {_pf_campaign(b) for n, b in members if n in fam}
+    return {"rule": rule, "classes": cl, "family": fam, "family_size": len(fam), "false_friends": alike,
+            "strangers": strangers,
+            "family_config_campaign": camps.pop() if len(camps) == 1 and None not in camps else None}
+
+
+register_generic("family-cluster-similarity-facts", _MS_FIELD.pattern, _ms_generic, formats=("elf", "zip"), first=True)
+_MS_ENT = GENERIC_FIELDS.pop()   # ahead of the trace-profile rule: cluster_count under a .text / HCFG / threshold rule
+GENERIC_FIELDS.insert(next((i for i, e in enumerate(GENERIC_FIELDS) if e[0] == "behavior-profile-from-trace-templates"),
+                           len(GENERIC_FIELDS)), _MS_ENT)
+
+
+# --- fuzzy / structural hashes (prebuild fuzzy-hash-fields) ------------------------------------------------------------
+# ssdeep (CTPH/spamsum, libfuzzy 2.13+ semantics: rolling window 7, FNV-1 32-bit block hash kept mod 64, base64
+# alphabet, block size 3*2^k guessed from the length then halved while the first signature is < 32 chars, sigs capped
+# at 64/32 chars with the trailing piece folded into the last char, "<bs>:<s1>:<s2>"); ssdeep compare (runs of >3
+# identical chars eliminated, edit distance insert/remove 1, replace 2, 7-char common substring required, small-bs
+# cap); TLSH T1 (py-tlsh 4.x reference: 128 buckets, window 5, Pearson v_table, 1-byte checksum, quartile code, L/Q
+# nibble-swapped, code reversed; < 50 bytes or <= 64 nonzero buckets -> TNULL); TLSH diff (len-diff on); imphash
+# (pefile.get_imphash); telfhash (first nonempty .dynsym/.symtab: GLOBAL DEFAULT FUNC names minus the telfhash
+# exclusions, lowercased, sorted, ","-joined, TLSH lowercased; no symbol table -> None, the call-destination path of
+# telfhash is not ported). Pure Python, bounded by _FH_MAX_SSDEEP / _FH_MAX_TLSH bytes (None above).
+_FH_B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+_FH_SUM = bytes((((h * 0x01000193) & 0x3F) ^ (c & 0x3F)) for h in range(64) for c in range(256))
+_FH_MAX_SSDEEP = 2 << 20
+_FH_MAX_TLSH = 2 << 20
+_TL_V = bytes((
+    1, 87, 49, 12, 176, 178, 102, 166, 121, 193, 6, 84, 249, 230, 44, 163, 14, 197, 213, 181, 161, 85, 218, 80, 64, 239,
+    24, 226, 236, 142, 38, 200, 110, 177, 104, 103, 141, 253, 255, 50, 77, 101, 81, 18, 45, 96, 31, 222, 25, 107, 190,
+    70, 86, 237, 240, 34, 72, 242, 20, 214, 244, 227, 149, 235, 97, 234, 57, 22, 60, 250, 82, 175, 208, 5, 127, 199, 111,
+    62, 135, 248, 174, 169, 211, 58, 66, 154, 106, 195, 245, 171, 17, 187, 182, 179, 0, 243, 132, 56, 148, 75, 128, 133,
+    158, 100, 130, 126, 91, 13, 153, 246, 216, 219, 119, 68, 223, 78, 83, 88, 201, 99, 122, 11, 92, 32, 136, 114, 52,
+    10, 138, 30, 48, 183, 156, 35, 61, 26, 143, 74, 251, 94, 129, 162, 63, 152, 170, 7, 115, 167, 241, 206, 3, 150, 55,
+    59, 151, 220, 90, 53, 23, 131, 125, 173, 15, 238, 79, 95, 89, 16, 105, 137, 225, 224, 217, 160, 37, 123, 118, 73, 2,
+    157, 46, 116, 9, 145, 134, 228, 207, 212, 202, 215, 69, 229, 27, 188, 67, 124, 168, 252, 42, 4, 29, 108, 21, 247, 19,
+    205, 39, 203, 233, 40, 186, 147, 198, 192, 155, 33, 164, 191, 98, 204, 165, 180, 117, 76, 140, 36, 210, 172, 41, 54,
+    159, 8, 185, 232, 113, 196, 231, 47, 146, 120, 51, 65, 28, 144, 254, 221, 93, 189, 194, 139, 112, 43, 71, 109, 184,
+    209))
+_TL_TOPVAL = (
+    1, 2, 3, 5, 7, 11, 17, 25, 38, 57, 86, 129, 194, 291, 437, 656, 854, 1110, 1443, 1876, 2439, 3171, 3475, 3823, 4205,
+    4626, 5088, 5597, 6157, 6772, 7450, 8195, 9014, 9916, 10907, 11998, 13198, 14518, 15970, 17567, 19323, 21256, 23382,
+    25720, 28292, 31121, 34233, 37656, 41422, 45564, 50121, 55133, 60646, 66711, 73382, 80721, 88793, 97672, 107439,
+    118183, 130002, 143002, 157302, 173032, 190335, 209369, 230306, 253337, 278670, 306538, 337191, 370911, 408002,
+    448802, 493682, 543050, 597356, 657091, 722800, 795081, 874589, 962048, 1058252, 1164078, 1280486, 1408534, 1549388,
+    1704327, 1874759, 2062236, 2268459, 2495305, 2744836, 3019320, 3321252, 3653374, 4018711, 4420582, 4862641, 5348905,
+    5883796, 6472176, 7119394, 7831333, 8614467, 9475909, 10423501, 11465851, 12612437, 13873681, 15261050, 16787154,
+    18465870, 20312458, 22343706, 24578077, 27035886, 29739474, 32713425, 35984770, 39583245, 43541573, 47895730,
+    52685306, 57953837, 63749221, 70124148, 77136564, 84850228, 93335252, 102668779, 112935659, 124229227, 136652151,
+    150317384, 165349128, 181884040, 200072456, 220079703, 242087671, 266296456, 292926096, 322218735, 354440623,
+    389884688, 428873168, 471760495, 518936559, 570830240, 627913311, 690704607, 759775136, 835752671, 919327967,
+    1011260767, 1112386880, 1223623232, 1345985727, 1480584256, 1628642751, 1791507135, 1970657856, 2167723648,
+    2384496256, 2622945920, 2885240448, 3173764736, 3491141248, 3840255616, 4224281216)
+_TL_SALT = {s: bytes(_TL_V[s ^ x] for x in range(256)) for s in (1, 49, 12, 178, 166, 84, 230)}
+
+
+def _fh_fold(h, seg, t=_FH_SUM):
+    for c in seg:
+        h = t[h << 8 | c]
+    return h
+
+
+def _fh_sig(data, trig, bs, cap, rh):
+    """One spamsum signature at block size bs (cap = chars before the trailing one)."""
+    out, h, pos, pend = [], 0x27, 0, ""
+    for i, r in trig:
+        if r % bs != bs - 1:
+            continue
+        h = _fh_fold(h, data[pos:i + 1])
+        pos = i + 1
+        if len(out) < cap:
+            out.append(_FH_B64[h])
+            h = 0x27
+        else:
+            pend = _FH_B64[h]
+    if rh:
+        return "".join(out) + _FH_B64[_fh_fold(h, data[pos:])]
+    return "".join(out) + pend
+
+
+def ssdeep_hash(data):
+    """ssdeep / spamsum CTPH of `data` ("<bs>:<sig1>:<sig2>"); None above _FH_MAX_SSDEEP bytes."""
+    data = bytes(data)
+    n = len(data)
+    if n > _FH_MAX_SSDEEP:
+        return None
+    trig, h1, h2, h3, r = [], 0, 0, 0, 0
+    app = trig.append
+    for i, (c, o) in enumerate(zip(data, bytes(7) + data)):
+        h2 += 7 * c - h1
+        h1 += c - o
+        h3 = ((h3 << 5) ^ c) & 0xFFFFFFFF
+        r = (h1 + h2 + h3) & 0xFFFFFFFF
+        if r % 3 == 2:   # every block size is 3 * 2^k
+            app((i, r))
+    bs = 3
+    while bs * 64 < n:
+        bs *= 2
+    while bs > 3 and sum(1 for _, x in trig if x % bs == bs - 1) < 32:
+        bs //= 2
+    return "%d:%s:%s" % (bs, _fh_sig(data, trig, bs, 63, r), _fh_sig(data, trig, bs * 2, 31, r))
+
+
+def _fh_elim(s):
+    return re.sub(r"(.)\1{3,}", lambda m: m.group(1) * 3, s)
+
+
+def _fh_edit(a, b):
+    prev = list(range(len(a) + 1))
+    for j, cb in enumerate(b, 1):
+        cur = [j]
+        for i, ca in enumerate(a, 1):
+            cur.append(min(prev[i] + 1, cur[i - 1] + 1, prev[i - 1] + (0 if ca == cb else 2)))
+        prev = cur
+    return prev[-1]
+
+
+def _fh_score(a, b, bs):
+    if len(a) > 64 or len(b) > 64 or not any(a[i:i + 7] in b for i in range(len(a) - 6)):
+        return 0
+    s = 100 * (_fh_edit(a, b) * 64 // (len(a) + len(b))) // 64
+    if s >= 100:
+        return 0
+    s = 100 - s
+    if bs >= 45:
+        return s
+    return min(s, bs // 3 * min(len(a), len(b)))
+
+
+def ssdeep_compare(x, y):
+    """ssdeep match score 0..100 of two "<bs>:<s1>:<s2>" hashes; None when malformed or in the one case the
+    implementations disagree on (same bs and first signature, different second signature)."""
+    try:
+        (b1, p1, q1), (b2, p2, q2) = (h.strip().split(":", 2) for h in (x, y))
+        b1, b2 = int(b1), int(b2)
+    except (ValueError, AttributeError):
+        return None
+    if b1 != b2 and b1 != 2 * b2 and b2 != 2 * b1:
+        return 0
+    if (b1, p1, q1) == (b2, p2, q2):
+        return 100
+    p1, q1, p2, q2 = map(_fh_elim, (p1, q1, p2, q2))
+    if b1 == b2:
+        if p1 == p2:
+            return None
+        return max(_fh_score(p1, p2, b1), _fh_score(q1, q2, b1 * 2))
+    if b1 == 2 * b2:
+        return _fh_score(p1, q2, b1)
+    return _fh_score(q1, p2, b2)
+
+
+def _tl_xor(p, q):
+    return (int.from_bytes(p, "little") ^ int.from_bytes(q, "little")).to_bytes(len(p), "little")
+
+
+def tlsh_hash(data):
+    """TLSH T1 digest ("T1" + 70 uppercase hex); "TNULL" when TLSH declines (< 50 bytes, too little variation);
+    None above _FH_MAX_TLSH bytes."""
+    data = bytes(data)
+    n = len(data)
+    if n > _FH_MAX_TLSH:
+        return None
+    if n < 50:
+        return "TNULL"
+    w = [data[4 - k:n - k] for k in range(5)]   # w[k] = byte at j-k for every window end j >= 4
+    V = _TL_V
+
+    def pm(salt, a, b, c):
+        return _tl_xor(_tl_xor(w[a].translate(_TL_SALT[salt]), w[b]).translate(V), w[c]).translate(V)
+
+    cnt = [0] * 256
+    for salt, a, b, c in ((49, 0, 1, 2), (12, 0, 1, 3), (178, 0, 2, 3), (166, 0, 2, 4), (84, 0, 1, 4), (230, 0, 3, 4)):
+        r = pm(salt, a, b, c)
+        for v in range(128):
+            cnt[v] += r.count(v)
+    cs = 0
+    for u in _tl_xor(w[0].translate(_TL_SALT[1]), w[1]).translate(V):
+        cs = V[u ^ cs]
+    bk = cnt[:128]
+    srt = sorted(bk)
+    q1, q2, q3 = srt[31], srt[63], srt[95]
+    if q3 == 0 or sum(1 for v in bk if v) <= 64:
+        return "TNULL"
+    code = []
+    for i in range(32):
+        h = 0
+        for j in range(4):
+            k = bk[4 * i + j]
+            h += (3 if k > q3 else 2 if k > q2 else 1 if k > q1 else 0) << (j * 2)
+        code.append(h)
+    lv = bisect.bisect_left(_TL_TOPVAL, n) & 0xFF
+    sw = lambda x: ((x & 0xF0) >> 4) | ((x & 0x0F) << 4)  # noqa: E731
+    qb = ((q1 * 100 // q3) % 16) | (((q2 * 100 // q3) % 16) << 4)
+    return "T1" + bytes([sw(cs), sw(lv), sw(qb)] + code[::-1]).hex().upper()
+
+
+def tlsh_diff(x, y):
+    """TLSH distance (len-diff included) of two T1 / 70-hex digests; None when either is not a valid digest."""
+    def parse(h):
+        h = h.strip().upper()
+        h = h[2:] if h.startswith("T1") else h
+        if not re.fullmatch(r"[0-9A-F]{70}", h):
+            raise ValueError
+        b = bytes.fromhex(h)
+        sw = lambda v: ((v & 0xF0) >> 4) | ((v & 0x0F) << 4)  # noqa: E731
+        qb = sw(b[2])
+        return b[0], sw(b[1]), qb & 0xF, qb >> 4, b[3:]
+    try:
+        (c1, l1, a1, b1, d1), (c2, l2, a2, b2, d2) = parse(x), parse(y)
+    except (ValueError, AttributeError):
+        return None
+
+    def md(p, q, r):
+        d = abs(p - q)
+        return min(d, r - d)
+    diff = 0
+    ld = md(l1, l2, 256)
+    diff += ld if ld <= 1 else ld * 12
+    for p, q in ((a1, a2), (b1, b2)):
+        d = md(p, q, 16)
+        diff += d if d <= 1 else (d - 1) * 12
+    diff += c1 != c2
+    for u, v in zip(d1, d2):
+        for s in range(0, 8, 2):
+            d = abs(((u >> s) & 3) - ((v >> s) & 3))
+            diff += 6 if d == 3 else d
+    return diff
+
+
+_TELF_EXCL = re.compile(r"[_.].*|.*64|str.*|mem.*|__libc_start_main|main|abort|cachectl|cacheflush|puts|atol|"
+                        r"malloc_trim", re.S)
+
+
+def telfhash(data):
+    """telfhash of an ELF (lowercase TLSH over the filtered sorted import/function names); None when the ELF has no
+    nonempty symbol table, when the digest is TNULL, or unparsable."""
+    from elftools.elf.elffile import ELFFile
+    try:
+        elf = ELFFile(io.BytesIO(bytes(data)))
+        tab = next((s for s in elf.iter_sections() if s["sh_size"] > 0 and s["sh_type"] in ("SHT_DYNSYM", "SHT_SYMTAB")),
+                   None)
+        if tab is None:
+            return None
+        names = sorted(s.name.lower() for s in itertools.islice(tab.iter_symbols(), 200000)
+                       if s["st_info"]["type"] == "STT_FUNC" and s["st_info"]["bind"] == "STB_GLOBAL"
+                       and s["st_other"]["visibility"] == "STV_DEFAULT" and s.name and not _TELF_EXCL.fullmatch(s.name))
+    except Exception:  # noqa: BLE001 -- untrusted bytes
+        return None
+    if not names:
+        return None
+    h = tlsh_hash(",".join(names).encode("ascii", "replace"))
+    return None if not h or h == "TNULL" else h.lower()
+
+
+_FH_FIELD = (r"(?:(?P<ab>[a-z0-9_]+?)_)?(?P<algo>ssdeep|ctph|spamsum|fuzzy|tlsh|imphash|import_hash|telfhash|"
+             r"elf_import_hash)(?:_(?P<sfx>hash|digest|value|score|similarity|compare|comparison|match|distance|diff))?")
+_FH_REGION = re.compile(r"(?i)\b(?:section|segment|overlay|resource|payload|decoded|extracted|decrypted|unpacked|"
+                        r"embedded|stage|carved|string)s?\b")
+
+
+def _fh_group_find(ctx, role):
+    hits = [(n, b) for n, b in ctx.group if _ms_role(n, role)]
+    if len(hits) == 1:
+        return hits[0]
+    if ctx.fmt == "zip" and len(ctx.data) <= (24 << 20):
+        def make():
+            zf = zipfile.ZipFile(io.BytesIO(bytes(ctx.data)))
+            return [(i.filename, i) for i in zf.infolist() if not i.is_dir() and not i.flag_bits & 1
+                    and i.file_size <= (16 << 20)]
+        inf = ctx.memo("fh_zip", make) or []
+        zh = [(n, i) for n, i in inf if _ms_role(n, role)]
+        if len(zh) == 1:
+            try:
+                return zh[0][0], zipfile.ZipFile(io.BytesIO(bytes(ctx.data))).read(zh[0][1])
+            except Exception:  # noqa: BLE001
+                return None
+    return None
+
+
+def _fh_digest(algo, b):
+    if algo in ("tlsh",):
+        h = tlsh_hash(b)
+        return None if h in (None, "TNULL") else h
+    return ssdeep_hash(b)
+
+
+def _fh_generic(ctx, m):
+    algo, ab, sfx = m.group("algo"), m.group("ab"), m.group("sfx") or ""
+    algo = {"ctph": "ssdeep", "spamsum": "ssdeep", "fuzzy": "ssdeep", "import_hash": "imphash",
+            "elf_import_hash": "telfhash"}.get(algo, algo)
+    if sfx in ("score", "similarity", "compare", "comparison", "match", "distance", "diff"):
+        if algo not in ("ssdeep", "tlsh") or not ab:
+            return None
+        if (algo == "ssdeep") != (sfx not in ("distance", "diff")):
+            return None
+        parts, pick = ab.split("_"), None
+        for k in range(1, len(parts)):
+            fa, fb = _fh_group_find(ctx, "_".join(parts[:k])), _fh_group_find(ctx, "_".join(parts[k:]))
+            if fa and fb and fa[0] != fb[0]:
+                if pick is not None:
+                    return None
+                pick = (fa, fb)
+        if pick is None or _FH_REGION.search(ctx.q):
+            return None
+        ha, hb = (ctx.memo(("fh", algo, n, len(b)), lambda b=b: _fh_digest(algo, b)) for n, b in pick)
+        if not ha or not hb:
+            return None
+        v = ssdeep_compare(ha, hb) if algo == "ssdeep" else tlsh_diff(ha, hb)
+        return None if v is None else str(v)
+    if ab and not re.fullmatch(r"(?:file|member|sample|binary|whole_file|full_file|specimen|artifact|executable|"
+                               r"program|image|this|target)", ab):
+        return None
+    if algo == "imphash":
+        if ctx.fmt not in ("pe", "pe_cli"):
+            return None
+        f = ctx.memo("fh_imp", lambda: _pe_import_facts(ctx.data))
+        v = f and f.get("imphash")
+        return v if isinstance(v, str) and v else None
+    if algo == "telfhash":
+        return ctx.memo("fh_telf", lambda: telfhash(ctx.data)) if ctx.fmt == "elf" else None
+    if _FH_REGION.search(ctx.q):
+        return None   # a region of the member, not the member bytes
+    v = ctx.memo(("fh", algo), lambda: _fh_digest(algo, ctx.data))
+    return v if v else None
+
+
+register_generic("fuzzy-hash-fields", _FH_FIELD, _fh_generic, first=True)

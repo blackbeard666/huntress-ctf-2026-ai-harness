@@ -1,0 +1,16 @@
+{
+ "kind": "generic_field",
+ "member": "ms_gcc.zip",
+ "field": "family_a_o0_twin_text_sha256_equal",
+ "question": "In evidence.zip, Use all d31-- members in ZIP central-directory order. Submit true exactly when family-a.elf and o0-twin.elf have byte-identical .text sections (equal SHA-256), else false.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "false",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "objcopy -O binary --only-section=.text <m> /dev/stdout | sha256sum  # both members, compare"
+}

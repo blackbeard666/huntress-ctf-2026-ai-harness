@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-D14C93420D7CF735",
+ "decoy": false,
+ "_why": "D29 table: hex of (b + key + 3i) & 255, key 85",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_table  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_table.apk assets/huntress_puzzle.json | jq -r -r '.data, .key' | python3 -I -c 'import sys;d,k=sys.stdin.read().split(chr(10))[:2];k=int(k);print(bytes((c-(k+3*i))&255 for i,c in enumerate(bytes.fromhex(d))).decode())'"
+}

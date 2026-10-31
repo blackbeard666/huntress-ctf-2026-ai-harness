@@ -1,0 +1,7 @@
+{
+ "expected_plain": null,
+ "decoy": true,
+ "target": "mastery-scale-bench-30k",
+ "generator_cmd": "bash tests/data/script_fixtures/mt_gen.sh  (Codec_51ab declared; only Material_51abc / Material_51ab2 assigned, a perl-xor'd non-plan sentence)",
+ "oracle_cmd": "grep -c '^Material_51ab = ' mt_decoy_neighbours.vbs  (0: the declared ident is never assigned; base64 -d | perl xor 0x33 of the neighbours prints 'not a plan: inventory refresh complete')"
+}

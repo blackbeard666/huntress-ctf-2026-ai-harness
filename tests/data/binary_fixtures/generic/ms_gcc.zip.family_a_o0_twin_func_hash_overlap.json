@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_gcc.zip",
+ "field": "family_a_o0_twin_func_hash_overlap",
+ "question": "In evidence.zip, Use all d31-- members in ZIP central-directory order. Treat every .eh_frame FDE pc range as one function, hash its normalised instructions (mnemonic plus operand kinds, immediates and displacements masked) and count the functions of family-a.elf whose hash also occurs in o0-twin.elf (multiset intersection).",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer"
+ },
+ "expected": "4",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "readelf --debug-dump=frames <m> (FDE pc=lo..hi) + objdump -d -M intel --start/--stop-address per FDE; mnemonic + r/i/m operand kinds, sha256 per FDE, multiset overlap"
+}

@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "typedef_count",
+ "question": "In delivery 1: evidence.zip, Use the unique d22-- primary managed assembly whose basename starts d22-- and ends .dll. Count every TypeDef table row. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": null,
+ "generator_cmd": "python3 -m ziglang cc -target x86_64-windows-gnu -O1 -o gf_pe_imports.exe gf_pe_imports.c -luser32 -lws2_32 (existing native member)",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/generic/dnc_src/dnc_oracle.sh tests/data/binary_fixtures/generic/gf_pe_imports.exe  # -> {\"_all\":\"none\"} (no CLI metadata)",
+ "decoy": true
+}

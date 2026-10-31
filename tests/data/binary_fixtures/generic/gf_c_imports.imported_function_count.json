@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_imports.bin",
+ "field": "imported_function_count",
+ "question": "In evidence.zip, use the d99-- member. Count the imported functions: undefined, nonempty-named .dynsym symbols with any @version suffix removed. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "8",
+ "generator_cmd": "gcc -O1 -o gf_c_imports.bin gf_imports.c -lm -lz",
+ "oracle_cmd": "readelf --dyn-syms -W gf_c_imports.bin | awk '$7==\"UND\" && $8!=\"\"{sub(/@.*/,\"\",$8); print $8}' | sort -u | wc -l"
+}

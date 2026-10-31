@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "d29--sample-O3.elf",
+ "field": "telfhash",
+ "question": "Submit the telfhash of the sample.",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": "t150e02b97645d61a658b14d665c23230340a3d374d1c8c858ff68ecd0649f545f959c4f",
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "python3 -c 'import telfhash,sys;print(telfhash.telfhash(sys.argv[1])[0][\"telfhash\"])' d29--sample-O3.elf  # telfhash 0.9.8"
+}

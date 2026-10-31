@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_gcc.zip",
+ "field": "family_a_stranger_string_jaccard",
+ "question": "In evidence.zip, Use all d31-- members in ZIP central-directory order. Take the sets of printable strings (strings -a -n 4) of family-a.elf and stranger.elf and submit their Jaccard index rounded to 4 decimal places.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "decimal with 4 decimal places"
+ },
+ "expected": "0.5750",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "strings -a -n 4 <m> | sort -u  # both members; |A&B| / |A|B| via python sets"
+}

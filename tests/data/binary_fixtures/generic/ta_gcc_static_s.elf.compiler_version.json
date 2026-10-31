@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ta_gcc_static_s.elf",
+ "field": "compiler_version",
+ "question": "In evidence.zip, Use the unique d27-- member whose basename ends gcc_static_s.elf. Report the compiler version (dotted numeric, e.g. 12.2.1) named by the first-CU DW_AT_producer or the .comment compiler banner.",
+ "answer_format": {
+  "kind": "exact_text",
+  "syntax": "exact case-sensitive artifact-derived text only; no quotes or explanatory text"
+ },
+ "expected": "15.2.0",
+ "generator_cmd": "sh ta_gen.sh  # gcc -g | clang-18 -g -no-pie | gcc -static -s | aarch64-linux-gnu-gcc -g -static | zig cc -target x86_64-linux-musl | gcc + strip -s -R .comment; ta_d27_{gcc,tcc}.elf = D27 GM members verbatim",
+ "oracle_cmd": "sh -c 'p=$(readelf --debug-dump=info ta_gcc_static_s.elf 2>/dev/null | grep -m1 DW_AT_producer); [ -n \"$p\" ] || p=$(readelf -p .comment ta_gcc_static_s.elf 2>/dev/null | grep -E \"clang version\" || readelf -p .comment ta_gcc_static_s.elf 2>/dev/null | grep GCC:); echo \"$p\" | grep -oE \"(GNU C[0-9+]* |clang version |\\) )[0-9]+\\.[0-9]+(\\.[0-9]+)?\" | head -1 | grep -oE \"[0-9]+\\.[0-9]+(\\.[0-9]+)?$\" || echo none'"
+}

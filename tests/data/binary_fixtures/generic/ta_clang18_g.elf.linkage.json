@@ -1,0 +1,16 @@
+{
+ "kind": "generic_field",
+ "member": "ta_clang18_g.elf",
+ "field": "linkage",
+ "question": "In evidence.zip, Use the unique d27-- member whose basename ends clang18_g.elf. Is the image statically or dynamically linked? Submit exactly one listed lowercase token.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "static",
+   "dynamic"
+  ]
+ },
+ "expected": "dynamic",
+ "generator_cmd": "sh ta_gen.sh  # gcc -g | clang-18 -g -no-pie | gcc -static -s | aarch64-linux-gnu-gcc -g -static | zig cc -target x86_64-linux-musl | gcc + strip -s -R .comment; ta_d27_{gcc,tcc}.elf = D27 GM members verbatim",
+ "oracle_cmd": "sh -c 'file -b ta_clang18_g.elf | grep -oE \"(static|dynamic)ally linked\" | grep -oE \"^(static|dynamic)\"'"
+}

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "pg_macho.dylib",
+ "field": "has_three_pg_exports",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when at least three exported symbol names start with _pg_lib_. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": "true",
+ "generator_cmd": "tools/ziglang/ziglang/zig cc -target x86_64-macos -O1 -shared -o pg_macho.dylib pg_src/pg_lib.c (pg_src/pg_gen.sh)",
+ "oracle_cmd": "[ $(python3 -c \"import lief, sys; b = lief.parse('pg_macho.dylib'); n = [s.name for s in b.exported_symbols]; sys.stdout.write(''.join(x + chr(10) for x in n)); sys.stdout.flush()\" 2>/dev/null | grep -c '^_pg_lib_') -ge 3 ] && echo true || echo false"
+}

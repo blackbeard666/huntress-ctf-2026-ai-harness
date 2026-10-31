@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "d28--sample-false-friend.elf",
+ "field": "failure_event_count",
+ "question": "Submit the event_count of the failure branch record.",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": null,
+ "generator_cmd": "GM artifact: Huntress D28 single_solve evidence.zip member d28--sample-false-friend.elf (copied verbatim)",
+ "oracle_cmd": "strings -a d28--sample-false-friend.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -s '[.[]|select(.branch==\"failure\")|.event_count]'  # [1,8]: ambiguous -> null",
+ "oracle_output": "[\n  1,\n  8\n]",
+ "decoy": true
+}

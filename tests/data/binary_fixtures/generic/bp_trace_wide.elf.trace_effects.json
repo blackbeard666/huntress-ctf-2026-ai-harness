@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "bp_trace_wide.elf",
+ "field": "trace_effects",
+ "question": "Submit the effects value of the embedded dynamic trace records.",
+ "answer_format": {
+  "kind": "exact_text"
+ },
+ "expected": "wide_only",
+ "generator_cmd": "gcc -O0 -fshort-wchar -o bp_trace_wide.elf tw.c  # two L\"...\" UTF-16LE JSON records (gen_generic.sh)",
+ "oracle_cmd": "strings -a -el bp_trace_wide.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs '[.[].effects]|unique|.[0]'",
+ "oracle_output": "wide_only"
+}

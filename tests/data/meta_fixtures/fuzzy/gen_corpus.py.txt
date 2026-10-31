@@ -1,0 +1,14 @@
+import random, sys, os
+out=sys.argv[1]; r=random.Random(2026)
+words=[''.join(r.choice('abcdefghijklmnopqrstuvwxyz') for _ in range(r.randint(2,9))) for _ in range(500)]
+def doc(n): return ' '.join(r.choice(words) for _ in range(n)).encode()
+def mutate(b,k):
+    b=bytearray(b)
+    for _ in range(k):
+        p=r.randrange(len(b)); b[p:p+6]=doc(1)
+    return bytes(b)
+base=doc(2500)
+files={'report-final.txt':base,'report-draft.txt':mutate(base,6),'report-old.txt':mutate(base,14),
+       'memo.txt':doc(2400),'notes.txt':doc(900),'config.log':doc(2600)}
+memo2=mutate(files['memo.txt'],9); files['memo-copy.txt']=memo2
+for n,b in files.items(): open(os.path.join(out,n),'wb').write(b)

@@ -1,0 +1,8 @@
+{
+ "field": "relation.same_content_different_hash_groups",
+ "expected": "[[\"ev-conf-a\",\"ev-conf-b\"]]",
+ "generator_cmd": "printf compact JSON vs CRLF/tab pretty JSON with reordered keys, an exact txt copy pair, a singleton; delivery-manifest.json ids by path/filename; cd d && zip -q -r -X ../cluster-042.zip delivery-manifest.json artifacts",
+ "oracle_cmd": "oracle.sh CLUSTER MODE (bash, no python): unzip; per member by magic: PNG/JPEG -> ImageMagick `identify -format %wx%h:%#` (pixel signature); zip -> sorted `unzip -Z1` names + `unzip -p | sha256sum`; gzip -> `gzip -dc | sha256sum`; JSON -> `jq -S -c .`; text -> sed strip BOM / CR / trailing ws + $(...) drops trailing newlines; else sha256; label = manifest id else basename sans ext; jq group_by(family|key), len>1 [MODE json/text/pixel filters the family; diffhash keeps groups with >1 distinct sha256], sorted",
+ "decoy": false,
+ "member": "cluster-042.zip"
+}

@@ -73,3 +73,84 @@ python3 cs_fixtures.py
 # bad-crc decoy; expected from the independent cg_oracle.sh reader (python crc check + jq)
 python3 cg_gen.py
 python3 cg_fixtures.py
+
+# backfill-spec-grammar-extensions (prebuild): import / DT_NEEDED / export sets; gcc + zig cc members, binutils oracles
+# (IE_REBUILD=1 rebuilds the members; needs tools/ziglang)
+bash ie_gen.sh
+
+# theme-backfill-d18-d28-fields: D27 per-role toolchain fingerprints (debug_format / hash_style / dwarf_producer);
+# gcc + GNU as --gstabs members, binutils readelf oracles
+sh tc_gen.sh
+python3 tc_fixtures.py
+
+# optimization-equivalence-facts (prebuild): gcc -O0/-O3 -g twins + the D29 Fraternal Twins pair; readelf / objcopy /
+# sha256sum oracles (pair facts: ot_pair_check.sh vs cmp -l)
+sh ot_gen.sh
+python3 ot_fixtures.py
+
+# behavior-profile-from-trace-templates (prebuild): complete huntress.binary.dynamic_trace.v1 JSON records embedded by gcc
+# (char + -fshort-wchar UTF-16LE literals) and javac/jar, a template-only decoy, plus the D28 family-a / false-friend
+# members (GM artifacts, copied verbatim); expected = strings [-el] | grep | jq oracles (bp_src/mkfx.py runs them)
+(cd bp_src && gcc -O0 -o ../bp_trace_records.elf tr.c && gcc -O0 -fshort-wchar -o ../bp_trace_wide.elf tw.c &&
+ gcc -O0 -o ../bp_trace_template.elf tpl.c && javac --release 8 -d . TraceRec.java &&
+ jar cfm ../bp_trace_records.jar m.txt TraceRec.class && rm -f TraceRec.class)
+python3 bp_src/mkfx.py "$PWD"
+
+# toolchain-attribution-verdicts (prebuild): compiler / compiler_version / linker / libc / linkage / pie / dwarf_version;
+# gcc / clang-18 / gcc -static -s / aarch64-linux-gnu-gcc -static / zig cc (musl) / banner-stripped decoy + the two D27
+# GM role members; expected = readelf / file / strings oracles (ta_fixtures.py)
+sh ta_gen.sh
+python3 ta_fixtures.py
+
+# gf-func-body (prebuild): symbol-addressed function bodies (disassembly / recover_code / <sym>_size / <sym>_address);
+# gcc -O2 / -O0 / -m32 -c + strip -s members, expected = objdump -M intel / readelf -sW oracles (fb_src/fb_fixtures.py)
+bash fb_src/fb_gen.sh
+python3 fb_src/fb_fixtures.py
+# gf-pe-conventions (prebuild): MinGW-w64 gcc PE members ('/N' long names, raw vs VirtualSize .text extent, COFF
+# NumberOfSymbols vs aux-skipped names) + truncated decoy; oracles = mingw objdump -h/-t and pefile one-liners
+# (PEC_REBUILD=1 rebuilds the members; needs tools/mingw)
+bash "$(dirname "$0")/pec_src/pec_fixtures.sh"
+
+# gf-predicate-grammar (prebuild): spec-grammar conjunction / negation / every / at-least-N clauses and DT_NEEDED /
+# imported-DLL / dylib / exported-symbol counts over the gf_c_* (gcc ELF), gf_pe_* (zig PE) and two zig cc Mach-O
+# members; expected = readelf / pefile / macholib / lief one-liners (pg_src/pg_fixtures.py), decoys -> null
+sh pg_src/pg_gen.sh
+python3 pg_src/pg_fixtures.py
+
+# gf-dotnet-counts (prebuild): .NET TypeDef / MethodDef / Field counts (<Module> / nested / compiler-generated
+# qualifiers), kind predicates, sorted name-set sha256 and #US user-string predicates over Roslyn C# / VB.NET builds;
+# expected = dnc_src/dnc_oracle.sh (System.Reflection.Metadata, not dnfile); decoys: native PE, unnamed absent type
+bash dnc_src/dnc_gen.sh
+python3 dnc_src/dnc_fixtures.py
+
+# gf-runtime-markers (prebuild): has_zig_runtime (zig 0.17 build-exe PE/ELF + the GM d10 Zig PE twin) and has_v_runtime
+# (GM d27 V gcc/tcc builds); decoys: zig-cc C PE, gcc C ELF. expected from binutils strings / nm (RTM_REBUILD=1 rebuilds)
+bash rtm_gen.sh
+
+# gf-macho (prebuild): Mach-O segment / load-command / section (per-segment, per-slice, all-slices) / symbol (stabs
+# in/out, nsyms, external / undefined) counts, has_<x>_section, fat slice_count / is_fat over zig cc x86_64 / arm64 -g /
+# MH_OBJECT / plain members + an llvm-lipo fat member; expected = llvm-otool-18 / llvm-objdump-18 --macho / llvm-nm-18 /
+# macholib one-liners (mo_src/mo_fixtures.py); decoys: thin slice_count, ELF ncmds, absent __TEXT,__hctf
+sh mo_src/mo_gen.sh
+python3 mo_src/mo_fixtures.py "$PWD"
+# family-cluster-similarity-facts: pair metrics (<a>_<b>_diff_bytes / first_diff / text_sha256_equal / string_jaccard /
+# func_hash_overlap / same_sections), family_members, false_friend, strangers, cluster_count over gcc -O2/-O0/-g builds
+# (ms_gcc.zip) and the D28 trio (ms_d28_trio.zip); expected = cmp / objcopy / strings / readelf / objdump / pyelftools
+sh ms_src/ms_gen.sh
+python3 ms_src/ms_fixtures.py "$PWD"
+
+# false-friend-discriminator (prebuild): partition_family over neutrally named members (sample-1..5 / specimen-a..c /
+# member-1..4): family by HCFG config equality, campaign prefix or .text sha256; family_members / family_size /
+# stranger_members / false_friend_member / family_config_campaign; decoys: tied 2+2 classes, prefix family without a
+# common campaign. expected = pf_src/pf_fixtures.py (stdlib HCFG decoder + objcopy .text sha256, not lib.binary)
+sh pf_src/pf_gen.sh
+python3 pf_src/pf_fixtures.py "$PWD"
+
+# fuzzy-hash-fields (ssdeep / TLSH / imphash / telfhash / <a>_<b>_ssdeep_score / <a>_<b>_tlsh_distance): one new member
+# pair (same C source, different TAG string) zipped as family-a/family-b; the other members are reused. expected =
+# fh_fixtures.py: libfuzzy 2.14.1 (tools/ssdeep/ssdeep.sh), py-tlsh, pefile.get_imphash, telfhash 0.9.8 in a throwaway
+# venv (pip install py-tlsh pefile pyelftools telfhash) -- never lib.binary
+gcc -O0 -o fh-family-a.elf fh_src/fam.c
+gcc -O0 -DTAG='"bravo-variant"' -o fh-family-b.elf fh_src/fam.c
+rm -f fh_pair.zip && zip -X -q fh_pair.zip fh-family-a.elf fh-family-b.elf && rm -f fh-family-a.elf fh-family-b.elf
+"${FH_PY:-python3}" fh_fixtures.py

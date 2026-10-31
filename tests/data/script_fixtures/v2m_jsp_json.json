@@ -1,0 +1,8 @@
+{
+ "target": "analysis-v2-marker-schema",
+ "note": "V2 marker in a `<%-- --%>` JSP comment host, JSON plan (v:4) with an edges list and a nested inner object",
+ "decoy": false,
+ "expected_plain": "{\"v\":4,\"language\":\"jsp\",\"role\":\"stager\",\"edges\":[\"init>pull\",\"pull>exec\"],\"parent\":\"index.jsp\",\"host_language\":\"java\",\"inner\":{\"language\":\"groovy\",\"role\":\"beacon\"}}",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v2m_gen.py  (stdlib base64/binascii/json encode of a v=4 / v=5 / JSON plan under a HUNTRESS_ANALYSIS_V2 marker)",
+ "oracle_cmd": "sed -n 's/^<%-- HUNTRESS_ANALYSIS_V2:B64-\\(.*\\) --%>$/\\1/p' tests/data/script_fixtures/v2m_jsp_json.jsp | base64 -d"
+}

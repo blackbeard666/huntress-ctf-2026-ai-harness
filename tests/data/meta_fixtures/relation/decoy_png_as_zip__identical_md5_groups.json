@@ -1,0 +1,8 @@
+{
+ "field": "relation.identical_md5_groups",
+ "expected": "none",
+ "generator_cmd": "python3 -c \"from PIL import Image; Image.new('RGB',(8,8),(1,2,3)).save('still.png')\" && cp still.png cluster-099.zip",
+ "oracle_cmd": "file still.png -> PNG image data, 8 x 8 (renamed, not a zip: no members)",
+ "decoy": true,
+ "member": "cluster-099.zip"
+}

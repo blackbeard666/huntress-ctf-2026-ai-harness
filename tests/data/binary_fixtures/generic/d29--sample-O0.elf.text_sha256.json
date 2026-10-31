@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "d29--sample-O0.elf",
+ "field": "text_sha256",
+ "question": "In evidence.zip, Use the unique d29-- member whose basename ends O0.elf. Compute SHA-256 over the exact file bytes of the .text section (sh_offset, sh_size).",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "exactly 64 lowercase hexadecimal characters; no prefix, whitespace, or explanatory text"
+ },
+ "expected": "bb27cc2a06ba7adc7736d9132a241e02a8ab7b6c46f884546a34ad606de0ad11",
+ "generator_cmd": "sh ot_gen.sh  # gcc -O0 -g / gcc -O3 -g of ot_twin.c; d29--sample-O0/O3.elf copied from the D29 GM evidence",
+ "oracle_cmd": "objcopy -O binary --only-section=.text d29--sample-O0.elf /dev/stdout | sha256sum | cut -c1-64"
+}

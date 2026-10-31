@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_gcc.zip",
+ "field": "strangers",
+ "question": "In evidence.zip, Use all d31-- members in ZIP central-directory order. Family = members sharing an identical .text SHA-256; a stranger shares neither the family's .text nor its section-name table nor its size. Submit the strangers' basenames as a JSON array.",
+ "answer_format": {
+  "kind": "json",
+  "syntax": "compact JSON array"
+ },
+ "expected": "[\"d31--sample-stranger.elf\"]",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "readelf -SW <m> section names + objcopy .text sha256sum + stat -c %s"
+}

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "bp_trace_records.elf",
+ "field": "trace_family",
+ "question": "Submit the family value shared by the embedded dynamic trace records.",
+ "answer_format": {
+  "kind": "exact_text"
+ },
+ "expected": "breadth_cluster_trace",
+ "generator_cmd": "gcc -O0 -o bp_trace_records.elf tr.c  # three const char[] JSON records + one %s/%d template (gen_generic.sh)",
+ "oracle_cmd": "strings -a bp_trace_records.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs '[.[].family]|unique|.[0]'",
+ "oracle_output": "breadth_cluster_trace"
+}

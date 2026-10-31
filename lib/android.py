@@ -62,7 +62,96 @@ def decode_payload(codec, data, key=None, accept=ANS_RE_T.search):
     out = _decode_declared(codec, data, key)
     if accept is None or (out and accept(out)):
         return out
+    hit = v1_registry_decode(data, key)  # every v1 codec of D1-D30 under <= 2 unwraps: < 1 ms, before the 0.35 s chain
+    if hit and accept(hit):
+        return hit
     return decode_any(data, key, accept) or out
+
+
+# --- v1 codec registry (D1-D30 every shipped v1 codec, keys re-rolled; tests/data/android_fixtures/v1r_*) -------------
+# One table of the v1 decoders the GM has shipped (plain, reverse, base64, hex, xor = b64 + key, caesar +/- key, packet
+# = hex `HA` u8-len ascii xor-checksum, table = hex then b-(key+3i), layered = b64 -> b^(key+i) -> reverse), tried under
+# 0-2 unkeyed unwraps {reverse, unhex, unbase64} and an optional final reverse. Only a whole-reading fullmatch of
+# ANS-<16 hex> counts. D30 showed the slow searches (decode_any chain 0.35 s, stacked_codec_search) cost the race probe.
+_V1R_FULL = re.compile(r"ANS-[0-9A-Fa-f]{16}")
+
+
+def _v1r_unhex(s):
+    t = re.sub(r"\s", "", s)
+    return bytes.fromhex(t).decode("latin-1") if len(t) % 2 == 0 and re.fullmatch(r"[0-9A-Fa-f]+", t) else None
+
+
+def _v1r_unb64(s):
+    t = re.sub(r"\s", "", s)
+    if not re.fullmatch(r"[A-Za-z0-9+/\-_]+={0,2}", t) or len(t) < 4:
+        return None
+    return base64.urlsafe_b64decode(t.replace("+", "-").replace("/", "_") + "=" * (-len(t) % 4)).decode("latin-1")
+
+
+def _v1r_packet(b):
+    if len(b) >= 4 and b[:2] == b"HA" and 3 + b[2] <= len(b):
+        return b[3:3 + b[2]]
+    return None
+
+
+def _v1r_steps(k):
+    """(name, str -> str|None) decoders; keyed ones only when the key is an int."""
+    L = lambda b: b.decode("latin-1")  # noqa: E731
+    B = lambda s: s.encode("latin-1")  # noqa: E731
+    steps = [("plain", lambda s: s), ("reverse", lambda s: s[::-1]), ("base64", _v1r_unb64), ("hex", _v1r_unhex),
+             ("packet", lambda s: (lambda h: L(_v1r_packet(B(h))) if h and _v1r_packet(B(h)) else None)(_v1r_unhex(s)))]
+    if k is not None:
+        steps += [("caesar-", lambda s: "".join(chr((ord(c) - k) % 0x110000) for c in s)),
+                  ("caesar+", lambda s: "".join(chr((ord(c) + k) % 0x110000) for c in s))]
+        for nm, f in (("xor", lambda i: k), ("sub3i", lambda i: k + 3 * i), ("xori", lambda i: k + i)):
+            steps += [(nm, lambda s, f=f: L(bytes((x ^ f(i)) & 255 for i, x in enumerate(B(s)))) if max(map(ord, s), default=0) < 256 else None)]
+        steps += [("table", lambda s: L(bytes((x - (k + 3 * i)) & 255 for i, x in enumerate(B(s)))) if max(map(ord, s), default=0) < 256 else None),
+                  ("table+", lambda s: L(bytes((x + (k + 3 * i)) & 255 for i, x in enumerate(B(s)))) if max(map(ord, s), default=0) < 256 else None)]
+    return steps
+
+
+def v1_registry_decode(data, key=None):
+    """The ANS-<16 hex> token of a v1 puzzle `data` under any registry codec (or a <= 3-step stack of them), else None.
+    Bounded: <= ~2k cheap string ops on a <= 4 KB payload; never raises."""
+    try:
+        if not isinstance(data, str) or not data or len(data) > 4096:
+            return None
+        k = None
+        if isinstance(key, int) and not isinstance(key, bool):
+            k = key
+        elif isinstance(key, str) and re.fullmatch(r"-?\d{1,6}", key.strip()):
+            k = int(key.strip())
+        wraps = (("reverse", lambda s: s[::-1]), ("hex", _v1r_unhex), ("base64", _v1r_unb64))
+        layer, seen = [data], {data}
+        stages = [data]
+        for _ in range(2):
+            nxt = []
+            for s in layer:
+                for _, w in wraps:
+                    try:
+                        r = w(s)
+                    except Exception:  # noqa: BLE001
+                        r = None
+                    if r and r not in seen:
+                        seen.add(r)
+                        nxt.append(r)
+            stages += nxt
+            layer = nxt
+        steps = _v1r_steps(k)
+        for s in stages:
+            for _, f in steps:
+                try:
+                    r = f(s)
+                except Exception:  # noqa: BLE001
+                    r = None
+                if not r:
+                    continue
+                for c in (r, r[::-1], _v1r_unb64(r) if len(r) > 20 else None, _v1r_unhex(r) if len(r) > 20 else None):
+                    if c and _V1R_FULL.fullmatch(c.strip()):
+                        return c.strip()
+    except Exception:  # noqa: BLE001 - a decoy / malformed payload just misses
+        return None
+    return None
 
 
 def _decode_declared(codec, data, key=None):
@@ -448,12 +537,37 @@ def transposition_candidates(s, p=None):
         return []
 
 
+_V1R_DECLARED = {"plain", "", "none", "raw", "identity", "xor", "base64", "b64", "base32", "b32", "hex", "base16",
+                 "rot13", "rot-13", "reverse", "reversed", "caesar", "shift", "char_shift"}
+
+
+def _v1r_perm(p, data):
+    """Fullmatch ANS tokens of an int-list permutation (D17 `indexed`) over `data` or one v1 unwrap of it (b64/hex/
+    reverse); [] when the puzzle has no int-list field or nothing assembles to a whole token."""
+    try:
+        if not isinstance(data, str) or len(data) > 4096 or not any(_int_list(v) is not None for v in p.values()):
+            return []
+        for w in (lambda s: s, _v1r_unb64, _v1r_unhex, lambda s: s[::-1]):
+            inner = w(data)
+            if inner:
+                q = dict(p, data=inner)
+                q.pop("key", None)  # a whole-token assembly needs no key; keeps permutation_candidates off decode_any
+                hit = [c.strip() for c in permutation_candidates(q) if _V1R_FULL.fullmatch(c.strip())]
+                if hit:
+                    return list(dict.fromkeys(hit))
+    except Exception:  # noqa: BLE001
+        return []
+    return []
+
+
 def _puzzle_obj_candidates(p):
     """Decoded candidate strings of one parsed huntress_puzzle.json object (declared codec, split parts, int-list
     permutation fields, keyless transposition)."""
     data, codec, key = p.get("data", p.get("payload", "")), p.get("codec"), p.get("key")
     if (codec or "").lower() == "split" or "parts" in p:
         got = _split_assemblies(p.get("parts", []), p.get("order"))
+    elif (codec or "").lower() not in _V1R_DECLARED and _v1r_perm(p, data):  # D17 indexed (or wrapped): no 0.35 s chain
+        return _v1r_perm(p, data) + [data]
     else:
         got = [decode_payload(codec, data, key)]
     if not any(c and ANS_RE_T.search(c) for c in got):  # indexed/perm*/shuffle*/unknown: int-list fields
@@ -709,6 +823,387 @@ def stacked_codec_search(puzzle):
     except Exception:  # noqa: BLE001 - decoy / truncated / wrong-format input yields nothing
         return []
 
+
+# --- framed binary packet codec family (coverage atlas row 113, prebuild packet-frame-codec-family) --------------------
+# D28 `packet` = hex of `HA` | u8 len | payload | XOR8 of all prior bytes. Its mutations, parsed explicitly: a 0-4 byte
+# magic/version prefix, a length u8 / u16 / u32 BE|LE / LEB128 varint (counting the payload, payload+checksum or the whole
+# frame), 0-2 type/flag bytes, a 1/2/4-byte checksum (XOR8, sum8, -sum8; CRC16 CCITT-FALSE / XMODEM / KERMIT / ARC /
+# MODBUS, sum16; CRC32, Adler32; BE|LE) after the payload or right after the header, over the frame / after-magic /
+# payload bytes. A stream of frames keeps only checksum-valid ones; TLV records (u8 type, u8|u16 len) inside a frame or
+# trailed by a checksum. A payload counts only when it fullmatches ANS-<16 hex> plain, under the v1 registry (base64 /
+# hex / reverse / xor|caesar|table with the declared key) or a 1-byte / key+i xor pinned by the known `ANS-` prefix.
+_PFC_MAX = 4096
+_PFC_LENS = ("u8", "u16be", "u16le", "u32be", "u32le", "varint")
+
+
+def _pfc_table(poly):
+    t = []
+    for c in range(256):
+        for _ in range(8):
+            c = (c >> 1) ^ poly if c & 1 else c >> 1
+        t.append(c)
+    return t
+
+
+_PFC_TAB = {0x8408: _pfc_table(0x8408), 0xA001: _pfc_table(0xA001)}
+
+
+def _pfc_crc16r(b, poly, init):
+    c, t = init, _PFC_TAB[poly]
+    for x in b:
+        c = (c >> 8) ^ t[(c ^ x) & 255]
+    return c
+
+
+def _pfc_xor8(b):
+    c = 0
+    for x in b:
+        c ^= x
+    return c
+
+
+_PFC_SUMS = {1: (_pfc_xor8, lambda b: sum(b) & 255, lambda b: -sum(b) & 255),
+             2: (lambda b: binascii.crc_hqx(b, 0xFFFF), lambda b: binascii.crc_hqx(b, 0),
+                 lambda b: _pfc_crc16r(b, 0x8408, 0), lambda b: _pfc_crc16r(b, 0xA001, 0),
+                 lambda b: _pfc_crc16r(b, 0xA001, 0xFFFF), lambda b: sum(b) & 0xFFFF),
+             4: (zlib.crc32, zlib.adler32)}
+
+
+def _pfc_len(b, o, enc):
+    n = len(b)
+    if enc == "u8":
+        return (b[o], 1) if o < n else None
+    if enc == "varint":
+        v = 0
+        for i in range(4):
+            if o + i >= n:
+                return None
+            v |= (b[o + i] & 0x7F) << (7 * i)
+            if not b[o + i] & 0x80:
+                return (v, i + 1) if i == 0 or b[o + i] else None  # minimal encoding only
+        return None
+    w = 2 if enc.startswith("u16") else 4
+    return (int.from_bytes(b[o:o + w], "big" if enc.endswith("be") else "little"), w) if o + w <= n else None
+
+
+def _pfc_frame(b, s, lay):
+    """(payload, stored checksum, end, spans()) of the frame at s under layout lay, or None."""
+    o, enc, gap, sem, cs, tail = lay
+    r = _pfc_len(b, s + o, enc)
+    if not r:
+        return None
+    L, nl = r
+    h = o + nl + gap
+    p0 = h + (0 if tail else cs)
+    pl = L if sem == 0 else L - cs if sem == 1 else L - p0 - (cs if tail else 0)
+    end = s + p0 + pl + (cs if tail else 0)
+    if pl <= 0 or end > len(b):
+        return None
+    pay = b[s + p0:s + p0 + pl]
+    stored = b[s + p0 + pl:end] if tail else b[s + h:s + p0]
+
+    def spans():
+        head = b[s:s + h]
+        return [head + pay, pay] + ([head[o:] + pay] if o else []) + ([head[o + nl:] + pay] if gap else [])
+    return pay, stored, end, spans
+
+
+def _pfc_sum_ok(stored, spans, combo=None):
+    """The (span index, algo index, order) combos whose checksum equals stored."""
+    cs, out = len(stored), []
+    for si, sp in enumerate(spans):
+        for ai, f in enumerate(_PFC_SUMS[cs]):
+            if combo and combo[:2] != (si, ai):
+                continue
+            v = f(sp) & ((1 << (8 * cs)) - 1)
+            for od in ("big", "little")[:1 if cs == 1 else 2]:
+                if v.to_bytes(cs, od) == stored:
+                    out.append((si, ai, od))
+    return out
+
+
+def _pfc_tlv(b, s, end, enc, need):
+    """Values of u8-type TLV records exactly tiling b[s:end] (>= need records), else []."""
+    vals, i = [], s
+    while i < end:
+        r = _pfc_len(b, i + 1, enc)
+        if not r or r[0] <= 0 or i + 1 + r[1] + r[0] > end or len(vals) >= 64:
+            return []
+        vals.append(b[i + 1 + r[1]:i + 1 + r[1] + r[0]])
+        i += 1 + r[1] + r[0]
+    return vals if len(vals) >= need else []
+
+
+def packet_frames(b, deadline=None):
+    """Checksum-valid payloads (bytes) of a framed binary packet / frame stream / TLV body `b`; [] when none."""
+    out = []
+    if not isinstance(b, (bytes, bytearray)) or not 4 <= len(b) <= _PFC_MAX:
+        return out
+    b, n = bytes(b), len(b)
+    deadline = deadline or time.time() + 0.5
+    for o in range(5):
+        for enc in _PFC_LENS:
+            for gap in range(3):
+                for sem in range(3):
+                    for cs in (1, 2, 4):
+                        for tail in (True, False):
+                            if deadline and time.time() > deadline:
+                                return out
+                            lay = (o, enc, gap, sem, cs, tail)
+                            frames, s = [], 0
+                            while s < n:
+                                f = _pfc_frame(b, s, lay)
+                                if not f or len(frames) >= 64 or (frames and b[s:s + o] != b[:o]):
+                                    break
+                                frames.append(f)
+                                s = f[2]
+                            if s != n or not frames:
+                                continue
+                            combos, frames = {}, [f[:3] + (f[3](),) for f in frames]
+                            for f in frames:
+                                for c in _pfc_sum_ok(f[1], f[3]):
+                                    combos[c] = combos.get(c, 0) + 1
+                            if not combos:
+                                continue
+                            best = max(combos, key=combos.get)
+                            good = [f[0] for f in frames if best in _pfc_sum_ok(f[1], f[3], best)]
+                            out += [p for p in good if p not in out]
+                            if len(good) > 1:
+                                out.append(b"".join(good))
+    out = out[:64]
+    for s in range(5 if time.time() < deadline else 0):  # TLV body after a 0-4 byte magic, trailed by a checksum (or none: >= 2 records tile it exactly)
+        for enc in ("u8", "u16be", "u16le"):
+            for cs in (0, 1, 2, 4):
+                if n - cs <= s:
+                    continue
+                if cs and not _pfc_sum_ok(b[n - cs:], [b[:n - cs], b[s:n - cs]]):
+                    continue
+                out += [v for v in _pfc_tlv(b, s, n - cs, enc, 1 if cs else 2) if v not in out]
+    for p in (list(out) if time.time() < deadline else []):  # TLV records inside a checksum-valid frame payload
+        for enc in ("u8", "u16be", "u16le"):
+            out += [v for v in _pfc_tlv(p, 0, len(p), enc, 2) if v not in out]
+    return out
+
+
+def _pfc_answer(p, key=None):
+    s = p.decode("latin-1")
+    if _V1R_FULL.fullmatch(s):
+        return s
+    hit = v1_registry_decode(s, key)
+    if hit:
+        return hit
+    for q in (p, (_v1r_unb64(s) or "").encode("latin-1"), (_v1r_unhex(s) or "").encode("latin-1")):
+        for r in (q, q[::-1]):
+            if len(r) != 20:
+                continue
+            k = r[0] ^ 0x41  # known plaintext `A`: constant xor, or key+i
+            for ks in ((lambda i: k), (lambda i: (k + i) & 255), (lambda i: k ^ i)):
+                t = bytes(x ^ ks(i) for i, x in enumerate(r)).decode("latin-1")
+                if _V1R_FULL.fullmatch(t):
+                    return t
+            if isinstance(key, str) and key:
+                kb = key.encode("utf-8", "replace")
+                t = bytes(x ^ kb[i % len(kb)] for i, x in enumerate(r)).decode("latin-1")
+                if _V1R_FULL.fullmatch(t):
+                    return t
+    return None
+
+
+def _pfc_readings(v):
+    if isinstance(v, list) and v and all(isinstance(x, int) and not isinstance(x, bool) for x in v):
+        return [bytes(x & 255 for x in v)]
+    if not isinstance(v, str) or len(v) < 8:
+        return []
+    out = []
+    t = re.sub(r"(?i)0x|[\s:,\-]", "", v)
+    if len(t) % 2 == 0 and re.fullmatch(r"[0-9A-Fa-f]+", t):
+        out.append(bytes.fromhex(t))
+    try:
+        u = _v1r_unb64(v)
+        if u:
+            out.append(u.encode("latin-1"))
+    except (ValueError, binascii.Error):
+        pass
+    if max(map(ord, v)) < 256 and re.search(r"[^\x20-\x7e]", v):
+        out.append(v.encode("latin-1"))
+    return out
+
+
+def packet_frame_candidates(apk, puzzle_objs=None, budget_s=0.6):
+    """ANS tokens of framed binary packets: puzzle-JSON string / int-list values (hex, base64, raw) and small binary
+    assets (*.bin/.pkt/.dat/.frame/.packet), each a checksum-valid frame / stream / TLV (packet_frames) whose payload
+    fullmatches the token. [] when absent; never raises; bounded by budget_s."""
+    hits, deadline = [], time.time() + budget_s
+    try:
+        vals = []
+        with zipfile.ZipFile(apk) as z:
+            objs = puzzle_objs
+            if objs is None:
+                objs = []
+                for i in z.infolist():
+                    if i.filename.endswith("huntress_puzzle.json") and i.file_size < 1 << 20:
+                        try:
+                            objs.append(json.loads(z.read(i)))
+                        except ValueError:
+                            pass
+            for i in z.infolist()[:4096]:
+                if re.search(r"(?i)^assets/.+\.(?:bin|pkt|dat|frame|packet|wire)$", i.filename) \
+                        and 4 <= i.file_size <= _PFC_MAX and len(vals) < 16:
+                    raw = z.read(i)
+                    vals.append((None, raw))
+                    vals += [(None, r) for r in _pfc_readings(raw.decode("latin-1").strip())]
+
+        def walk(o, key, d=0):
+            if isinstance(o, dict):
+                key = o.get("key", key)
+                for v in o.values():
+                    walk(v, key, d + 1)
+            elif isinstance(o, list) and d < 3 and not all(isinstance(x, int) for x in o):
+                for v in o:
+                    walk(v, key, d + 1)
+            else:
+                vals.extend((key, r) for r in _pfc_readings(o))
+        for p in objs:
+            walk(p, None)
+        for key, b in vals:
+            for p in packet_frames(b, deadline):
+                t = _pfc_answer(p, key)
+                if t and t not in hits:
+                    hits.append(t)
+            if time.time() > deadline:
+                break
+        if not hits:  # out-of-order seq/nonce frame stream (one JSON list of frame strings joins into one blob)
+            for p in objs:
+                for v in (p.values() if isinstance(p, dict) else ()):
+                    if isinstance(v, list) and 2 <= len(v) <= 64 and all(isinstance(x, str) for x in v):
+                        rs = [_pfc_readings(x) for x in v]
+                        if all(rs):
+                            vals.append((p.get("key"), b"".join(r[0] for r in rs)))
+            hits += seq_nonce_candidates(vals)
+    except Exception:  # noqa: BLE001 - a decoy / malformed container just misses
+        return hits
+    return hits
+
+
+# --- multi-frame seq / nonce stream (coverage atlas row 114, prebuild multi-frame-seq-nonce-reorder) -------------------
+# The D28 `packet` stream grown a session layer: magic-prefixed frames `magic(1-4) | k fixed header bytes holding a
+# length field (u8 / u16 BE|LE / varint, payload / payload+sum / whole frame) plus seq (u8 / u16 BE|LE) and nonce
+# (1/2/4/8 bytes, or every other header byte) | payload | tail checksum (packet_frames' 1/2/4-byte family, one combo for
+# the stream)`, arriving out of order with a replayed duplicate, a stale (reused / non-increasing) nonce and a
+# bad-checksum decoy. Drop bad sums, drop repeated nonces (keep the first; or keep only increasing nonces), one frame per
+# seq (first / last / freshest nonce), order by seq (a gap-free 0.. / 1.. run), join the payloads; only a _pfc_answer
+# fullmatch counts.
+_SNR_HDR = 12
+
+
+def _snr_streams(b, deadline):
+    """[(fields list, payloads list)] of checksum-valid frame streams tiling b (>= 2 good frames, one sum combo)."""
+    n, out = len(b), []
+    for o in range(1, 5):
+        for k in range(1, _SNR_HDR + 1):
+            for q in range(k + 1):
+                for enc in ("u8", "u16be", "u16le", "varint"):
+                    for sem in range(3):
+                        for cs in (1, 2, 4):
+                            if time.time() > deadline:
+                                return out
+                            frames, s = [], 0
+                            while s < n and len(frames) < 64 and b[s:s + o] == b[:o]:
+                                r = _pfc_len(b, s + o + q, enc)
+                                if not r:
+                                    break
+                                h = o + k + r[1]
+                                pl = r[0] if sem == 0 else r[0] - cs if sem == 1 else r[0] - h - cs
+                                end = s + h + pl + cs
+                                if pl <= 0 or end > n:
+                                    break
+                                fl = b[s + o:s + o + q] + b[s + o + q + r[1]:s + h]
+                                frames.append((fl, b[s + h:s + h + pl], b[end - cs:end],
+                                               [b[s:end - cs], b[s + h:end - cs], b[s + o:end - cs]]))
+                                s = end
+                            if s != n or len(frames) < 3:
+                                continue
+                            combos = {}
+                            for f in frames:
+                                for c in _pfc_sum_ok(f[2], f[3]):
+                                    combos[c] = combos.get(c, 0) + 1
+                            if not combos or max(combos.values()) < 2:
+                                continue
+                            best = max(combos, key=combos.get)
+                            good = [f[:2] for f in frames if best in _pfc_sum_ok(f[2], f[3], best)]
+                            out.append(([f[0] for f in good], [f[1] for f in good]))
+    return out
+
+
+def _snr_orders(fields, pays):
+    """Joined payload readings: every (seq field, nonce field, replay policy, per-seq policy) of one frame stream."""
+    k, seen = len(fields[0]), set()
+    for sp in range(k):
+        for sw, sod in ((1, "big"), (2, "big"), (2, "little")):
+            if sp + sw > k:
+                continue
+            seq = [int.from_bytes(f[sp:sp + sw], sod) for f in fields]
+            nspans = [(p, w) for w in (1, 2, 4, 8) for p in range(k - w + 1) if p + w <= sp or p >= sp + sw]
+            for np_, nw in nspans + [(None, 0)]:
+                non = [f[np_:np_ + nw] if np_ is not None else f[:sp] + f[sp + sw:] for f in fields]
+                nint = [int.from_bytes(x, "big") for x in non]
+                for pol in ("first", "rise"):
+                    keep, used, top = [], set(), -1
+                    for i, v in enumerate(non):
+                        if (v in used) if pol == "first" else (nint[i] <= top):
+                            continue
+                        used.add(v)
+                        top = max(top, nint[i])
+                        keep.append(i)
+                    for per in ("first", "last", "fresh"):
+                        pick = {}
+                        for i in keep:
+                            j = pick.get(seq[i])
+                            if j is None or per == "last" or (per == "fresh" and nint[i] > nint[j]):
+                                pick[seq[i]] = i
+                        sq = sorted(pick)
+                        if len(sq) < 2 or sq[0] > 1 or sq[-1] - sq[0] + 1 != len(sq):  # seq runs 0.. / 1.. gap-free
+                            continue
+                        j = b"".join(pays[pick[x]] for x in sq)
+                        if j not in seen:
+                            seen.add(j)
+                            yield j
+
+
+def seq_nonce_frames(b, deadline=None):
+    """Joined payloads (bytes) of an out-of-order seq/nonce frame stream `b` (bad sums + replayed nonces dropped,
+    ordered by seq); [] when none. Bounded by deadline; never raises."""
+    out = []
+    try:
+        if not isinstance(b, (bytes, bytearray)) or not 12 <= len(b) <= _PFC_MAX:
+            return out
+        deadline = deadline or time.time() + 0.4
+        for fields, pays in _snr_streams(bytes(b), deadline):
+            if len(set(map(len, fields))) != 1 or not fields[0]:
+                continue
+            for j in _snr_orders(fields, pays):
+                out.append(j)
+                if len(out) >= 4096 or time.time() > deadline:
+                    return out
+    except Exception:  # noqa: BLE001 - a malformed stream just misses
+        return out
+    return out
+
+
+def seq_nonce_candidates(vals, budget_s=0.4):
+    """ANS tokens of seq/nonce frame streams among (key, bytes) readings; [] when absent; never raises."""
+    hits, deadline = [], time.time() + budget_s
+    for key, b in vals:
+        for j in seq_nonce_frames(b, deadline):
+            try:
+                t = _pfc_answer(j, key)
+            except Exception:  # noqa: BLE001
+                t = None
+            if t and t not in hits:
+                hits.append(t)
+        if hits or time.time() > deadline:
+            break
+    return hits
 
 # --- declared pipeline / onion puzzle JSON (prebuild v1-declared-layers-pipeline; D30 `layered` finale form) -----------
 # A puzzle that NAMES its steps: `layers` / `steps` / `pipeline` / `chain` / `codecs` / `stages` / `ops` (or a list /
@@ -2170,6 +2665,11 @@ def _puzzle_candidates(apk, depth=3, seen=None, top=True):
         out += dex_eval_scan(apk, deep=True)
         if not any(ANS_RE_T.search(c) for c in out):  # v2: the chain reads assets / resources / PackageInfo via its Context
             out += context_chain_scan(apk)
+    if names and not any(ANS_RE_T.search(c) for c in out) \
+            and any(isinstance(p, dict) and "key" not in p for p in objs):  # key derived from build / pkg / case ref
+        out += identity_seed_candidates(apk, objs)
+    if names and not any(ANS_RE_T.search(c) for c in out):  # framed binary packet: magic/len/payload/checksum, TLV
+        out += packet_frame_candidates(apk, [p for p in objs if isinstance(p, dict)])
     if names and not any(ANS_RE_T.search(c) for c in out):  # declared `layers`/`steps` pipeline, or an onion puzzle JSON
         out += declared_pipeline_candidates(apk)
     if names and not any(ANS_RE_T.search(c) for c in out):  # unknown codec: a stack of known steps (D29 table, D30 layered)
@@ -3379,8 +3879,11 @@ def dex_strings(apk):
         hits = method_handle_scan(apk)
     if not hits:
         hits = jni_callback_scan(apk)
-    if not hits:
-        hits = dex_eval_scan(apk)
+    ckx = not hits and _ckx_marked(apk)
+    if ckx:  # integrity-check chain over the APK's own bytes: run it on the Context VM
+        hits = context_chain_scan(apk)
+    if not hits:  # a marked dex's all-zero token is a helper run on default 0 params (hex(0)), not an app value
+        hits = [h for h in dex_eval_scan(apk) if not (ckx and h.upper() == "ANS-0000000000000000")]
     if not hits:
         hits = bytecode_vm_scan(apk)
     if not hits:
@@ -8199,6 +8702,131 @@ def identity_key_scan(apk):
     except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
         pass
     return list(dict.fromkeys(hits))
+
+
+# --- per-variant identity as the codec key (atlas: puzzle-key-from-variant-identity) ----------------------------------
+# A v1 puzzle that drops `key` (or carries a `build`) keyed by the variant's identity: the asset `build` (12 hex), the
+# package suffix v<12 hex> (manifest pool / dex type descriptors), the case ref MOB-NN-<hex> and SECRET-<hex> (dex
+# strings). Int keys: int(h[:2],16), int(h[-2:],16), int(h,16)&0xff, sum / xor of the hex bytes and of the ascii, and
+# String.hashCode & 0xff -- through _decode_declared and v1_registry_decode; byte keys: bytes.fromhex(h) and hashCode
+# BE / LE (4 B) as a repeating xor / sub / add over the {plain, base64, hex, reverse} reading. Identity is read from the
+# APK bytes only; only a whole-reading fullmatch of ANS-<16 hex> counts.
+_IDV_DEX = re.compile(rb"MOB-\d{1,3}-[0-9A-Fa-f]{6,16}|SECRET-[0-9A-Za-z_\-]{6,64}|L([a-z]\w*(?:/\w+){1,8}/v[0-9a-f]{12})/")
+_IDV_FIELD = re.compile(r"(?i)build|variant|ident|seed|salt|case|ref|secret|package|pkg|nonce")
+_IDV_FULL = re.compile(r"\s*(ANS-[0-9A-Fa-f]{16})\s*")
+_IDV_BUDGET_S = 0.3
+
+
+def _idv_identity(z, objs):
+    """Identity strings of the APK: puzzle-json identity fields, dex case ref / secret / package, manifest package."""
+    ids = []
+    for p in objs:
+        for k, v in p.items():
+            if isinstance(v, str) and 4 <= len(v) <= 96 and _IDV_FIELD.search(str(k)):
+                ids.append(v.strip())
+    for info in z.infolist():
+        n = info.filename
+        if info.file_size > _NEST_MAX_ENTRY:
+            continue
+        if re.fullmatch(r"classes\d*\.dex", n):
+            for m in _IDV_DEX.finditer(z.read(info)):
+                ids.append((m.group(1) or m.group(0)).decode().replace("/", "."))
+        elif n == "AndroidManifest.xml":
+            b = z.read(info)
+            if b[:2] == b"\x03\x00":
+                ids += [t for t in _pool_strings(b)[:400] if _IDK_PKG.fullmatch(t) and not t.startswith(_IDK_SYS)][:2]
+    return list(dict.fromkeys(ids))[:16]
+
+
+def _idv_x8(b):
+    x = 0
+    for c in b:
+        x ^= c
+    return x
+
+
+def _idv_keys(ids):
+    """(int keys, multi-byte keys) derived from the identity strings, most specific first."""
+    ints, raws = [], []
+    for s in ids:
+        hx = []
+        m = re.search(r"\.v([0-9a-f]{12})$", s)
+        if m:
+            hx.append(m.group(1))
+        m = re.fullmatch(r"(?:MOB-\d{1,3}-|SECRET-)?([0-9A-Fa-f]{2,64})", s)
+        if m:
+            hx.append(m.group(1))
+        for h in hx:
+            if len(h) % 2 == 0:
+                hb = bytes.fromhex(h)
+                raws.append(hb)
+                ints += [hb[0], hb[-1], sum(hb) & 255, _idv_x8(hb)]
+            ints += [int(h[:2], 16), int(h[-2:], 16), int(h, 16) & 255]
+        sb = s.encode("utf-8", "replace")
+        h = _java_hash(s)
+        raws += [struct.pack(">I", h), struct.pack("<I", h)]
+        ints += [h & 255, sum(sb) & 255, _idv_x8(sb)]
+    return list(dict.fromkeys(ints)), [r for r in dict.fromkeys(raws) if len(r) > 1]
+
+
+def _idv_readings(data):
+    out = [data.encode("latin-1", "replace"), data[::-1].encode("latin-1", "replace")]
+    for f in (_v1r_unb64, _v1r_unhex):
+        try:
+            r = f(data)
+        except Exception:  # noqa: BLE001
+            r = None
+        if r:
+            out += [r.encode("latin-1"), r[::-1].encode("latin-1")]
+    return out
+
+
+def identity_seed_candidates(apk, puzzle_objs=None):
+    """ANS tokens of a puzzle json whose codec key is derived from the variant identity (build / package suffix / case
+    ref / client secret, see _idv_keys) instead of a JSON `key`. [] when absent; never raises; < 0.3 s."""
+    hits = []
+    try:
+        with zipfile.ZipFile(apk) as z:
+            objs = puzzle_objs
+            if objs is None:
+                objs = []
+                for info in z.infolist():
+                    if info.filename.endswith("huntress_puzzle.json") and info.file_size <= 1 << 20:
+                        try:
+                            objs.append(json.loads(z.read(info)))
+                        except ValueError:
+                            continue
+            objs = [p for p in objs if isinstance(p, dict)]
+            pays = [(p.get("codec"), p.get("data", p.get("payload"))) for p in objs]
+            pays = [(c, d) for c, d in pays if isinstance(d, str) and 8 <= len(d) <= 4096]
+            if not pays:
+                return []
+            ints, raws = _idv_keys(_idv_identity(z, objs))
+        end = time.time() + _IDV_BUDGET_S
+
+        def hit(s):
+            m = _IDV_FULL.fullmatch(s) if s else None
+            if m and m.group(1) not in hits:
+                hits.append(m.group(1))
+
+        for codec, data in pays:
+            for k in ints:
+                if time.time() > end:
+                    return hits
+                hit(_decode_declared(codec, data, k))
+                hit(v1_registry_decode(data, k))
+            for b in _idv_readings(data):
+                for k in raws:
+                    n = len(k)
+                    for op in (lambda x, i: x ^ k[i % n], lambda x, i: x - k[i % n], lambda x, i: x + k[i % n]):
+                        r = bytes(op(x, i) & 255 for i, x in enumerate(b)).decode("latin-1")
+                        hit(r)
+                        hit(r[::-1])
+            if hits:
+                return hits
+    except Exception:  # noqa: BLE001 - truncated / impostor APK: no answer here
+        pass
+    return hits
 
 
 # --- signing certificate facts (coverage atlas rows 9 / 49 / 59: app-links fingerprint, integrity check, cert fields) ---
@@ -16666,6 +17294,29 @@ def _spl_name(b):
     except Exception:  # noqa: BLE001
         pass
     return None
+
+
+# 'integrity checks' made real in a v2 chain (coverage atlas: v2-checksum-intrinsics-crc32-adler): token() folds
+# CRC32 / Adler32 / Checksum / MessageDigest values over the APK's own bytes (getAssets().open, ZipFile(getPackageCodePath
+# | sourceDir) entries, getPackageInfo signatures[0] / signingInfo cert DER). Run outside the Context VM, dex_eval_scan's
+# stand-alone helpers (hex(long) on a default 0) leak ANS-0000000000000000, so dex_strings routes such a dex here first.
+_CKX_SUM = re.compile(rb"Ljava/util/zip/(?:CRC32|Adler32|Checksum);|Ljava/security/MessageDigest;")
+_CKX_SRC = re.compile(rb"getPackageCodePath|getPackageResourcePath|sourceDir|Landroid/content/res/AssetManager;"
+                      rb"|Landroid/content/pm/Signature;|getApkContentsSigners")
+
+
+def _ckx_marked(apk):
+    """True when some classes*.dex takes a Context and pairs a checksum / digest class with an own-bytes source."""
+    try:
+        with zipfile.ZipFile(apk) as z:
+            for i in z.infolist()[:64]:
+                if i.file_size <= _DXE_MAX_DEX and re.fullmatch(r"classes\d*\.dex", i.filename):
+                    d = z.read(i)
+                    if b"Landroid/content/Context;" in d and _CKX_SUM.search(d) and _CKX_SRC.search(d):
+                        return True
+    except Exception:  # noqa: BLE001 - not a zip
+        pass
+    return False
 
 
 def context_chain_scan(apk, splits=None):

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_imports.bin",
+ "field": "deps_all_lib_prefixed",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when every DT_NEEDED entry starts with lib. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": "true",
+ "generator_cmd": "gcc -O1 -o gf_c_imports.bin gf_imports.c -lm -lz (existing member)",
+ "oracle_cmd": "! readelf -d -W gf_c_imports.bin | sed -n 's/.*(NEEDED).*\\[\\(.*\\)\\]/\\1/p' | grep -qv '^lib' && echo true || echo false"
+}

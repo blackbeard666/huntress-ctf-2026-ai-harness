@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_d28_trio.zip",
+ "field": "false_friend",
+ "question": "In evidence.zip, Use all d28-- members in ZIP central-directory order. Family = members sharing an identical .text SHA-256. The false friend shares a family member's section-name table but not its .text. Submit the false friend's basename.",
+ "answer_format": {
+  "kind": "exact_text",
+  "syntax": "exact member basename"
+ },
+ "expected": "d28--sample-false-friend.elf",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "readelf -SW <m> section names + objcopy .text sha256sum"
+}

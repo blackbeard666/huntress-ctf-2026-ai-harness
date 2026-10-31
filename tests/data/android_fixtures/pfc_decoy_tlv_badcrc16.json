@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": null,
+ "decoy": true,
+ "_why": "DECOY: HA | TLV{seq, 0x10: base64(reversed token)} | CRC16-XMODEM off by one",
+ "generator_cmd": "python3 tests/data/android_fixtures/pfc_src/gen_pfc.py pfc_decoy_tlv_badcrc16  # python zipfile + bitwise CRC32/CRC16/sum8",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/pfc_decoy_tlv_badcrc16.apk assets/session.pkt | python3 -I -c 'import sys,binascii,base64\nb=sys.stdin.buffer.read();ok=binascii.crc_hqx(b[:-2],0).to_bytes(2,\"big\")==b[-2:];i=2\nwhile ok and i<len(b)-2:\n t,n=b[i],b[i+1]\n if t==16: print(base64.b64decode(b[i+2:i+2+n]).decode()[::-1])\n i+=2+n\nprint(\"\" if ok else \"BADSUM\",end=\"\")'"
+}

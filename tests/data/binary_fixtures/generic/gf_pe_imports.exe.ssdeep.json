@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "ssdeep",
+ "question": "Submit the ssdeep hash of the executable.",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": "6144:kB9gmIZrspTTZUK4OiFVVcYMwdnMtkIwRP/m9E13XDt75JyYzr:kB9gmuCPZ34i6e4mG1LJy+",
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "tools/ssdeep/ssdeep.sh -s -b gf_pe_imports.exe  # libfuzzy 2.14.1"
+}

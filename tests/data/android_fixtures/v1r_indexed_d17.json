@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-3C5D610130077861",
+ "decoy": false,
+ "_why": "D17 indexed order (3+7i)%20: data[i] = token[order[i]]",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_indexed_d17  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_indexed_d17.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json;p=json.load(sys.stdin);r=[\"\"]*len(p[\"data\"])\nfor i,o in enumerate(p[\"order\"]): r[o]=p[\"data\"][i]\nprint(\"\".join(r))'"
+}

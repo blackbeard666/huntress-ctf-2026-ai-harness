@@ -1,0 +1,17 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_events.bin",
+ "field": "has_zig_runtime",
+ "question": "In evidence.zip, use the d99-- member. Does the member carry the Zig standard-library runtime? Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "false",
+ "generator_cmd": "see gen_generic.sh (gcc C ELF)",
+ "oracle_cmd": "strings -a gf_c_events.bin | grep -cE 'attempt to unwrap error|integer cast truncated bits'   # Zig std panic texts; >0 -> true",
+ "decoy": true
+}

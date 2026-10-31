@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "pg_macho.dylib",
+ "field": "api_surface_size",
+ "question": "In evidence.zip, use the d99-- member. Count the exported symbol names of the Mach-O image. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "5",
+ "generator_cmd": "tools/ziglang/ziglang/zig cc -target x86_64-macos -O1 -shared -o pg_macho.dylib pg_src/pg_lib.c (pg_src/pg_gen.sh)",
+ "oracle_cmd": "python3 -c \"import lief, sys; b = lief.parse('pg_macho.dylib'); n = [s.name for s in b.exported_symbols]; sys.stdout.write(''.join(x + chr(10) for x in n)); sys.stdout.flush()\" 2>/dev/null | wc -l"
+}

@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "fh_pair.zip",
+ "field": "family_a_family_b_ssdeep_score",
+ "question": "What is the ssdeep match score (0-100) between family-a and family-b?",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": "75",
+ "generator_cmd": "gcc -O0 fh_src/fam.c -o fh-family-a.elf; gcc -O0 -DTAG='\"bravo-variant\"' fh_src/fam.c -o fh-family-b.elf; zip -X fh_pair.zip fh-family-a.elf fh-family-b.elf  (gen_generic.sh)",
+ "oracle_cmd": "unzip fh_pair.zip; tools/ssdeep/ssdeep.sh -s -b -a -d fh-family-a.elf fh-family-b.elf"
+}

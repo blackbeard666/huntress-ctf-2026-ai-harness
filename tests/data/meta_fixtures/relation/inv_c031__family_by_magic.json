@@ -1,0 +1,8 @@
+{
+  "field": "relation.family_by_magic",
+  "expected": "{\"inv-01\":\"prefetch\",\"inv-02\":\"registry\",\"inv-03\":\"evtx\",\"inv-04\":\"apk\",\"inv-05\":\"zip\",\"inv-06\":\"pcap\",\"inv-07\":\"png\",\"inv-08\":\"json\",\"inv-09\":\"sqlite\",\"inv-10\":\"pe\",\"inv-11\":\"msi\",\"inv-12\":\"x509\",\"inv-13\":\"email\",\"inv-14\":\"jpeg\",\"inv-15\":\"json\",\"inv-16\":\"pdf\",\"inv-17\":\"text\",\"inv-18\":\"pe\",\"inv-19\":\"lnk\",\"inv-20\":\"ooxml\",\"inv-21\":\"elf\",\"inv-22\":\"macho\",\"inv-23\":\"jar\"}",
+  "generator_cmd": "gen.sh (lib/meta/prebuilt/relation_inventory.py docstring corpus): Pillow PNG/JPEG/PDF/GIF, sqlite3 CLI, openssl req -x509 (+x509 -outform DER), zip -X jar/docx/zip, sfdisk GPT, python wave, printf eml/json/ps1, + tool-generated lane fixtures (pe exe, /bin/true ELF, pcap, evtx, regf SAM, MAM prefetch, msibuild MSI, pylnk LNK, APK, Mach-O); liars: PE->holiday.png, JPEG->notes.txt, JSON->photo.jpg (031), PNG->readme.md (044); cluster-031 = delivery-manifest.json ids inv-NN by path; cluster-044 has no manifest; zip -q -r -X",
+  "oracle_cmd": "oracle.sh: unzip -q member tree; per member file -b (+ unzip -Z1 META-INF/MANIFEST.MF for jar, xxd MAM\\\\x04/SCCA for prefetch which file(1) calls 'data') -> family; label = jq manifest id by .path then .filename else basename sans ext; size = stat -c%s; expect.sh: jq over the TSV (family map / group_by counts / unique / ext-claim map / sort_by(-size,label) / add)",
+  "decoy": false,
+  "member": "cluster-031.zip"
+}

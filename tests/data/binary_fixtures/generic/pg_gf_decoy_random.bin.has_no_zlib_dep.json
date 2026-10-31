@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "has_no_zlib_dep",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when none of the DT_NEEDED entries contain libz. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": null,
+ "generator_cmd": "head -c 4096 /dev/urandom (existing member)",
+ "oracle_cmd": "file -b gf_decoy_random.bin  # 'data'",
+ "decoy": true
+}

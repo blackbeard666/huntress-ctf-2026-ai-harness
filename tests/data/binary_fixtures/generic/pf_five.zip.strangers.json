@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "pf_five.zip",
+ "field": "strangers",
+ "question": "In evidence.zip, Use all members in ZIP central-directory order. Group members by identical .text section SHA-256; the family is the largest group. Submit the stranger members (not in the family) as a JSON array in ZIP central-directory order.",
+ "answer_format": {
+  "kind": "json",
+  "syntax": "compact JSON array of basenames"
+ },
+ "expected": "[\"sample-2.elf\",\"sample-5.elf\"]",
+ "decoy": false,
+ "generator_cmd": "sh pf_src/pf_gen.sh  # mkblob.py (stdlib zlib.crc32 HCFG writer) + gcc -O2 fam.c / other.c, zip -X; D28 trio renamed",
+ "oracle_cmd": "python3 pf_src/pf_fixtures.py  # stdlib HCFG backward scan (xor, zlib.crc32, json) / objcopy --only-section=.text + sha256"
+}

@@ -1,0 +1,12 @@
+{
+ "kind": "generic_field",
+ "member": "fh_pair.zip",
+ "field": "family_a_family_b_tlsh_distance",
+ "question": "What is the TLSH distance between family-a and family-b?",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": "34",
+ "generator_cmd": "gcc -O0 fh_src/fam.c -o fh-family-a.elf; gcc -O0 -DTAG='\"bravo-variant\"' fh_src/fam.c -o fh-family-b.elf; zip -X fh_pair.zip fh-family-a.elf fh-family-b.elf  (gen_generic.sh)",
+ "oracle_cmd": "python3 -c 'import tlsh,zipfile;z=zipfile.ZipFile(\"fh_pair.zip\");print(tlsh.diff(*(tlsh.hash(z.read(n)) for n in (\"fh-family-a.elf\",\"fh-family-b.elf\"))))'"
+}

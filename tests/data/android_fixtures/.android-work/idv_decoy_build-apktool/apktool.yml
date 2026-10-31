@@ -1,0 +1,10 @@
+version: 3.0.3
+apkFileName: idv_decoy_build.apk
+usesFramework:
+  ids:
+  - 1
+resourcesInfo:
+  packageId: 0
+  packageName: 
+doNotCompress:
+- arsc

@@ -1,0 +1,8 @@
+{
+ "field": "relation.pixel_identical_groups",
+ "expected": "[[\"img-01\",\"img-02\"],[\"photo-01\",\"photo-02\"]]",
+ "generator_cmd": "printf/cp text+ps1 (BOM, CRLF, trailing ws, trailing blank lines, a case-changed decoy, an exact copy); printf compact vs pretty reordered JSON; Pillow PNG compress_level 9 vs 1 + tEXt (one 1-pixel-changed decoy); ImageMagick `convert gradient` JPEG + `exiftool -Comment -Artist` copy; `zip -X` vs `zip -9` reordered/new-mtime/-z comment (+1-byte-changed decoy); `gzip -n` vs `gzip -9 -N` (other mtime); /dev/urandom blob + cp; cd c && zip -q -r -X ../cluster-041.zip artifacts (no manifest)",
+ "oracle_cmd": "oracle.sh CLUSTER MODE (bash, no python): unzip; per member by magic: PNG/JPEG -> ImageMagick `identify -format %wx%h:%#` (pixel signature); zip -> sorted `unzip -Z1` names + `unzip -p | sha256sum`; gzip -> `gzip -dc | sha256sum`; JSON -> `jq -S -c .`; text -> sed strip BOM / CR / trailing ws + $(...) drops trailing newlines; else sha256; label = manifest id else basename sans ext; jq group_by(family|key), len>1 [MODE json/text/pixel filters the family; diffhash keeps groups with >1 distinct sha256], sorted",
+ "decoy": false,
+ "member": "cluster-041.zip"
+}

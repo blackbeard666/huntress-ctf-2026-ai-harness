@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "bp_trace_records.elf",
+ "field": "load_command_count",
+ "question": "In evidence.zip, use the d99-- member. Submit the Mach-O header ncmds in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": null,
+ "generator_cmd": "existing fixture",
+ "oracle_cmd": "file -b bp_trace_records.elf  (ELF, not Mach-O: no ncmds)",
+ "decoy": true
+}

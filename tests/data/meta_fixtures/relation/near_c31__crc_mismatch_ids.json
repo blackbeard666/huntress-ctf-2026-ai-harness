@@ -1,0 +1,8 @@
+{
+ "field": "relation.crc_mismatch_ids",
+ "expected": "[\"juliet-10\"]",
+ "generator_cmd": "printf ps1/json/txt payloads into a/artifacts/{alpha-01,bravo-02(=alpha)}, charlie-03 = sed 's/Preference/Prfference/' alpha-01, {delta-04,echo-05(=delta)}, foxtrot-06 = sed 's/verified/verifiad/;s/ridge/ridgf/' delta-04, golf-07 singleton; inner: zip -q -0 -X hotel-08.zip saffron.txt -> copied to hotel-08/india-09/juliet-10, then printf X | dd of=juliet-10 bs=1 seek=44 conv=notrunc (stored-data byte flip -> bad CRC); touch -d fixed mtime; cd a && zip -q -r -X ../cluster-031.zip artifacts (no manifest, extensionless, D30-timed style)",
+ "oracle_cmd": "oracle.sh: unzip -q cluster -d D; sha256sum * -> exact groups (>=2), rep = smallest name; for each non-grouped member of equal size: cmp -l rep member | wc -l <= 4 -> NEAR rep member; for each PK member: unzip -tq fails with 'bad CRC' -> BADCRC member. cluster-031 -> NEAR alpha-01 charlie-03 1 / delta-04 foxtrot-06 2 / hotel-08 juliet-10 1; BADZIP juliet-10 (unzip: bad CRC 42a2432f should be ed4bd58c)",
+ "decoy": false,
+ "member": "cluster-031.zip"
+}

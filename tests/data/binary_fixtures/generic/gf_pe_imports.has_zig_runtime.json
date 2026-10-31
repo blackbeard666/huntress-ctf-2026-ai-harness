@@ -1,0 +1,17 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "has_zig_runtime",
+ "question": "In evidence.zip, use the d99-- member. Does the member carry the Zig standard-library runtime? Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "false",
+ "generator_cmd": "see ie_gen.sh (C source built with zig cc: zig toolchain, no Zig runtime)",
+ "oracle_cmd": "strings -a gf_pe_imports.exe | grep -cE 'attempt to unwrap error|integer cast truncated bits'   # Zig std panic texts; >0 -> true",
+ "decoy": true
+}

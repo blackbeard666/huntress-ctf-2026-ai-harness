@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-E3E4A0765F826E9C",
+ "decoy": false,
+ "_why": "D15/D16 native: plaintext in data + .rodata literal in lib/x86_64/libarena.so (gcc)",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_native  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_native.apk assets/huntress_puzzle.json | jq -r .data"
+}

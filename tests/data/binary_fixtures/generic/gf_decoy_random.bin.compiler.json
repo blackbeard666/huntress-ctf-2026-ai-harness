@@ -1,0 +1,23 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "compiler",
+ "question": "In evidence.zip, Use the unique d27-- member whose basename ends gcc.elf. Attribute the build to the compiler that produced its code from the DW_AT_producer / .comment banners, stabs and runtime fingerprints. Submit exactly one listed lowercase token.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "gcc",
+   "clang",
+   "tcc",
+   "zig",
+   "msvc",
+   "mingw",
+   "odin",
+   "v"
+  ]
+ },
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "existing gf_decoy_random.bin (head -c random bytes, see gen_generic.sh)",
+ "oracle_cmd": "file gf_decoy_random.bin  # data, not ELF -> field cannot be answered"
+}

@@ -184,18 +184,96 @@ PLAN_KEY_ALIASES = {"campaign": "campaign_id", "obfuscation": "obfuscation_profi
 # multi-word keys seen in v=3 plans: an id ending in one the plan lacks is unanswerable here (None), never read as the
 # shorter key under it (`-next-language` must not answer `language`, `-upload-url` must not answer `url`)
 PLAN_KNOWN_KEYS = {"next_language", "host_profile", "stage_profile", "obfuscation_profile", "stage_count",
-                   "campaign_id", "file_path", "upload_url", "host_id"}
+                   "campaign_id", "file_path", "upload_url", "host_id", "host_language", "inner_language",
+                   "parent_language"}
+
+
+# Target analysis-v2-marker-schema: a finale bump (`HUNTRESS_ANALYSIS_V2:` marker, `v=4`/`v=5` plan or a JSON plan)
+# adds keys (`edges=a>b;b>c`, `parent`/`parents`, `host_language` / `host-language`, `inner` as a scalar, a JSON object
+# or `k:v,k:v` pairs). Plan keys match hyphen/underscore-insensitively, then singular<->plural; `-inner-language` reads
+# a nested `inner.language` before the shorter top-level `language`. Exact keys always win (v=3 answers unchanged).
+def _plan_norm_keys(plan):
+    out = {}
+    for k in plan or {}:
+        out.setdefault(str(k).lower(), k)
+    for k in plan or {}:
+        out.setdefault(str(k).lower().replace("-", "_"), k)
+    return out
+
+
+def _plan_flat(suf, keys, plural=True):
+    for cand in (suf, PLAN_KEY_ALIASES.get(suf), suf + "_id"):
+        if cand and cand in keys:
+            return keys[cand]
+    if plural and suf:
+        cands = [suf + "s", suf + "es"]
+        if suf.endswith("s") and not suf.endswith(("ss", "us", "is")):
+            cands.append(suf[:-1])
+            if suf.endswith("es"):
+                cands.append(suf[:-2])
+        for cand in cands:
+            if cand in keys:
+                return keys[cand]
+    return None
+
+
+def _plan_nested(v):
+    """A plan value as a sub-dict: a JSON object, or `k:v,k:v` / `k:v;k:v` pairs; else None."""
+    if isinstance(v, dict):
+        return v
+    if not isinstance(v, str) or ":" not in v or len(v) > 4096:
+        return None
+    out = {}
+    for part in re.split(r"[,;]", v):
+        m = re.fullmatch(r"\s*([A-Za-z_][\w-]{0,40})\s*:\s*(?!//)([^:]*?)\s*", part)
+        if not m:
+            return None
+        out.setdefault(m.group(1), m.group(2))
+    return out or None
+
+
+def _plan_lookup(answer_id, plan):
+    """(found, value) for the plan key / nested sub-key an answer id names (see plan_key_for)."""
+    keys = _plan_norm_keys(plan)
+    parts = [x for x in re.split(r"[-_]+", str(answer_id or "").rsplit(".", 1)[-1].lower()) if x]
+    for i in range(len(parts)):
+        suf = "_".join(parts[i:])
+        k = _plan_flat(suf, keys, plural=False)
+        if k is not None:
+            return True, plan[k]
+        for j in range(i + 1, len(parts)):
+            hk = _plan_flat("_".join(parts[i:j]), keys, plural=False)
+            if hk is None:
+                continue
+            sub = _plan_nested(plan[hk])
+            tail = "_".join(parts[j:])
+            if sub:
+                sk = _plan_flat(tail, _plan_norm_keys(sub))
+                if sk is not None:
+                    return True, sub[sk]
+                return False, None         # `<key>-<sub>` names a sub-field this nested value lacks
+            if "_".join(parts[i:j]) == "inner" and isinstance(plan[hk], str):
+                if tail in ("language", "lang") and re.fullmatch(r"[a-z][a-z0-9_+#.-]{0,30}", plan[hk].strip().lower()):
+                    return True, plan[hk]  # `inner=python` asked as the inner language
+                return False, None         # never the outer plan's `role` for `-inner-role`
+        k = _plan_flat(suf, keys)
+        if k is not None:
+            return True, plan[k]
+        if "_" in suf and (suf in PLAN_KNOWN_KEYS or PLAN_KEY_ALIASES.get(suf) in PLAN_KNOWN_KEYS):
+            return False, None
+    return False, None
 
 
 def plan_key_for(answer_id, plan):
-    """The plan key an answer id asks for (longest suffix match, hyphens -> underscores, aliases), or None."""
-    keys = {str(k).lower(): k for k in (plan or {})}
+    """The plan key an answer id asks for (longest suffix match, hyphens -> underscores, aliases, plural/singular),
+    or None."""
+    keys = _plan_norm_keys(plan)
     parts = re.split(r"[-_]+", str(answer_id or "").rsplit(".", 1)[-1].lower())
     for i in range(len(parts)):
         suf = "_".join(p for p in parts[i:] if p)
-        for cand in (suf, PLAN_KEY_ALIASES.get(suf), suf + "_id"):
-            if cand and cand in keys:
-                return keys[cand]
+        k = _plan_flat(suf, keys)
+        if k is not None:
+            return k
         if "_" in suf and (suf in PLAN_KNOWN_KEYS or PLAN_KEY_ALIASES.get(suf) in PLAN_KNOWN_KEYS):
             return None
     return None
@@ -206,7 +284,7 @@ def _plan_dict(plan):
         return plan
     if isinstance(plan, (bytes, bytearray)):
         plan = bytes(plan).decode("utf-8", "replace")
-    t = str(plan or "").lstrip("﻿ \r\n\t")
+    t = str(plan or "").lstrip("\ufeff \r\n\t")
     if t.startswith("{"):
         import json
         try:
@@ -217,21 +295,83 @@ def _plan_dict(plan):
     return plan_kv(t)
 
 
+_SEP_WORDS = {"comma": ",", "commas": ",", "semicolon": ";", "semicolons": ";", "pipe": "|", "pipes": "|",
+              "space": " ", "spaces": " ", "newline": "\n", "newlines": "\n", "slash": "/", "slashes": "/",
+              "arrow": ">", "arrows": ">"}
+
+
+def _plan_sep(q):
+    """The list separator the question / answer_format states (`joined by ;`, `using > separators`, `comma-separated`),
+    or None."""
+    fmt = (q or {}).get("answer_format") or {}
+    for text in (str(fmt.get("syntax") or ""), str((q or {}).get("question") or "")):
+        m = (re.search(r"(?:joined|separated|delimited)\s+(?:by|with)\s+(?:an?\s+|the\s+)?[`'\"]?([^\s`'\"]+)", text)
+             or re.search(r"using\s+[`'\"]?([^\s`'\"]+?)[`'\"]?\s+(?:separators?|delimiters?)", text)
+             or re.search(r"\b(comma|semicolon|pipe|space|newline)[- ](?:separated|delimited)", text, re.I))
+        if m:
+            w = m.group(1).rstrip(".,")
+            sep = _SEP_WORDS.get(w.lower(), w)
+            if len(sep) <= 3:
+                return sep
+    return None
+
+
+def _plan_items(val):
+    """List items of a plan value: a JSON list, or a `;`-separated (else `,`-separated) string."""
+    if isinstance(val, (list, tuple)):
+        return [str(x).strip() for x in val if str(x).strip()]
+    val = str(val)
+    for sep in (";", ","):
+        if sep in val:
+            return [t.strip() for t in val.split(sep) if t.strip()]
+    return [val.strip()] if val.strip() else []
+
+
+def _edge_path(items):
+    """`a>b`,`b>c` -> `a>b>c` when the edges form one chain, else None."""
+    pairs = [tuple(t.strip() for t in it.split(">")) for it in items]
+    if not pairs or any(len(p) != 2 or not all(p) for p in pairs):
+        return None
+    path = list(pairs[0])
+    for a, b in pairs[1:]:
+        if a != path[-1]:
+            return None
+        path.append(b)
+    return ">".join(path)
+
+
 def plan_answer(answer_id, plan, q=None):
     """Answer `answer_id` straight from a decoded plan (dict, `k=v|..` text or JSON text) under the question's
     answer_format, or None when the plan has no such key / the value does not fit the format. Never raises."""
     try:
         plan = _plan_dict(plan)
-        key = plan_key_for(answer_id, plan)
-        if key is None or plan.get(key) is None:
+        found, val = _plan_lookup(answer_id, plan)
+        if not found or val is None:
             return None
-        val = plan[key]
         fmt = (q or {}).get("answer_format") or {}
         kind = str(fmt.get("kind") or "").lower()
-        if isinstance(val, (list, tuple)):
-            val = ",".join(str(x) for x in val)
+        if isinstance(val, dict):
+            if kind == "json":
+                import json
+                return json.dumps(val, separators=(",", ":"))
+            return None
+        sep = _plan_sep(q)
+        if isinstance(val, (list, tuple)) or (isinstance(val, str) and ";" in val):
+            items = _plan_items(val)
+            if not items:
+                return None
+            if kind == "ordered_tokens" and sep in (None, ">"):
+                if any(">" in it for it in items):
+                    return _edge_path(items)
+                return ">".join(items)
+            if kind in ("ordered_tokens", "exact_text", "pattern", "") and sep:
+                return sep.join(items)
+            val = ",".join(items) if isinstance(val, (list, tuple)) else val
         val = str(val).strip()
         if kind == "ordered_tokens":
+            if sep and sep != ">":
+                toks = [t.strip() for t in re.split(r"[,;]", val) if t.strip()]
+                return sep.join(toks) if toks else None
             toks = [t.strip() for t in re.split(r"[,>]", val) if t.strip()]
             return ">".join(toks) if toks else None
         if kind == "integer":
@@ -241,6 +381,8 @@ def plan_answer(answer_id, plan, q=None):
             if not acc:
                 return val
             return val if val in acc else next((a for a in acc if a.lower() == val.lower()), None)
+        if sep and sep not in val and "," in val and kind in ("exact_text", "pattern", ""):
+            return sep.join(t.strip() for t in val.split(",") if t.strip())
         return val
     except Exception:  # noqa: BLE001
         return None
@@ -644,6 +786,8 @@ def decode(material, rep, transform, key=None):
         return _cix_decode(material, transform, key)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("actionhandoffs", "actionhandoff", "actiondefinition"):   # github-action-definition-route
         return _ah_decode(material, transform)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("handofftarget", "handoffresolve", "handoffmember", "nextmember"):   # next-language-member-resolve
+        return _nlm_decode(material, transform, key)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("repohooks", "repohook", "githooks", "repoautorun"):   # git-repo-hooks-route
         return _rh_decode(material, transform)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("plistscripts", "launchd", "plist", "launchdplist"):   # launchd-plist-route
@@ -676,6 +820,13 @@ def decode(material, rep, transform, key=None):
         return _oa_decode(material, transform, key)
     if re.sub(r"[^a-z]", "", rep.lower()) in ("corpusgraph", "languagegraph", "executiongraph", "bridgegraph"):   # corpus-language-graph-bridge
         return _cg_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("makemodel", "makediff", "makeflow", "maketargetflow", "makevars",
+                                              "makefilemodel", "makefileflow"):   # make-target-flow-variant-diff
+        return _mk_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("suffixroute", "contractroute", "unansweredroute"):   # capstone-new-suffix-on-old-families
+        return _sr_decode(material, transform, key)
+    if re.sub(r"[^a-z]", "", rep.lower()) in ("grammarroute", "mixedgrammar", "idgrammar"):   # mixed-grammar-single-contract
+        return _mg_decode(material, transform, key)
     transform, key = _spec(rep, transform, key)
     if known(rep, transform):
         for data in _rep_candidates(rep, material):
@@ -785,14 +936,38 @@ _ANALYSIS_TAG_REP = {"B64": "base64_literal", "HEX": "hex_compact", "HB64": "hex
 _LYR_TAG_ONLY = re.compile(r"[a-z0-9]{1,8}(?:[_,+|>][a-z0-9]{1,8}){0,5}", re.I)
 
 
+# material_text() used to re.compile one `Material_<ident>` pattern per call: every member has its own ident, so each
+# call was a cold compile (~0.4 ms; D30 Mastery 14 sets: 574 compiles = 0.22 s of the 6.3 s CPU, prebuild
+# mastery-scale-bench-30k). _mt_assign_ends() walks the same non-overlapping matches of
+# `(?:Material|MATERIAL)_<re.escape(ident)>(?:_[0-9A-Za-z]+)?\b` with two static patterns: the prefix, then the
+# literal ident, then the optional split-part suffix + word boundary (pattern.match(src, pos) sees src[pos-1] for \b).
+_MT_PREFIX = re.compile(r"(?:Material|MATERIAL)_")
+_MT_TAIL = re.compile(r"(?:_[0-9A-Za-z]+)?\b")
+
+
+def _mt_assign_ends(src, ident):
+    """End offsets of the finditer matches of the old per-ident pattern, in order."""
+    pos, n = 0, len(src)
+    while pos <= n:
+        m = _MT_PREFIX.search(src, pos)
+        if not m:
+            return
+        j = m.end()
+        t = _MT_TAIL.match(src, j + len(ident)) if src.startswith(ident, j) else None
+        if t is None:
+            pos = m.start() + 1                            # finditer retries one char on
+            continue
+        yield t.end()
+        pos = t.end() if t.end() > m.start() else m.start() + 1
+
+
 def material_text(src, ident):
     """The written payload for `Material_<ident>` / `MATERIAL_<ident>`: every string literal (or the int tuple/array)
     of its assignment(s), joined in order -- one literal, `& _` / `+` continuation, adjacent quoted strings, later
     `+=` / `&=` appends. Returns the raw text (rep decoding is decode()'s job) or None."""
-    pat = re.compile(r"(?:Material|MATERIAL)_" + re.escape(ident) + r"(?:_[0-9A-Za-z]+)?\b")   # also split `_a`/`_b` parts
     pieces = []
-    for m in pat.finditer(src):
-        rest = src[m.end():]
+    for m_end in _mt_assign_ends(src, ident):
+        rest = src[m_end:]
         a = re.match(r"(?:\s+(?i:As)\s+[A-Za-z_][\w.]*)?\s*(\+=|&=|=|\.=)?\s*", rest)   # VBA `Const X As String =`
         if not a or not a.group(1):
             continue                                   # a use, not an assignment
@@ -2790,11 +2965,25 @@ def _shrc_codecs(src, budget=0.5):
 
 
 _FC_CACHE = {}
+_FC_TOP = {}
 
 
 def find_codecs(src, _depth=0):
     """Every declared codec in a source text (see _find_codecs_uncached). Nested readings (_depth >= 1) of one inner
     text are memoised: the SaaS JSON-string reader and the nested string-carrier reader can unescape the same text."""
+    if _depth == 0 and isinstance(src, (str, bytes, bytearray)) and len(src) <= (1 << 22):
+        # top level: memoised per CONTENT sha256 (+ type) within the process -- never on id(obj) (D25: Mastery sets
+        # share pool processes and freed ids are reused). The same member text read through two answer paths (or two
+        # sets in one pool process) is analysed once; callers get fresh dict copies.
+        import hashlib
+        b = src.encode("utf-8", "surrogatepass") if isinstance(src, str) else bytes(src)
+        k = (type(src).__name__, hashlib.sha256(b).digest(), _max_day(), FALLBACK)   # a run-visible vocabulary change re-reads
+        hit = _FC_TOP.get(k)
+        if hit is None:
+            if len(_FC_TOP) > 256:
+                _FC_TOP.clear()
+            hit = _FC_TOP[k] = _emb_append(src, _find_codecs_uncached(src, 0))
+        return [dict(c) for c in hit]
     if _depth < 1 or not isinstance(src, str) or len(src) > (1 << 20):
         out = _find_codecs_uncached(src, _depth)
         return _emb_append(src, out) if _depth == 0 else out
@@ -14495,6 +14684,194 @@ def _hg_code_targets(src, member, parent):
     return out
 
 
+# --- next-language-member-resolve: the concrete member a plan's next_language / next_stage hands off to ----------------
+# handoff_graph's `resolved` keeps every member of the next language (ambiguous when several); resolve_handoff ranks
+# those candidates by what the two plans share: a handoff id (handoff_id / next_stage_id <-> the candidate's stage /
+# handoff id or file stem), the campaign token, a file_path / next_stage stem naming the candidate, a url host, and the
+# role a staged chain hands to (staged_chain / cross_language_handoff -> launcher | downloader | stager | relay).
+_NLM_ID_KEYS = ("handoff_id", "next_stage_id", "next_id", "handoff_token", "handoff", "next_handoff_id", "child_id",
+               "target_id", "next_stage_token")
+_NLM_OWN_ID_KEYS = ("handoff_id", "stage_id", "id", "member_id", "artifact_id", "sample_id", "handoff_token", "token",
+                   "prev_handoff_id", "parent_handoff_id", "from_handoff_id")
+_NLM_CAMPAIGN_KEYS = ("campaign", "campaign_id", "campaign_token", "campaign_tag", "operation", "operation_id",
+                     "cluster", "family", "actor", "set_token", "corpus_token", "bundle", "bundle_id", "kit")
+_NLM_PATH_KEYS = ("file_path", "next_stage", "drop_path", "dropped_file", "output_path", "target_path", "path",
+                 "write_path", "stage_path", "next_file", "handoff_path", "script_path")
+_NLM_ROLE_KEYS = ("role", "scenario", "stage_role", "intent", "classification", "behavior", "stage_profile", "profile")
+_NLM_HANDS_TO = ("launcher", "downloader", "stager", "relay", "loader", "dropper")
+_NLM_HANDS_FROM = ("staged_chain", "cross_language_handoff", "handoff", "relay", "multi_stage", "chain")
+
+
+def _nlm_flat(plan):
+    """plan -> {normalized key: str value}, one nested level of JSON flattened (last key segment wins)."""
+    out = {}
+    try:
+        d = _rc_dict(plan) or {}
+    except Exception:  # noqa: BLE001
+        return out
+    for k, v in list(d.items())[:400]:
+        if isinstance(v, dict):
+            for k2, v2 in list(v.items())[:200]:
+                if not isinstance(v2, (dict, list)):
+                    out.setdefault(_rc_field(k2), str(v2).strip())
+        elif isinstance(v, list):
+            out.setdefault(_rc_field(k), ",".join(str(x) for x in v[:50] if not isinstance(x, (dict, list))))
+        elif v is not None:
+            out[_rc_field(k)] = str(v).strip()
+    return out
+
+
+def _nlm_stem(s):
+    return re.sub(r"\.[A-Za-z0-9_]+$", "", str(s or "").replace("\\", "/").rsplit("/", 1)[-1]).lower()
+
+
+def _nlm_hosts(d):
+    hs = set()
+    for v in d.values():
+        for mm in re.finditer(r"(?i)\b[a-z][a-z0-9+.-]{1,12}://(?:[^/@\s\"']*@)?([a-z0-9.-]+|\[[0-9a-f:]+\])", v[:4000]):
+            h = mm.group(1).lower().strip(".")
+            if h and h not in ("localhost",):
+                hs.add(h)
+    return hs
+
+
+def _nlm_vals(d, keys):
+    return {d[k].lower() for k in keys if d.get(k) and d[k].lower() not in _HG_NONE}
+
+
+def resolve_handoff(member, plan, plans_by_member, sources=None):
+    """(member_name, evidence) the plan's next_language / next_stage hands off to within the same set, or None.
+    member: the handing-off member's name; plan: its decoded plan (dict / 'k=v|..' / JSON; None -> plans_by_member);
+    plans_by_member {member: plan}. A next_stage naming one member wins outright; else the other members of
+    next_language (plan language=, file family; loose jscript~javascript fallback) are scored -- handoff id 10, file
+    path stem 6, campaign token 5, url host 3, role 2 -- top score wins, a tie of evidenced candidates goes to the
+    smallest file name. One candidate -> it ('only_candidate'); several with no shared evidence -> None.
+    evidence = {"score", "why": [..], "candidates": [..]}."""
+    try:
+        plans_by_member = plans_by_member or {}
+        if plan is None:
+            plan = plans_by_member.get(member)
+        me = _nlm_flat(plan)
+        nl = str(me.get("next_language") or "").strip()
+        ns = str(me.get("next_stage") or "").strip()
+        nl = None if nl.lower() in _HG_NONE else nl
+        ns = None if ns.lower() in _HG_NONE else ns
+        if not nl and not ns:
+            return None
+        names = sorted(str(m) for m in set(plans_by_member) | set(sources or ()) if str(m) != str(member))
+        if not names:
+            return None
+        flats = {m: _nlm_flat(plans_by_member.get(m)) for m in names}
+        if ns:
+            n0 = ns.replace("\\", "/").rsplit("/", 1)[-1].lower()
+            for k in (n0, _nlm_stem(ns)):
+                hit = [m for m in names if k in (m.lower(), m.replace("\\", "/").rsplit("/", 1)[-1].lower(),
+                                                 _nlm_stem(m))]
+                if len(hit) == 1:
+                    return hit[0], {"score": None, "why": ["next_stage:" + ns], "candidates": hit}
+        nlc = hg_lang(nl) if nl else None
+        if not nlc:
+            return None
+        lang = {m: hg_lang(flats[m].get("language")) or _hg_member_lang(m) for m in names}
+        cand = [m for m in names if lang[m] == nlc]
+        if not cand and nlc in _HG_LOOSE:
+            cand = [m for m in names if lang[m] and _HG_LOOSE.get(lang[m]) == _HG_LOOSE[nlc]]
+        if not cand:
+            return None
+        if len(cand) == 1:
+            return cand[0], {"score": 0, "why": ["only_candidate:" + nlc], "candidates": cand}
+        my_ids = _nlm_vals(me, _NLM_ID_KEYS)
+        my_ids |= {v for k, v in me.items() if k.endswith("handoff_id") and v.lower() not in _HG_NONE}
+        my_ids = {x.lower() for x in my_ids if len(x) >= 3}
+        my_camp = _nlm_vals(me, _NLM_CAMPAIGN_KEYS)
+        my_paths = {_nlm_stem(v) for k in _NLM_PATH_KEYS for v in [me.get(k)] if v and v.lower() not in _HG_NONE}
+        my_paths.discard("")
+        my_hosts = _nlm_hosts(me)
+        my_role = " ".join(_nlm_vals(me, _NLM_ROLE_KEYS))
+        hands = any(t in my_role for t in _NLM_HANDS_FROM)
+        scored = []
+        for m in cand:
+            o = flats[m]
+            sc, why = 0, []
+            own = {x.lower() for x in _nlm_vals(o, _NLM_OWN_ID_KEYS) | {v for k, v in o.items()
+                   if k.endswith("handoff_id") or k.endswith("stage_id")} if x}
+            st = _nlm_stem(m)
+            idh = sorted(i for i in my_ids if i in own or i == st or (len(i) >= 6 and re.search(
+                r"(?<![0-9a-z])" + re.escape(i) + r"(?![0-9a-z])", m.lower())))
+            if idh:
+                sc += 10
+                why.append("handoff_id:" + idh[0])
+            ph = sorted(p for p in my_paths if p == st or p in {_nlm_stem(o.get(k)) for k in _NLM_PATH_KEYS if o.get(k)})
+            if ph:
+                sc += 6
+                why.append("file_path:" + ph[0])
+            ch = sorted(my_camp & _nlm_vals(o, _NLM_CAMPAIGN_KEYS))
+            if ch:
+                sc += 5
+                why.append("campaign:" + ch[0])
+            hh = sorted(my_hosts & _nlm_hosts(o))
+            if hh:
+                sc += 3
+                why.append("url_host:" + hh[0])
+            if hands:
+                orole = " ".join(_nlm_vals(o, _NLM_ROLE_KEYS))
+                rh = next((t for t in _NLM_HANDS_TO if re.search(r"(?<![a-z])" + t + r"(?![a-z])", orole)), None)
+                if rh:
+                    sc += 2
+                    why.append("role:" + rh)
+            scored.append((-sc, m.replace("\\", "/").rsplit("/", 1)[-1].lower(), m, why))
+        scored.sort()
+        best = scored[0]
+        if -best[0] <= 0:
+            return None
+        why = list(best[3])
+        if len(scored) > 1 and scored[1][0] == best[0]:
+            why.append("tie_break:file_name")
+        return best[2], {"score": -best[0], "why": why, "candidates": cand}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _nlm_decode(material, transform=None, key=None):
+    """decode() hook for rep 'handoff_target': material = JSON {"member": name, "plans": {member: plan}} (or a bare
+    {member: plan} map with the handing-off member in `key`, else the single member declaring a handoff); transform
+    'member' (default: the target member name) / 'stem' (`<6hex>.<ext>` stem: name without extension) / 'language'
+    / 'evidence' (comma-joined why). 'none' when the member declares no handoff; None when unresolvable."""
+    try:
+        import json
+        obj = json.loads(material) if isinstance(material, (str, bytes, bytearray)) else material
+        if not isinstance(obj, dict):
+            return None
+        plans = obj.get("plans") if isinstance(obj.get("plans"), dict) else obj
+        who = obj.get("member") if isinstance(obj.get("plans"), dict) else None
+        who = who or key
+        if not who:
+            decl = [m for m, p in plans.items() if (lambda d: any(str(d.get(k) or "").lower() not in _HG_NONE
+                                                                   for k in ("next_language", "next_stage")))(
+                _nlm_flat(p))]
+            if len(decl) != 1:
+                return None
+            who = decl[0]
+        if who not in plans:
+            return None
+        d = _nlm_flat(plans[who])
+        if all(str(d.get(k) or "").lower() in _HG_NONE for k in ("next_language", "next_stage")):
+            return "none"
+        r = resolve_handoff(who, plans[who], plans)
+        if not r:
+            return None
+        t = re.sub(r"[^a-z]", "", str(transform or "member").lower())
+        if t == "stem":
+            return re.sub(r"\.[A-Za-z0-9_]+$", "", r[0].replace("\\", "/").rsplit("/", 1)[-1])
+        if t == "language":
+            return hg_lang(_nlm_flat(plans[r[0]]).get("language")) or _hg_member_lang(r[0])
+        if t == "evidence":
+            return ",".join(r[1]["why"])
+        return r[0]
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def handoff_graph(plans_by_member, sources=None):
     """Corpus-level handoff graph: where each member's static handoff actually leads.
     plans_by_member {member: plan dict / 'k=v|..' / JSON}; sources {member: text/bytes} (optional, code side).
@@ -14563,6 +14940,9 @@ def handoff_graph(plans_by_member, sources=None):
             if g["next_language"] or g["next_stage"]:
                 edges.append((m, g["next_language"] or g["next_stage"], res))
             g["resolved"] = res
+            g["target"], g["target_evidence"] = (res[0], {"score": None, "why": ["resolved"], "candidates": res}) \
+                if len(res) == 1 else (resolve_handoff(m, plans_by_member.get(m), plans_by_member, sources)
+                                       if len(res) > 1 else None) or (None, None)
         nxt = {m: g["resolved"][0] for m, g in mem.items() if len(g["resolved"]) == 1}
         has_in = {o for g in mem.values() for o in g["resolved"]}
         # cycles over the single-successor map
@@ -14677,6 +15057,16 @@ def handoff_answer(g, kind, accepted_values=None, what="terminal_language", sep=
             if not r:
                 return "none"
             return out([lng(x) for x in r] if w.endswith("language") else r)
+        if w in ("target", "target_language", "target_stem"):   # next-language-member-resolve
+            m = next((x for x in mem if x == arg or x.lower() == arg.lower() or stem(x) == stem(arg)), None)
+            if not m or not (mem[m]["next_language"] or mem[m]["next_stage"]):
+                return None
+            t = mem[m].get("target")
+            if not t:
+                return None if mem[m]["resolved"] else "none"
+            if w == "target_language":
+                return out([lng(t)])
+            return out([stem(t) if w == "target_stem" else t])
         if w.startswith("mismatch") and w != "mismatches":
             mm = g["mismatches"]
             if not mm:
@@ -28214,3 +28604,1295 @@ def _cg_decode(material, transform=None, key=None):
         return None if got is None else str(got)
     except Exception:  # noqa: BLE001
         return None
+
+
+# Target capstone-new-suffix-on-old-families (D31 finale with NO new language): an id the carried solver leaves
+# unanswered is routed (1) plan_answer when the WHOLE field tail (after family / member tokens) names a plan key --
+# a modifier in front (`-host-language`, `-inner-language`, `-parent-language`) never falls back to the bare key,
+# (2) the typed corpus_graph for graph words (edge, bridge, holds together, connect, component, degree, articulation,
+# betweenness, parent / child, reachable, host / inner container), (3) corpus_summary for counts / distinct / most
+# common / longest chain, (4) lineage for parent / attribution, (5) else NO answer (None; never a bulk guess).
+# suffix_route(aid, q, plans, texts, ctx) -> (value|None, step); route_contract(contract, plans, texts, answered)
+# -> {aid: value} for the ids it can answer. decode(material=JSON {"contract", "plans", "texts"}, rep='suffix_route',
+# transform=<answer id>) -> the routed value. ctx caches the corpus-level structures per corpus (a plain dict the
+# caller owns; never keyed on id()).
+_SR_MODIFIERS = {"host", "inner", "outer", "parent", "child", "next", "previous", "prev", "upstream", "downstream",
+                 "edge", "bridge", "graph", "corpus", "capstone", "source", "target", "producer", "consumer", "root",
+                 "leaf", "container", "carrier", "degree", "component", "components"}
+_SR_COUNT_FIELDS = (("next_language", ("next languages", "next-language", "next_language", "handoff languages")),
+                    ("host_profile", ("host profiles", "host_profile", "host-profile", "hosts", "host containers")),
+                    ("attack", ("techniques", "technique ids", "att&ck", "attack ids", "mitre")),
+                    ("role", ("roles",)), ("language", ("languages",)))
+
+
+def _sr_words(aid, q):
+    text = str((q or {}).get("question") or "").lower()
+    tail = re.sub(r"^set\d+\.", "", str(aid or "").lower())
+    return text, set(re.split(r"[^a-z0-9]+", tail)) - {""}, tail
+
+
+def _sr_member(aid, q, names):
+    """(member name or None, field tokens) of an id: the question's `artifact` (`x.zip -> m.ps1`) first, else a hex /
+    stem token of the id naming exactly one member. Field = id tokens after the member token, else after the family."""
+    tail = re.sub(r"^set\d+\.", "", str(aid or "").strip().lower())
+    toks = [t for t in tail.split("-") if t]
+    leaf = lambda n: str(n).replace("\\", "/").rsplit("/", 1)[-1].lower()
+    stem = lambda n: leaf(n).rsplit(".", 1)[0]
+    mem = None
+    art = str((q or {}).get("artifact") or "")
+    if "->" in art:
+        a, b = (x.strip().replace("\\", "/") for x in art.split("->", 1))
+        hit = [n for n in names if str(n).replace("\\", "/").lower() in (b.lower(), f"{a}/{b}".lower())] or \
+            [n for n in names if leaf(n) == leaf(b)]
+        mem = hit[0] if len(hit) == 1 else None
+    for i in range(len(toks) - 1, -1, -1):
+        hit = [n for n in names if stem(n) == toks[i] or leaf(n) == toks[i]]
+        if len(hit) == 1 and (mem is None or hit[0] == mem):
+            return hit[0], toks[i + 1:]
+    return mem, toks[1:]
+
+
+def _sr_shape(val, q):
+    if val is None:
+        return None
+    fmt = (q or {}).get("answer_format") or {}
+    kind = str(fmt.get("kind") or "").lower()
+    s = str(val).strip()
+    if kind == "integer":
+        return s if re.fullmatch(r"\d+", s) else None
+    if kind == "enum":
+        acc = [str(a) for a in fmt.get("accepted_values") or []]
+        if acc:
+            return next((a for a in acc if a.lower() == s.lower()), None)
+    return s or None
+
+
+def _sr_ctx(ctx, plans, texts, scope):
+    key = ("sr", scope)
+    if key not in ctx:
+        sel = lambda d: {k: v for k, v in (d or {}).items()
+                         if scope is None or str(k).replace("\\", "/").startswith(scope + "/")}
+        p, t = sel(plans), sel(texts)
+        ctx[key] = {"plans": p, "texts": t, "dicts": {n: {str(k).lower(): v for k, v in _cl_plan(v).items()}
+                                                       for n, v in p.items()}}
+    return ctx[key]
+
+
+def _sr_lazy(c, name, fn):
+    if name not in c:
+        try:
+            c[name] = fn()
+        except Exception:  # noqa: BLE001
+            c[name] = None
+    return c[name]
+
+
+def _sr_graph(c, text, words, member, field, q):
+    """Graph step: (value, handled). handled=False lets the router fall through to the next step."""
+    g = _sr_lazy(c, "graph", lambda: corpus_graph(c["plans"], c["texts"]))
+    if not g:
+        return None, False
+    kind = str(((q or {}).get("answer_format") or {}).get("kind") or "").lower()
+    many = "how many" in text or "number of" in text or kind == "integer"
+    level = "member" if re.search(r"\b(member|file|script|specimen)s?\b", text) and "language" not in text \
+        else "language"
+    ftoks = set(field)
+    if member is not None:
+        d = c["dicts"].get(member) or {}
+        hp = re.sub(r"[^0-9a-z]+", "_", str(d.get("host_profile") or "").strip().lower()).strip("_")
+        lang = (g["members"].get(member) or {}).get("language")
+        if {"host", "container"} & ftoks or re.search(r"\b(host|container)\b", text) and "language" in ftoks:
+            if "inner" in ftoks:
+                pass
+            elif not d:
+                return None, False
+            else:
+                return ("none" if hp in _CG_NOHOST else _CG_HOST.get(hp, (hp, None))[0]), True
+        if "inner" in ftoks or "inner" in text:
+            if hp in _CG_NOHOST:
+                return None, False
+            return (lang or _CG_HOST.get(hp, (None, None))[1]), True
+        if {"parent", "child", "children"} & ftoks or re.search(r"\b(parent|child|spawn\w*|launch\w*)\b", text):
+            ex = [(a, b) for a, b, t, _ in g["edges"] if t == "execution" and a in g["members"] and b in g["members"]]
+            want = "child" if ({"child", "children"} & ftoks or "child" in text) else "parent"
+            hit = sorted({a for a, b in ex if b == member} if want == "parent" else {b for a, b in ex if a == member})
+            if len(hit) == 1:
+                return _cl_split(hit[0])[1], True
+            return None, False                      # zero / several: lineage decides
+        if "degree" in ftoks or "degree" in text:
+            op = "in_degree" if ("in" in ftoks or "incoming" in text or "in-degree" in text) else \
+                "out_degree" if ("out" in ftoks or "outgoing" in text or "out-degree" in text) else "degree"
+            for arg in (_cl_split(member)[1].lower(), lang):
+                v = graph_answer(g, f"member:{op}:{arg}") if arg == _cl_split(member)[1].lower() else \
+                    graph_answer(g, f"language:{op}:{arg}")
+                if v is not None:
+                    return str(v), True
+            return None, False
+        if "reachable" in text or "reachable" in ftoks:
+            succ = {}
+            for a, b, t, _ in g["edges"]:
+                if t in ("execution", "host"):
+                    succ.setdefault(a, set()).add(b)
+            seen, st = set(), [member]
+            while st:
+                for v in succ.get(st.pop(), ()):
+                    if v not in seen:
+                        seen.add(v)
+                        st.append(v)
+            seen.discard(member)
+            out = sorted(_cl_split(x)[1] if x in g["members"] else x for x in seen)
+            return (str(len(out)) if many else (", ".join(out) or "none")), True
+        return None, False
+    # corpus-level
+    if "handoff" in text and "edge" in text and many:
+        return None, False                          # handoff-edge counts belong to corpus_summary
+    if "articulation" in text or "cut vertex" in text or "articulation" in ftoks:
+        return graph_answer(g, f"{level}:{'articulation_count' if many else 'articulation'}"), True
+    if "betweenness" in text:
+        return graph_answer(g, f"{level}:max_betweenness_edge"), True
+    if "bridge" in ftoks or re.search(r"\bbridges?\b|holds? (?:\w+ ){0,3}together|critical edge", text) or \
+            ("edge" in ftoks and "connect" in text):
+        if many:
+            return graph_answer(g, f"{level}:bridge_count"), True
+        if re.search(r"\b(all|every|list)\b.*\bbridges\b", text):
+            return graph_answer(g, f"{level}:bridges"), True
+        return graph_answer(g, f"{level}:bridge"), True
+    if {"component", "components"} & ftoks or re.search(r"\bcomponents?\b|\bislands?\b|disconnected", text):
+        return (graph_answer(g, f"{level}:components"), True) if many else (None, False)
+    if "reached by most" in text or "most reached" in text or ("reachable" in text and "most" in text):
+        return graph_answer(g, "language:most_reached_language"), True
+    if "degree" in ftoks or "degree" in text:
+        op = "max_in_degree" if "in" in ftoks or "incoming" in text else \
+            "max_out_degree" if "out" in ftoks or "outgoing" in text else "max_degree"
+        return graph_answer(g, f"{level}:{op}"), True
+    if many and re.search(r"\bedges\b", text):
+        return graph_answer(g, f"{level}:edge_count"), True
+    if many and re.search(r"\bnodes\b", text):
+        return graph_answer(g, f"{level}:node_count"), True
+    return None, False
+
+
+def _sr_corpus(c, text, words, member, field, q):
+    summ = _sr_lazy(c, "summary", lambda: corpus_summary(c["plans"]))
+    if not summ:
+        return None
+    kind = str(((q or {}).get("answer_format") or {}).get("kind") or "").lower()
+    many = "how many" in text or "number of" in text or kind == "integer"
+    if re.search(r"\b(longest|chain|path)\b", text) or {"chain", "path"} & set(field):
+        if many:
+            return corpus_answer(summ, "longestchainnodes" if re.search(r"\b(nodes|languages|stages)\b", text)
+                                 else "longestchainhops")
+        return corpus_answer(summ, "longestchain")
+    if "handoff" in text and "edge" in text and many:
+        return corpus_answer(summ, "edgecount")
+    if "campaign" in text:
+        if "largest" in text or "biggest" in text:
+            return corpus_answer(summ, "largestcampaign")
+        if member is not None:
+            return corpus_answer(summ, "campaignmembers", member)
+        if many:
+            return corpus_answer(summ, "campaigngroups")
+        return None
+    fld = next((f for f, ph in _SR_COUNT_FIELDS if any(p in text for p in ph)), None)
+    if fld is None:
+        ft = "_".join(field)
+        fld = next((f for f, _ in _SR_COUNT_FIELDS if ft.endswith(f) or ft.endswith(f + "s")), None)
+    if re.search(r"\b(distinct|different|unique)\b", text) or {"distinct", "unique"} & set(field):
+        return corpus_answer(summ, "distinct", fld) if fld else None
+    if re.search(r"most (common|frequent)|\bmode\b", text) or {"top", "mode"} & set(field):
+        return corpus_answer(summ, "top", fld) if fld else None
+    vals = [(f, v) for f in _CS_FIELDS for v in summ["counts"].get(f, {})
+            if v != "none" and len(v) > 2 and re.search(r"(?<![a-z0-9_.])" + re.escape(v) + r"(?![a-z0-9_])", text)]
+    if many and re.search(r"\b(members?|files?|scripts?|specimens?|samples?)\b", text):
+        if len(vals) == 1:
+            return corpus_answer(summ, "count", f"{vals[0][0]}={vals[0][1]}")
+        return corpus_answer(summ, "members") if not vals else None
+    if len(vals) == 1 and re.search(r"\bwhich (members?|files?|scripts?|specimens?)\b", text):
+        return corpus_answer(summ, "members", f"{vals[0][0]}={vals[0][1]}")
+    return None
+
+
+def suffix_route(answer_id, question=None, plans_by_member=None, texts_by_member=None, ctx=None, scope=None):
+    """(value, step) for one id the carried solver left unanswered; step in plan | graph | corpus | lineage | None.
+    value None = no answer (step None). Never raises."""
+    try:
+        ctx = {} if ctx is None else ctx
+        q = question or {}
+        if scope is None:
+            mm = re.match(r"(?i)set(\d+)\.", str(answer_id or ""))
+            if mm:   # Mastery set ids: scope to the set's container when the corpus is container-prefixed
+                cands = sorted({_cl_split(n)[0] for n in list(plans_by_member or {}) + list(texts_by_member or {})})
+                pick = [s for s in cands if re.search(r"(?<!\d)0*%s(?!\d)" % int(mm.group(1)), s)]
+                scope = pick[0] if len(pick) == 1 else None
+        c = _sr_ctx(ctx, plans_by_member, texts_by_member, scope)
+        names = sorted(set(c["plans"]) | set(c["texts"]), key=str)
+        member, field = _sr_member(answer_id, q, names)
+        text, words, _ = _sr_words(answer_id, q)
+        # (1) plan: the whole field tail (or a tail with only non-modifier words dropped) names a plan key
+        if member is not None and field:
+            d = c["dicts"].get(member)
+            if d is None and c["texts"].get(member):
+                try:
+                    pl = next((x.get("plain") for x in find_codecs(c["texts"][member]) if x.get("plain")), None)
+                except Exception:  # noqa: BLE001
+                    pl = None
+                d = c["dicts"][member] = {str(k).lower(): v for k, v in _cl_plan(pl).items()}
+            if d:
+                for i in range(len(field)):
+                    if any(t in _SR_MODIFIERS for t in field[:i]):
+                        break
+                    k = plan_key_for("-".join(field[i:]), d)
+                    if k is not None and _cl_norm(k) in {_cl_norm("".join(field[i:])),
+                                                         _cl_norm("".join(field[i:]) + "id"),
+                                                         _cl_norm(PLAN_KEY_ALIASES.get("_".join(field[i:]), ""))}:
+                        v = _sr_shape(plan_answer("-".join(field[i:]), d, q), q)
+                        if v is not None:
+                            return v, "plan"
+                        break
+        # (2) graph
+        v, handled = _sr_graph(c, text, words, member, field, q)
+        if handled:
+            v = _sr_shape(v, q)
+            if v is not None:
+                return v, "graph"
+        # (3) corpus counts
+        v = _sr_shape(_sr_corpus(c, text, words, member, field, q), q)
+        if v is not None:
+            return v, "corpus"
+        # (4) lineage
+        lin_words = re.search(r"\b(parent|attribut\w*|lineage|derived|descend\w*|skin[- ]deep|resembl\w*|borrow\w*)\b",
+                              text) or {"parent", "lineage", "attribution", "decoy"} & set(field)
+        if lin_words:
+            res = _sr_lazy(c, "lineage", lambda: lineage(c["plans"], c["texts"]))
+            if res:
+                f = "-".join(field) or "parent"
+                if not re.search(r"parent|evidence|kind|decoy|skin|resembl|language|member", _cl_norm(f)):
+                    f = "parent"
+                v = _sr_shape(lineage_answer(res, member, f), q)
+                if v is not None:
+                    return v, "lineage"
+        return None, None
+    except Exception:  # noqa: BLE001
+        return None, None
+
+
+def route_contract(contract, plans_by_member=None, texts_by_member=None, answered=None, ctx=None):
+    """{answer_id: value} for every contract question NOT in `answered` that suffix_route can answer (ids it cannot
+    answer are left out -- the day's solver / worker keeps them). Never raises."""
+    out = {}
+    try:
+        ctx = {} if ctx is None else ctx
+        qs = (contract or {}).get("questions") or []
+        for q in qs:
+            aid = q.get("id") or q.get("answer_id")
+            if not aid or aid in (answered or {}):
+                continue
+            v, _ = suffix_route(aid, q, plans_by_member, texts_by_member, ctx)
+            if v is not None:
+                out[aid] = v
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _sr_decode(material, transform=None, key=None):
+    """decode() hook for rep 'suffix_route': material = JSON {"contract": {"questions": [..]}, "plans": {member:
+    plan}, "texts": {member: text}}; transform = the answer id; key 'step' -> the routing step instead of the value."""
+    try:
+        import json
+        d = json.loads(material) if isinstance(material, (str, bytes, bytearray)) else material
+        if not isinstance(d, dict):
+            return None
+        q = next((x for x in ((d.get("contract") or {}).get("questions") or [])
+                  if (x.get("id") or x.get("answer_id")) == transform), {"id": transform})
+        v, step = suffix_route(transform, q, d.get("plans") or {}, d.get("texts") or {})
+        return step if str(key or "").lower() == "step" else v
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# Target mixed-grammar-single-contract (finale guard: the Timed grammar flipped D23 per-file -> D27 semantic -> D28-D30
+# per-file while the single stayed semantic; a finale may merge them). One contract may mix semantic
+# `<lang>-<role>-<field>` ids (member named by the question's `artifact`, else by the language + role its plan / name
+# carries) with per-file `<family>-<4-8 hex stem>-<field>` ids, optionally `setN.`-prefixed. grammar_of() classifies
+# EACH id on its own: per_file iff a hex token of the id is the stem of a member of the SAME set (artifact container,
+# else the `setN` number), else semantic. grammar_route() answers each id through its own path (per_file: pf_route +
+# pf_answer; semantic: the member, field = every token after the longest member-identity prefix, so `-campaign` and
+# `-campaign-token` never share a reading) and reports {grammar: [answered, total]}. decode(material=JSON {"contract",
+# "plans", "texts"}, rep='grammar_route', transform=<answer id>) -> the value; key 'grammar' -> the class; transform
+# '*' or key 'report' -> `per_file=a/n semantic=b/m`. ctx caches per scope (a plain dict; never keyed on id()).
+_MG_EXT = {"js": ("js", "jscript", "javascript"), "jse": ("js", "jscript"), "ps1": ("ps", "ps1", "powershell"),
+           "psm1": ("ps", "powershell"), "py": ("py", "python"), "vbs": ("vbs", "vbscript"), "vbe": ("vbs", "vbscript"),
+           "bat": ("bat", "batch", "cmd"), "cmd": ("bat", "batch", "cmd"), "sh": ("sh", "bash", "shell"),
+           "hta": ("hta",), "wsf": ("wsf", "jscript", "vbscript"), "pl": ("pl", "perl"), "php": ("php",),
+           "lua": ("lua",), "ts": ("ts", "typescript"), "au3": ("au3", "autoit"), "applescript": ("applescript",),
+           "mof": ("mof",), "rb": ("rb", "ruby")}
+
+
+def _mg_norm(n):
+    return str(n).replace("\\", "/").strip()
+
+
+def _mg_leaf(n):
+    return _mg_norm(n).rsplit("/", 1)[-1].lower()
+
+
+def _mg_stem(n):
+    lf = _mg_leaf(n)
+    return lf.rsplit(".", 1)[0] if "." in lf else lf
+
+
+def _mg_scope(aid, q, names):
+    """The members of the id's set: the artifact's container, else the `setN.` number, else the only container."""
+    names = list(names)
+    pref = lambda n: _mg_norm(n).rsplit("/", 1)[0].lower() if "/" in _mg_norm(n) else ""
+    conts = sorted({pref(n) for n in names})
+    if len(conts) <= 1:
+        return names
+    pick = []
+    art = str((q or {}).get("artifact") or "")
+    if "->" in art:
+        c = _mg_leaf(art.split("->", 1)[0])
+        cs = c.rsplit(".", 1)[0]
+        pick = [x for x in conts if x.rsplit("/", 1)[-1] in (c, cs) or x.rsplit("/", 1)[-1].rsplit(".", 1)[0] == cs]
+    if len(pick) != 1:
+        mm = re.match(r"(?i)set(\d+)\.", str(aid or "").strip())
+        if mm:
+            pick = [x for x in conts if re.search(r"(?<!\d)0*%s(?!\d)" % int(mm.group(1)), x)]
+    return [n for n in names if pref(n) == pick[0]] if len(pick) == 1 else []
+
+
+def grammar_of(answer_id, question=None, members=()):
+    """'per_file' iff a 4-8 hex token of the id is the stem of one of `members` (already scoped to the id's set),
+    else 'semantic'."""
+    try:
+        stems = {_mg_stem(n) for n in members}
+        if not stems:
+            art = str((question or {}).get("artifact") or "")
+            stems = {_mg_stem(art.split("->")[-1])} if "->" in art else set()
+        return "per_file" if any(s in stems for _, s, _ in _pf_split(answer_id)) else "semantic"
+    except Exception:  # noqa: BLE001
+        return "semantic"
+
+
+def _mg_ident(name, plan):
+    """Tokens that name a member: its stem tokens, its extension's family names, the plan's language / role / stage."""
+    out = set(t for t in re.split(r"[^a-z0-9]+", _mg_stem(name)) if t)
+    lf = _mg_leaf(name)
+    if "." in lf:
+        out.update(_MG_EXT.get(lf.rsplit(".", 1)[1], (lf.rsplit(".", 1)[1],)))
+    for k in ("language", "lang", "family", "role", "stage"):
+        v = plan.get(k) if isinstance(plan, dict) else None
+        if isinstance(v, str):
+            out.update(t for t in re.split(r"[^a-z0-9]+", v.lower()) if t)
+            out.update(PF_KIND.get(t, t) for t in re.split(r"[^a-z0-9]+", v.lower()) if t)
+    out.update([PF_KIND[t] for t in list(out) if t in PF_KIND])
+    return out
+
+
+def _mg_plan(c, name):
+    d = c["dicts"].get(name)
+    if d is None:
+        pl = c["plans"].get(name)
+        if pl is None and c["texts"].get(name):
+            try:
+                pl = next((x.get("plain") for x in find_codecs(c["texts"][name]) if x.get("plain")), None)
+            except Exception:  # noqa: BLE001
+                pl = None
+        try:
+            d = _plan_dict(pl) if pl is not None else {}
+        except Exception:  # noqa: BLE001
+            d = {}
+        d = c["dicts"][name] = {str(k).lower(): v for k, v in (d or {}).items()}
+    return d
+
+
+def _mg_semantic(aid, q, scoped, c):
+    """(member, field, kind) of a semantic id, or None."""
+    toks = [t for t in re.sub(r"(?i)^set\d+\.", "", str(aid or "").strip().lower()).split("-") if t]
+    if len(toks) < 2:
+        return None
+    mem = None
+    art = str((q or {}).get("artifact") or "")
+    if "->" in art:
+        b = _mg_norm(art.split("->", 1)[1]).lower()
+        hit = [n for n in scoped if _mg_norm(n).lower() == b or _mg_norm(n).lower().endswith("/" + b)] or \
+            [n for n in scoped if _mg_leaf(n) == _mg_leaf(b)]
+        mem = hit[0] if len(hit) == 1 else None
+        if mem is None:
+            return None              # the artifact names a member this set does not carry: never guess another
+    if mem is None:
+        idents = {n: _mg_ident(n, _mg_plan(c, n)) for n in scoped}
+        for k in range(1, len(toks)):
+            hit = [n for n, s in idents.items() if all(t in s for t in toks[:k])]
+            if len(hit) == 1:
+                mem = hit[0]
+                break
+            if not hit:
+                return None
+        if mem is None:
+            return None
+    ident = _mg_ident(mem, _mg_plan(c, mem))
+    k = 0
+    while k < len(toks) - 1 and toks[k] in ident:
+        k += 1
+    if k == 0:
+        k = min(2, len(toks) - 1)
+    lf = _mg_leaf(mem)
+    kind = PF_KIND.get(toks[0]) or next((PF_KIND.get(x) for x in _MG_EXT.get(lf.rsplit(".", 1)[-1], ())
+                                         if PF_KIND.get(x)), toks[0])
+    return mem, "-".join(toks[k:]), kind
+
+
+def grammar_answer(answer_id, question=None, plans_by_member=None, texts_by_member=None, ctx=None):
+    """(value|None, grammar) for one id through its own grammar's path. Never raises."""
+    g = "semantic"
+    try:
+        ctx = {} if ctx is None else ctx
+        q = question or {}
+        names = sorted(set(plans_by_member or {}) | set(texts_by_member or {}), key=str)
+        scoped = _mg_scope(answer_id, q, names)
+        key = ("mg", tuple(scoped))
+        if key not in ctx:
+            ctx[key] = {"plans": {n: (plans_by_member or {}).get(n) for n in scoped if n in (plans_by_member or {})},
+                        "texts": {n: (texts_by_member or {}).get(n) for n in scoped}, "dicts": {}}
+        c = ctx[key]
+        g = grammar_of(answer_id, q, scoped)
+        if g == "per_file":
+            r = pf_route(answer_id, {}, scoped)
+            if not r:
+                return None, g
+            fam, mem, field = r
+            d = _mg_plan(c, mem)
+            v = pf_answer(field, d, q, fam) if d else None
+        else:
+            r = _mg_semantic(answer_id, q, scoped, c)
+            if not r:
+                return None, g
+            mem, field, kind = r
+            d = _mg_plan(c, mem)
+            v = pf_answer(field, d, q, kind) if d and field else None
+        return _sr_shape(v, q), g
+    except Exception:  # noqa: BLE001
+        return None, g
+
+
+def grammar_route(contract, plans_by_member=None, texts_by_member=None, answered=None, ctx=None):
+    """({answer_id: value} for every id NOT in `answered` its grammar's path answers, {grammar: [answered, total]}).
+    Never raises."""
+    out, rep = {}, {"per_file": [0, 0], "semantic": [0, 0]}
+    try:
+        ctx = {} if ctx is None else ctx
+        for q in (contract or {}).get("questions") or []:
+            aid = q.get("id") or q.get("answer_id")
+            if not aid or aid in (answered or {}):
+                continue
+            v, g = grammar_answer(aid, q, plans_by_member, texts_by_member, ctx)
+            rep[g][1] += 1
+            if v is not None:
+                rep[g][0] += 1
+                out[aid] = v
+    except Exception:  # noqa: BLE001
+        pass
+    return out, rep
+
+
+def _mg_decode(material, transform=None, key=None):
+    try:
+        import json
+        d = json.loads(material) if isinstance(material, (str, bytes, bytearray)) else material
+        if not isinstance(d, dict) or not isinstance(d.get("contract"), dict):
+            return None
+        plans, texts = d.get("plans") or {}, d.get("texts") or {}
+        if not isinstance(plans, dict) or not isinstance(texts, dict):
+            return None
+        if str(transform or "") == "*" or str(key or "").lower() == "report":
+            _, rep = grammar_route(d["contract"], plans, texts)
+            return " ".join(f"{g}={a}/{n}" for g, (a, n) in rep.items()) if any(n for _, n in rep.values()) else None
+        q = next((x for x in (d["contract"].get("questions") or [])
+                  if (x.get("id") or x.get("answer_id")) == transform), {"id": transform})
+        v, g = grammar_answer(transform, q, plans, texts)
+        return g if str(key or "").lower() == "grammar" else v
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# Target make-target-flow-variant-diff (D29 prompt, all 3 modes: "Unseen Makefile variants and their prior-language
+# build chains differ in layered variables and target flow"). make_model(text) reads a GNU Makefile STATICALLY (never
+# `make -n` / `-p`: they evaluate `$(shell)`) -> {vars: final value per name, layers: the layer that won (`=` expanded
+# late, `:=` / `::=` / `:::=` immediate, `?=` only if unset, `+=` appends with a space (only to a non-empty value),
+# `override`, `define`, `!=` = shell, never run -> ''), target_vars (`t: [override] VAR op x`, inherited by prereqs),
+# rules: [{targets, prereqs, order_only (after `|`), double_colon, pattern, recipe_lines, recipe, recipe_lang,
+# handoffs}], targets (merged per target: the recipe rule's prereqs first, then the other rules' in file order, as GNU
+# make 4.4 builds them), default_goal (`.DEFAULT_GOAL` else the first non-dot, non-pattern target), run_order
+# (post-order DFS from the goal, deps left-to-right in that merged order, each once: the targets whose recipe runs, as
+# `make -n --trace` lists them; visit_order keeps every rule target, the goal included; a prereq only a `%` pattern
+# rule makes is instantiated from it), phony}.
+# ifdef/ifndef/ifeq/ifneq/else/endif evaluated; `$(VAR)` / `${VAR}` / `$X` / `$(V:a=b)` and subst, patsubst, strip,
+# findstring, filter(-out), sort, word(s), wordlist, first/lastword, dir, notdir, suffix, basename, add{pre,suf}fix,
+# join, if, or, and, foreach, call, value, origin, flavor (shell / wildcard / eval -> ''). recipe_lang: SHELL (target
+# or global) else sh; a `python3 -c` / `pwsh -c` / `node -e` / `perl -e` / ... head in a recipe line is the handoff.
+# make_diff(a, b) -> changed vars (name, a, b, layer a, layer b), added/removed targets, targets whose prereqs differ,
+# run orders, goal, recipe-language changes. decode(material, rep='make_model', transform, key) answers from them.
+# Not a Makefile (any non-make line ratio > 20 % or no rule) -> None. Bounded, never raises.
+_MK_FUNCS = frozenset("subst patsubst strip findstring filter filter-out sort word words wordlist firstword lastword "
+                      "dir notdir suffix basename addsuffix addprefix join if or and foreach call value origin flavor "
+                      "shell wildcard eval info warning error realpath abspath file let intcmp guile".split())
+_MK_HEAD = re.compile(r"(?:^|[\s;|&(`'\"])(?:\S*[/\\])?(?:env[ \t]+)?(?P<h>python[\d.]*|pwsh|powershell|node|nodejs|deno|"
+                      r"bun|perl|ruby|php|lua|bash|sh|zsh|dash|ksh|cmd|tclsh|osascript|Rscript|groovy)(?:\.exe)?"
+                      r"[ \t]+(?:-[A-Za-z]+[ \t]+)*?(?P<f>-c|-e|-Command|-EncodedCommand|-enc|/c|/k|-r|--eval|-p|-)"
+                      r"(?=[ \t]|$)", re.I)
+_MK_LANGX = {"osascript": "applescript", "rscript": "r", "groovy": "groovy", "dash": "sh", "ksh": "bash"}
+
+
+class _MkEval:
+    def __init__(self):
+        self.vars = {}          # name -> {flavor, raw, layer, override}
+        self.tvars = {}         # target -> [(name, op, raw, override)]
+        self.scopes = []        # foreach / call / automatic bindings: [{name: value}]
+        self.budget = 200000
+
+    def lookup(self, name):
+        for sc in reversed(self.scopes):
+            if name in sc:
+                return sc[name]
+        v = self.vars.get(name)
+        if v is None:
+            return ""
+        return self.x(v["raw"]) if v["flavor"] == "recursive" else v["raw"]
+
+    def x(self, s, depth=0):
+        if "$" not in s:
+            return s
+        if depth > 30 or self.budget <= 0:
+            return ""
+        out, i, n = [], 0, len(s)
+        while i < n:
+            j = s.find("$", i)
+            if j < 0:
+                out.append(s[i:])
+                break
+            out.append(s[i:j])
+            i = j
+            if i + 1 >= n:
+                break
+            d = s[i + 1]
+            if d == "$":
+                out.append("$")
+                i += 2
+            elif d in "({":
+                close, k, lvl = ")" if d == "(" else "}", i + 2, 1
+                while k < n:
+                    if s[k] == d:
+                        lvl += 1
+                    elif s[k] == close:
+                        lvl -= 1
+                        if not lvl:
+                            break
+                    k += 1
+                if k >= n:
+                    break
+                out.append(self.ref(s[i + 2:k], depth + 1))
+                i = k + 1
+            else:
+                out.append(self.ref(d, depth + 1))
+                i += 2
+        r = "".join(out)
+        self.budget -= len(r)
+        return r
+
+    @staticmethod
+    def args(body, maxn):
+        out, lvl, cur = [], 0, []
+        for ch in body:
+            if ch in "({":
+                lvl += 1
+            elif ch in ")}":
+                lvl -= 1
+            if ch == "," and not lvl and len(out) < maxn - 1:
+                out.append("".join(cur))
+                cur = []
+            else:
+                cur.append(ch)
+        out.append("".join(cur))
+        return out
+
+    @staticmethod
+    def pat(p, w):
+        if "%" not in p:
+            return None if p != w else ""
+        a, b = p.split("%", 1)
+        return w[len(a):len(w) - len(b)] if len(w) >= len(a) + len(b) and w.startswith(a) and w.endswith(b) else None
+
+    def ref(self, body, depth):
+        m = re.match(r"([a-z-]+)[ \t]+", body)
+        if m and m.group(1) in _MK_FUNCS:
+            return self.func(m.group(1), body[m.end():], depth)
+        lvl, cut = 0, -1
+        for i, ch in enumerate(body):
+            lvl += ch in "({"
+            lvl -= ch in ")}"
+            if ch == ":" and not lvl and "=" in body[i:]:
+                cut = i
+                break
+        name = self.x(body if cut < 0 else body[:cut], depth)
+        val = self.lookup(name)
+        if cut >= 0:
+            a, b = body[cut + 1:].split("=", 1)
+            a, b = self.x(a, depth), self.x(b, depth)
+            if "%" not in a:
+                a, b = "%" + a, "%" + b
+            val = " ".join(self.subw(a, b, w) for w in val.split())
+        return val
+
+    def subw(self, p, r, w):
+        st = self.pat(p, w)
+        return w if st is None else (r.replace("%", st, 1) if "%" in r else r)
+
+    def func(self, f, body, depth):
+        X = lambda s: self.x(s, depth)  # noqa: E731
+        if f in ("if", "or", "and", "foreach", "call", "let"):
+            a = self.args(body, {"if": 3, "foreach": 3, "let": 3}.get(f, 4096))
+            if f == "if":
+                return X(a[1]) if X(a[0]).strip() else (X(a[2]) if len(a) > 2 else "")
+            if f == "or":
+                return next((v for v in (X(t).strip() for t in a) if v), "")
+            if f == "and":
+                v = ""
+                for t in a:
+                    v = X(t).strip()
+                    if not v:
+                        return ""
+                return v
+            if f == "foreach" and len(a) == 3:
+                name, outs = X(a[0]).strip(), []
+                for w in X(a[1]).split()[:2000]:
+                    self.scopes.append({name: w})
+                    try:
+                        outs.append(X(a[2]))
+                    finally:
+                        self.scopes.pop()
+                return " ".join(o for o in outs if o)   # GNU joins non-empty results
+            if f == "call":
+                name = X(a[0]).strip()
+                v = self.vars.get(name)
+                sc = {str(i): X(t) for i, t in enumerate(a[1:], 1)}
+                sc["0"] = name
+                for i in range(len(a), 10):
+                    sc[str(i)] = ""
+                if v is None or len(self.scopes) > 40:
+                    return ""
+                self.scopes.append(sc)
+                try:
+                    return self.x(v["raw"], depth) if v["flavor"] == "recursive" else v["raw"]
+                finally:
+                    self.scopes.pop()
+            return ""
+        nargs = {"subst": 3, "patsubst": 3, "findstring": 2, "filter": 2, "filter-out": 2, "word": 2, "wordlist": 3,
+                 "addsuffix": 2, "addprefix": 2, "join": 2, "intcmp": 5}.get(f, 1)
+        a = [X(t) for t in self.args(body, nargs)]
+        a += [""] * (nargs - len(a))
+        w = a[-1].split()
+        if f == "subst":
+            return a[2].replace(a[0], a[1]) if a[0] else a[2]
+        if f == "patsubst":
+            return " ".join(self.subw(a[0].strip(), a[1].strip(), x) for x in w)
+        if f == "strip":
+            return " ".join(w)
+        if f == "findstring":
+            return a[0] if a[0] in a[1] else ""
+        if f in ("filter", "filter-out"):
+            ps = a[0].split()
+            keep = [x for x in w if any(self.pat(p, x) is not None for p in ps)]
+            return " ".join(keep if f == "filter" else [x for x in w if x not in keep])
+        if f == "sort":
+            return " ".join(sorted(set(w)))
+        if f == "word":
+            n = int(a[0]) if a[0].strip().isdigit() else 0
+            return w[n - 1] if 0 < n <= len(w) else ""
+        if f == "wordlist":
+            s, e = (int(t) if t.strip().isdigit() else 0 for t in a[:2])
+            return " ".join(w[max(s, 1) - 1:e])
+        if f == "words":
+            return str(len(w))
+        if f == "firstword":
+            return w[0] if w else ""
+        if f == "lastword":
+            return w[-1] if w else ""
+        if f == "dir":
+            return " ".join(x[:x.rfind("/") + 1] if "/" in x else "./" for x in w)
+        if f == "notdir":
+            return " ".join(x.rsplit("/", 1)[-1] for x in w)
+        if f in ("suffix", "basename"):
+            o = []
+            for x in w:
+                k = x.rfind(".")
+                k = k if k > x.rfind("/") else -1
+                o.append((x[k:] if k >= 0 else "") if f == "suffix" else (x[:k] if k >= 0 else x))
+            return " ".join(t for t in o if t)
+        if f == "addsuffix":
+            return " ".join(x + a[0] for x in w)
+        if f == "addprefix":
+            return " ".join(a[0] + x for x in w)
+        if f == "join":
+            l1, l2 = a[0].split(), a[1].split()
+            return " ".join((l1[i] if i < len(l1) else "") + (l2[i] if i < len(l2) else "")
+                            for i in range(max(len(l1), len(l2))))
+        if f == "value":
+            v = self.vars.get(a[0].strip())
+            return v["raw"] if v else ""
+        if f == "origin":
+            v = self.vars.get(a[0].strip())
+            return "undefined" if not v else ("override" if v["override"] else "file")
+        if f == "flavor":
+            v = self.vars.get(a[0].strip())
+            return v["flavor"] if v else "undefined"
+        if f in ("abspath", "realpath"):
+            return a[0].strip()
+        return ""                                   # shell / wildcard / eval / info / warning / error: never run
+
+    def assign(self, name, op, val, override=False, layer=None):
+        cur = self.vars.get(name)
+        if cur and cur["override"] and not override:
+            return
+        lay = layer or ("override" if override else op)
+        if op == "?=":
+            if cur is None:
+                self.vars[name] = {"flavor": "recursive", "raw": val, "layer": "?=", "override": override}
+            return
+        if op == "+=" and cur is not None:
+            if cur["flavor"] == "simple":
+                add = self.x(val)
+            else:
+                add = val
+            raw = cur["raw"] + (" " if cur["raw"] and add else "") + add
+            self.vars[name] = {"flavor": cur["flavor"], "raw": raw, "layer": "override" if override else "+=",
+                               "override": override or cur["override"]}
+            return
+        if op == "!=":
+            self.vars[name] = {"flavor": "simple", "raw": "", "layer": "!=", "override": override}
+            return
+        simple = op in (":=", "::=", ":::=")
+        self.vars[name] = {"flavor": "simple" if simple else "recursive", "raw": self.x(val) if simple else val,
+                           "layer": lay, "override": override}
+
+
+def _mk_split(line):
+    """(kind, a, b, op) for one logical makefile line: ('assign', name, value, op) | ('rule', lhs, rhs, ':'|'::')
+    | (None,...) when neither (GNU 'missing separator')."""
+    lvl, i, n = 0, 0, len(line)
+    while i < n:
+        ch = line[i]
+        if ch == "$" and i + 1 < n and line[i + 1] in "({":
+            lvl += 1
+            i += 2
+            continue
+        if ch in ")}" and lvl:
+            lvl -= 1
+        elif not lvl and ch == "=":
+            k = i
+            while k > 0 and line[k - 1] in ":?+!" and i - k < 3:
+                k -= 1
+            op = line[k:i + 1]
+            if op not in ("=", ":=", "::=", ":::=", "?=", "+=", "!="):
+                op, k = "=", i
+            return "assign", line[:k].strip(), line[i + 1:].lstrip(), op
+        elif not lvl and ch == ":":
+            m = re.match(r":{1,3}=", line[i:])
+            if m:
+                return "assign", line[:i].strip(), line[i + m.end():].lstrip(), m.group(0)
+            if i + 1 < n and line[i + 1] in "\\/" and i == 1:      # C:\ path, not a rule
+                i += 1
+                continue
+            dbl = line[i + 1:i + 2] == ":"
+            return "rule", line[:i].strip(), line[i + (2 if dbl else 1):], "::" if dbl else ":"
+        i += 1
+    return None, line, "", ""
+
+
+def _mk_cond(ev, rest, kw):
+    rest = rest.strip()
+    if kw in ("ifdef", "ifndef"):
+        r = bool(ev.lookup(ev.x(rest).strip()).strip()) if ev.vars.get(ev.x(rest).strip()) else False
+        return r if kw == "ifdef" else not r
+    a = b = None
+    if rest.startswith("("):
+        inner = rest[1:rest.rfind(")")] if ")" in rest else rest[1:]
+        p = _MkEval.args(inner, 2)
+        if len(p) == 2:
+            a, b = ev.x(p[0]).strip(), ev.x(p[1]).strip()
+    else:
+        m = re.match(r"""(["'])(.*?)\1\s+(["'])(.*?)\3""", rest)
+        if m:
+            a, b = ev.x(m.group(2)), ev.x(m.group(4))
+    if a is None:
+        return False
+    return (a == b) if kw == "ifeq" else (a != b)
+
+
+def _mk_lang(shell, lines, oneshell):
+    sh = (shell or "").split()
+    base = re.sub(r"(?i)\.exe$", "", re.split(r"[/\\]", sh[0])[-1]).lower() if sh else "sh"
+    if base == "env" and len(sh) > 1:
+        base = re.split(r"[/\\]", sh[1])[-1].lower()
+    base = re.sub(r"(?<=python)[\d.]+$", "", base)
+    lang = _MK_LANGX.get(base) or _BIS_LANG.get(base, base or "sh")
+    hand = []
+    if lang in ("sh", "bash", "batch"):
+        for ln in lines:
+            for m in _MK_HEAD.finditer(ln):
+                h = re.sub(r"[\d.]+$", "", m.group("h").lower()) if m.group("h").lower().startswith("python") \
+                    else m.group("h").lower()
+                h = _MK_LANGX.get(h) or _BIS_LANG.get(h, h)
+                if m.group("f") == "-" and h not in ("python", "perl", "ruby", "node", "php", "sh", "bash"):
+                    continue
+                hand.append(h)
+    prior = next((h for h in hand if h not in ("sh", "bash")), None)
+    return (prior or lang), hand
+
+
+def make_model(text):
+    """Static GNU make model of one Makefile text (see the target comment above), or None when it is not one."""
+    try:
+        return _make_model(text)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _make_model(text):
+    if isinstance(text, (bytes, bytearray)):
+        text = bytes(text).decode("utf-8", "replace")
+    if not isinstance(text, str) or not text.strip() or len(text) > 2_000_000:
+        return None
+    text = text.lstrip("\ufeff").replace("\r\n", "\n")
+    phys = text.split("\n")
+    ev = _MkEval()
+    rules, conds, cur_rules, junk, good = [], [], None, 0, 0
+    prefix, oneshell, i = "\t", False, 0
+    active = lambda: all(c[0] for c in conds)  # noqa: E731
+    while i < len(phys):
+        ln = phys[i]
+        i += 1
+        # recipe line (rule context): TAB-led, kept verbatim; `\`-newline kept as the shell sees it
+        if cur_rules is not None and ln.startswith(prefix):
+            body = [ln[len(prefix):]]
+            while body[-1].endswith("\\") and i < len(phys):
+                nxt = phys[i]
+                i += 1
+                body.append(nxt[len(prefix):] if nxt.startswith(prefix) else nxt)
+            if active():
+                for r in cur_rules:
+                    r["recipe_lines"].append("\n".join(body))
+                good += 1
+            continue
+        logical = ln
+        while logical.endswith("\\") and not logical.endswith("\\\\") and i < len(phys):
+            logical = logical[:-1].rstrip() + " " + phys[i].lstrip()
+            i += 1
+        stripped = logical.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        hm = re.search(r"(?<!\\)#", logical)
+        line = (logical[:hm.start()] if hm else logical).replace("\\#", "#").strip()
+        if not line:
+            continue
+        kw = line.split(None, 1)
+        k0, rest = kw[0], (kw[1] if len(kw) > 1 else "")
+        if k0 in ("ifdef", "ifndef", "ifeq", "ifneq"):
+            on = active()
+            r = _mk_cond(ev, rest, k0) if on else False
+            conds.append([r, r])
+            good += 1
+            continue
+        if k0 == "else" and conds:
+            c = conds[-1]
+            sub = rest.split(None, 1)
+            if sub and sub[0] in ("ifdef", "ifndef", "ifeq", "ifneq"):
+                if c[1]:
+                    c[0] = False
+                else:
+                    conds.pop()
+                    r = _mk_cond(ev, sub[1] if len(sub) > 1 else "", sub[0]) if active() else False
+                    conds.append([r, r])
+            else:
+                c[0] = not c[1]
+                c[1] = True
+            good += 1
+            continue
+        if k0 == "endif" and conds:
+            conds.pop()
+            good += 1
+            continue
+        dm = re.match(r"^((?:(?:override|export|private)[ \t]+)*)define[ \t]+(\S+)[ \t]*(\S*)", line)
+        if dm:
+            body, nest = [], 1
+            while i < len(phys):
+                b = phys[i]
+                i += 1
+                bs = b.strip()
+                if re.match(r"(?:(?:override|export|private)[ \t]+)*define(?:[ \t]|$)", bs):
+                    nest += 1
+                elif bs == "endef" or bs.startswith("endef ") or bs.startswith("endef#"):
+                    nest -= 1
+                    if not nest:
+                        break
+                body.append(b)
+            if active():
+                op = dm.group(3) if dm.group(3) in (":=", "::=", ":::=", "?=", "+=", "=") else "="
+                ev.assign(ev.x(dm.group(2)), op, "\n".join(body), "override" in dm.group(1),
+                          layer="override" if "override" in dm.group(1) else "define")
+            cur_rules, good = None, good + 1
+            continue
+        if not active():
+            continue
+        if k0 in ("include", "-include", "sinclude", "vpath", "unexport", "undefine", "load", "-load") or \
+                (k0 == "export" and not re.search(r"[:?+!]?=", rest)):
+            if k0 == "undefine" and rest.strip():
+                ev.vars.pop(ev.x(rest.replace("override", "")).strip(), None)
+            good += 1
+            continue
+        kind, lhs, rhs, op = _mk_split(line)
+        if kind is None:
+            if re.fullmatch(r"\$[({][^\n]*[)}]", line):     # a bare `$(info ..)` / `$(eval ..)` line
+                good += 1
+            else:
+                junk += 1
+            continue
+        if kind == "assign":
+            mods = re.match(r"((?:(?:override|export|private)[ \t]+)*)", lhs).group(1)
+            name = ev.x(lhs[len(mods):]).strip()
+            if not name or re.search(r"\s", name):
+                junk += 1
+                continue
+            ev.assign(name, op, rhs, "override" in mods)
+            if name == ".RECIPEPREFIX":
+                prefix = ev.lookup(name)[:1] or "\t"
+            cur_rules, good = None, good + 1
+            continue
+        # rule line
+        recipe0 = None
+        lvl = 0
+        for j, ch in enumerate(rhs):
+            lvl += ch in "({"
+            lvl -= ch in ")}"
+            if ch == ";" and not lvl:
+                rhs, recipe0 = rhs[:j], rhs[j + 1:]
+                break
+        targets = ev.x(lhs).split()
+        if not targets:
+            junk += 1
+            continue
+        sk, slhs, srhs, sop = _mk_split(rhs)
+        if sk == "assign":                              # target-specific variable
+            mods = re.match(r"\s*((?:(?:override|export|private)[ \t]+)*)", slhs).group(1)
+            name = ev.x(slhs.strip()[len(mods.strip()):]).strip()
+            for t in targets:
+                ev.tvars.setdefault(t, []).append((name, sop, srhs, "override" in mods))
+            cur_rules, good = None, good + 1
+            continue
+        pre_raw, oo_raw = (rhs.split("|", 1) + [""])[:2]
+        static = None
+        if sk == "rule":                                # static pattern rule  targets: tpat: ppat
+            static = (ev.x(slhs).strip(), ev.x(srhs.split("|")[0]).split())
+        rs = []
+        for grp in ([targets] if op == ":" and static is None else [[t] for t in targets]):
+            if static:
+                st = _MkEval.pat(static[0], grp[0])
+                pre = [p.replace("%", st or "", 1) for p in static[1]]
+            else:
+                pre = ev.x(pre_raw).split()
+            r = {"targets": grp, "prereqs": pre, "order_only": ev.x(oo_raw).split(), "double_colon": op == "::",
+                 "pattern": any("%" in t for t in grp) and static is None, "recipe_lines": [],
+                 "line": len(rules) + len(rs)}
+            if recipe0 is not None and recipe0.strip():
+                r["recipe_lines"].append(recipe0.strip())
+            rs.append(r)
+        if targets == [".ONESHELL"]:
+            oneshell = True
+        rules += rs
+        cur_rules, good = rs, good + 1
+    if junk * 5 > junk + good or not any(not r["targets"][0].startswith(".") for r in rules):
+        return None
+    vars_ = {}
+    for n in ev.vars:
+        vars_[n] = ev.lookup(n)
+    layers = {n: v["layer"] for n, v in ev.vars.items()}
+    phony = []
+    for r in rules:
+        if r["targets"] == [".PHONY"]:
+            phony += [p for p in r["prereqs"] if p not in phony]
+    # merged per-target view (GNU 4.4: the recipe rule's prereqs first, then the other rules' in file order)
+    tg, order_t = {}, []
+    for r in rules:
+        if r["pattern"] or r["targets"][0].startswith("."):
+            continue
+        for t in r["targets"]:
+            if t not in tg:
+                tg[t] = {"rules": [], "double_colon": r["double_colon"]}
+                order_t.append(t)
+            tg[t]["rules"].append(r)
+    # a prereq no explicit rule makes takes the first pattern rule (with a recipe) whose target pattern matches it
+    pats = [r for r in rules if r["pattern"] and r["recipe_lines"]]
+    work = [p for r in rules if not r["pattern"] for p in r["prereqs"] + r["order_only"]]
+    while work and len(tg) < 5000:
+        p = work.pop(0)
+        if p in tg:
+            continue
+        for r in pats:
+            st = next((x for x in (_MkEval.pat(tp, p) for tp in r["targets"]) if x is not None), None)
+            if st is not None:
+                ir = dict(r, targets=[p], prereqs=[x.replace("%", st, 1) for x in r["prereqs"]],
+                          order_only=[x.replace("%", st, 1) for x in r["order_only"]], pattern=False, stem=st,
+                          recipe_lines=list(r["recipe_lines"]))
+                tg[p] = {"rules": [ir], "double_colon": False}
+                order_t.append(p)
+                work += ir["prereqs"] + ir["order_only"]
+                break
+    # target-specific vars, inherited down the prereq tree (computed per target on demand)
+    def tscope(t, seen=()):
+        sc = {}
+        for name, sop, raw, ovr in ev.tvars.get(t, []):
+            gv = ev.vars.get(name)
+            if gv and gv["override"] and not ovr:
+                continue
+            base = sc.get(name, ev.lookup(name))
+            if sop == "+=":
+                add = ev.x(raw)
+                sc[name] = base + (" " if base and add else "") + add
+            elif sop == "?=":
+                if name not in sc and name not in ev.vars:
+                    sc[name] = ev.x(raw)
+            elif sop != "!=":
+                sc[name] = ev.x(raw)
+        return sc
+    parents = {}
+    for t, d in tg.items():
+        seq = []
+        rr = d["rules"]
+        if not d["double_colon"]:
+            rr = [r for r in rr if r["recipe_lines"]][-1:] + [r for r in rr if not r["recipe_lines"]]
+        for r in rr:
+            seq += [(p, False) for p in r["prereqs"]] + [(p, True) for p in r["order_only"]]
+        seen, pre, oo, deps = set(), [], [], []
+        for p, o in seq:
+            if p not in seen:
+                seen.add(p)
+                deps.append(p)
+                (oo if o else pre).append(p)
+        d["prereqs"], d["order_only"], d["deps"] = pre, oo, deps
+        for p in d["deps"]:
+            parents.setdefault(p, []).append(t)
+    def inherited(t, depth=0):
+        sc = {}
+        if depth < 20:
+            for par in parents.get(t, [])[:1]:
+                sc.update(inherited(par, depth + 1))
+        ev.scopes.append(sc)
+        try:
+            sc2 = dict(sc)
+            sc2.update(tscope(t))
+        finally:
+            ev.scopes.pop()
+        return sc2
+    for t, d in tg.items():
+        rec = [r for r in d["rules"] if r["recipe_lines"]]
+        r = rec[-1] if rec else d["rules"][0]
+        sc = inherited(t)
+        auto = {"@": t, "<": (d["prereqs"] or [""])[0], "^": " ".join(d["prereqs"]), "|": " ".join(d["order_only"]),
+                "+": " ".join(d["prereqs"]), "*": r.get("stem", ""), "?": " ".join(d["prereqs"])}
+        ev.scopes.append(dict(sc, **auto))
+        try:
+            lines = [ev.x(ln) for rr in rec for ln in rr["recipe_lines"]]
+            shell = ev.lookup("SHELL")
+        finally:
+            ev.scopes.pop()
+        lines = [re.sub(r"^[@+\-\s]+", "", ln) for ln in lines]
+        d["recipe"] = lines
+        d["vars"] = sc
+        d["recipe_lang"], d["handoffs"] = _mk_lang(shell if shell and shell != "/bin/sh" else "", lines, oneshell)
+        if not rec:
+            d["recipe_lang"] = None
+        for rr in rec:
+            rr["recipe"], rr["recipe_lang"], rr["handoffs"] = lines, d["recipe_lang"], d["handoffs"]
+    for r in rules:
+        r.setdefault("recipe", [])
+        r.setdefault("recipe_lang", None)
+        r.setdefault("handoffs", [])
+    goal = vars_.get(".DEFAULT_GOAL", "").strip()
+    if not goal:
+        goal = next((t for r in rules if not r["pattern"] for t in r["targets"]
+                     if not t.startswith(".") or "/" in t), None)
+    run = make_run_order({"targets": tg}, goal)
+    recipes = [t for t in run if tg[t]["recipe"]]
+    return {"vars": vars_, "layers": layers, "flavors": {n: v["flavor"] for n, v in ev.vars.items()},
+            "target_vars": {t: d["vars"] for t, d in tg.items() if d["vars"]}, "rules": rules,
+            "targets": {t: {k: tg[t][k] for k in ("prereqs", "order_only", "deps", "double_colon", "recipe", "recipe_lang",
+                                                   "handoffs")} for t in order_t},
+            "default_goal": goal, "run_order": recipes, "visit_order": run, "phony": phony, "oneshell": oneshell,
+            "shell": vars_.get("SHELL") or "/bin/sh"}
+
+
+def make_run_order(model, goal=None, all_nodes=False):
+    """Post-order DFS from `goal` (default the model's): prereqs then order-only, left-to-right, each once. Nodes
+    without a rule (plain files) are skipped unless all_nodes."""
+    tg = model.get("targets") or {}
+    goal = goal or model.get("default_goal")
+    if not goal:
+        return []
+    out, seen = [], set()
+    def visit(t, depth):
+        if t in seen or depth > 500:
+            return
+        seen.add(t)
+        d = tg.get(t)
+        if d:
+            for p in d.get("deps") or list(d.get("prereqs", [])) + list(d.get("order_only", [])):
+                visit(p, depth + 1)
+        if d or all_nodes:
+            out.append(t)
+    visit(goal, 0)
+    return out
+
+
+def make_diff(a, b):
+    """Diff two make_model()s (or Makefile texts): {changed_vars: [(name, a, b, layer_a, layer_b)], added, removed,
+    changed_prereqs: [(target, a_prereqs, b_prereqs)], changed_order_only, run_order_a/b, order_changed, goal_a/b,
+    changed_lang: [(target, a, b)]}. None when either side is not a Makefile."""
+    try:
+        a = make_model(a) if isinstance(a, (str, bytes)) else a
+        b = make_model(b) if isinstance(b, (str, bytes)) else b
+        if not a or not b:
+            return None
+        names = list(a["vars"]) + [n for n in b["vars"] if n not in a["vars"]]
+        cv = [(n, a["vars"].get(n), b["vars"].get(n), a["layers"].get(n), b["layers"].get(n)) for n in names
+              if not n.startswith(".") and n != "MAKEFILE_LIST" and
+              (a["vars"].get(n), a["layers"].get(n)) != (b["vars"].get(n), b["layers"].get(n))]
+        ta, tb = a["targets"], b["targets"]
+        common = [t for t in ta if t in tb]
+        return {"changed_vars": cv, "changed_values": [c for c in cv if c[1] != c[2]],
+                "added": [t for t in tb if t not in ta], "removed": [t for t in ta if t not in tb],
+                "changed_prereqs": [(t, ta[t]["prereqs"], tb[t]["prereqs"]) for t in common
+                                    if ta[t]["prereqs"] != tb[t]["prereqs"]],
+                "changed_order_only": [(t, ta[t]["order_only"], tb[t]["order_only"]) for t in common
+                                       if ta[t]["order_only"] != tb[t]["order_only"]],
+                "run_order_a": a["run_order"], "run_order_b": b["run_order"],
+                "visit_order_a": a["visit_order"], "visit_order_b": b["visit_order"],
+                "order_changed": a["visit_order"] != b["visit_order"], "goal_a": a["default_goal"],
+                "goal_b": b["default_goal"],
+                "changed_lang": [(t, ta[t]["recipe_lang"], tb[t]["recipe_lang"]) for t in common
+                                 if ta[t]["recipe_lang"] != tb[t]["recipe_lang"]]}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _mk_texts(material):
+    """One Makefile text, or a pair from JSON {"a": .., "b": ..} / [a, b] / {member: text} (first two members)."""
+    import json
+    s = material.decode("utf-8", "replace") if isinstance(material, (bytes, bytearray)) else str(material)
+    if s.lstrip()[:1] in "[{":
+        try:
+            d = json.loads(s)
+        except ValueError:
+            return [s]
+        if isinstance(d, dict):
+            if "a" in d and "b" in d:
+                return [str(d["a"]), str(d["b"])]
+            v = [str(x) for x in d.values() if isinstance(x, str)]
+            return v[:2] if v else None
+        if isinstance(d, list):
+            return [str(x) for x in d if isinstance(x, str)][:2] or None
+    return [s]
+
+
+def _mk_decode(material, transform=None, key=None):
+    """decode() hook for rep 'make_model': material = a Makefile text (model answers) or a pair (diff answers).
+    transform: var (key=name) | layer (key) | flavor (key) | vars (json) | goal | run_order (key = goal; `a>b>c`) |
+    prereqs / order_only / recipe / recipe_lang (key = target; recipe_lang without key = the first prior-language
+    handoff along the run order) | target_var (key `t:VAR`) | phony | targets | double_colon; on a pair:
+    changed_var(s) | changed_values | changed_target (prereqs differ) | added | removed | order_a / order_b |
+    changed_lang | diff (json); a single-model transform with `_a` / `_b` reads that side (default b). Field absent ->
+    'none'; not a Makefile -> None."""
+    import json
+    texts = _mk_texts(material)
+    if not texts:
+        return None
+    raw = str(transform or "run_order").strip().lower()
+    side = None
+    m = re.match(r"^(.*?)[_@:.\- ](a|b|old|new)$", raw)
+    if m and m.group(1):
+        raw, side = m.group(1), m.group(2) in ("a", "old")
+    t, k = _cl_norm(raw), str(key or "").strip()
+    models = [make_model(x) for x in texts]
+    if not all(models):
+        return None
+    J = lambda o: json.dumps(o, sort_keys=True, separators=(",", ":"))  # noqa: E731
+    if len(models) == 2:
+        dt = make_diff(*models)
+        if dt is None:
+            return None
+        if t in ("changedvar", "changedvars", "diffvar", "diffvars", "varchanged", "variable", "changedvariable"):
+            return ",".join(c[0] for c in dt["changed_vars"]) or "none"
+        if t in ("changedvalues", "changedvalue", "valuediff"):
+            return ",".join("%s:%s>%s" % (c[0], c[1], c[2]) for c in dt["changed_values"]) or "none"
+        if t in ("changedtarget", "changedtargets", "prereqdiff", "changedprereqs", "changededges", "edgediff",
+                 "targetprereqsdiffer"):
+            return ",".join(c[0] for c in dt["changed_prereqs"] + dt["changed_order_only"]) or "none"
+        if t in ("added", "addedtargets", "newtargets"):
+            return ",".join(dt["added"]) or "none"
+        if t in ("removed", "removedtargets", "droppedtargets"):
+            return ",".join(dt["removed"]) or "none"
+        if t in ("orderchanged", "runorderchanged"):
+            return "true" if dt["order_changed"] else "false"
+        if t in ("changedlang", "langdiff", "changedlanguage"):
+            return ",".join(c[0] for c in dt["changed_lang"]) or "none"
+        if t in ("diff", "json", "makediff"):
+            return J(dt)
+        mo = models[0] if side else models[1]
+    else:
+        if side is not None:
+            return None
+        mo = models[0]
+    if t in ("var", "value", "resolved", "variable", "varvalue"):
+        return mo["vars"].get(k, "none") if k else None
+    if t in ("layer", "op", "winninglayer", "varlayer"):
+        return mo["layers"].get(k, "none") if k else None
+    if t in ("flavor",):
+        return mo["flavors"].get(k, "undefined") if k else None
+    if t in ("vars", "json", "model"):
+        return J({"vars": mo["vars"], "layers": mo["layers"]})
+    if t in ("goal", "defaultgoal", "default"):
+        return mo["default_goal"] or "none"
+    if t in ("runorder", "order", "flow", "targetflow", "buildorder", "executionorder", "recipeorder"):
+        r = make_run_order(mo, k) if k else mo["visit_order"]
+        return ">".join(x for x in r if mo["targets"][x]["recipe"]) or "none"
+    if t in ("visitorder", "targetorder", "dfsorder", "updateorder"):
+        return ">".join(make_run_order(mo, k) if k else mo["visit_order"]) or "none"
+    tg = mo["targets"]
+    if t in ("prereqs", "prerequisites", "deps", "orderonly", "recipe", "recipelang", "lang", "language", "handoff",
+             "handofflang", "priorlanguage"):
+        if t in ("recipelang", "lang", "language", "handoff", "handofflang", "priorlanguage") and not k:
+            for x in mo["run_order"] + [x for x in tg if x not in mo["run_order"]]:
+                if tg[x]["recipe_lang"] and tg[x]["recipe_lang"] not in ("sh", "bash"):
+                    return tg[x]["recipe_lang"]
+            return "none"
+        if k not in tg:
+            return "none"
+        d = tg[k]
+        if t in ("prereqs", "prerequisites", "deps"):
+            return ",".join(d["prereqs"]) or "none"
+        if t == "orderonly":
+            return ",".join(d["order_only"]) or "none"
+        if t == "recipe":
+            return "\n".join(d["recipe"]) or "none"
+        return d["recipe_lang"] or "none"
+    if t in ("targetvar", "targetspecific"):
+        tt, _, n = k.partition(":")
+        v = mo["target_vars"].get(tt.strip(), {})
+        return v.get(n.strip(), "none")
+    if t in ("phony", "phonytargets"):
+        return ",".join(sorted(mo["phony"])) or "none"
+    if t in ("targets", "alltargets"):
+        return ",".join(tg) or "none"
+    if t in ("doublecolon",):
+        return ",".join(x for x in tg if tg[x]["double_colon"]) or "none"
+    return None

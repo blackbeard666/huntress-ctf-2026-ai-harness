@@ -1,0 +1,16 @@
+{
+ "kind": "generic_field",
+ "member": "mo_x64.bin",
+ "field": "has_hctf_section",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when the Mach-O has a __TEXT,__hctf section.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "true",
+ "generator_cmd": "sh mo_src/mo_gen.sh (zig cc -target x86_64-macos / aarch64-macos [-g] [-c], llvm-lipo-18 -create)",
+ "oracle_cmd": "llvm-otool-18 -l mo_x64.bin | grep -A1 'sectname __hctf$' | grep -q 'segname __TEXT$' && echo true || echo false"
+}

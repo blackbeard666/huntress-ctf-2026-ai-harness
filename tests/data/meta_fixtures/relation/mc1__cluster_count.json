@@ -1,0 +1,8 @@
+{
+ "field": "relation.cluster_count",
+ "expected": "3",
+ "generator_cmd": "bash mc_gen.sh (printf payloads + delivery-manifest.json via sha256sum/stat; `zip -q -r -X` per cluster, `zip -q -X` evidence; mc2 inner zip -0 CRC zeroed in LFH+CD, cluster-011 entries touch -d 2031)",
+ "oracle_cmd": "bash mc_oracle.sh EVIDENCE.zip (unzip + jq manifest claims vs sha256sum/wc -c, unzip -tq inner zips, zipinfo -T entry dates > outer entry date, SHA lines grouped across clusters) -> fabricated = the single cluster with the max claims/badcrc/future excess over the other clusters; CLUSTER lines ",
+ "decoy": false,
+ "member": "evidence.zip"
+}

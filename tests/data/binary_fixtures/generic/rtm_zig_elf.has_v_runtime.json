@@ -1,0 +1,17 @@
+{
+ "kind": "generic_field",
+ "member": "rtm_zig_elf.elf",
+ "field": "has_v_runtime",
+ "question": "In evidence.zip, use the d99-- member. Does the member carry the V (vlang) runtime? Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "false",
+ "generator_cmd": "python3 -m ziglang build-exe -target x86_64-linux-musl -O ReleaseSafe -fstrip -femit-bin=rtm_zig_elf.elf rtm_src/rtm_zig.zig",
+ "oracle_cmd": "{ strings -a rtm_zig_elf.elf | grep -c '^V panic: '; nm rtm_zig_elf.elf 2>/dev/null | grep -cE ' (_vinit|builtin__)'; } | paste -sd+ | bc   # V C-backend; >0 -> true",
+ "decoy": true
+}

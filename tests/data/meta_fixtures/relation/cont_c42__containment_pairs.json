@@ -1,0 +1,8 @@
+{
+ "field": "relation.containment_pairs",
+ "expected": "[[\"quebec-03\",\"oscar-01\"]]",
+ "generator_cmd": "printf payloads into m/artifacts/{oscar-01.txt,papa-02.txt}; cp oscar-01.txt cfg.txt; tar --format=ustar -czf artifacts/quebec-03.tgz cfg.txt; delivery-manifest.json (ids oscar-01/papa-02/quebec-03 by path); zip -q -r -X cluster-042.zip delivery-manifest.json artifacts",
+ "oracle_cmd": "oracle2.sh: unzip; jq -r '.artifacts[]|.id+\" \"+.path' manifest; tar -xzf quebec-03.tgz; sha256sum artifacts/* x/* -> x/cfg.txt == artifacts/oscar-01.txt (id oscar-01) inside quebec-03",
+ "decoy": false,
+ "member": "cluster-042.zip"
+}

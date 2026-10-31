@@ -1,0 +1,16 @@
+{
+ "kind": "generic_field",
+ "member": "mo_obj.o",
+ "field": "has_cfg_section",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when the Mach-O has a __DATA,__cfg section.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "true",
+ "generator_cmd": "sh mo_src/mo_gen.sh (zig cc -target x86_64-macos / aarch64-macos [-g] [-c], llvm-lipo-18 -create)",
+ "oracle_cmd": "llvm-otool-18 -l mo_obj.o | grep -A1 'sectname __cfg$' | grep -q 'segname __DATA$' && echo true || echo false"
+}

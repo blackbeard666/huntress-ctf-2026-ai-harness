@@ -1,0 +1,8 @@
+{
+ "field": "ssdeep.most_similar_pair",
+ "expected": "[\"report-draft\",\"report-final\"]",
+ "generator_cmd": "python3 gen.py c/artifacts (random.Random(2026) word docs: report-final, report-draft=6 edits, report-old=14 edits, memo, memo-copy=9 edits, notes, config.log); cd c && zip -q -X -r ../corpus.zip artifacts",
+ "oracle_cmd": "cd artifacts && ssdeep -s -b -a -p * (ssdeep 2.14.1 / libfuzzy, Ubuntu deb under tools/ssdeep_root) | python3 oracle.py - 50 (parse 'A matches B (score)', label = basename sans ext; max score pair, ties lexicographic; union-find on score >= 50)",
+ "decoy": false,
+ "member": "corpus.zip"
+}

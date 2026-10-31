@@ -1,0 +1,10 @@
+{
+ "material": "{\"member\":\"3f9a2c.ps1\",\"plans\":{\"3f9a2c.ps1\":{\"v\":3,\"language\":\"powershell\",\"scenario\":\"staged_chain\",\"stage_profile\":\"cross_language_handoff\",\"next_language\":\"jscript\",\"campaign\":\"ember-7f3a21\",\"url\":\"https://cdn.ember-relay.net/a/stage2\"},\"1b0e44.js\":{\"v\":3,\"language\":\"jscript\",\"scenario\":\"launcher\",\"campaign\":\"frost-0a9e11\",\"url\":\"https://frost-mirror.org/x\"},\"9c51d7.js\":{\"v\":3,\"language\":\"jscript\",\"scenario\":\"dropper\",\"campaign\":\"ember-7f3a21\",\"file_path\":\"%TEMP%\\\\\\\\svc.tmp\"},\"55aa01.vbs\":{\"v\":3,\"language\":\"vbscript\",\"campaign\":\"ember-7f3a21\"}}}",
+ "rep": "handoff_target",
+ "transform": "member",
+ "key": null,
+ "expected": "9c51d7.js",
+ "generator_cmd": "jq -cn '{member:\"3f9a2c.ps1\",plans:{\"3f9a2c.ps1\":{v:3,language:\"powershell\",scenario:\"staged_chain\",stage_profile:\"cross_language_handoff\",next_language:\"jscript\",campaign:\"ember-7f3a21\",url:\"https://cdn.ember-relay.net/a/stage2\"},\"1b0e44.js\":{v:3,language:\"jscript\",scenario:\"launcher\",campaign:\"frost-0a9e11\",url:\"https://frost-mirror.org/x\"},\"9c51d7.js\":{v:3,language:\"jscript\",scenario:\"dropper\",campaign:\"ember-7f3a21\",file_path:\"%TEMP%\\\\\\\\svc.tmp\"},\"55aa01.vbs\":{v:3,language:\"vbscript\",campaign:\"ember-7f3a21\"}}}'",
+ "oracle_cmd": "printf '%s' \"$material\" | jq -r '.member as $h | .plans[$h] as $p | .plans | to_entries | map(select(.key != $h and .value.language == $p.next_language and .value.campaign == $p.campaign)) | .[0].key'",
+ "note": "D30 host: next_language=jscript (prior language), stage_profile cross_language_handoff; 2 jscript candidates, the one sharing campaign token wins over the launcher-role one"
+}

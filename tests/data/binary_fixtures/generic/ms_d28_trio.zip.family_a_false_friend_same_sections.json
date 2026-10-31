@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_d28_trio.zip",
+ "field": "family_a_false_friend_same_sections",
+ "question": "In evidence.zip, Use all d28-- members in ZIP central-directory order. List the sections (section-header order of family-a.elf, NOBITS excluded) whose bytes are identical in family-a.elf and false-friend.elf as a JSON array.",
+ "answer_format": {
+  "kind": "json",
+  "syntax": "compact JSON array"
+ },
+ "expected": "[\".interp\",\".note.gnu.property\",\".note.ABI-tag\",\".hash\",\".gnu.hash\",\".dynsym\",\".dynstr\",\".gnu.version\",\".gnu.version_r\",\".init\",\".plt\",\".plt.got\",\".fini\",\".eh_frame_hdr\",\".eh_frame\",\".init_array\",\".fini_array\",\".dynamic\",\".got\",\".data\",\".shstrtab\"]",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "python3 -c 'from elftools.elf.elffile import ELFFile; ...'  # sections (header order, NOBITS skipped) whose data() is equal in both"
+}

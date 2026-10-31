@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "import_dll_count",
+ "question": "In evidence.zip, use the d99-- member. Count the PE import descriptors (imported DLL names). Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "10",
+ "generator_cmd": "python3 -m ziglang cc -target x86_64-windows-gnu -O1 -o gf_pe_imports.exe gf_pe_imports.c -luser32 -lws2_32",
+ "oracle_cmd": "objdump -p gf_pe_imports.exe | sed -n 's/^\\tDLL Name: //p' | wc -l"
+}

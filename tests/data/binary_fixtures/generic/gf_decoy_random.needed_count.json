@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_decoy_random.bin",
+ "field": "needed_count",
+ "question": "In evidence.zip, use the d99-- member. Count the ELF DT_NEEDED entries of the dynamic section. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": null,
+ "generator_cmd": "head -c 4096 /dev/urandom > gf_decoy_random.bin  # file: data -> no dynamic section (None)",
+ "oracle_cmd": "null",
+ "decoy": true
+}

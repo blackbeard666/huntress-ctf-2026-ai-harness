@@ -1,0 +1,8 @@
+{
+ "field": "relation.near_duplicate_ids",
+ "expected": "none",
+ "generator_cmd": "python3 -c writes a PNG signature+IHDR named fake.zip",
+ "oracle_cmd": "file fake.zip -> PNG image data; unzip -l -> not a zipfile",
+ "decoy": true,
+ "member": "fake.zip"
+}

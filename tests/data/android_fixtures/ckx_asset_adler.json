@@ -1,0 +1,8 @@
+{
+ "entry": "dex_strings",
+ "expected": "ANS-35423f14f6da6f34",
+ "decoy": false,
+ "_why": "getAssets().open(seed.bin) read() loop -> Checksum ck = new Adler32() (invoke-interface update(int) x4 + update(byte[],4,n-4)), CRC32.update(int), MD5 update(byte[],0,n) digest folded BE, SHA-1(signingInfo.getApkContentsSigners()[0]) ByteBuffer.order(LITTLE_ENDIAN).getLong, Arrays.hashCode(byte[]) + String.hashCode",
+ "generator_cmd": "python3 tests/data/android_fixtures/ckx_src/gen_ckx.py asset_adler tests/data/android_fixtures/ckx_asset_adler.apk  # javac --release 8 (app + android.* stubs) + dex2jar d2j-jar2dex.sh + apktool's aapt2 link (manifest) + zipfile (assets, classes.dex) + keytool RSA + apksigner sign v1+v2",
+ "oracle_cmd": "same generator, oracle stage: openssl pkcs7 -print_certs | openssl x509 -outform DER on META-INF/*.RSA (signer DER), aapt dump badging (package), then java -Dctx.apk=<signed apk> -Dctx.cert=<der> -cp <javac out> <pkg>.Probe runs Release.code(new Context()) on the host JVM with the REAL java.util.zip.CRC32 / Adler32 / ZipFile, java.security.MessageDigest, java.nio.ByteBuffer -> 'ANS-35423f14f6da6f34'"
+}

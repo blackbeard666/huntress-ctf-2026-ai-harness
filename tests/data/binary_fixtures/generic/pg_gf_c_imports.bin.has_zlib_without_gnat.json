@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_imports.bin",
+ "field": "has_zlib_without_gnat",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when any DT_NEEDED entry equals libz.so.1 and no nonempty ELF symbol name contains gnat. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": "true",
+ "generator_cmd": "gcc -O1 -o gf_c_imports.bin gf_imports.c -lm -lz (existing member)",
+ "oracle_cmd": "{ readelf -d -W gf_c_imports.bin | sed -n 's/.*(NEEDED).*\\[\\(.*\\)\\]/\\1/p' | grep -qx libz.so.1 && ! readelf -sW gf_c_imports.bin | awk 'NR>3{print $8}' | grep -q gnat; } && echo true || echo false"
+}

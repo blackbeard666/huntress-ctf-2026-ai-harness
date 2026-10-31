@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "dnc_vb.dll",
+ "field": "user_type_names_sha256",
+ "question": "In delivery 1: evidence.zip, Use the unique d22-- primary managed assembly whose basename starts d22-- and ends .dll. Collect the namespace-qualified names (Namespace.Name) of the TypeDef rows excluding <Module> and compiler-generated types, sort ascending, join with one LF byte and no trailing LF, then SHA-256. Submit lowercase hex.",
+ "answer_format": {
+  "kind": "string",
+  "syntax": "64 lowercase hexadecimal characters"
+ },
+ "expected": "7a145171f288e15627b0599f5ce4bf28a00abbfe0068e9a0c30ea3a4843fe64f",
+ "generator_cmd": "bash dnc_src/dnc_gen.sh  # dotnet 10 SDK (Roslyn vbc), net8.0 Release, dnc_src/Program.vb",
+ "oracle_cmd": "source bin/env.sh; bash tests/data/binary_fixtures/generic/dnc_src/dnc_oracle.sh tests/data/binary_fixtures/generic/dnc_vb.dll  # -> sha256(LF.join(sorted(user_type_full_names)))"
+}

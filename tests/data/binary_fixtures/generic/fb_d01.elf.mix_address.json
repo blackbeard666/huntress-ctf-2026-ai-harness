@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "fb_d01.elf",
+ "field": "mix_address",
+ "question": "Look up the mix FUNC symbol in the ELF's .symtab and submit its st_value virtual address; none if the symbol is absent.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "lowercase hexadecimal with 0x prefix, or the literal token none"
+ },
+ "expected": "0x1160",
+ "generator_cmd": "gcc -O2 -fcf-protection=none -fno-asynchronous-unwind-tables -o fb_d01.elf fb_src/fb.c  # fb_src/fb_gen.sh",
+ "oracle_cmd": "readelf -sW fb_d01.elf | awk '$4==\"FUNC\" && $8==\"mix\" {print $2}' | head -1",
+ "oracle_output": "0000000000001160"
+}

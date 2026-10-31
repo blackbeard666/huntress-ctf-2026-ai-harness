@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-37BBFD0AB8599BE6",
+ "decoy": false,
+ "_why": "caesar with a NEGATIVE declared key -13 (code point - 13)",
+ "generator_cmd": "python3 tests/data/android_fixtures/v1r_src/gen_v1r.py v1r_caesar_negkey  # python zipfile (+gcc .so / javac+d2j-jar2dex dex)",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/v1r_caesar_negkey.apk assets/huntress_puzzle.json | jq -r -r '.data, .key' | python3 -I -c 'import sys;d,k=sys.stdin.read().split(chr(10))[:2];print(\"\".join(chr(ord(c)-int(k)) for c in d))'"
+}

@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-D3C35ADA50770382",
+ "decoy": false,
+ "_why": "stream of CA FE | varint len | payload^(key+i) | sum8 frames; frame 2 = decoy ANS-DF8870D3E72C839D with a bad sum8 (int list)",
+ "generator_cmd": "python3 tests/data/android_fixtures/pfc_src/gen_pfc.py pfc_stream_varint_sum8  # python zipfile + bitwise CRC32/CRC16/sum8",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/pfc_stream_varint_sum8.apk assets/huntress_puzzle.json | python3 -I -c 'import sys,json\nj=json.load(sys.stdin);b=bytes(j[\"frames\"]);k=j[\"key\"];i=0\nwhile i<len(b):\n n=b[i+2];p=b[i+3:i+3+n]\n if sum(b[i:i+3+n])&255==b[i+3+n] and p[:3]!=b\"seq\": print(bytes(x^((k+j)&255) for j,x in enumerate(p)).decode())\n i+=4+n'"
+}

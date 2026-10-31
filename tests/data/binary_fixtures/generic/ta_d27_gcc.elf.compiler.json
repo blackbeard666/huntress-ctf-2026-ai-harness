@@ -1,0 +1,22 @@
+{
+ "kind": "generic_field",
+ "member": "ta_d27_gcc.elf",
+ "field": "compiler",
+ "question": "In evidence.zip, Use the unique d27-- member whose basename ends d27_gcc.elf. Attribute the build to the compiler that produced its code from the DW_AT_producer / .comment banners, stabs and runtime fingerprints. Submit exactly one listed lowercase token.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "gcc",
+   "clang",
+   "tcc",
+   "zig",
+   "msvc",
+   "mingw",
+   "odin",
+   "v"
+  ]
+ },
+ "expected": "gcc",
+ "generator_cmd": "sh ta_gen.sh  # gcc -g | clang-18 -g -no-pie | gcc -static -s | aarch64-linux-gnu-gcc -g -static | zig cc -target x86_64-linux-musl | gcc + strip -s -R .comment; ta_d27_{gcc,tcc}.elf = D27 GM members verbatim",
+ "oracle_cmd": "sh -c 'p=$(readelf --debug-dump=info ta_d27_gcc.elf 2>/dev/null | grep -m1 DW_AT_producer); c=$(readelf -p .comment ta_d27_gcc.elf 2>/dev/null); if strings -a ta_d27_gcc.elf | grep -q zig_probe_stack; then echo zig; elif echo \"$p$c\" | grep -q \"clang version\"; then echo clang; elif echo \"$p$c\" | grep -qE \"GCC:|GNU C\"; then echo gcc; elif readelf -SW ta_d27_gcc.elf | grep -q \"\\] \\.stab \"; then echo tcc; else echo none; fi'"
+}

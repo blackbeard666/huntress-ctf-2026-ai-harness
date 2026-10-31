@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "pec_mingw_g.exe",
+ "field": "raw_section_names",
+ "question": "List the raw 8-byte Name fields of the PE section headers in header order, NUL padding trimmed, without resolving '/N' long-name references. Submit a JSON array.",
+ "answer_format": {
+  "kind": "json_array",
+  "syntax": "compact JSON array of strings"
+ },
+ "expected": "[\".text\",\".data\",\".rdata\",\".pdata\",\".xdata\",\".bss\",\".idata\",\".tls\",\".reloc\",\"/4\",\"/19\",\"/31\",\"/45\",\"/57\",\"/70\",\"/81\",\"/97\",\"/113\"]",
+ "generator_cmd": "PEC_REBUILD=1 bash pec_src/pec_fixtures.sh  # mingw-w64 gcc 13 (see pec_src/pec_fixtures.sh: -O1 -g1 / -O2 -s / head -c 512 decoy)",
+ "oracle_cmd": "python3 -c 'import pefile,json,sys;p=pefile.PE(sys.argv[1]);print(json.dumps([s.Name.rstrip(b\"\\0\").decode() for s in p.sections],separators=(\",\",\":\")))' pec_mingw_g.exe"
+}

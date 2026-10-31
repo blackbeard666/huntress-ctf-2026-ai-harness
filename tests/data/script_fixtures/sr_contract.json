@@ -1,0 +1,31 @@
+{
+ "_doc": "whole-contract fixture: route_contract(contract, plans) must answer exactly expected_routes (unknown ids absent) with the steps in expected_steps, in < 0.5 s; transform = one id so the lane gate checks it",
+ "material": "{\"contract\":{\"questions\":[{\"id\":\"capstone-graph-bridge\",\"question\":\"Rebuild the complete execution, host and evidence graph at the language level: which edge holds everything together? Answer src>dst.\",\"artifact\":\"evidence.zip\",\"answer_format\":{\"kind\":\"ordered_tokens\"},\"normalization\":\"trim\"},{\"id\":\"vbscript-host-language\",\"question\":\"Which host container language runs c.vbs?\",\"artifact\":\"evidence.zip -> c.vbs\",\"answer_format\":{\"kind\":\"string\"},\"normalization\":\"trim\"},{\"id\":\"python-parent\",\"question\":\"Which member is the parent of b.py in the execution chain?\",\"artifact\":\"evidence.zip -> b.py\",\"answer_format\":{\"kind\":\"string\"},\"normalization\":\"trim\"},{\"id\":\"corpus-distinct-languages\",\"question\":\"How many distinct languages appear across the corpus?\",\"artifact\":\"evidence.zip\",\"answer_format\":{\"kind\":\"integer\"},\"normalization\":\"trim\"},{\"id\":\"powershell-loader-profile\",\"question\":\"What loader profile does a.ps1 declare?\",\"artifact\":\"evidence.zip -> a.ps1\",\"answer_format\":{\"kind\":\"string\"},\"normalization\":\"trim\"},{\"id\":\"graph-component-count\",\"question\":\"How many connected components does the language graph have?\",\"artifact\":\"evidence.zip\",\"answer_format\":{\"kind\":\"integer\"},\"normalization\":\"trim\"},{\"id\":\"capstone-entropy-score\",\"question\":\"What is the Shannon entropy score of the corpus?\",\"artifact\":\"evidence.zip\",\"answer_format\":{\"kind\":\"string\"},\"normalization\":\"trim\"},{\"id\":\"powershell-mutation-vector\",\"question\":\"Which mutation vector does a.ps1 use?\",\"artifact\":\"evidence.zip -> a.ps1\",\"answer_format\":{\"kind\":\"string\"},\"normalization\":\"trim\"}]},\"plans\":{\"evidence.zip/a.ps1\":\"v=3|role=loader|language=powershell|next_language=python|next_stage=b.py|campaign_id=campaign-aa11|attack=T1059.001|loader_profile=reflective_stub\",\"evidence.zip/b.py\":\"v=3|role=loader|language=python|next_language=vbscript|next_stage=c.vbs|campaign_id=campaign-aa11|attack=T1059.006\",\"evidence.zip/c.vbs\":\"v=3|role=dropper|language=vbscript|next_language=none|host_profile=hta|campaign_id=campaign-bb22|attack=T1059.005\",\"evidence.zip/d.bsh\":\"v=3|role=benign_utility|language=beanshell|next_language=none|host_profile=jsp_beanshell|campaign_id=campaign-bb22|attack=none\",\"evidence.zip/e.groovy\":\"v=3|role=dropper|language=groovy|next_language=none|host_profile=jenkins_pipeline|campaign_id=campaign-bb22|attack=T1059\",\"evidence.zip/f.lua\":\"v=3|role=benign_utility|language=lua|next_language=none|attack=none\"}}",
+ "rep": "suffix_route",
+ "transform": "capstone-graph-bridge",
+ "key": null,
+ "expected": "python>vbscript",
+ "decoy": false,
+ "expected_routes": {
+  "capstone-graph-bridge": "python>vbscript",
+  "vbscript-host-language": "hta",
+  "python-parent": "a.ps1",
+  "corpus-distinct-languages": "6",
+  "powershell-loader-profile": "reflective_stub",
+  "graph-component-count": "2"
+ },
+ "expected_steps": {
+  "capstone-graph-bridge": "graph",
+  "vbscript-host-language": "graph",
+  "python-parent": "graph",
+  "corpus-distinct-languages": "corpus",
+  "powershell-loader-profile": "plan",
+  "graph-component-count": "graph"
+ },
+ "unanswered": [
+  "capstone-entropy-score",
+  "powershell-mutation-vector"
+ ],
+ "generator_cmd": "python3 tests/data/script_fixtures/sr_gen.py $TMPDIR/srgen  (stdlib k=v plans + contract json)",
+ "oracle_cmd": "python3 -I tests/data/script_fixtures/sr_oracle.py $TMPDIR/srgen/corpus.json  (networkx bridges/components + collections.Counter)"
+}

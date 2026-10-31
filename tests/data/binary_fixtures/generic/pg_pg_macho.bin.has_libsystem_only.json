@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "pg_macho.bin",
+ "field": "has_libsystem_only",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when any LC_LOAD_DYLIB dylib path ends with libSystem.B.dylib and every dylib path starts with /usr/lib/. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": "true",
+ "generator_cmd": "tools/ziglang/ziglang/zig cc -target x86_64-macos -O1 -o pg_macho.bin pg_src/pg_macho.c (pg_src/pg_gen.sh)",
+ "oracle_cmd": "{ python3 -c \"from macholib.MachO import MachO; [print(c[2].rstrip(b'\\0').decode()) for h in MachO('pg_macho.bin').headers for c in h.commands if c[0].cmd in (0xc, 0x80000018, 0x8000001f, 0x20, 0x80000023)]\" | grep -q 'libSystem.B.dylib$' && ! python3 -c \"from macholib.MachO import MachO; [print(c[2].rstrip(b'\\0').decode()) for h in MachO('pg_macho.bin').headers for c in h.commands if c[0].cmd in (0xc, 0x80000018, 0x8000001f, 0x20, 0x80000023)]\" | grep -qv '^/usr/lib/'; } && echo true || echo false"
+}

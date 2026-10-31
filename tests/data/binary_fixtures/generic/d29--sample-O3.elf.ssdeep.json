@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "d29--sample-O3.elf",
+ "field": "ssdeep",
+ "question": "What is the ssdeep hash of the .text section?",
+ "answer_format": {
+  "kind": "string"
+ },
+ "expected": null,
+ "generator_cmd": "existing member (gen_generic.sh)",
+ "oracle_cmd": "tools/ssdeep/ssdeep.sh -s -b d29--sample-O3.elf  # libfuzzy 2.14.1",
+ "decoy": true,
+ "note": "region (section) digest, not the member bytes -> must stay None"
+}

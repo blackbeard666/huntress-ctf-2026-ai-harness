@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest android:compileSdkVersion="36" android:compileSdkVersionCodename="16" package="com.huntress.mobile.d31.v9e3b5d71a2c4" platformBuildVersionCode="36" platformBuildVersionName="16"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="Huntress">
+        <activity android:name=".MainActivity" android:exported="true" />
+    </application>
+</manifest>

@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_gcc.zip",
+ "field": "family_a_family_b_diff_bytes",
+ "question": "In evidence.zip, Use all d31-- members in ZIP central-directory order. Compare family-a.elf and family-b.elf position by position and count the byte offsets whose values differ.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer"
+ },
+ "expected": "25",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "cmp -l family-a.elf family-b.elf | wc -l"
+}

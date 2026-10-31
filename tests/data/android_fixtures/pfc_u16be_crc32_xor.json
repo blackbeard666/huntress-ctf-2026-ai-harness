@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-3B9A5A4BBEEDF761",
+ "decoy": false,
+ "_why": "HA | u16 BE len | token^(key+i), key 135 | CRC32 BE over header+payload (hex)",
+ "generator_cmd": "python3 tests/data/android_fixtures/pfc_src/gen_pfc.py pfc_u16be_crc32_xor  # python zipfile + bitwise CRC32/CRC16/sum8",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/pfc_u16be_crc32_xor.apk assets/huntress_puzzle.json | jq -r '.data, .key' | python3 -I -c 'import sys,zlib;d,k=sys.stdin.read().split();b=bytes.fromhex(d);n=int.from_bytes(b[2:4],\"big\");p=b[4:4+n];ok=zlib.crc32(b[:4+n]).to_bytes(4,\"big\")==b[4+n:8+n];print(bytes(x^((int(k)+i)&255) for i,x in enumerate(p)).decode() if ok else \"BADSUM\")'"
+}

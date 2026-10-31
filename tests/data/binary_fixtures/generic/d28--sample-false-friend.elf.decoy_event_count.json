@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "d28--sample-false-friend.elf",
+ "field": "decoy_event_count",
+ "question": "Sum the event_count values of the embedded dynamic trace records whose branch is decoy.",
+ "answer_format": {
+  "kind": "integer"
+ },
+ "expected": "22",
+ "generator_cmd": "GM artifact: Huntress D28 single_solve evidence.zip member d28--sample-false-friend.elf (copied verbatim)",
+ "oracle_cmd": "strings -a d28--sample-false-friend.elf | grep -F huntress.binary.dynamic_trace.v1 | jq -cR 'fromjson? // empty' | jq -rs '[.[]|select(.branch==\"decoy\")|.event_count]|add'",
+ "oracle_output": "22"
+}

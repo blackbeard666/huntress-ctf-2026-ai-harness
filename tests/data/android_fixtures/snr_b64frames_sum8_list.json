@@ -1,0 +1,8 @@
+{
+ "entry": "puzzle_candidates",
+ "expected": "ANS-2E4D84C83F3EF7E1",
+ "decoy": false,
+ "_why": "puzzle frames[] = base64 frames NF | nonce u16be | seq u8 | len u8 | piece of base64(token) | sum8; bad-sum frame, replay, stale reused nonce",
+ "generator_cmd": "python3 tests/data/android_fixtures/snr_src/gen_snr.py  # snr_b64frames_sum8_list; python zipfile + bitwise CRC32/CRC16/sum8",
+ "oracle_cmd": "unzip -p tests/data/android_fixtures/snr_b64frames_sum8_list.apk assets/huntress_puzzle.json | jq -r \".frames[]\" | python3 -I -c 'import sys,base64,re\nseen=set();got={}\nfor l in sys.stdin.read().split():\n f=base64.b64decode(l)\n if sum(f[:-1])&255!=f[-1] or f[2:4] in seen: continue\n seen.add(f[2:4]);got.setdefault(f[4],f[6:-1].decode())\nj=base64.b64decode(\"\".join(got[k] for k in sorted(got))).decode();print(j if re.fullmatch(\"ANS-[0-9A-F]{16}\",j) else \"NOMATCH\")'"
+}

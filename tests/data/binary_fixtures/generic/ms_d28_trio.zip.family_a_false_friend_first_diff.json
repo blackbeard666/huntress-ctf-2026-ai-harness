@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "ms_d28_trio.zip",
+ "field": "family_a_false_friend_first_diff",
+ "question": "In evidence.zip, Use all d28-- members in ZIP central-directory order. Report the zero-based file offset of the first byte that differs between family-a.elf and false-friend.elf, in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer"
+ },
+ "expected": "2056",
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "cmp family-a.elf false-friend.elf"
+}

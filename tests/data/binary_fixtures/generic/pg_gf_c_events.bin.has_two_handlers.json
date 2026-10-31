@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_events.bin",
+ "field": "has_two_handlers",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when at least 2 nonempty ELF symbol names match /event_(success|decoy)/ and the final bytes do not contain NimMain. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": "true",
+ "generator_cmd": "gcc -O1 -o gf_c_events.bin gf_events.c (existing member)",
+ "oracle_cmd": "{ [ $(readelf -sW gf_c_events.bin | sed -n '/Symbol table .\\.symtab/,$p' | awk 'NR>2 && $8!=\"\"{print $8}' | grep -cE 'event_(success|decoy)') -ge 2 ] && ! grep -q NimMain gf_c_events.bin; } && echo true || echo false"
+}

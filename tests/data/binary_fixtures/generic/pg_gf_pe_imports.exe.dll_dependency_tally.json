@@ -1,0 +1,13 @@
+{
+ "kind": "generic_field",
+ "member": "gf_pe_imports.exe",
+ "field": "dll_dependency_tally",
+ "question": "In evidence.zip, use the d99-- member. What is the imported DLL count? Count the PE import descriptors. Submit the count in base 10.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer with no units, separators, whitespace, or explanatory text"
+ },
+ "expected": "10",
+ "generator_cmd": "python3 -m ziglang cc -target x86_64-windows-gnu -O1 -o gf_pe_imports.exe gf_pe_imports.c -luser32 -lws2_32 (existing member)",
+ "oracle_cmd": "python3 -c \"import pefile; p=pefile.PE('gf_pe_imports.exe'); [print(e.dll.decode()) for e in p.DIRECTORY_ENTRY_IMPORT]\" | wc -l"
+}

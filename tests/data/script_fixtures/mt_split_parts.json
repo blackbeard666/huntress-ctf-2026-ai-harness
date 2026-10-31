@@ -1,0 +1,7 @@
+{
+ "expected_plain": "v=3|language=vbscript|role=downloader|verdict=malicious|attack=T1105|adapter=http_get|stage_count=2|steps=acquire_remote,write_file|campaign_id=VBS-7e41c0aa|url=https://vbs-7e41c0aa.example.invalid/stage.bin",
+ "decoy": false,
+ "target": "mastery-scale-bench-30k",
+ "generator_cmd": "bash tests/data/script_fixtures/mt_gen.sh  (perl single-byte xor 0x5a | coreutils base64 -w0, split into Material_7e41_a/_b; neighbour idents Material_7e41x / Material_7e4)",
+ "oracle_cmd": "sed -n 's/^Material_7e41_[ab] = \"\\(.*\\)\"\\r$/\\1/p' mt_split_parts.vbs | tr -d '\\n' | base64 -d | perl -pe 's/(.)/chr(ord($1)^0x5a)/gse'"
+}

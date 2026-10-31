@@ -1,0 +1,8 @@
+{
+ "target": "analysis-v2-marker-schema",
+ "note": "V2 marker in a `//` comment host, v=5 plan with a hyphenated `host-language` key",
+ "decoy": false,
+ "expected_plain": "v=5|language=javascript|role=loader|edges=fetch>decode;decode>spawn|host-language=node|inner=lua|parent=install.sh|steps=acquire_remote,decode_embedded,dispatch_process",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/v2m_gen.py  (stdlib base64/binascii/json encode of a v=4 / v=5 / JSON plan under a HUNTRESS_ANALYSIS_V2 marker)",
+ "oracle_cmd": "sed -n 's#^// HUNTRESS_ANALYSIS_V2:HEX-##p' tests/data/script_fixtures/v2m_slash_js.js | xxd -r -p"
+}

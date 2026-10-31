@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "ms_gcc.zip",
+ "field": "alpha_bravo_diff_bytes",
+ "question": "In evidence.zip, Use all d31-- members in ZIP central-directory order. Count the differing bytes between alpha.elf and bravo.elf.",
+ "answer_format": {
+  "kind": "integer",
+  "syntax": "base-10 integer"
+ },
+ "expected": null,
+ "generator_cmd": "sh ms_src/ms_gen.sh  # gcc -O2/-O0/-g builds of ms_src/fam.c + other.c zipped (ms_gcc.zip) / the D28 trio (ms_d28_trio.zip)",
+ "oracle_cmd": "unzip -l ms_gcc.zip  # no member basename ends alpha / bravo: field absent",
+ "decoy": true
+}

@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "fb_d01.elf",
+ "field": "recover_code",
+ "question": "In evidence.zip, Use all d01-- members in ZIP central-directory order. Look for a FUNC symbol named recover_code in the Day 1 ELF's .symtab symbol table. If there is no such symbol, submit the literal token none. A stripped ELF (one without a .symtab section) has no recover_code symbol, even if the function's code is still present and can be found by disassembly; it still takes none, not the disassembled immediate. Otherwise decode that symbol's exact bytes as mov eax, imm32 followed by ret and submit the immediate as an unsigned base-10 integer.",
+ "answer_format": {
+  "kind": "pattern",
+  "syntax": "unsigned base-10 integer, or the literal token none when the recover_code FUNC symbol is absent"
+ },
+ "expected": "34847",
+ "generator_cmd": "gcc -O2 -fcf-protection=none -fno-asynchronous-unwind-tables -o fb_d01.elf fb_src/fb.c  # fb_src/fb_gen.sh",
+ "oracle_cmd": "objdump -d -M intel --no-show-raw-insn --disassemble=recover_code fb_d01.elf | python3 -c 'import sys,re,json; print(json.dumps([re.sub(r\"0x[0-9a-f]+\",lambda h:str(int(h.group(0),16)),re.sub(r\",\",\", \",\" \".join(l.split(\"\\t\")[-1].split()))) for l in sys.stdin if re.match(r\"\\s+[0-9a-f]+:\\t\",l)],separators=(\",\",\":\")))'",
+ "oracle_output": "[\"mov eax, 34847\",\"ret\"]"
+}

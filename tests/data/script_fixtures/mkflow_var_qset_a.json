@@ -1,0 +1,11 @@
+{
+ "decoy": false,
+ "material": "# stage build chain, variant A\nPREFIX ?= /opt/stage\nCHANNEL ?= beta\nSTAGE_DIR := $(PREFIX)/drop\nTOOLS = fetch $(EXTRA)\nEXTRA = decode\nTOOLS += launch\noverride MODE := quiet\nMODE := loud\nNAME = $(strip $(subst -,_, stage-one ))\nFIRST = $(firstword $(TOOLS))\nOBJS := $(patsubst %.c,%.o,a.c b.c)\ndefine HOOK\nimport sys\nprint(\"hook\")\nendef\n.PHONY: all fetch decode launch report prep\n.DEFAULT_GOAL := all\nall: launch report\nlaunch: decode | prep\n\tpwsh -NoProfile -Command \"Write-Host $(MODE) $(word 2,$(TOOLS))\"\ndecode: fetch\n\tpython3 -c \"print('$(CHANNEL)')\"\nfetch: prep\n\t@echo fetch $(STAGE_DIR) \\\n\t  $(FIRST)\nreport: fetch\n\tnode -e \"console.log('$(NAME) $(CHANNEL)')\"\nreport: CHANNEL := gamma\nprep:\n\t@echo prep\n",
+ "rep": "make_model",
+ "transform": "var",
+ "key": "CHANNEL",
+ "expected": "beta",
+ "note": "make-target-flow-variant-diff: `?=` sets CHANNEL when unset",
+ "generator_cmd": "python3 -I tests/data/script_fixtures/mkflow_gen.py tests/data/script_fixtures/  (stdlib str writer; variant B = A with `CHANNEL := stable` ahead of `CHANNEL ?= beta`, `all: launch report` -> `all: report launch`, no .DEFAULT_GOAL)",
+ "oracle_cmd": "cd tests/data/script_fixtures/ && python3 -I mkflow_oracle.py var mkflow_variant_a.mk CHANNEL  (GNU make 4.4.1 -n --trace / --eval $(info ..) / -qp)"
+}

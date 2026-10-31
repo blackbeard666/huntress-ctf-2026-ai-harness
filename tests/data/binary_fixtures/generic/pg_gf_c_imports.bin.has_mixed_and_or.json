@@ -1,0 +1,14 @@
+{
+ "kind": "generic_field",
+ "member": "gf_c_imports.bin",
+ "field": "has_mixed_and_or",
+ "question": "In evidence.zip, use the d99-- member. Submit true exactly when any DT_NEEDED entry equals libz.so.1 and any DT_NEEDED entry equals libm.so.6 or any nonempty ELF symbol name contains gnat. Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "boolean",
+  "syntax": "lowercase true or false"
+ },
+ "expected": null,
+ "generator_cmd": "gcc -O1 -o gf_c_imports.bin gf_imports.c -lm -lz (existing member)",
+ "oracle_cmd": "n/a: mixed and/or without stated precedence stays unsure (None)",
+ "decoy": true
+}

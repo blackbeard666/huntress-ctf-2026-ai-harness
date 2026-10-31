@@ -1,0 +1,8 @@
+{
+ "field": "dedup.duplicate_group_count",
+ "expected": "2",
+ "generator_cmd": "printf payloads into a/artifacts/{alpha-01.txt,delta-02.log(=alpha),echo-03.txt,nested/foxtrot-04.zip,golf-05.zip(=foxtrot; inner zip -0 with its CRC zeroed),hotel-06.dat} + delivery-manifest.json (ids ev-*, by path / filename); cd a && zip -q -r -X ../cluster-007.zip delivery-manifest.json artifacts",
+ "oracle_cmd": "oracle.sh ZIP TOOL: unzip -Z1 members (no dirs, no *manifest*.json) -> label = jq manifest id by .path then .filename, else basename sans ext; key = unzip -p member | sha256sum (groups of >=2) -> jq group_by(key), len>1, each sorted, sorted",
+ "decoy": false,
+ "member": "cluster-007.zip"
+}

@@ -1,0 +1,11 @@
+{
+ "material": "{\"member\":\"6a1f02.ps1\",\"plans\":{\"6a1f02.ps1\":{\"v\":3,\"language\":\"powershell\",\"next_language\":\"jscript\",\"campaign\":\"ember-7f3a21\"},\"2b3c4d.js\":{\"v\":3,\"language\":\"jscript\",\"campaign\":\"frost-0a9e11\"},\"8e9f00.js\":{\"v\":3,\"language\":\"jscript\",\"campaign\":\"ash-11c0de\"}}}",
+ "rep": "handoff_target",
+ "transform": "member",
+ "key": null,
+ "expected": null,
+ "decoy": true,
+ "generator_cmd": "jq -cn '{member:\"6a1f02.ps1\",plans:{\"6a1f02.ps1\":{v:3,language:\"powershell\",next_language:\"jscript\",campaign:\"ember-7f3a21\"},\"2b3c4d.js\":{v:3,language:\"jscript\",campaign:\"frost-0a9e11\"},\"8e9f00.js\":{v:3,language:\"jscript\",campaign:\"ash-11c0de\"}}}'",
+ "oracle_cmd": "printf '%s' \"$material\" | jq -r '.member as $h | .plans[$h] as $p | [.plans | to_entries[] | select(.key != $h and .value.language == $p.next_language and .value.campaign == $p.campaign)] | length'   # -> 0 candidates share any token: unresolvable",
+ "note": "two jscript candidates, nothing shared with the host -> None (no tie-break guess without evidence)"
+}

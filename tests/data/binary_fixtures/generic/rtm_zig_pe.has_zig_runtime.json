@@ -1,0 +1,16 @@
+{
+ "kind": "generic_field",
+ "member": "rtm_zig_pe.exe",
+ "field": "has_zig_runtime",
+ "question": "In evidence.zip, use the d99-- member. Does the member carry the Zig standard-library runtime? Submit lowercase true or false.",
+ "answer_format": {
+  "kind": "enum",
+  "accepted_values": [
+   "true",
+   "false"
+  ]
+ },
+ "expected": "true",
+ "generator_cmd": "python3 -m ziglang build-exe -target x86_64-windows-gnu -O ReleaseSafe -fstrip -femit-bin=rtm_zig_pe.exe rtm_src/rtm_zig.zig",
+ "oracle_cmd": "strings -a rtm_zig_pe.exe | grep -cE 'attempt to unwrap error|integer cast truncated bits'   # Zig std panic texts; >0 -> true"
+}
