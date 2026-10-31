@@ -956,7 +956,8 @@ def gm_solved(cid):
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(json.dumps({"attempt": attempt_id(body), "seen": time.strftime("%Y-%m-%dT%H:%M:%S")}))
         return True
-    at = gm_list_solved(_day_of(cid)).get(cid) if _day_of(cid) else None
+    day = _list_day(cid)
+    at = gm_list_solved(day).get(cid) if day else None
     if at:
         # the scoreboard has it on an EARLIER attempt (D16 script Mastery: CORRECT out of band, then a re-roll made
         # the latest attempt not-correct and `reconcile` reported 0 updated)
@@ -970,6 +971,22 @@ def gm_solved(cid):
 def _day_of(cid):
     m = re.search(r"-day-(\d+)", cid)
     return int(m.group(1)) if m else None
+
+
+def _list_day(cid):
+    """The day whose GM `list` carries this mode: the day the local index registered it under (the GM's own `day`,
+    updated on a relabel), else the id's `-day-NN`. D31: web ids are numbered on their own track
+    (`web-exploitation-day-27-internal-affairs` is listed under day 29), so `list --day 27` never contained them --
+    gm_solved's sticky-list fallback paid a full-day list for nothing. Every non-web id's registered day equals its
+    `-day-NN` (index.json at D30), so for them nothing changes."""
+    try:
+        info = paths.lookup(cid) or {}
+        d = int(info.get("gm_day") or info.get("day") or 0)
+        if d:
+            return d
+    except Exception:  # noqa: BLE001 - the id's own day below
+        pass
+    return _day_of(cid)
 
 
 _list_cache = {}

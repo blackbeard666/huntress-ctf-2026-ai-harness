@@ -146,6 +146,89 @@ def answer_str(v):
     return str(v)
 
 
+# D31 warmups Mastery speed (lib.warmups_codecs.register_today): once the warmups Single is GM-verified, today's codec
+# (inferred + verified on cases/single_solve) is handed to every later solver process of the lane as
+# HCTF_WARMUPS_TODAY, so Mastery line N decodes as a known day instead of through lib.decode._unknown_line_cands
+# (D30: ~30 s for 148 sets vs a 25 s cap -> ~0.1 s). Warmups lane only; HCTF_WARMUPS_REGISTER_TODAY=0 = off.
+# Local solver runs only (run_solver, the local timed runner, the lib racer): the Homebase daemon builds its solver env
+# on the VM, so a Homebase-routed warmups attempt decodes as before.
+_WTODAY = {}            # lane -> HCTF_WARMUPS_TODAY value (JSON)
+_WTODAY_CACHE = {}      # (case path, contract mtime, expected mtime) -> spec tuple | None
+_WTODAY_LOCK = __import__("threading").Lock()
+
+
+def _register_today_on():
+    return os.environ.get("HCTF_WARMUPS_REGISTER_TODAY", "1") != "0"
+
+
+def _single_verified(sdir):
+    """cases/single_solve of this solver dir when it IS today's GM-verified Single (its contract = the chain's
+    single_solve/start.json and its expected = that attempt's confirmed answers), else None. A prestaged prior solver
+    brings yesterday's single_solve case along until today's overwrites it."""
+    case = Path(sdir) / "cases" / "single_solve"
+    mdir = Path(sdir).parent / "single_solve"
+    try:
+        contract = json.loads((case / "contract.json").read_text())
+        expected = json.loads((case / "expected.json").read_text())
+        start = json.loads((mdir / "start.json").read_text())
+        conf = json.loads((mdir / "confirmed.json").read_text())
+    except (OSError, ValueError):
+        return None
+    from .cli import attempt_id
+    got = conf.get(attempt_id(start) or "_") if isinstance(conf, dict) else None
+    if contract != start or not expected or not isinstance(got, dict):
+        return None
+    if any(got.get(k) != v for k, v in expected.items()):
+        return None
+    return case
+
+
+def prepare_warmups_today(sdir, hints=()):
+    """Infer + verify today's warmups codec from the chain's GM-verified Single case and publish it for the lane's
+    later solver runs -> (name, enc, dec, free) or None (not warmups, kill switch, no verified Single, the day already
+    has a codec, inference / verification failed). Idempotent + serialized (one inference per case); runs in the
+    caller's thread (the orchestrator starts it in the background at the Single's CORRECT)."""
+    sdir = Path(sdir)
+    if not _register_today_on() or _lane_of(sdir) != "warmups":
+        return None
+    try:
+        day = int(sdir.parent.parent.name[3:])
+    except ValueError:
+        return None
+    case = _single_verified(sdir)
+    if case is None:
+        return None
+    try:
+        key = (str(case.resolve()), (case / "contract.json").stat().st_mtime_ns, (case / "expected.json").stat().st_mtime_ns)
+    except OSError:
+        return None
+    with _WTODAY_LOCK:
+        if key in _WTODAY_CACHE:
+            return _WTODAY_CACHE[key]
+        spec = None
+        try:
+            from lib import warmups_codecs as W
+            if W.day_codec(day) is None:
+                spec = W.today_codec_spec(day, case, hints=tuple(h for h in hints if h))
+        except Exception:  # noqa: BLE001 - an optimisation: never break the chain
+            spec = None
+        _WTODAY_CACHE[key] = spec
+        if spec:
+            _WTODAY["warmups"] = json.dumps({"day": day, "case": str(case.resolve()), "codec": spec[0]})
+        return spec
+
+
+def warmups_today_env(sdir=None, lane=None):
+    """{"HCTF_WARMUPS_TODAY": ...} for a warmups solver run once prepare_warmups_today published today's codec, else {}.
+    Never blocks."""
+    if not _register_today_on():
+        return {}
+    v = _WTODAY.get("warmups")
+    if not v or (lane or _lane_of(sdir)) != "warmups":
+        return {}
+    return {"HCTF_WARMUPS_TODAY": v}
+
+
 def run_solver(sdir, contract, artifacts, timeout=120, background=None, deadline=None, env_extra=None):
     """Run one solver. Returns (answers dict, error string or None, seconds).
     Own process group, killed as a group on timeout (its fork pool too); background=True (or the calling thread's
@@ -160,6 +243,7 @@ def run_solver(sdir, contract, artifacts, timeout=120, background=None, deadline
     py = str(VENV_PY) if VENV_PY.exists() else "python3"
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"  # solvers can `import lib.*`
+    env.update(warmups_today_env(sdir))   # {} unless a warmups solver after the verified Single
     env.update(env_extra or {})
     t0 = time.time()
     if deadline is not None:

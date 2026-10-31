@@ -521,9 +521,10 @@ with patched(QUIET):
         time.sleep(0.1)
         check("#6 kill switch HCTF_OFFPATH_DL_GATE=0", ch6._offpath_wait("x") == 0.0)
     time.sleep(0.9)
-check("#6 the pre-start download concurrency is HCTF_PRESTART_DL_WORKERS (default 8) and marks the download",
-      orchestrate.PRESTART_DL_WORKERS == int(os.environ.get("HCTF_PRESTART_DL_WORKERS", "8"))
-      and "PRESTART_DL_WORKERS" in inspect.getsource(orchestrate.Chain._prefetch_mode_start)
+check("#6 the pre-start download concurrency is HCTF_PRESTART_DL_WORKERS (default 16 since D31: one wave) and marks the download",
+      orchestrate.PRESTART_DL_WORKERS == int(os.environ.get("HCTF_PRESTART_DL_WORKERS", "16"))
+      and "_prestart_dl_width()" in inspect.getsource(orchestrate.Chain._prefetch_mode_start)   # D31: via the 429-aware width
+      and "PRESTART_DL_WORKERS" in inspect.getsource(orchestrate._prestart_dl_width)
       and "_timed_download(mode)" in inspect.getsource(orchestrate.Chain._prefetch_mode_start))
 check("#6 gated: generalize baseline replay, background baseline, duel / background-generalize starts, post-live accept",
       "self.gate(" in inspect.getsource(orchestrate.GenBaseline._run)

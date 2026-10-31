@@ -1282,6 +1282,11 @@ def run_timed(solver_dir, cid, op="start", timeout=60, budget=None, on_event=Non
     rel = solver_dir.relative_to(ROOT)
     t_env = time.time()
     env = dict(os.environ, PYTHONPATH=f"{ROOT}:{os.environ.get('PYTHONPATH', '')}", **timed_env(cid))
+    try:   # D31: today's warmups codec as a known day for the solver (hctf/solvers.py prepare_warmups_today); {} else
+        from . import solvers as _solvers
+        env.update(_solvers.warmups_today_env(Path(solver_dir)))
+    except Exception:  # noqa: BLE001 - an optimisation only
+        pass
     t_env = round(time.time() - t_env, 2)
     if budget:
         env["HCTF_UNTIMED_BUDGET"] = f"{budget:g}"

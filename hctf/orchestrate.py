@@ -129,6 +129,100 @@ def _code_sig(d):
     return out
 
 
+# D31 gen-lock: ONE generalize per solver dir at a time (any Chain object: early thread, blocked path, pre-attempt probes,
+# train, speed_harden). D30 warmups Mastery: the early (contract-ahead) generalize started at 09:19:57 was NOT adopted by
+# _early_join, so the blocked path started a second worker on the same variant (prep 09:20:02 + 09:20:04). Both used the
+# one .generalize-snapshot (the 2nd _snapshot_copy rmtree'd the 1st's async baseline replay -> its FileNotFoundError at
+# 09:21:28) and, at the live pass (09:21:21), BOTH ran _accept_after_live (the lib racer was still set, so the early one's
+# _racer_passed was true too): one saw an unchanged solver and rmtree'd the snapshot, the other saw a half-deleted
+# snapshot (code sig differs), moved the real solver (solve.py mtime 09:18:28: neither worker had edited it) to
+# .generalize-unjudged and the EMPTIED snapshot into solver/ -> solver/ held only the case recorded after the pass. A
+# second caller now waits for the running one (a live pass it races ends that worker), then skips when the first left
+# changed code behind (the caller retries on it), else generalizes itself. HCTF_GEN_SOLVER_LOCK=0 = the old behaviour.
+GEN_SOLVER_LOCK = os.environ.get("HCTF_GEN_SOLVER_LOCK", "1") != "0"
+GEN_LOCK_WAIT = float(os.environ.get("HCTF_GEN_LOCK_WAIT", str(GENERALIZE_TIMEOUT + 300)))
+GEN_LOCK_POLL = 0.5
+GEN_PRE_CODE_MAX = 64 << 20   # in-memory pre-generalize code copy for the solve.py invariant (bytes; larger: dirs only)
+_gen_states, _gen_states_mu = {}, threading.Lock()
+
+
+def _gen_state(sdir):
+    """The per-solver-dir generalize state {lock (RLock), changed (count of generalizes that ended with changed code),
+    green (the running worker's stop event), passed (cid a waiter's racer passed)}, keyed by the dir's real path."""
+    key = os.path.realpath(str(sdir))
+    with _gen_states_mu:
+        return _gen_states.setdefault(key, {"lock": threading.RLock(), "changed": 0, "green": None, "passed": None})
+
+
+def _code_files(d, cap=GEN_PRE_CODE_MAX):
+    """{relative path: bytes} of a solver dir's code (same scope as _code_sig), or None past `cap` bytes."""
+    d, out, n = Path(d), {}, 0
+    if not d.is_dir():
+        return out
+    for p in sorted(d.rglob("*")):
+        rel = p.relative_to(d)
+        if not p.is_file() or rel.parts[0] == "cases" or "__pycache__" in rel.parts:
+            continue
+        try:
+            b = p.read_bytes()
+        except OSError:
+            continue
+        n += len(b)
+        if n > cap:
+            return None
+        out[str(rel)] = b
+    return out
+
+
+def _gen_locked(fn):
+    """Chain.generalize decorator (D31 gen-lock, see GEN_SOLVER_LOCK): a second generalize on the same solver dir waits for
+    the running one -- ending its worker when the waiter's own racer (live answer / lib racer) passes the mode -- then
+    skips if that one left changed code (the caller retries on it), else runs. Afterwards _solver_intact (solve.py)."""
+    import functools
+
+    @functools.wraps(fn)
+    def generalize(self, cid, wrong=None, fixed=None, diag=None, live=None):
+        if not GEN_SOLVER_LOCK:
+            return fn(self, cid, wrong, fixed, diag, live)
+        gst = _gen_state(self.sdir)
+        lock = gst["lock"]
+        if not lock.acquire(blocking=False):
+            c0, t0 = gst["changed"], time.time()
+            say(f"[{cid}] another generalize is running on this solver: waiting for it (one per solver dir -- D30: two "
+                "shared one snapshot and left solver/ without solve.py)")
+            got = False
+            while time.time() - t0 < GEN_LOCK_WAIT:
+                if lock.acquire(timeout=GEN_LOCK_POLL):
+                    got = True
+                    break
+                g = gst.get("green")
+                if g is not None and not g.is_set() and self._racer_passed(cid, live):
+                    gst["passed"] = cid    # our racer passed the mode: end the running worker, fast accept on its side
+                    g.set()
+            if not got:
+                say(f"!!! [{cid}] the running generalize still holds this solver after {GEN_LOCK_WAIT:g}s: this one is "
+                    "SKIPPED (never two on one solver)")
+                return None
+            if gst["changed"] != c0:
+                lock.release()
+                say(f"[{cid}] the generalize that ran meanwhile ({time.time() - t0:.0f}s) changed the solver: no second "
+                    "worker on it -- the caller retries on the new code")
+                return None
+        pre = _code_files(self.sdir) if (self.sdir / "solve.py").exists() else {}
+        sig0 = _code_sig(self.sdir)
+        try:
+            return fn(self, cid, wrong, fixed, diag, live)
+        finally:
+            try:
+                self._solver_intact(cid, pre, sig0)
+                if _code_sig(self.sdir) != sig0:
+                    gst["changed"] += 1
+            finally:
+                gst["green"], gst["passed"] = None, None
+                lock.release()
+    return generalize
+
+
 def _cap_lines(lines, limit=None):
     """Join prompt lines but stop at `limit` characters with a count of what was left out."""
     limit = PROBS_MAX_CHARS if limit is None else limit
@@ -797,11 +891,23 @@ def answer_first_eligible(lane, n_fields):
 # of a solved single either has local state or a list entry with `solved: true` (replay_gm proxies the real list), so the
 # gm_solved acceptance of an already-solved live-web single (f90a60b6) still runs there; an entry without the key never
 # counts as fresh. 0 = always ask gm_solved on web (old).
+# D31 fix: the live GM list never sends `solved: false` -- an UNSOLVED mode simply has no `solved` key (gm.jsonl D28-D30:
+# 0 of ~6,350 entries ever carried false; every solved one carries `solved: true` + `solved_by` + `flag`), so the skip
+# never fired and every web single paid gm_solved's status + a full-day `list` (~10-12 s at the drop). An entry is now
+# fresh when it says `solved: false`, OR it is a LIVE list entry (carries the pool fields every GM list entry has:
+# _LIVE_LIST_KEYS) with no `solved` / `solved_by` / `flag` at all. Entries synthesized from the local index (chain_for:
+# id/mode/lane/name only) are never fresh, so `hctf solve <cid>` keeps asking.
 WEB_FRESH_SKIP_SOLVED = os.environ.get("HCTF_WEB_FRESH_SKIP_SOLVED", "1") != "0"
+_LIVE_LIST_KEYS = ("regular_pool_size", "run_for_time_supported")
 
 
 def _web_fresh_drop(entry):
-    return WEB_FRESH_SKIP_SOLVED and isinstance(entry, dict) and entry.get("solved") is False
+    if not (WEB_FRESH_SKIP_SOLVED and isinstance(entry, dict)):
+        return False
+    if entry.get("solved") is False:
+        return True
+    return (not any(k in entry for k in ("solved", "solved_by", "flag"))
+            and all(k in entry for k in _LIVE_LIST_KEYS))
 
 
 def _web_race_seed(lane):
@@ -1414,6 +1520,18 @@ TRIAGE_ABORT_AT_CORRECT = os.environ.get("HCTF_TRIAGE_ABORT_AT_CORRECT", "1") !=
 RACE_VERIFY_FROM_PLAN = os.environ.get("HCTF_RACE_VERIFY_FROM_PLAN", "1") != "0"
 RACE_PRESNAP = os.environ.get("HCTF_RACE_PRESNAP", "1") != "0"
 RACE_SNAP_FIRST = os.environ.get("HCTF_RACE_SNAP_FIRST", "1") != "0"
+# D31 ovh #1: the ready-watcher polls every SPEC_POLL s and saw the race's CORRECT ~0.1-0.8 s BEFORE _race_snapshot set
+# _race_snap (seed verify) -> it built its own snapshot instead: copytree + a full re-run of the staged solver + the
+# new-id hold (NEWID_WAIT on a 25k-id background dry run) = single CORRECT -> ready +5.3 / +7.4 / +5 s on script D30 /
+# D29 / D28 (the race's own snapshot was ready at once). When the race holds this attempt's submit and is still
+# finishing, wait up to RACE_SNAP_WAIT s for its verified snapshot first. 0 = off (the old behaviour).
+RACE_SNAP_WAIT = float(os.environ.get("HCTF_RACE_SNAP_WAIT", "3"))
+RACE_SNAP_NOTICE = float(os.environ.get("HCTF_RACE_SNAP_NOTICE", "0.3"))
+# D31 ovh #4: a runner pass ended the parallel live-answer worker SYNCHRONOUSLY (finish(): join the worker thread until
+# the claude process exits + the watch thread's 2 s tick, <= 5 s each) before `result:` / time_trial:correct /
+# Mastery's stage: "+4.6s after the runner returned" (D30 mobile TT), +2.4 / +2.3 / +1.3 s (D29 / D28 / D30 mobile
+# Mastery / TT). The mode is CORRECT on the GM: stop it and let a daemon thread reap it. 0 = the old blocking end.
+LIVE_END_ASYNC = os.environ.get("HCTF_LIVE_END_ASYNC", "1") != "0"
 # Race-first handoff: a reuse-race win with a verified seed hands the timed modes over at once -- triage runs in a thread
 # and the prompt build + LLM worker launch are skipped (D24 A/B replay: binary won its race at +18 s, then waited 23 s
 # for triage's 27 s extract + the 8 s prompt build before the watcher saw CORRECT; script 14 s). The watcher + the
@@ -1443,6 +1561,9 @@ RACE_KNOWN_MEMO_MAX = int(os.environ.get("HCTF_RACE_KNOWN_MEMO_MAX", "50000"))
 # GM has not confirmed) right there -- D29 binary: 398/406 banked, the 8-field answer-first only at the launch prep (+69 s,
 # behind triage's extract + the prompt build). 0 = answer-first only from the launch prep (old).
 RACE_RESIDUAL_AF = os.environ.get("HCTF_RACE_RESIDUAL_AF", "1") != "0"
+# D31 #2: a live-web single's answer-first worker starts at target-up (Chain._web_target_af) instead of after the prompt
+# build + launch prep (D29 Internal Affairs: up to 16 s later on a saturated box). 0 = the launch prep starts it (old).
+WEB_AF_AT_TARGET = os.environ.get("HCTF_WEB_AF_AT_TARGET", "1") != "0"
 _known_memo, _known_raw = {}, solvers._known_ids
 
 
@@ -1520,8 +1641,32 @@ WEB_PREPROVISION = os.environ.get("HCTF_WEB_PREPROVISION", "1") != "0"
 OFFPATH_DL_GATE = os.environ.get("HCTF_OFFPATH_DL_GATE", "1") != "0"
 OFFPATH_DL_WAIT_MAX = float(os.environ.get("HCTF_OFFPATH_DL_WAIT_MAX", "120"))
 OFFPATH_DL_SCOPE = os.environ.get("HCTF_OFFPATH_DL_SCOPE", "chain").strip().lower()
-PRESTART_DL_WORKERS = max(1, int(os.environ.get("HCTF_PRESTART_DL_WORKERS", "8")))
+# D31 ovh #2: 8 -> 16. A Mastery pre-start of 13-14 deliveries ran in TWO waves (D29 mobile: 8 x 12 KB at 3.2-4.4 s,
+# then 5 more -> 12.3 s; D30 6.0 s; binary 13-14 x 17 MB at 8.3-9.9 MB/s = ~1.1-1.2 MB/s per stream, 26.4 / 23.9 s,
+# while a lone 16.9 MB file gets 1.3-2.1 MB/s): one wave covers every delivery seen (<= 14). The runner's own download
+# already fans out to HCTF_DL_PARALLEL (48); both narrow under run-wide GM 429 pressure (ratebucket.wave_width).
+PRESTART_DL_WORKERS = max(1, int(os.environ.get("HCTF_PRESTART_DL_WORKERS", "16")))
 _DL_ACTIVE, _DL_COND = {}, threading.Condition()
+
+
+def _race_runs_note(runs):
+    """D31 ovh #5: per-solver wall seconds of a reuse race (D29/D30 script: '3 solver run(s) 10.7 s / 14.6 s' while each
+    solver takes 0.5-0.9 s idle and 1.4 s for all three in parallel -- which one stalled was not logged)."""
+    try:
+        parts = [f"{Path(sd).parent.name[:28]} {float(r[2]):.1f}s" + (" ERR" if r[1] else "")
+                 for sd, r in (runs or {}).items()]
+    except Exception:  # noqa: BLE001 - a log detail only
+        return ""
+    return f" [runs: {', '.join(parts)}]" if parts else ""
+
+
+def _prestart_dl_width():
+    """PRESTART_DL_WORKERS, narrowed while the run sees GM 429 pressure (the runner's download does the same)."""
+    try:
+        from . import ratebucket
+        return max(1, ratebucket.wave_width(PRESTART_DL_WORKERS))
+    except Exception:  # noqa: BLE001 - the governor is fail-open
+        return PRESTART_DL_WORKERS
 # D28 #9: a kick answered `prerequisite_required` does not consume the once-per-chain flag (re-kicked at the CORRECT)
 WEB_KICK_RETRY_PREREQ = os.environ.get("HCTF_WEB_KICK_RETRY_PREREQ", "1") != "0"
 # D28 #14: the first web TT waits up to this long for a codify worker still writing the class plugin (0 = no wait);
@@ -3485,11 +3630,47 @@ class Chain:
         set_state(self.base, stage=f"{solvers.mode_of(cid)}:fixing")
         self.run_worker(cid, "fix", prompt, max(20, (left or 600) - 15), urgent=True)
 
+    def _solver_intact(self, cid, pre, sig0):
+        """D31 invariant: a solver dir that had solve.py before the generalize has it after. Lost (D30: concurrent
+        accept-after-live swaps left solver/ with one case dir) -> the pre-generalize code is written back (in-memory copy;
+        else a .generalize-snapshot / -unjudged / -rejected dir holding exactly that code) and every case dir missing
+        from solver/cases is hard-linked back from those dirs (cases recorded meanwhile stay). -> True when it repaired."""
+        if "solve.py" not in sig0 or (self.sdir / "solve.py").exists():
+            return False
+        srcs = [d for d in (self._snap_dir(), self.root / ".generalize-unjudged", self.root / ".generalize-rejected")
+                if (d / "solve.py").exists()]
+        code = pre or next((_code_files(d) for d in srcs if _code_sig(d) == sig0), None)
+        if not code:
+            say(f"!!! [{cid}] solver/ lost solve.py during the generalize and no copy of the pre-generalize code is left")
+            return False
+        self.sdir.mkdir(parents=True, exist_ok=True)
+        for rel, b in code.items():
+            p = self.sdir / rel
+            if not p.exists():
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_bytes(b)
+        n = 0
+        for d in srcs:
+            for c in sorted((d / "cases").glob("*/")) if (d / "cases").is_dir() else ():
+                dst = self.sdir / "cases" / c.name
+                if dst.exists():
+                    continue
+                try:
+                    shutil.copytree(c, dst, ignore=shutil.ignore_patterns("__pycache__"), copy_function=_link_or_copy)
+                    n += 1
+                except OSError as e:
+                    say(f"[{cid}] case restore note ({c.name}): {e}")
+        say(f"!!! [{cid}] solver/ had NO solve.py after the generalize: pre-generalize code restored ({len(code)} file(s))"
+            f" + {n} case dir(s) from {[d.name for d in srcs]}")
+        return True
+
+    @_gen_locked
     def generalize(self, cid, wrong=None, fixed=None, diag=None, live=None):
         """Offline (no clock): improve the solver so it handles the captured variant and still passes old cases.
         `wrong`: (answer_id, solver_value) pairs the GM rejected; `fixed`: {answer_id: value} the GM accepted as the
         right label on that attempt; `diag`: facts about the attempt (window, elapsed, how much was judged), so the
-        worker is told the truth — "timing" only when every field was actually judged correct."""
+        worker is told the truth — "timing" only when every field was actually judged correct.
+        D31 gen-lock (_gen_locked): one at a time per solver dir; solver/ never ends without solve.py when it had one."""
         self._handoff_join("generalize")   # its case + probes + baseline (D24 #5 async handoff)
         if getattr(self, "_live_accept", None):   # D28 #5: the post-live judgement is applied before a new snapshot
             self._live_accept_join("a new generalize")
@@ -3762,6 +3943,8 @@ class Chain:
             say(f"[{cid}] the live answer passed the mode during the generalize prep: no worker")
             return
         green, done, harvesting = threading.Event(), threading.Event(), threading.Event()
+        gst = _gen_state(self.sdir)
+        gst["green"] = green   # D31 gen-lock: a waiting generalize whose racer passes the mode ends this worker
         if live is not None:
             live.link(green)   # a live-answer pass ends this worker (its edits are still judged by _accept_or_restore)
         if getattr(self, "_lib_racer", None) is not None:
@@ -3844,7 +4027,7 @@ class Chain:
                 reaper.join(timeout=HARVEST_JOIN_MAX)
                 if reaper.is_alive():
                     say(f"[{cid}] harvest still busy {HARVEST_JOIN_MAX:g}s after the worker ended: not waiting for it")
-            if self._racer_passed(cid, live):
+            if self._racer_passed(cid, live) or gst.get("passed") == cid:   # (gst: a waiter's racer ended this one)
                 self._accept_after_live(cid, mode)
             else:
                 self._accept_or_restore(cid)
@@ -4338,6 +4521,11 @@ class Chain:
         snap = self._snap_dir()
         if not snap.exists():
             return
+        if not (snap / "solve.py").exists() and (self.sdir / "solve.py").exists():
+            # D31: an incomplete snapshot (D30: emptied by a concurrent generalize) never replaces a solver with solve.py
+            shutil.rmtree(snap, ignore_errors=True)
+            say(f"!!! [{self.base}] generalize restore SKIPPED ({why}): the snapshot has no solve.py -- current solver kept")
+            return
         rejected = self.root / ".generalize-rejected"
         if rejected.exists():
             shutil.rmtree(rejected)
@@ -4427,6 +4615,12 @@ class Chain:
             shutil.rmtree(snap, ignore_errors=True)
             return
         if mode != "time_trial":
+            if not (snap / "solve.py").exists() and (self.sdir / "solve.py").exists():
+                # D31: D30's half-deleted shared snapshot (the other generalize's rmtree) differed in code sig, and the
+                # swap below installed it as solver/ -- a snapshot without solve.py never replaces one that has it
+                shutil.rmtree(snap, ignore_errors=True)
+                say(f"!!! [{self.base}] live pass: the generalize snapshot has no solve.py -- current solver kept")
+                return
             aside = self.root / ".generalize-unjudged"
             shutil.rmtree(aside, ignore_errors=True)
             if self.sdir.exists():
@@ -4610,7 +4804,8 @@ class Chain:
         merged = {a: high.get(a, spec.get(a)) for a in ids if a in high or a in spec}
         say(f"[{cid}] reuse race{where}: {len(high)} confident + {len(spec)} speculative of {len(ids)} field(s) from "
             f"{len(plan['runs'])} solver(s) in {time.time() - t0:.1f}s"
-            + (f"; dropped {len(dropped)} implausible value(s) {dropped[:4]}" if dropped else ""))
+            + (f"; dropped {len(dropped)} implausible value(s) {dropped[:4]}" if dropped else "")
+            + _race_runs_note(plan.get("runs")))
         presnap = None
         if RACE_PRESNAP and plan.get("best") and len(merged) == len(ids):
             presnap = self._race_presnap(plan["best"])   # copy + carry-over check beside the submit (D24 #6)
@@ -4622,6 +4817,7 @@ class Chain:
             used = self._race_bank(cid, ids, high, spec, merged, plan)
         tr["submit"] = time.time()
         if cli.is_complete(cid):
+            self._race_won_at = time.time()   # D31 ovh #1: the watcher waits for _race_snap from here (_race_snap_wait)
             self._single_correct(cid, "reuse race")
             set_state(self.base, stage="single:reuse-won")
             snap = self._race_snapshot(cid, plan["best"], contract, art,
@@ -4675,6 +4871,42 @@ class Chain:
             except Exception as e:  # noqa: BLE001 - the launch prep's path still runs
                 say(f"[{cid}] race-residual answer-first note: {str(e)[:200]}")
         threading.Thread(target=launch, daemon=True, name=f"race-af-{self.base}").start()
+
+    def _web_target_af(self, cid, body):
+        """D31 #2 (WEB_AF_AT_TARGET): a live-web single's answer-first worker starts the moment the target is up and the
+        contract is saved (right after the start + prior dry-run start), not after triage / retrieval / prompt build /
+        launch prep. D29 Internal Affairs: target up 21:00:36, go 21:00:41, answer-first 21:00:57 (CPU psi 47%, render
+        4.6 s). Same construction and eligibility as the launch prep's side_workers block, under the same one-per-single
+        lock: whichever comes first launches it, the other sees `_af` set and skips. Ineligible here (cap / memory) ->
+        nothing set, the launch prep tries again as before. Never raises."""
+        from . import webtarget
+        if (not (ANSWER_FIRST and WEB_AF_AT_TARGET) or self.lane == "welcome" or not webtarget.is_live_lane(self.lane)
+                or getattr(self, "_af", None) is not None or not webtarget.ready(body)):
+            return None   # no live target from THIS start (preparing / dead / error): the launch prep decides, as before
+
+        def launch():
+            try:
+                with self._af_launch_lock():
+                    if (getattr(self, "_af", None) is not None or cli.is_complete(cid)
+                            or getattr(self, "_ready_snap", None) is not None):
+                        return
+                    contract = cli.load(cid, "start.json") or {}
+                    if not (webtarget.ready(contract) and cli.attempt_id(contract) == cli.attempt_id(body)):
+                        return   # start.json is not this start's live attempt: the launch prep decides, as before
+                    af = AnswerFirst(self, cid)
+                    n_af = (min(len(af.ids), 1) if AF_RESIDUAL and getattr(self, "_dry_fut", None) is not None
+                            else len(af.ids))
+                    ok, why = answer_first_eligible(self.lane, n_af)
+                    if not ok:
+                        say(f"[{cid}] no answer-first worker at target-up: {why} (the launch prep retries)")
+                        return
+                    say(f"[{cid}] web target up: answer-first worker starts now (not after the prompt build)")
+                    self._af = af.start(race_done=getattr(self, "_race_done", None))
+            except Exception as e:  # noqa: BLE001 - the launch prep's path still runs
+                say(f"[{cid}] target-up answer-first note: {str(e)[:200]}")
+        t = threading.Thread(target=launch, daemon=True, name=f"web-af-{self.base}")
+        t.start()
+        return t
 
     def _hb_race_wanted(self):
         """In-network race for this single: the race is on for a lane that is not live-target web, and the lane's newest
@@ -5389,6 +5621,8 @@ class Chain:
         self._pre_t["tp"] = time.time()
         self._start_prior_dry_run(cid)
         self._pre_t["dry"] = time.time()
+        if web_live and not welcome:
+            self._web_target_af(cid, body)   # D31 #2: answer-first at target-up (thread; the launch prep skips if set)
         if not welcome and REUSE_RACE and not REUSE_OLD_SOLVERS and self.lane in REUSE_RACE_LANES:
             def race():
                 try:
@@ -6192,12 +6426,49 @@ class Chain:
 
     def _start_today_pre(self, cid):
         """Background, once the single's solver is final: the today-probe (warmups: yesterday's Mastery + today's codec)."""
+        self._start_warmups_today()
         self._today_fut = None
         kind = self._today_kind()
         if kind is None or not (self.sdir / "solve.py").exists():
             return
         self._today_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(today_probe, owner_tag=self.base), self.sdir,
                                                                    60 if kind == "merge" else 30, kind)
+
+    def _start_warmups_today(self):
+        """Warmups only, once per chain, after the Single's verified case is saved: infer + verify today's codec in the
+        background and publish it (solvers.prepare_warmups_today) so the TT / Mastery / probe solver runs decode
+        today's Mastery line as a known day. HCTF_WARMUPS_REGISTER_TODAY=0 = off."""
+        if (getattr(self, "lane", None) != "warmups" or getattr(self, "_wtoday_started", False)
+                or os.environ.get("HCTF_WARMUPS_REGISTER_TODAY", "1") == "0"):
+            return
+        self._wtoday_started = True
+        base, sdir, hint = self.base, self.sdir, getattr(self, "name", "") or ""
+
+        def run():
+            t0 = time.time()
+            spec = solvers.prepare_warmups_today(sdir, hints=(hint,))
+            if spec:
+                say(f"[{base}] today's codec `{spec[0]}` registered as a known day for the lane's solver runs "
+                    f"(verified on the Single, {time.time() - t0:.1f}s)")
+            else:
+                say(f"[{base}] today's codec not registered (no verified Single / unidentified / not built from known "
+                    f"codecs; {time.time() - t0:.1f}s): Mastery's last line decodes as before")
+            return spec
+        try:
+            self._wtoday_fut = ThreadPoolExecutor(max_workers=1).submit(procgov.bg_wrap(run, owner_tag=self.base))
+        except Exception as e:  # noqa: BLE001 - an optimisation only
+            say(f"[{base}] today's codec registration skipped: {e}")
+
+    def _await_warmups_today(self, cid, timeout=None):
+        """Before the warmups Mastery: let a still-running today's-codec registration finish (normally done ~1 s after
+        the Single's CORRECT, long before; bounded by HCTF_WARMUPS_TODAY_WAIT s, default 3)."""
+        fut = getattr(self, "_wtoday_fut", None)
+        if fut is None or fut.done():
+            return
+        try:
+            fut.result(timeout=float(os.environ.get("HCTF_WARMUPS_TODAY_WAIT", "3")) if timeout is None else timeout)
+        except Exception:  # noqa: BLE001 - TimeoutError included: the Mastery runs as before
+            say(f"[{cid}] today's codec registration still running: the Mastery runs without it")
 
     def _start_pool_rehearsal(self, tt_cid):
         """Background pool rehearsal (POOL_REHEARSAL above) for the Time Trial `tt_cid` just passed; once per chain."""
@@ -6531,7 +6802,7 @@ class Chain:
                         f.unlink()
                 (adir / "contract.json").write_text(json.dumps(body))
                 plan = _H._plan(body)
-                with self._timed_download(mode), _TPE(max_workers=max(1, min(PRESTART_DL_WORKERS, len(plan)))) as ex, \
+                with self._timed_download(mode), _TPE(max_workers=max(1, min(_prestart_dl_width(), len(plan)))) as ex, \
                         cli.quiet():
                     envs = list(ex.map(lambda it: cli.call(mcid, "download", it[1], str(adir), "--name", it[0],
                                                            timeout=180), plan))
@@ -6635,6 +6906,7 @@ class Chain:
                 say(f"[{cid}] cross-format probe: {len(xcases)} format gap(s) ({n} adopted as xfmt-* cases)")
                 pre["xfmt_pre"] = xtxt
         if solvers.mode_of(cid) == "mastery":
+            self._await_warmups_today(cid)   # D31: today's codec registered before the Mastery runner's env is built
             # today-probe: before Mastery (bounded wait of its own, whatever `wait` says) or a Mastery-failure generalize
             pre.update(self._today_pre_result(cid, wait=wait))
             pre.update(self._pool_rehearsal_result(cid))     # only if already done: never waited for
@@ -6941,6 +7213,8 @@ class Chain:
                     if ready.is_set():
                         return   # the Homebase shadow handed over first
                     race = getattr(self, "_race_snap", None)
+                    if race is None and RACE_SNAP_FIRST and not held:
+                        race = self._race_snap_wait(RACE_SNAP_WAIT)
                     if (RACE_SNAP_FIRST and race is not None and not held
                             and self._solver_mtimes() == getattr(self, "_launch_mtimes", None)):
                         snap = race   # the worker hasn't touched the staged code: no copy + re-run of it (D24 #6)
@@ -6977,6 +7251,31 @@ class Chain:
                     say(f"[{cid}] ready-watch note: {e}")
                 if errs >= 50:
                     return
+
+    def _race_snap_wait(self, wait):
+        """D31 ovh #1: the reuse race holds this attempt's submit (it claimed it) and has not finished -> wait up to `wait`
+        s for its verified seed snapshot (_race_snapshot sets _race_snap right before the race ends). -> the snapshot or
+        None (no race / it ended without one / timeout: the caller builds its own snapshot, as before)."""
+        done = getattr(self, "_race_done", None)
+        if wait <= 0 or done is None or done.is_set() or getattr(self, "_race_claim_by", None) is None:
+            return getattr(self, "_race_snap", None)
+        t0 = time.time()
+        # Only a race that saw the CORRECT itself is about to verify its seed: give it RACE_SNAP_NOTICE s to say so (the
+        # watcher can see the race's own winning submit a few ms first). A race still banking / yielding while the worker
+        # or answer-first won is not waited for (the old path runs, <= RACE_SNAP_NOTICE s later).
+        notice = t0 + min(wait, RACE_SNAP_NOTICE)
+        while getattr(self, "_race_won_at", None) is None and not done.is_set() and time.time() < notice:
+            done.wait(0.02)
+        if getattr(self, "_race_won_at", None) is None:
+            return getattr(self, "_race_snap", None)
+        end = t0 + wait
+        while time.time() < end and getattr(self, "_race_snap", None) is None and not done.is_set():
+            done.wait(0.05)
+        snap = getattr(self, "_race_snap", None)
+        if snap is not None and time.time() - t0 >= 0.05:
+            say(f"[{self.base}] ready-watcher: adopted the reuse race's verified snapshot after {time.time() - t0:.1f}s "
+                "(no own snapshot + re-run)")
+        return snap
 
     # -- new-id check at the single's handoff: the CORRECT submit's own dry-run warning reached a worker that was
     #    ended ~1 s later (main armB D15: the TT then missed a field only the timed contracts ask, 60 s block)
@@ -7852,7 +8151,10 @@ class Chain:
         if live is None:
             return res
         if res == "correct":
-            self._end_live(live)
+            if LIVE_END_ASYNC:
+                self._end_live_async(live)   # D31 ovh #4: the mode is CORRECT -- never wait out the worker's exit
+            else:
+                self._end_live(live)
             say(f"[{cid}] runner passed: parallel live answer ended")
             return res
         passed, _acc = live._state()
@@ -8030,6 +8332,18 @@ class Chain:
         except Exception as e:  # noqa: BLE001 - the generalize path stands on its own
             say(f"[{cid}] live-answer not started: {e}")
             return None
+
+    @staticmethod
+    def _end_live_async(live):
+        """_end_live without the wait: signal the stop now, join + final state in a daemon thread. For a live answer
+        whose mode the RUNNER already passed (nothing downstream reads its verdict)."""
+        if live is None:
+            return
+        try:
+            live.stop_evt.set()
+        except Exception:  # noqa: BLE001
+            pass
+        threading.Thread(target=Chain._end_live, args=(live,), daemon=True, name="live-end").start()
 
     @staticmethod
     def _end_live(live):
@@ -8216,7 +8530,7 @@ class Chain:
         submit completed it)? D16 script Mastery: CORRECT on the GM at 21:12, yet the loop re-ran (and re-rolled) it
         until 14/15. Records the pass locally so is_complete / dash agree."""
         try:
-            day = cli._day_of(cid)
+            day = cli._list_day(cid)
             if not (cli.gm_latest_correct(cid) or (day and cid in cli.gm_list_solved(day, max_age=0))):
                 return False
         except Exception:  # noqa: BLE001
@@ -9583,23 +9897,26 @@ def speed_harden(day=None, cid=None, log=None):
             diag["parallel_sets"] = par
         chain = chain_for(base, pools, gov)
         keep = hasattr(chain, "_snap_dir")   # (a stand-in chain without the snapshot API: the old single re-time)
-        if keep:
-            chain._keep_gen_snap = True
-        try:
-            chain.generalize(base, wrong=None, fixed=None, diag=diag)
-        finally:
+        # D31 gen-lock: the kept snapshot is read after generalize() returns -- hold the solver's lock (re-entrant) until
+        # the re-time has kept or restored it, so no other generalize on this solver can replace it meanwhile
+        with _gen_state(sdir)["lock"] if GEN_SOLVER_LOCK else contextlib.nullcontext():
             if keep:
-                chain._keep_gen_snap = False
-        res_after = solvers.test_solver(sdir)
-        after = max((r["seconds"] for r in res_after if not r.get("unverified") and not r.get("error")), default=0.0)
-        if keep and chain._snap_dir().exists():
+                chain._keep_gen_snap = True
             try:
-                after = _speed_keep_or_restore(chain, base, sdir, res, res_after, worst, log)
-            except Exception as e:  # noqa: BLE001 - the edit passed the correctness gate: keep it, never strand the snapshot
-                shutil.rmtree(chain._snap_dir(), ignore_errors=True)
-                log(f"[speed-harden] {base}: re-time failed ({str(e)[:120]}): generalize kept, slowest {after:.1f}s")
-        else:
-            log(f"[speed-harden] {base}: slowest case {slow:.1f}s -> {after:.1f}s")
+                chain.generalize(base, wrong=None, fixed=None, diag=diag)
+            finally:
+                if keep:
+                    chain._keep_gen_snap = False
+            res_after = solvers.test_solver(sdir)
+            after = max((r["seconds"] for r in res_after if not r.get("unverified") and not r.get("error")), default=0.0)
+            if keep and chain._snap_dir().exists():
+                try:
+                    after = _speed_keep_or_restore(chain, base, sdir, res, res_after, worst, log)
+                except Exception as e:  # noqa: BLE001 - the edit passed the correctness gate: keep it, never strand the snapshot
+                    shutil.rmtree(chain._snap_dir(), ignore_errors=True)
+                    log(f"[speed-harden] {base}: re-time failed ({str(e)[:120]}): generalize kept, slowest {after:.1f}s")
+            else:
+                log(f"[speed-harden] {base}: slowest case {slow:.1f}s -> {after:.1f}s")
         out[base] = (slow, after)
     return out
 

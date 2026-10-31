@@ -1349,6 +1349,12 @@ def run_attempt(cid, solver_dir, op="start", min_left=None, opts=None, on_event=
         _CTX.lane = _CTX.opts = _CTX.on_event = _CTX.solver_dir = _CTX.t0 = _CTX.spawn = None
 
 
+# D31 ovh #3: the runner waits here for the orchestrator's pre-start of this mode (it holds the lock through its start +
+# download: D29/D30 10 of 14 timed modes waited 1.5-27 s). A 0.5 s poll handed ~0.25 s on average (up to 0.5 s) of
+# every such wait to nobody, on the critical path of each mode; a 0.05 s poll is ~20 flock() calls/s per waiting runner.
+MODE_LOCK_POLL = max(0.01, float(os.environ.get("HCTF_MODE_LOCK_POLL", "0.05")))
+
+
 def _mode_lock(cid):
     """One runner per mode at a time (flock on .run/tmp-timed/<slug>.lock): every runner of a mode shares (and wipes)
     .run/tmp-timed/<slug>/ -- D16, a manual resume and the orchestrator's retry deleted each other's bytes mid-attempt.
@@ -1367,7 +1373,7 @@ def _mode_lock(cid):
             if time.time() >= until:
                 f.close()
                 return None
-            time.sleep(0.5)
+            time.sleep(MODE_LOCK_POLL)
 
 
 def _read_progress(cid):

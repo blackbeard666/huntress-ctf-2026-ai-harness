@@ -88,6 +88,11 @@ def today_codec(sdir):
     from lib import warmups_codecs
     chal = Path(sdir).parent
     hint = _meta(chal).get("name") or ""
+    # D31: the verified codec the lane's solver runs get as a known day (one shared, cached inference; it must be
+    # published BEFORE this probe's solver runs so they rehearse what the Mastery runner will see). None -> as before.
+    spec = solvers.prepare_warmups_today(sdir, hints=(hint,))
+    if spec:
+        return spec[0], spec[1]
     got = warmups_codecs.infer_case(Path(sdir) / "cases" / "single_solve", hints=(hint,))
     return (got[0], got[1]) if got else None
 

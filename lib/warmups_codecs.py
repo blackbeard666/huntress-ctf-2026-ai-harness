@@ -8452,6 +8452,134 @@ def infer_case(case_dir, hints=()):
     return got[0], got[1], plain
 
 
+# ------------------------------------------------------- today's codec as a known day (D31: Mastery line N at once)
+# A Mastery's last line is today's codec, which no DAYS entry knows before the night's ratchet: lib.decode then reads
+# that line through _unknown_line_cands (every CANDIDATES decoder + rot-N + speculative free codecs: 0.1-6 s per
+# URL-shaped set, D30 Mastery ~30 s for 148 sets vs a 25 s cap). Once the Single is GM-verified the harness knows
+# today's codec (infer_case) -- registered as a DAYS entry, line N decodes positionally like any other day (D30
+# Mastery: 148/148 in ~0.1 s). Only a codec built from KNOWN parts is registered (a stack of DAYS codecs or a
+# CANDIDATES codec with a decoder), and only after it round-trips the Single's verified bytes + slug. The harness
+# hands it to every solver process of the warmups chain as HCTF_WARMUPS_TODAY (JSON {"day", "case", "codec"}, or
+# "<day>:<case dir>" = infer here); HCTF_WARMUPS_REGISTER_TODAY=0 turns it off.
+REGISTER_TODAY_ENV = "HCTF_WARMUPS_TODAY"
+
+
+def register_today_enabled():
+    return os.environ.get("HCTF_WARMUPS_REGISTER_TODAY", "1") != "0"
+
+
+def _single_case(case_dir):
+    """(want, slug) of a GM-verified Single case: its blob text (stripped) and the verified slug, else None."""
+    from pathlib import Path
+    case = Path(case_dir)
+    try:
+        contract = json.loads((case / "contract.json").read_text())
+        expected = json.loads((case / "expected.json").read_text())
+    except (OSError, ValueError):
+        return None
+    slugs = [v for v in (expected.values() if isinstance(expected, dict) else ()) if isinstance(v, str)
+             and SLUG.fullmatch(v)]
+    if len(slugs) != 1:
+        return None
+    q = (contract.get("questions") or [{}])[0] if isinstance(contract, dict) else {}
+    art = case / "artifacts" / str((q or {}).get("artifact") or "blob.txt")
+    if not art.is_file():
+        files = [f for f in (case / "artifacts").glob("*") if f.is_file() and not f.name.startswith(".")]
+        if len(files) != 1:
+            return None
+        art = files[0]
+    try:
+        want = reader_text(blob_text(art.read_bytes())).strip()
+    except Exception:  # noqa: BLE001
+        return None
+    return (want, slugs[0]) if want else None
+
+
+def build_codec(name):
+    """(name, enc, dec, free) for a codec made only of known parts: a DAYS name, a `stack:a>b>c` of DAYS names
+    (outermost first, as stack_fit names it), or a CANDIDATES codec that has a decoder. Else None."""
+    if not isinstance(name, str) or not name:
+        return None
+    days = {n: (e, d, f) for _d, n, e, d, f in DAYS}
+    if name.startswith("stack:"):
+        chain = name[len("stack:"):].split(">")
+        if not chain or any(n not in days for n in chain):
+            return None
+        encs, decs = [days[n][0] for n in chain], [days[n][1] for n in chain]
+
+        def enc(s, encs=tuple(encs)):
+            for e in reversed(encs):
+                s = e(s)
+            return s
+
+        def dec(t, decs=tuple(decs)):
+            for d in decs:
+                t = d(t)
+            return t
+        return name, enc, dec, all(days[n][2] for n in chain)
+    if name in days:
+        return (name,) + days[name]
+    hit = next(((e, d) for n, e, d in CANDIDATES if n == name and d is not None), None)
+    return (name, hit[0], hit[1], False) if hit else None
+
+
+def today_codec_spec(day, case_dir, hints=(), name=None):
+    """(name, enc, dec, free) of today's codec, VERIFIED on the GM-verified Single case `case_dir`, or None.
+    name=None: inferred from the case (infer_case). Never mutates DAYS; never raises."""
+    try:
+        got = _single_case(case_dir)
+        if not got:
+            return None
+        want, slug = got
+        if name is None:
+            inf = infer_case(case_dir, hints=hints)
+            name = inf[0] if inf else None
+        c = build_codec(name)
+        if not c:
+            return None
+        plain = c[2](want)
+        if not isinstance(plain, str) or not plain.rstrip().endswith(slug) or "\n" in plain.strip():
+            return None
+        if c[1](plain).strip() != want:   # exact GM bytes back: the registered encoder is the GM's
+            return None
+        return c
+    except Exception:  # noqa: BLE001 - registration is an optimisation: anything odd = not registered
+        return None
+
+
+def register_today(day, case_dir, hints=(), name=None):
+    """Append today's codec (verified on the Single case) to DAYS as day `day` -> its name, else None (kill switch,
+    a day that already has a codec, inference / verification failed)."""
+    try:
+        day = int(day)
+    except (TypeError, ValueError):
+        return None
+    if day <= 0 or not register_today_enabled() or day_codec(day) is not None:
+        return None
+    c = today_codec_spec(day, case_dir, hints=hints, name=name)
+    if not c:
+        return None
+    DAYS.append((day, c[0], c[1], c[2], c[3]))
+    return c[0]
+
+
+def register_today_env(value=None):
+    """register_today from HCTF_WARMUPS_TODAY (JSON {"day", "case", "codec"?, "hints"?} or "<day>:<case dir>").
+    Called at import (every solver process of the warmups chain); never raises."""
+    v = os.environ.get(REGISTER_TODAY_ENV, "") if value is None else value
+    if not v or not register_today_enabled():
+        return None
+    try:
+        if v.lstrip().startswith("{"):
+            o = json.loads(v)
+            return register_today(o.get("day"), o.get("case") or "", hints=tuple(o.get("hints") or ()),
+                                  name=o.get("codec") or None)
+        d, _, case = v.partition(":")
+        return register_today(d, case) if case else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # ------------------------------------------- three-layer stacks of confirmed codecs (depth-3 peel of the DAYS codecs)
 # "Morse -> hex -> base64", "base64 -> hex -> rot13": a blob under 3 stacked GM-confirmed codecs (outermost peeled
 # first). CANDIDATES' chained pairs cover depth 2 and plaintext()'s 4000-node lib.decode.peel (25 rot-N per node) stalls
@@ -22892,6 +23020,10 @@ def register_speculative():
     for name, fn in SPECULATIVE_FREE:
         if name not in confirmed:   # rot47 = GM-confirmed D15: keep its day so it isn't demoted to speculative
             decode.register_free(name, None, fn)
+
+
+# today's codec handed down by the harness (register_today_env above): after CANDIDATES, so it never joins the pairs
+TODAY_REGISTERED = register_today_env()
 
 
 if __name__ == "__main__":

@@ -2,8 +2,9 @@
 - #8  every lib/web/handlers/*.py plugin compiles, imports, and maps each KEY_MAP name to a callable handler
 - #9  class_known counts concept keys only; known/unknown race budgets 20/12 s; run_solver(deadline=); the web reuse race
       is ONE lane-solver run (14 s deadline) that still races prior answer() + every plugin; answer-first never waits on web
-- #10 a web single on a fresh drop (no local trace + this run's list entry says solved: false) skips gm_solved; a
-      solved / unknown entry or local state still asks it (a solved live-web single is still ACCEPTED); polls 2 s
+- #10 a web single on a fresh drop (no local trace + this run's list entry says solved: false, or -- D31, the real GM
+      shape -- is a live list entry with no solved key) skips gm_solved; a solved / index-synthesized entry or local
+      state still asks it (a solved live-web single is still ACCEPTED); polls 2 s (real list shapes: test_d31_web.py)
 - #11 parallel web TT live answer bound to the runner's attempt; runner pass ends it, its pass maps to correct (no
       _gm_passed); a block while codify runs waits for the live answer / plugin (reconnect with start, never retry)
       before any generalize; codify is ended before a generalize takes its plugin file; no bg generalize beside codify
@@ -225,7 +226,7 @@ with patched({(orchestrate, "ANSWER_FIRST_RACE_WAIT_WEB"): 0.6}):
 # ---------------------------------------------------------------- #10: web start -- fresh-drop gm_solved skip, 2 s polls
 from hctf import webtarget  # noqa: E402
 
-check("#10 fresh drop = the list entry says solved: false explicitly",
+check("#10 fresh drop = solved: false; a bare entry without list fields (index-synthesized) is not fresh",
       orchestrate._web_fresh_drop({"id": "w", "solved": False}) is True
       and orchestrate._web_fresh_drop({"id": "w", "solved": True}) is False
       and orchestrate._web_fresh_drop({"id": "w"}) is False and orchestrate._web_fresh_drop(None) is False)
@@ -259,7 +260,7 @@ def single_gate(lane, entry, trace=False, gm=False):
 
 check("#10 web fresh drop: no gm_solved round trip, the single starts at once",
       single_gate("web", {"solved": False}) == ([], "continued"), single_gate("web", {"solved": False}))
-check("#10 web, list entry without `solved`: gm_solved still asked (old behaviour)",
+check("#10 web, entry without `solved` AND without live-list fields (index-synthesized): gm_solved still asked",
       single_gate("web", {}) == (["web-x"], "continued"))
 check("#10 web resume/replay of a SOLVED single (list solved: true, no local state): asked AND accepted -> timed modes",
       single_gate("web", {"solved": True}, gm=True) == (["web-x"], True))

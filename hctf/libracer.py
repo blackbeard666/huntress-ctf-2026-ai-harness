@@ -137,6 +137,11 @@ def decode_candidates(lane, contract_path, art_dir, fields, timeout=None):
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{ROOT}:{env.get('PYTHONPATH', '')}"
     env["HCTF_SOLVE_DEADLINE"] = f"{time.time() + max(1.0, timeout - 3):.3f}"   # lib.decode stops searching by then
+    try:   # D31: today's warmups codec as a known day (hctf/solvers.py prepare_warmups_today); {} for other lanes
+        from . import solvers
+        env.update(solvers.warmups_today_env(lane=lane))
+    except Exception:  # noqa: BLE001
+        pass
     py = str(VENV_PY) if Path(VENV_PY).exists() else sys.executable
     try:
         r = procgov.run([py, "-m", "hctf.libracer", "decode", "--lane", lane, "--contract", str(contract_path),
