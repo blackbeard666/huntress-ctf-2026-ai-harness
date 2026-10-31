@@ -30,6 +30,14 @@ member's id() is reused by the next set's member -> stale facts (D25 Mastery, 46
   `analyzeHeadless <proj_dir> tmp -import file -postScript <script>.py -deleteProject` (scripts go in `$TMPDIR`).
 - Flag/constant usually computed at runtime: emulate the routine (unicorn) or run a copy under `gdb` with a breakpoint right
   after it, rather than reversing everything. Patch a copy, never the original.
+- **Hardened crackme (D30 SHA1-Hulud, `reference/D30_SHA1HULUD_LESSONS.md`).** If an emulated/sandboxed run is SILENT for
+  every input, suspect env fingerprints (CPUID hypervisor bit, CPU count, memory, screen, registry/driver/tool-process
+  names) feeding the KEYS -- stub them as a plausible REAL host (4+ CPUs, 8 GB, 1920x1080, no hypervisor, no tools), never
+  "not found". Self-hashing `.text`: hook via the emulator (UC_HOOK_CODE), never byte-patch. Measure before reversing:
+  run TWO candidates, dump every operand at the compare; input-independent streams = stored target/masks
+  (`target = buffer ^ mask...`). Find which keys depend on input; decode block 0 from any probe, then extend the probe
+  (chosen-plaintext, probe length = the length word). An OR verdict accepts DECOYS -- enumerate all groups, submit only
+  the flag-shaped one. Don't model a hash you only need to execute.
 - Checks and key schedules: model in z3, or `angr` with `claripy.BVS` input + printable constraints + `explore(find=, avoid=)`.
   Crypto by constants (AES tables, `0x9E3779B9` TEA, `expand 32-byte k`): identify, then reimplement with pycryptodome.
 

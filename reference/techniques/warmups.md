@@ -1,50 +1,42 @@
-# warmups — technique log (days 1-28; updated after every day)
+# warmups — technique log (days 1-30; updated after every day)
 
 How this lane has looked so far (observations, not guarantees):
-- **Timed variants MUTATE** (organizer, Day 8: "new, dynamic variations/mutations ... new unseen effects"): nothing below is a
-  guarantee for Time Trial / Mastery -- solvers derive structure and degrade per field.
-- Each day: one `blob.txt`. Decode it until a plain English sentence appears; its final non-empty line ends "...submit this exact answer to the Game Master: <slug>". The slug is `word-word-word-NN` (`answer_format.kind=pattern`, `normalization=trim`). Same single question id `message` every day.
-- The ENCODING changes daily and the title/prompt is a pun naming it: D1 "64" base64; D2 "half a turn" ROT13; D3
-  "sixteen fingers" hex; D4 "two sides" 8-bit binary; D5 "reduced to numbers" decimal codes; D6 "eight fingers" octal;
-  D7 "Percent" URL `%xx`; D8 "Entity" HTML `&#N;`; D9 "Escape Room" JSON `"\uXXXX"`; D10 "Thirty-Two Below" base32;
-  D11 "URL-friendly" base64url, `=` dropped; D12 "wrong end" REVERSED; D13 "A met Z" Atbash; D14 "Caesar took a week
-  off" +7; D15 "Forty-Seven" ROT47; D16 "Sixteen ... Dot dot dot" MORSE over HEX; D17 "Sixteen guests. Five little a's
-  and b's" BACON 5-groups = hex nibbles; D18 "Three rails ... zigzag" RAIL FENCE 3/offset 0; D19 "Two bytes ... the
-  little one goes first" hex of UTF-16LE + `fffe`; D20 "Same bar ... the big one" UTF-16BE + `feff`; D21 "A familiar
-  wrapper. Something compressed inside." GZIP in base64 (`H4sI`); D22 "Another familiar wrapper ... inflation" ZLIB
-  `78da` in base64 (`eNo`); D23 "The alphabet got bigger. Adobe ... neighbors" ASCII85 `<~...~>`; D24 "Count
-  carefully. The comma knows where to stop."/"String Theory" NETSTRINGS `1:N,1:i,...`; D25 "Every character has a
-  point. A code point, anyway."/"You Have a Point" Unicode CODE POINTS `U+004E U+0069 ...` (D9's idea in U+ notation);
-  D26 "A very small language has quite a lot to say."/"Food for Thought" (= brain food) BRAINFUCK: a PROGRAM whose output
-  is the sentence (only `+ - .`, one cell, no loops); D27 "Ook. Ook? Ook! Someone seems chatty."/"Monkey Business" OOK!
-  = D26's exact BF program re-spelled in orangutan word pairs (`Ook. Ook.` `+`, `Ook! Ook!` `-`, `Ook! Ook.` `.`); D28
-  "Our sixteen-fingered friend is walking backwards."/"Back in Sixteen" = REVERSED HEX: D3's hex string reversed char by
-  char (D3's own prompt wording + D12's reversal) -- a REMIX of two seen days, no new codec.
-  D1-D15 and D23-D27 one layer (D27 = a token map over a program); D16-D17, D19-D22, D28 two, the pun naming BOTH (every
-  number/word may be a layer or a key; "familiar" = a seen codec as the OUTER layer). D20/D22/D27 twisted ONE PARAMETER
-  of the previous day. Families: D1-D11 base-N/char codes/escapes, D12-D15 free-text letter maps, D16-D17 carriers over
-  hex, D18 transposition, D19-D20 byte representation, D21-D22 compression, D23 bigger base-N alphabet, D24 framing, D25
-  character notation, D26-D27 ESOTERIC LANGUAGES (execute, don't decode). D23-D26 = four new families in a row, then
-  D27 a knob with NO "Same"/"Another" cue: the prompt QUOTED the dialect's own tokens; D28 left the esolangs for a
-  COMPOSITION of two day-3/day-12 codecs, the prompt re-using D3's "sixteen-fingered friend" verbatim. On an unknown
-  shape read the blob's STRUCTURE (repeating unit, token shape, a tiny alphabet of operators/words) and name the spec
-  from it + the pun; a prompt that QUOTES an old day's riddle = that day's codec is one of the layers.
-- Mastery is cumulative: day N = 5N-2 sets x N numbered lines `NN<TAB>fragment`, line k = day k's encoding (D26 line =
-  a 166-217 B BF program printing a 5-char tail; D27 line = 1672-2172 B of Ook printing a 4-5 char tail; D28 line = 8
-  (136/138) or 10 reversed-hex chars = a 4-5 char tail; 138 x 28).
-  Last line has no trailing newline; fragments split mid-word and join verbatim.
-- Clocks: D1-D15 TT ~5-8 s / Mastery ~5-9 s windows; since D16 mostly `deadline: null`. The HARNESS kills solve.py at
-  60 s regardless (D17, D21, D26 128 x 26: 0 answers, a live worker hand-decoded). D23/D25 Mastery first submit all-NN
-  wrong (pre-decoded line), fixed on the same attempt. D27 Mastery 133 x 27 solve 34.9 s (bad DAYS encoder). D28 TT 5.1 s
-  (solve 1.05 s), Mastery 138 x 28 9.3 s (solve 6.2 s), both first try.
+- **Timed variants MUTATE** (organizer, D8): nothing below is a guarantee for TT/Mastery -- derive structure per field.
+- Each day: one `blob.txt`; decode until the sentence `Nice work decoding this warmup! To solve, submit this exact answer
+  to the Game Master: <slug>` appears. Slug `word-word-word-NN`, `kind=pattern`, `normalization=trim`, question `message`.
+- The codec changes daily; the title/prompt is a pun naming it: D1 "64" base64; D2 "half a turn" ROT13; D3 "sixteen
+  fingers" hex; D4 "two sides" binary; D5 decimal; D6 "eight fingers" octal; D7 "Percent"/"address bar" URL `%xx`; D8
+  "Entity" `&#N;`; D9 "Escape Room" `"\uXXXX"`; D10 "Thirty-Two" base32; D11 "URL-friendly" unpadded base64url; D12
+  "wrong end" REVERSED; D13 "A met Z" Atbash; D14 "Caesar took a week off" +7; D15 "Forty-Seven" ROT47; D16 "Sixteen
+  ... Dot dot dot" MORSE over HEX; D17 "Five little a's and b's" BACON 5-groups = hex nibbles; D18 "Three rails" RAIL
+  FENCE 3/0; D19 "Two bytes ... little one first" hex of UTF-16LE `fffe`; D20 "Same bar ... big one" UTF-16BE `feff`;
+  D21 "A familiar wrapper. Something compressed" GZIP in base64; D22 "Another ... inflation" ZLIB in base64; D23
+  "alphabet got bigger. Adobe" ASCII85 `<~~>`; D24 "The comma knows where to stop" NETSTRINGS `1:N,`; D25 "Every
+  character has a point" `U+004E`; D26 "A very small language" BRAINFUCK program (`+ - .`, one cell); D27 "Ook. Ook?
+  Ook!" the same program in Ook! pairs; D28 "Our sixteen-fingered friend is walking backwards." REVERSED HEX (char-wise);
+  D29 "Sixty-four invited thirteen over. Things got scrambled."/"Rotten Base" ROT13 OF BASE64; D30 "That address bar
+  problem? It happened twice."/"Percent Percent" URL `%xx` APPLIED TWICE (`%25%34%65` -> `%4e` -> `N`).
+- Shape of the run: D1-D15, D23-D27 one layer; D16-D17, D19-D22, D28-D30 two, the pun naming BOTH (every number/word
+  may be a layer or a key; "familiar"/"invited over" = a seen codec as the other layer; "twice" = the SAME codec
+  again). Knob days (D20, D22, D27) turn one parameter of the day before. Families: base-N/char codes/escapes (D1-D11),
+  free-text letter maps (D12-D15), carriers over hex (D16-D17), transposition (D18), byte representation (D19-D20),
+  compression (D21-D22), bigger alphabet (D23), framing (D24), notation (D25), ESOLANGS (D26-D27, execute don't
+  decode), then REMIXES D28-D30: 2-layer stacks of D1-D12 codecs (hex+rev, b64+rot13, url+url) cued by re-quoting an
+  old riddle. On an unknown shape read the STRUCTURE (repeating unit, token shape, tiny operator alphabet) + the pun.
+- Mastery is cumulative: day N = 5N-2 sets x N lines `NN<TAB>fragment`, line k = day k's codec over a mid-word fragment
+  (line 26 = 166-217 B BF; 27 = 1672-2172 B Ook; 28 = 8-10 rev-hex chars; 29 = 8-char rot13'd b64 `nJkfoj==`; 30 =
+  36-char double `%25%37%37...`; 148 x 30). Last line has no trailing newline; fragments join verbatim.
+- Clocks: D1-D15 TT/Mastery ~5-9 s windows; since D16 mostly `deadline: null`, but the HARNESS kills solve.py at 60 s
+  (D17, D21, D26, D30: live workers hand-decoded). D23/D25 Mastery first submit all-NN wrong (pre-decoded line). D28-D29
+  TT/Mastery first try in < 10 s. D30 TT 3.0 s; Mastery 148 x 30 solve 65.9 s -> KILLED (line 30 pre-peeled, no
+  DAYS[29]/[30]); a live worker's flat positional table (line k -> day k's decoder) got 148/148 on its first submit.
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
-- **Encoding per line** -- Mastery line k uses day k's encoding; detect each line's encoding from its ALPHABET, never its
-  position. Escape-token encodings (url `%xx`, entities): accept when the WHOLE fragment is tokens of that kind, then the
-  stdlib decoder (`unquote`, `html.unescape`) covers unseen forms (`%XX`, `&#x6d;`, `&amp;`); GM used only decimal
-  `&#NNN;` (D8). D9 escapes: every char lowercase `\u00XX`, fragment WRAPPED IN DOUBLE QUOTES (all 45 blobs) -> if it
-  matches `^"?(?:\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[nrt"\\/]))+"?$`, `json.loads` (add quotes if missing; covers
-  `\n`, surrogates, non-ASCII), fall back to `codecs.decode(t,'unicode_escape')` for `\xNN`.
+- **Encoding per line** -- Mastery line k uses day k's encoding (D1-D30: the number has always matched the day). Route by
+  the NUMBER, confirm by the ALPHABET: lines 7 and 30 are both all-`%XX`, lines 1/29 both base64-shaped, 3/28 both hex
+  -- alphabet-only routing picks the wrong one. Escape tokens: accept when the WHOLE fragment is tokens of that kind,
+  stdlib decoders cover unseen forms (`%XX`, `&#x6d;`, `&amp;`; GM used decimal `&#NNN;`). D9: lowercase `\u00XX`
+  WRAPPED IN DOUBLE QUOTES -> `json.loads` (add quotes if missing), fall back to `codecs.decode(t,'unicode_escape')`.
 - **Code-point notation (D9, D25)** -- one token per char: D9 JSON `"\u00XX"` (quoted, lowercase); D25 `U+XXXX`
   UPPERCASE, 4 digits, one space apart (7 B/char; Mastery line 25 = 5 tokens). Parse rule (lib `uplus_dec`, prebuilt
   `codepoints_any`): the WHOLE text must be tokens `(?:U\+|u\+|\\u|\\U|%u|0x)[0-9A-Fa-f]{2,8}` split by
@@ -58,14 +50,22 @@ How this lane has looked so far (observations, not guarantees):
   fragment shaped `\d{2,}-[A-Za-z][A-Za-z-]*` is a reversed tail; free lines are assigned JOINTLY (`_joint_free`,
   each free codec ONCE per blob), keeping the assignment whose joined text ends in a full 3-word slug (3-word above
   2-word), best bigram. Any new keyless shift = one `decode.register_free(name, day, fn)`, never a per-line special case.
-- **Free transform OVER a strict string (D28)** -- values seen: single/TT = ONE lowercase hex string of the UTF-8
-  sentence, REVERSED CHARACTER-WISE (so the last nibble comes first: `...696e4` ends what reads `4e696...` forward),
-  even length, no separators/newline (220 B single, 212 B TT); Mastery line 28 = the 4-5 char tail's hex reversed ON
-  ITS OWN (8 chars on 136/138 sets, 10 on 2; `6313d2e6` -> `6e2d3136` -> `n-16`). Parse rule: `bytes.fromhex(t[::-1])`
-  (== nibble-swap of `bytes.fromhex(t)[::-1]`); BYTE-order reversal (`fromhex(t)[::-1]`) gives nibble-swapped junk
-  `\xe4\x966V` -- try both granularities (chars, bytes, nibbles) and gate printable + slug. Generalises to any
-  outer free transform (rev/rot13/Atbash/ROT47/rail) over any strict string: undo outer, decode inner, slug-gate.
-  GM-faithful encoder `s.encode().hex()[::-1]` (lowercase) -> safe as a DAYS[28] entry.
+- **Free transform OVER a strict string (D28-D29)** -- values seen: D28 single/TT = ONE lowercase hex string of the
+  UTF-8 sentence REVERSED CHARACTER-WISE (`...696e4`; 220 B single, 212 B TT); Mastery line 28 = the tail's hex
+  reversed ON ITS OWN (8-10 chars, `6313d2e6` -> `n-16`). D29 single = ONE std padded base64 line ROT13'd (148 B,
+  `GzywMFO3` = rot13 `TmljZSB3` "Nice w", digits and `+/=` untouched, ends `ZD==`); Mastery line 29 = the tail's own
+  8-char rot13'd base64 (`nJkfoj==`). Parse rule: undo the outer free transform, decode the inner strict codec,
+  gate printable + slug: `bytes.fromhex(t[::-1])` (byte-reverse gives nibble-swapped junk `\xe4\x966V` -- try chars,
+  bytes, nibbles); `b64decode(codecs.decode(t,'rot13'))`. Both outer layers KEEP the inner charset, so the raw
+  strict decode SUCCEEDS into junk instead of failing. GM-faithful encoders `s.encode().hex()[::-1]` (DAYS[28] in lib)
+  and `codecs.encode(b64encode(s.encode()).decode(),'rot13')` (DAYS[29]: NOT in lib yet).
+- **Same codec composed with ITSELF (D30)** -- single/TT = ONE line of `%XX` tokens whose decode is AGAIN all `%XX`
+  (outer layer encodes every char of `%4e%69...`: `%`->`%25`, digits `%3N`, `a-f` `%6N`; lowercase hex both layers;
+  972 B single and TT = 9 B per char, no newline); Mastery line 30 = the 4-char tail doubly encoded (36 chars). Parse
+  rule: LOOP the decoder while its output still fully matches the same codec (`(?:%[0-9A-Fa-f]{2})+` -> `unquote`, cap
+  8), then gate printable + slug; never stop after one level because the result "looks decoded". Same loop covers
+  base64^N, hex^N, `&#38;#78;` entity-of-entity, `%2525` triple. GM-faithful encoder
+  `''.join('%%%02x'%b for b in ''.join('%%%02x'%b for b in s.encode()).encode())`.
 - **Layer count / carrier alphabet (D16-D17)** -- a charset-collapsing carrier over HEX of the UTF-8 text: D16 Morse
   (one space between symbols, symbols only `0-9A-F`), D17 Bacon lowercase `a`/`b` 5-groups `aaaaa`..`abbbb` (values
   0-15 = nibbles). Parse rule: carrier output that is hex / exactly 16 symbols / `a`-`p` -> nibbles -> `fromhex`;
@@ -105,13 +105,16 @@ How this lane has looked so far (observations, not guarantees):
 - **Line wrapper / positional routing** -- `NN<TAB>fragment`; fragments split mid-word, join verbatim in number order.
   `decode._positional` decodes line k with day k's REGISTERED codec; a DAYS entry must round-trip (`enc(dec(line)) ==
   line`). Unregistered or non-round-tripping day -> `_unknown_line_cands` (re-"decodes" plain text, D25 `le-52` -> `-07`)
-  -> joint search (D26 absolute `'+'*ord+'.>'` vs GM deltas: 64.9 s kill; D27 same in Ook: 34.9 s). D28 had NO DAYS[28]
-  and passed only because line 28 was LAST. Rule: every new day = `register_free(name, day, fn)` on the RAW line, or a
-  DAYS entry with lib's GM-faithful encoder; assert the round trip on one real Mastery line.
-- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 83 x 17 on day 17, ..., 108 x 22, ..., 128 x 26, 133 x 27, 138 x 28 on day 28); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
+  -> joint search (D26 absolute `'+'*ord+'.>'` vs GM deltas: 64.9 s kill; D27 same in Ook: 34.9 s). D28 and D29 had
+  no registered codec and passed only because their line was LAST; D30 (lines 29 + 30 unregistered, line 30 pre-peeled
+  by the solver) died at 65.9 s with partial wrong slugs (`sunset-ct-ck-80`: words chopped = lines mis-assigned).
+  Rule: every new day = `register_free(name, day, fn)` on the RAW line, or a DAYS entry with a GM-faithful encoder;
+  assert the round trip on one real Mastery line. Emergency path that worked (D26, D30): a flat table `{k: decoder}`
+  for k = 1..N, decode line k with entry k, slug-gate, submit -- no search at all.
+- **Set count** -- grows by 5 per day, 5N-2 (33 on day 7, ..., 83 x 17, ..., 108 x 22, ..., 138 x 28, 143 x 29, 148 x 30); the solver must loop over whatever the contract lists, and its cost grows with sets x lines.
 - **Delivery shape** -- mastery bytes arrive as ONE zip saved under the first member's name (`blob-01.txt`; the contract has NO
   `artifacts[]`, only a top-level `sha256` = the zip; same on days 7-9). Set 1's question names that same file: read the MEMBER, never decode the whole bundle.
-- **Payload only** -- TT/single differ only in the slug and length (day 7: 318 vs 333 bytes; day 8: 620 vs 621; day 9: 644 vs 650); same sentence and encoding.
+- **Payload only** -- TT/single differ only in the slug and length (D7 318 vs 333 B; D30 972 vs 972); same sentence and encoding.
 - **Fragment whitespace** -- payload spaces sit at fragment edges (day 9: 34/43 rot13 line-2 fragments end in a space, `pbqvat guvf `). Never `.strip()` the decoded text of a fragment before joining.
 
 ## Recognition cues -> first move
@@ -124,6 +127,8 @@ How this lane has looked so far (observations, not guarantees):
 | Space-separated 2-3 digit tokens, max <=127, unpadded (`32`, `78`) | decimal char codes: `python3 -c "print(''.join(chr(int(t)) for t in open('blob.txt').read().split()))"` |
 | 3-digit tokens, digits 0-7 only, zero-padded (`040`, `116`) | octal: same, with `int(t,8)` |
 | `%4e%69%63...` (every char incl. letters/spaces as lowercase `%xx`, no line end) | URL decode: `python3 -c "import sys,urllib.parse;print(urllib.parse.unquote(open(sys.argv[1]).read()))" blob.txt`. Test `%[0-9a-f]{2}` BEFORE hex/b64 |
+| `%25%34%65%25%36%39...` -- every token `%25`/`%3N`/`%6N`, 9 B per char (prompt "twice", "again", "double", title repeating a codec name) | URL encoding APPLIED TWICE (D30): loop `unquote` until the output stops being all `%XX`: `python3 -I -c "import sys,urllib.parse as u;s=open(sys.argv[1]).read();[s:=u.unquote(s) for _ in range(8)];print(s)" blob.txt` (idempotent once plain: the sentence has no `%`). The same "decode until it stops being the same codec" loop for base64/hex/entities |
+| Padded base64 shape (`=`/`==`, len%4==0) that decodes to junk; starts `Gzyw` (= rot13 of `TmljZ` "Nice"); prompt pairs two old numbers ("Sixty-four" + "thirteen") | ROT13 OVER BASE64 (D29): `python3 -I -c "import sys,codecs,base64;print(base64.b64decode(codecs.decode(open(sys.argv[1]).read().strip(),'rot13')).decode())" blob.txt`. Gzip under it would read `U4fV` |
 | `&#78;&#105;&#99;...` (only `&...;` tokens, no line end) | HTML entities: `python3 -c "import html,sys;print(html.unescape(open(sys.argv[1]).read()))" blob.txt` (covers `&#x..;` and named too) |
 | `"\u004e\u0069..."` (quoted, only `\uXXXX`; prompt says "escape") | JSON string escapes: `python3 -c "import json,sys;print(json.loads(open(sys.argv[1]).read()))" blob.txt`. `lib.decode.decode_chunk` also gets it (generic fallback, ASCII only) |
 | `A-Z2-7=` | `base32 -d` |
@@ -149,47 +154,42 @@ How this lane has looked so far (observations, not guarantees):
 The generic path is `lib.decode.peel(data, accept)` (BFS over encodings) plus the day solvers in `challenges/day0N/warmups-*/solver/solve.py`. Each later solver re-checks every earlier day's cases.
 
 ## Day by day
-**Days 1-13** (base64, ROT13, hex, 8-bit binary, decimal, zero-padded octal, URL `%xx`, decimal entities, quoted
-`"\u00XX"`, base32, unpadded base64url, reversed sentence, Atbash): one layer each, CORRECT in 5-73 s. Lessons (details in
-Pitfalls): D1 same-named downloads overwrote each other (match by sha256); D3 a slow English scorer timed Mastery out; D4
-rot-N needs a margin over the unshifted text; D6 a shell `read` loop lost the unterminated last token; D7 decoding the
-WHOLE Mastery zip gave another set's slug (read the member); D8 a `str.replace` patch silently no-op'd; D11 strict len%4
-refused unpadded b64; D12 rot-N "decoded" reversed text (`69-fove-n`); D13 free lines must be assigned JOINTLY.
+**Days 1-27** (one codec per day, see the list above): single CORRECT in 4.5-73 s, first submit nearly every day.
+Lessons (details in Pitfalls): match downloads by sha256 (D1); cheap English scoring (D3) with a margin for rot-N (D4);
+read the Mastery zip MEMBER (D7); assert solver patches applied (D8); re-pad unpadded b64 (D11); assign free lines
+JOINTLY and rank 3-word slugs first (D12-D14); `register_free` each free codec (D15); a carrier's 16-symbol output is a
+middle layer (D16-D17); route to lib's prebuilt solvers (D18 `rail_solve`); write the GENERIC rule on day N so the knob
+day passes unchanged (D19 BOM-aware hex carried D20, D21 magic-sniffing `_b64z` carried D22); never replace the lane
+solver (D21 60 s kill); never pre-decode a Mastery line (D23, D25); strict whole-text cursor parse for framing (D24);
+INTERPRET program blobs in a step-capped pure-python VM and register lib's GM-faithful encoder (D26 60 s kill and D27
+34.9 s from ad-hoc absolute DAYS encoders; a live worker swapped `Ook! Ook.` output / `Ook. Ook!` input).
 
-**Days 14-27** (Caesar +7; ROT47; Morse over hex; Bacon a/b 5-groups over hex; rail fence 3/offset 0; hex of UTF-16LE
-+ `fffe`; hex of UTF-16BE + `feff`; gzip in base64; zlib `78da` in base64; Adobe Ascii85 `<~...~>`; netstrings
-`1:N,1:i,...`; `U+XXXX` code points; loop-free one-cell Brainfuck; the same program in Ook! pairs): single CORRECT in
-4.5-39 s, first submit each day. Lessons (details in Pitfalls): D14 rank 3-word slugs first; D15 ROT47 needs
-`register_free`; D16/D17 a carrier's 16-symbol output is a middle layer; D17 Mastery needed an early return; D18 lib's
-`rail_solve` existed but the carried solver never routed to it; D19's BOM-aware `_hex_utf16` carried D20 and D21's
-magic-sniffing `_b64z` carried D22 unchanged (write the GENERIC rule on day N); D21 Mastery died at 60 s on an ad-hoc
-solver; D23 and D25 Mastery all-NN-wrong from a pre-decoded line (fix: `register_free(name, day, fn)` on the RAW line);
-D24 a strict whole-text cursor parser sits first -- a structural codec's repeating unit (`\d+:.,`) IS the cue. D26
-(`+ - .` soup; atlas had rated BF LOW): worker wrote a step-capped `_bf` (~27 s); Mastery died at 60 s because the
-runtime DAYS[26] encoder (`'+'*ord(c)+'.>'`) didn't reproduce the GM's DELTA bytes. D27 ("Ook. Ook? Ook! Someone seems
-chatty."/"Monkey Business"): 33929 B, 3393 Ook pairs, only `+ - .` pairs, no `Ook?` despite the prompt; lib's prebuilt
-`bfd_dec` covered it, single ~33 s; the solver's DAYS[27] Ook encoder was absolute again (Mastery solve 34.9 s of 60).
-A parallel live worker swapped `Ook! Ook.` (output) / `Ook. Ook!` (input). A program blob means INTERPRET (pure python,
-step cap); when lib has a prebuilt decoder for the family, call it first and register ITS encoder.
+**Days 28-29 (REMIXES of two early codecs).** D28 "Back in Sixteen" ("Our sixteen-fingered friend is walking
+backwards."): 220 B `[0-9a-e]` = D3 hex reversed CHARACTER-wise (`...6e4`); `bytes.fromhex(t[::-1])` (forward and
+byte-reversed reads are junk). Race probe CORRECT at start+8 s; TT/Mastery first try. D29 "Rotten Base" ("Sixty-four
+invited thirteen over. Things got scrambled."): 148 B padded-base64-shaped line = ROT13 of base64 (`GzywMFO3` ->
+`TmljZSB3`); `base64.b64decode(codecs.decode(t,'rot13'))`; single CORRECT ~35 s, TT 2.4 s, Mastery 143 x 29 4.9 s.
+Neither day registered its Mastery codec; both passed only because their line was the LAST one (the D30 kill below).
 
-**Day 28: Back in Sixteen** ("Our sixteen-fingered friend is walking backwards." -- REVERSED HEX).
-- 220-byte `blob.txt`, one line, `[0-9a-e]` only, even length, no newline: D3's hex of the sentence, the STRING reversed
-  char by char (`...6e4` at the end = `4e` "N" read backwards). Pun: D3's own riddle ("sixteen fingers" = hex) +
-  "walking backwards" = D12 reversal; title "Back in Sixteen" (Back in Black) = back(wards) + sixteen. Triage again said
-  "looks base64" (hex is a b64 subset) and its idea list said only "hex" -- the second clue came from the prompt verb.
-- Command: `python3 -c "import sys;print(bytes.fromhex(open(sys.argv[1]).read().strip()[::-1]).decode())" blob.txt`.
-  Forward `fromhex` gives `#S\xd2GVvveu...` and byte-reversed gives `\xe4\x966V\x02w...` (nibble-swapped) -- neither is
-  a slug; reverse the CHARACTERS (or byte-reverse + nibble-swap).
-- Single: the harness race probe (prebuilt lib `decode_chunk` reversal + hex / tgt:free-over-strict) submitted CORRECT at
-  start+8 s, first try; slug as printed. TT 5.1 s, Mastery 138 x 28 9.3 s (solve 6.2 s), both first try. The carried
-  solver registered NO day-28 codec: line 28 was the LAST Mastery line, so `_positional`'s unknown-last-line path
-  (`decode_chunk`: reversal then hex) decoded it. Tomorrow line 28 is a MIDDLE line -- register it (Pitfalls).
-- Lesson: after a 2-day esolang run the lane went back to COMPOSING two early codecs, cued by quoting an old prompt;
-  expect more remixes (reversed octal/binary/base64, rot13 over base64, ...) -- undo the outer free layer, then peel.
+**Day 30: Percent Percent** ("That address bar problem? It happened twice." -- URL ENCODING APPLIED TWICE).
+- 972-byte `blob.txt`, one line, no newline, only `%25`, `%3N`, `%6N` tokens (9 B per char): D7's `%xx` of the
+  sentence, then `%xx` of THAT string (`%25%34%65` -> `%4e` -> `N`), lowercase hex in both layers. Pun: "address bar
+  problem" = D7's URL encoding (its riddle re-quoted), "twice" + the doubled title = apply it again. Triage's idea list
+  said only "URL percent-encoding" -- the depth came from the bytes: after one `unquote` the text is STILL all `%XX`.
+- Command (live answer-first worker): `python3 -I -c "import urllib.parse,sys;s=open(sys.argv[1]).read()` + a loop of
+  `t=urllib.parse.unquote(s); if t==s: break; s=t` -> 2 levels -> the sentence. GM accepted the slug as printed.
+- Single CORRECT at start+27 s, first submit. TT (972 B, same shape) 3.0 s, solve 0.8 s.
+- Mastery 148 x 30: the carried solve.py ran 65.9 s and was KILLED (partial submit of 2 sets wrong: `sunset-ct-ck-80`
+  for `daring-sunset-clover-80`). Cause: the single worker added `_pct2`, which PRE-PEELED line 30 down to one `%xx`
+  level (and `.strip()`ed every Mastery fragment), while lib's DAYS ended at 28 -- lines 29 (now a middle line) and 30
+  fell to the unknown-codec joint search. A live worker wrote a flat 30-entry table (`29: b64(rot13(t))`, `30:
+  unquote(unquote(t))`, the rest lib's decoders), decoded all 148 with the full crib prefix, submitted once: CORRECT.
+- Lesson: third remix day in a row; a "twice"/"again"/doubled-title prompt means the SAME codec nested -- loop until
+  the output stops matching the codec. In Mastery, register each new day on the RAW line; never massage the text.
 
 ## GM answer conventions learned
 - Submit the slug ONLY, exactly as decoded (lowercase, hyphens, 2-digit number). Not the whole sentence and not "Game Master: ...". `trim` normalization only.
-- No correctly decoded warmups answer has been rejected (days 1-28; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
+- No correctly decoded warmups answer has been rejected (days 1-30; day 8's 40 and day 9's 45 slugs all accepted as decoded). The only `incorrect` (day 7 mastery set1) was a wrong value from decoding the whole bundle. The value is self-describing, so verify it against `answer_format.syntax` and submit.
 - Mastery ids are per set (`setN.message` style). Each question names `blob-0N.txt`, but the bytes may arrive as a zip member, as same-named `blob.txt` downloads, or de-duplicated (`blob_2.txt`). Map set -> file by sha256 from `contract["artifacts"]` when present. When it is absent (day 7), open the zip and read member `blob-0N.txt`.
 - No GM-side label grammar in this lane: the answer is a derived VALUE, never a synthetic label.
 
@@ -205,20 +205,28 @@ step cap); when lib has a prebuilt decoder for the family, call it first and reg
 - CHEAP PATH FIRST, RETURN EARLY (D17): return the first candidate that yields a full slug; call the joint ranker only on
   a miss (83 x 17 passed 60 s when every set paid the joint search; a per-set `peel` BFS blew a 30 s window on D12). Time
   the real Mastery case (`hctf solver-test`) after every new codec; profile `answer()` per set when solve passes ~5 s.
-- PRE-DECODING / MIS-REGISTERED MASTERY LINES (D23 113/113, D25 123/123 sets wrong once; D26 60 s kill; D27 34.9 s):
+- PRE-DECODING / MIS-REGISTERED MASTERY LINES (D23 113/113, D25 123/123 sets wrong once; D26 60 s kill; D27 34.9 s;
+  D30 65.9 s kill):
   never rewrite a numbered line to plaintext before `decode_chunked`/`_joint_free` (no "identity" choice: ROT5 turned
   `el-46` into `el-91`); register today's codec on the RAW line even if the whole-blob path decodes it; a DAYS encoder
   that doesn't reproduce the GM bytes is worse than none (see Variant axes: line wrapper). All sets wrong in the same
-  field = one line's routing. D28: no day-28 codec, saved only by being the LAST line -> register `(28, "revhex",
-  lambda s: s.encode().hex()[::-1], lambda t: bytes.fromhex(t[::-1]).decode(), False)` before line 28 is a middle line.
+  field = one line's routing; chopped slug words (`sunset-ct-ck-80`) = lines mis-assigned. D28/D29 were saved only by
+  being the LAST line; D30 broke on 29 + 30 (lib DAYS ends at 28). The THIRD pre-decode (D30 `_pct2` peeled line 30 to
+  one `%xx` level and `.strip()`ed fragments): a whole-blob pre-pass must return the text UNCHANGED when it sees
+  `NN<TAB>` lines. Before the last day: DAYS[29] `codecs.encode(b64encode(s.encode()).decode(),'rot13')` / inverse,
+  DAYS[30] double `%xx` (Variant axes) -- or the flat 1..N table fallback when solve.py passes ~30 s.
 - ENGLISH SCORING: don't count single letters/hex reads as English (D3 timeout); a rot-N must beat the unshifted text by a
   margin (D4). Rot-N is `decode_chunk`'s catch-all, so ANY unknown plain transform comes back as plausible rot garbage
   (D12 reversal `69-fove-n`, D13's rejected `ovisx-tviskr-fbvecw-31` = rot-N of Atbash): gibberish slug words = an unknown
   transform, not a GM quirk. Several free transforms in one blob (rot13/rev/Atbash/Caesar/ROT47) -> decide JOINTLY, each
   once (`_joint_free`), rank full 3-word slugs first (D14 set22); prune by alphabet before the joint search (D15).
-- REVERSAL GRANULARITY (D28): a reversed STRICT string is still in the strict charset, so it "decodes" to junk instead of
-  failing -- `fromhex` succeeded on D28's reversed hex. Junk from a strict decode = try the outer free transforms
-  (char-reverse, byte-reverse + nibble-swap, rot13/Atbash of the letters) BEFORE assuming a new codec.
+- REVERSAL GRANULARITY / CHARSET-PRESERVING OUTER LAYERS (D28-D29): a reversed or rot13'd STRICT string stays in the
+  strict charset, so it "decodes" to junk instead of failing -- `fromhex` succeeded on D28's reversed hex, `b64decode`
+  on D29's rot13'd base64. Junk from a strict decode = try the outer free transforms (char-reverse, byte-reverse +
+  nibble-swap, rot13/Atbash/ROT47 of the letters) BEFORE assuming a new codec.
+- SELF-NESTING (D30): a decode whose output is the SAME codec again (`%4e%69` after one `unquote`, base64 of base64)
+  is a middle layer -- loop until the output leaves the codec, cap the depth (8), gate the final text only. A one-level
+  decoder plus an English gate rejects the right branch.
 - CLASS CONFUSION: binary is also hex (try binary first); decimal is also octal (padding + case); hex is a base64 subset
   (triage says "looks base64" on D19-D20 hex); unpadded base64 must be re-padded (`len%4==1` is the only impossible length).
 - FRAGMENTS: split mid-word; join with "" and keep payload whitespace (never `.strip()` a decoded fragment; spaces are

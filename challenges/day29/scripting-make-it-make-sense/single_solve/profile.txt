@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (1264114 function calls (1232066 primitive calls) in 0.835 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    200/1    0.002    0.000    0.836    0.836 {built-in method builtins.exec}
+        1    0.001    0.001    0.836    0.836 solve.py:1(<module>)
+        1    0.002    0.002    0.507    0.507 solve.py:848(main)
+    98/24    0.000    0.000    0.345    0.014 <frozen importlib._bootstrap_external>:993(exec_module)
+   129/19    0.001    0.000    0.344    0.018 <frozen importlib._bootstrap>:1349(_find_and_load)
+   129/19    0.000    0.000    0.343    0.018 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   280/41    0.000    0.000    0.341    0.008 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+   119/20    0.000    0.000    0.341    0.017 <frozen importlib._bootstrap>:911(_load_unlocked)
+  224/193    0.000    0.000    0.302    0.002 <frozen importlib._bootstrap>:1390(_handle_fromlist)
+    28/16    0.000    0.000    0.300    0.019 {built-in method builtins.__import__}
+     6590    0.009    0.000    0.279    0.000 __init__.py:280(_compile)
+        1    0.009    0.009    0.274    0.274 solve.py:900(_solve_pairs)
+      708    0.003    0.000    0.262    0.000 _compiler.py:745(compile)
+      572    0.000    0.000    0.249    0.000 __init__.py:226(compile)
+        1    0.002    0.002    0.206    0.206 codec.py:1(<module>)
+      196    0.162    0.001    0.162    0.001 {built-in method builtins.print}
+       18    0.000    0.000    0.151    0.008 __init__.py:1(<module>)
+      708    0.002    0.000    0.143    0.000 _parser.py:969(parse)
+ 2448/708    0.008    0.000    0.139    0.000 _parser.py:452(_parse_sub)
+4804/1265    0.058    0.000    0.136    0.000 _parser.py:512(_parse)
+  878/781    0.002    0.000    0.127    0.000 {method 'acquire' of '_thread.lock' objects}
+      708    0.001    0.000    0.115    0.000 _compiler.py:578(_code)
+      183    0.001    0.000    0.100    0.001 solve.py:155(_indexed)
+ 7734/708    0.036    0.000    0.098    0.000 _compiler.py:37(_compile)
+     15/3    0.000    0.000    0.096    0.032 threading.py:1018(_bootstrap)

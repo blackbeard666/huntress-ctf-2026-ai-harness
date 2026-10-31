@@ -1,4 +1,4 @@
-# script-analysis — technique log (days 1-28; updated after every day)
+# script-analysis — technique log (days 1-30; updated after every day)
 
 How this lane has looked so far (these are observations, not guarantees):
 - **Timed variants MUTATE** (organizer D8: "new, dynamic variations/mutations"): solvers derive structure and degrade per
@@ -10,34 +10,38 @@ How this lane has looked so far (these are observations, not guarantees):
   ids) -> JScript, Batch, VBScript, Python (d5, 357), Bash, Node + Bash advanced (d7, 469) -> PHP + WSF/HTA/webshell hosts (d8,
   615) -> Lua/SCT, MOF, TypeScript, AutoIt, AppleScript, MSBuild (d14, 971) -> Perl, Ruby (d16, 1095), AutoHotkey, Apps Script,
   C# `.csx` + ASPX (d19, 1249) -> Groovy + Jenkins + classic ASP (d20, 1329) -> GitHub Actions (d21), NSIS (d22, 1417) ->
-  GDScript (d23, 1461) -> JSP + host (d24, 1516) -> Elixir + Phoenix host (d25, 1571) -> Erlang (d26, 1615) -> **Dockerfile
-  (d27, 1659 = +44, 175 members, no host)** -> **Terraform HCL (d28, 1703 = +44, 179 members, no host)**. Bash advanced +2
-  on some days (none d26-d28). Since D8 the TITLE is a pun and the
+  GDScript (d23, 1461) -> JSP + host (d24, 1516) -> Elixir + Phoenix host (d25, 1571) -> Erlang (d26, 1615) -> Dockerfile
+  (d27, 1659) -> Terraform HCL (d28, 1703) -> **Makefile (d29, 1747 = +44, 183 members, no host)** -> **BeanShell + JSP host
+  (d30, 1802 = +55, 188 members)** = language #30; the D30 prompt called it "the last piece of a thirty-language puzzle", so
+  D31 (final day) may add NO language and ask about the whole corpus instead. Bash advanced +2 on some days (none d26-d30).
+  Since D8 the TITLE is a pun and the
   base id names the theme (D22 "Next, Next, Finish" -> NSIS; D24 "Web of Lies" -> JSP; D26 "Mixed Signals"/`beam-message-flow`
   -> Erlang; D27 "FROM Whence It Came"/`docker-build-attribution` -> Dockerfile; D28 "Out of Order"/`terraform-cloud-timeline`
-  -> Terraform); D25-D28 prompts NAMED the language in their first words.
-- **Forecast cue (5/5 hits D24-D28)**: the per-file timed plans' `next_language` pool holds only never-shipped languages
-  and each day's new one leaves it (jsp, elixir, erlang, dockerfile, terraform_hcl). D27 timed (semantic) hid it; D28 timed
-  shows it again WITHOUT terraform_hcl: 12 left = awk, beanshell, fish, kotlin, makefile, nim, rust, sed, swift, tcl, xslt,
-  zsh -- with 3 days left (D29-D31), not all can ship one-a-day. The sibling bet (D27 Dockerfile -> Makefile) MISSED on D28.
+  -> Terraform; D29 "Make It Make Sense"/`makefile-variant-diff`; D30 "Spill the Beans"/`beanshell-jsp-graph`); D25-D30 prompts
+  NAMED the language in their first words.
+- **Forecast cue (7/7 hits D24-D30)**: the per-file timed plans' `next_language` pool holds only never-shipped languages
+  and each day's new one leaves it (jsp, elixir, erlang, dockerfile, terraform_hcl, makefile, beanshell). Read it from TODAY's
+  `auto-*` cases only (older cases carry stale pools). After D30: 10 left = awk, fish, kotlin, nim, rust, sed, swift, tcl,
+  xslt, zsh, with ONE day left -- most of the pool is decoy vocabulary. Still one language per day, never a multi-drop.
 - From day 2 every fixture hides a **self-describing plan** `v=N|steps=a,b|adapter=..|stage_count=..|campaign_id=..|<indicators>`
   behind a `Codec_<id>` / `CODEC_<id>` / `rem HUNTRESS-CODEC:` const (`rep|transform|key`); most exact_text answers are plan
   values verbatim. From D8 a **`v=3` plan** carries `role=`/`attack=` itself behind a `HUNTRESS_ANALYSIS_V1:<TAG>-` comment.
 - The hard part is **naming CODE SHAPE** (control-flow, expansion, function/invocation/property styles): GM synthetic labels
   not in the plan. Role and scenario are enums -- read `accepted_values`. Single files are named by behaviour (host-context,
   memory-stage, embedded-write, remote-write, local-dispatch, staged-handoff, outbound-transfer, impact-plan, relay-handoff).
-- Narrative prompts (D8, D15-D28: equivalence, network/process reconcile, outlier, request order, config drift, collision
-  decoys, D27 attribution, D28 "assemble the timeline ... find the change that happened out of order") have NEVER been asked. Only D23's
+- Narrative prompts (D8, D15-D30: equivalence, network/process reconcile, outlier, request order, config drift, collision
+  decoys, D27 attribution, D28 timeline, D29 "diff the variants, keep the conclusions that hold across every variant", D30
+  "rebuild the execution, host and evidence graph, find the edge that holds everything together") have NEVER been asked. Only D23's
   "correlate with the corpus" surfaced once, as the cross-file `python-<6hex>-handoff-id` (= PS `$HandoffId`).
-- TT windows ~5-17 s when the solver fits. Mastery = `setN.` ids, +1 set/day since D21 (6 sets D22 ... 11 D27, **12 D28 =
-  21372**) in one outer `evidence-01.zip` of inner `evidence-0N.zip`; set loop count-agnostic; pair same-named deliveries by
+- TT windows ~3-17 s when the solver fits. Mastery = `setN.` ids, +1 set/day since D21 (6 sets D22 ... 12 D28, 13 D29 =
+  23829, **14 D30 = 26572**) in one outer `evidence-01.zip` of inner `evidence-0N.zip`; set loop count-agnostic; pair same-named deliveries by
   sha256. Timed questions carry `[assigned-artifact-sha256:<hex>]`; from D15 timed = untimed regular pool (`run_for_time:false`).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants of the SAME day -- parse every value listed)
 Each miss cost one failed timed attempt + a generalize cycle (D6: 4; D7: 1; D15: 1; **D23: TT 5 workers + Mastery 3, ~25 min**;
 all other days 0). Auto cases D20-D22, D24-D26 = value re-rolls; D23 (TT b10c4da4, M e24c070d) = per-file shape; D27 (TT
-6daf90f0, M ee4eeb7f) = semantic shape again; D28 (TT 82ffaaa8, M c4556fc4) = per-file again, all answered first try. No
-`VARIANT AXIS:` line written D24-D28 (NOTES.md: D7-D8 lines + speed notes).
+6daf90f0, M ee4eeb7f) = semantic shape again; D28 (TT 82ffaaa8, M c4556fc4), D29 (TT 315a492d, M 4b6afd09), D30 (TT 06fc3e03,
+M 4d7b1061) = per-file, all answered first try. No `VARIANT AXIS:` line written D24-D30 (NOTES.md: D7-D8 lines + speed notes).
 - **CONTRACT SHAPE (single vs timed; D23-D26 per-file, D27 semantic, D28 per-file)** -- single: ids `<lang>-<role>-<field>` over
   behaviour-named members. D23-D26 timed: members `<6hex>.<ext>`, ids `<family>-<6hex>-<field>` (families `powershell`,
   `jscript`, `batch`, `vbscript`, `python`, `bash`, `bash-advanced`, `nodejs`, `polyglot-<lang>`); **composite `style`** =
@@ -48,7 +52,9 @@ all other days 0). Auto cases D20-D22, D24-D26 = value re-rolls; D23 (TT b10c4da
   family, +13 ids/member, a host folds in as a 5th member (TT 1495 -> 1560 -> 1625 -> 1677). **D27 timed = the single's
   grammar** (TT 1659 = single, Mastery `setN.` x 11; 0 `<6hex>` ids). **D28 timed = per-file again**: TT 1781 = D26's 1677 + 52
   `polyglot-dockerfile` + 52 `polyglot-terraform_hcl` (4 members x 13 ids: role/attack/steps/stage-count/stage-profile/
-  obfuscation/next-language/campaign/url/file-path/url-host/path-leaf/campaign-token), Mastery 12 x 1781. Parse rule: detect the grammar PER CONTRACT (an id
+  obfuscation/next-language/campaign/url/file-path/url-host/path-leaf/campaign-token), Mastery 12 x 1781. **D29 TT 1833 (+52
+  makefile), D30 TT 1898 (+65 beanshell: the JSP host folds into `polyglot-beanshell` as a 5th member)** -- per-file 3 days
+  running. Parse rule: detect the grammar PER CONTRACT (an id
   matching `^(?P<fam>.+?)-(?P<stem>[0-9a-f]{6})-(?P<field>[a-z][a-z0-9-]*)$` with stem == a member stem => per-file
   `PF_ID`/`pf_value` path, else semantic); route by field name; READ the question for join order / precedence.
 - **Plan carrier tag (v=3)** -- single D8-D27: `HUNTRESS_ANALYSIS_V1:<TAG>-<data>`, tags `B64`/`HEX`/`HB64`/`FRAG` (=
@@ -73,15 +79,19 @@ all other days 0). Auto cases D20-D22, D24-D26 = value re-rolls; D23 (TT b10c4da
 - **Codec per file** -- rep x transform x key re-roll per variant; NEW rep names appear only on variants (D7 TT
   `unicode_escapes`, `json_numbers`, `reversed_base64`, Bash `xor_hex|cd`). Decode by material SHAPE x named transform; accept
   only `v=`. Spec arity: `rep|transform|key`, `rep|` (empty = identity), or transform folded into the rep (`xor_hex|cd`).
-- **Plan carrier NESTING (D10 MOF, D19 ASPX)** -- inner script as an escaped string of the host; unescape (`\n \" \\`, `""`,
-  `&quot;`/CDATA, `"`) and rescan; call `lib.codec.v3_plan` before anything else.
+- **Plan carrier NESTING (D10 MOF, D19 ASPX, D30 JSP->BeanShell)** -- inner script as an escaped string of the host; unescape
+  (`\n \" \\`, `""`, `&quot;`/CDATA, `"`) and rescan; call `lib.codec.v3_plan` before anything else. D30: the whole `.bsh`
+  source is a Java constant `private static final String INERT_BEANSHELL_<8HEX> = "// HUNTRESS..\nString descriptor_.. =
+  \"..\";\nMap buildPlan_..() {..}\n";` in a `<%! %>` block, so the marker data runs into `\nString`; stop at `\`.
 - **Plan carrier host syntax (v=3)** -- marker in the host's comment: `//`, `--`, `;`, `<!-- -->`, `#`, `'` in `<% %>`, D26
   Erlang `%`. Descriptor forms: `$descriptor_<id>`, `var/local/const/final String/my descriptor_<id> =`, AutoIt `Global
   Const`, AppleScript `property ..:`, AHK `:=`, `DESCRIPTOR_<8HEX> =`, `<HuntressDescriptor>`, ASP `Dim`, builder maps, YAML
   `env: HUNTRESS_DESCRIPTOR:`, GDScript `const DESCRIPTOR_<8HEX>: String =`, Elixir `descriptor_<8hex> = ".."` + `%{..}`;
   NAMELESS: NSIS `StrCpy $0 ".."`, Erlang `build_plan() -> "<data>".`; D27 Dockerfile `ARG HUNTRESS_DESCRIPTOR="<data>"`
-  + indirect use `LABEL ..=$HUNTRESS_DESCRIPTOR`; **D28 Terraform `locals { huntress_descriptor_<8hex> = "<data>" }` + indirect
-  use `output "inert_analysis_<8hex>" { value = local.huntress_descriptor_<8hex> }`** (declaration split from use, 2nd day). Parse
+  + indirect use `LABEL ..=$HUNTRESS_DESCRIPTOR`; D28 Terraform `locals { huntress_descriptor_<8hex> = "<data>" }` + indirect
+  use `output "inert_analysis_<8hex>" { value = local.huntress_descriptor_<8hex> }`; **D29 Makefile `HUNTRESS_DESCRIPTOR_<8hex> :=
+  <data>` UNQUOTED** (value ends at EOL); **D30 BeanShell `String descriptor_<8hex> = "..";` + `Map buildPlan_<8hex>()
+  { .. plan.put("descriptor", ..) }`**. Parse
   rule: regex the MARKER `HUNTRESS_ANALYSIS_V\d+\s*:\s*(\w*)-?\s*([^\s"'<>\]]+)` over raw bytes; never anchor on `=`/`:=`/`set`.
 - **Literal shapes (D6-D7)** -- radix from the code; base64 std AND urlsafe; reverse the LIST vs the TEXT (try both); join
   split chunks / `+=` / adjacent strings / `.`-FRAG / `[..].join("")` first; carriers may be frozen exes (D6 cx_Freeze).
@@ -93,8 +103,8 @@ all other days 0). Auto cases D20-D22, D24-D26 = value re-rolls; D23 (TT b10c4da
 | You see | First move |
 |---|---|
 | `evidence.zip`, "method=AES Encrypted" | Triage already extracted it (`work/extracted/`) and decoded every plan. Diff the member list / contract ids against yesterday's to find the new language. Open members with `lib.common.read_member` (zipfile can't read AES). |
-| Prior-day languages in the contract | Cumulative: rerun the carried marker-routed solver FIRST (D9-D23 single: it covered each new v=3 language unchanged except D18/D19 carrier patches). Any planless file: `lib.codec.v3_plan(text)`. Spend thinking on the new language and on label regimes. |
-| **Timed contract ids `<family>-<6hex>-<field>`, members `<6hex>.<ext>` (D23-D26, D28; D27 semantic ids)** | Contract-shape change, not a decode failure. Count ids answered vs asked FIRST; route by `PF_ID` + field name; composite fields join with `\|` in the question's order; indicator by the question's precedence list; resolve cross-file ids (`handoff-id`) per set. |
+| Prior-day languages in the contract | Cumulative: rerun the carried marker-routed solver FIRST (D9-D30 single: it covered each new v=3 language unchanged except D18/D19 carrier patches). Any planless file: `lib.codec.v3_plan(text)`. Spend thinking on the new language and on label regimes. |
+| **Timed contract ids `<family>-<6hex>-<field>`, members `<6hex>.<ext>` (D23-D26, D28-D30; D27 semantic ids)** | Contract-shape change, not a decode failure. Count ids answered vs asked FIRST; route by `PF_ID` + field name; composite fields join with `\|` in the question's order; indicator by the question's precedence list; resolve cross-file ids (`handoff-id`) per set. |
 | `HUNTRESS_ANALYSIS_V1:LYR-<l>_<l>-..` (D23 timed) | Tag = encode layers (b64/b32/hex/rev/frag); undo last-first; obfuscation answer = the layer string verbatim. |
 | `.ps1` `$encodedMaterial = [Convert]::FromBase64String('..')` + `$nativeTypes` | `base64 -d` -> JSON descriptor: url/wallet/mutex/UA/file/ext/note by SHAPE. `$nativeTypes`: Process/Registry+wallet=resource, ZipFile/HttpWebRequest=collection, Aes/DirectoryInfo=impact. `invoke-python-stage.ps1` carries `$HandoffId = 'PSPY-<16HEX>'` + `$NextStage`. |
 | `.js` WSH, `decode_*`/`recover_*`/`inspect_*`, XOR key arrays | Run each file in an empty `node` `vm` (no require/ActiveXObject, `eval` -> capture); keep the first object with `steps`. Styles from the `inspect_*` body. |
@@ -105,11 +115,12 @@ all other days 0). Auto cases D20-D22, D24-D26 = value re-rolls; D23 (TT b10c4da
 | `.mjs` ESM `const Material_<id>`, async `load_/decode_/recover_/inspect_/plan_<id>` | Static decode (`lib.codec.find_codecs` + shape fallback). Plan fields verbatim. |
 | `HUNTRESS_ANALYSIS_V1:<TAG>-..` in any comment + a descriptor literal (`.php .lua .js .vbs .mof .ts .au3 .applescript .proj .pl .rb .ahk .gs .csx .groovy .yml .nsi .gd`) | **Route by the marker before the extension.** Peel to `v=3|language=..|role=..|attack=..|adapter=..|host_profile=..|obfuscation_profile=..|stage_profile=..|next_language=..|stage_count=..|steps=..|campaign_id=..|url=..|file_path=..`. EVERY answer incl. role/attack is plan-verbatim. |
 | `HUNTRESS_ANALYSIS_V1:SPLIT` (no data) + `const HUNTRESS_ANALYSIS_V1_SPLIT_<id> = [..].join("")` (D18) | Join the array literals, drop the `<TAG>-` head, peel. 44 new ids unanswered = CARRIER bug; never walk the role enum. |
-| ASPX `<script runat="server">` + `EmbeddedCsx_<id> = "// HUNTRESS..\n..\"..\";"` (D19) | NESTED carrier: unescape `\n`/`\"`/`\\` (and `""`, `&quot;`, CDATA) and rescan; `lib.codec.v3_plan` does. |
+| ASPX `<script runat="server">` + `EmbeddedCsx_<id> = "// HUNTRESS..\n..\"..\";"` (D19); JSP `<%@ page import="bsh.Interpreter" %>` + `<%! private static final String INERT_BEANSHELL_<8HEX> = "<escaped .bsh>"; %>` (D30 host-jsp-beanshell) | NESTED carrier: unescape `\n`/`\"`/`\\` (and `""`, `&quot;`, CDATA) and rescan; `lib.codec.v3_plan` does. D30 host plan: host_profile `jsp_beanshell` (two seen languages), staged_chain, cross_language_handoff -> a PRIOR next_language; `bsh.Interpreter` is imported, never called. |
 | New language, plain one-line marker: `.csx` (D19), `.groovy` (D20), `.yml` (D21 `env: HUNTRESS_DESCRIPTOR`), `.nsi` (D22 `StrCpy $0`), `.exs` (D25, next row), **`.gd` (D23: line-1 `# HUNTRESS_ANALYSIS_V1:<TAG>-..`, `extends RefCounted`, `const DESCRIPTOR_<8HEX>: String = ".."`, `func build_plan_<id>() -> Dictionary: return {"descriptor": ..}`)** | Carried solver answers unpatched: plan-verbatim. Spellings: `language=<family>` (csharp_script / groovy / github_actions / nsis / gdscript), campaign `<FAMILY_UPPER>-<8hex>`, url host `<family>-<10hex>.example.invalid`, file_path `/tmp/huntress-<family>/.<16hex>.stage`, attack T1059 parent / T1105 / none, host_profile `standalone`. Host syntax (pipeline, triggers, Section, `extends`) is inert noise. Don't YAML-parse (PyYAML turns `on:` into `True`). |
 | D24-D28 one-file languages: `.jsp` `<%-- marker --%>` + `<%! private static final String DESCRIPTOR_<8HEX> = "..";` / `.exs` `# marker` + `descriptor_<8hex> = ".."` + `%{descriptor: ..}` / `.escript` `% marker` + `-module(plan_<8hex>).` + `build_plan() -> "<data>".` (no descriptor NAME) / `.dockerfile` `# marker` + `FROM scratch AS analysis_<8hex>` + `ARG HUNTRESS_DESCRIPTOR=".."` + `LABEL ..=$HUNTRESS_DESCRIPTOR` / **`.tf` `# marker` + `terraform { required_version = ">= 1.0" }` + `locals { huntress_descriptor_<8hex> = ".." }` + `output "inert_analysis_<8hex>" { value = local.huntress_descriptor_<8hex> }`** | Carried solver, unpatched: the MARKER regex is the anchor. Plan-verbatim: `language=<lang>`, campaign `<LANG>-<8hex>`, host `<lang>-<10hex>.example.invalid`, `/tmp/huntress-<lang>/`. Hosts `host-jsp-webshell-jsp` (`jsp_webshell`) / `host-elixir-phoenix-elixir` (`elixir_phoenix`) are inert stubs (`"inert-analysis-fixture"`), role staged_chain -- copy role=. No request/exec/spawn/`receive` code shipped despite the prompts. |
+| D29 `.mk` `# marker` + `HUNTRESS_DESCRIPTOR_<8hex> := <data>` (no quotes) + `.PHONY: analyze-<8hex>` + `analyze-<8hex>:` / TAB `@:` (no-op recipe) / D30 `.bsh` `// marker` + `String descriptor_<8hex> = "..";` + `Map buildPlan_<8hex>() { Map plan = new HashMap(); plan.put("descriptor", ..); return plan; }` | Carried solver, unpatched. `language=makefile`/`beanshell`, campaign `MAKEFILE-`/`BEANSHELL-<8hex>`, `standalone`. Never `make -n`; no recipe/`$(shell)` content shipped. |
 | `<%@ Language=VBScript %>` + `<% ' HUNTRESS_ANALYSIS_V1:..` in a `.vbs` (D20) | v=3 host for an OLD language (`language=vbscript`, host_profile `classic_asp`). Route by the marker. |
-| Prompt about fetch targets vs network evidence (D17) / process tree (D18) / "level that doesn't belong" (D23) / "order of requests and stages" (D24) / "the setting that didn't survive" (D25) / "message flow, collision decoys" (D26) / "attribute each specimen" (D27) / "assemble the timeline, find the change that happened out of order" (D28) | Flavour unless a question or an evidence file asks. Network: `lib.codec.network_indicators`/`reconcile`; process: `process_events`/`reconcile_processes`; outlier: `lib.codec.plan_canonical`. |
+| Prompt about fetch targets vs network evidence (D17) / process tree (D18) / "level that doesn't belong" (D23) / "order of requests and stages" (D24) / "the setting that didn't survive" (D25) / "message flow, collision decoys" (D26) / "attribute each specimen" (D27) / "find the change that happened out of order" (D28) / "keep conclusions that hold across every variant" (D29) / "find the edge that holds everything together" (D30) | Flavour unless a question or an evidence file asks. Network: `lib.codec.network_indicators`/`reconcile`; process: `process_events`/`reconcile_processes`; outlier: `lib.codec.plan_canonical`. |
 | An id whose field suffix is a plan key never asked before | `lib.codec.plan_answer(answer_id, plan, q)` / `plan_key_for` (longest suffix, hyphen->underscore). |
 | `Codec_` key like `ba` / `0a` / `ec` | A hex byte. Transforms are ENCODE-side names: `subtract_modulo_256` decodes by ADDING; `rolling_xor` = c ^ previous CIPHER byte. |
 
@@ -134,23 +145,27 @@ s). D20-D22 no twist: CORRECT T+13-25 s 0 wrong; TT 5-9 s, Mastery 8.5-18 s firs
 reshape (hashed members, per-file ids, composite fields, `LYR-` tags, re-rolled vocab, cross-file `handoff-id`): 593/1495
 answered -> `PF_ID`/`pf_value` + LYR peel -> TT CORRECT T+14 min (4 batch `-style` ids -> call_double); Mastery lost 12
 `-style` + 6 handoff-id (set1 value reused) -> per-set lookup -> T+11 min.
-**D24-D27 (JSP + webshell host, Elixir + Phoenix host, Erlang, Dockerfile; +55/+55/+44/+44)**: carried D23 solver unpatched
-every day -- marker routing absorbed a new comment char (`%`), a nameless `build_plan() -> ".."` literal and the D27 ARG/LABEL
-indirection; hosts were inert stubs (`"inert-analysis-fixture"`); single T+14-39 s race wins, 0 wrong. D27 timed flipped to the
-semantic grammar (handled: both grammars kept). TT/Mastery first try all four days; all narrative prompts were flavour.
-**D28 Out of Order (base `terraform-cloud-timeline`; 1703 ids = +44, 179 members)**: +4 `polyglot-terraform_hcl-*.tf`
-(benign-utility/downloader/launcher/staged-chain), no host, no new bash. Artifact: 3-line HCL --
-`# HUNTRESS_ANALYSIS_V1:<B64|HEX|HB64|FRAG>-<data>`, `terraform { required_version = ">= 1.0" }`, `locals {
-huntress_descriptor_<8hex> = "<data>" }`, `output "inert_analysis_<8hex>" { value = local.huntress_descriptor_<8hex> }`; no
-resource/provider/depends_on/provisioner, no timestamps -- nothing to put "in order" despite the prompt (15th narrative). Plans
-`language=terraform_hcl`, campaign `TERRAFORM_HCL-<8hex>` (underscore kept, upper-cased), url `https://terraform_hcl-<10hex>
-.example.invalid/stage`, `/tmp/huntress-terraform_hcl/.<16hex>.stage`, `standalone`, attack none/T1105/T1059 (launcher + staged_chain), adapters
-local_parser/http_client/process_builder/operation_graph, an unasked `verdict=` key. Insight: none needed on the single (the
-marker regex is the anchor; `local.` reference is a use, not data). The twist was TIMED again: the contract flipped BACK to the
-D23-D26 per-file grammar (13 ids/member incl. url-host/path-leaf/campaign-token; LYR tags; colour_shape; next_language pool)
-and the carried solver -- both grammars kept -- answered it unpatched. Commands: race reuse of the carried `solve.py` ->
-`hctf submit --from-solver`. **Single CORRECT ~T+49 s (race win), 0 wrong**; TT 82ffaaa8 1781/1781 first try (solve 0.83 s,
-total 4.35 s); Mastery c4556fc4 (12 sets, 21372) first try (solve 3.5 s, total 10.1 s, submit 6.2 s). 0 generalize workers.
+**D24-D28 (JSP + webshell host, Elixir + Phoenix host, Erlang, Dockerfile, Terraform; +55/+55/+44/+44/+44)**: carried D23
+solver unpatched every day -- marker routing absorbed a new comment char (`%`), a nameless `build_plan() -> ".."` literal and the
+D27 ARG/LABEL and D28 `locals`/`output` indirections (read the declaration, never the use); hosts were inert stubs; single
+T+14-49 s race wins, 0 wrong. Timed grammar flipped D27 semantic -> D28 per-file (both kept); TT/Mastery first try all five days.
+**D29 Make It Make Sense (base `makefile-variant-diff`; 1747 ids = +44, 183 members)**: +4 `polyglot-makefile-*.mk`, no host.
+Artifact: `# HUNTRESS_ANALYSIS_V1:<TAG>-<data>`, `HUNTRESS_DESCRIPTOR_<8hex> := <data>` (UNQUOTED), `.PHONY: analyze-<8hex>`,
+`analyze-<8hex>:` + TAB `@:` -- no `$(shell)`, no recipe body, nothing to "diff" (16th narrative). Carried solver unpatched:
+single ~T+24 s (race win, 0 wrong); TT 315a492d 1833 first try (8.65 s); Mastery 4b6afd09 13 sets x 1833 first try (11.0 s).
+Ops: the post-run generalize workers and log writers hit the account's weekly usage limit (no D29 notes were written).
+**D30 Spill the Beans (base `beanshell-jsp-graph`; 1802 ids = +55, 188 members, 187 families)**: +4 `polyglot-beanshell-*.bsh`
+(benign-utility/downloader/launcher/staged-chain) + host `host-jsp-beanshell-beanshell.bsh`. Artifact: polyglot = `// marker`,
+`String descriptor_<8hex> = "<data>";`, `Map buildPlan_<8hex>() { Map plan = new HashMap(); plan.put("descriptor", ..); return
+plan; }`; host = a JSP page (`<%@ page import="bsh.Interpreter" %>`) holding the WHOLE .bsh source as an escaped Java string
+constant `INERT_BEANSHELL_<8HEX>` (2nd nested-carrier day after D19 ASPX), then `<%= "inert-analysis-fixture" %>`. Plans
+`language=beanshell`, campaign `BEANSHELL-<8hex>`, url `https://beanshell-<10hex>.example.invalid/stage`,
+`/tmp/huntress-beanshell/.<16hex>.stage`; host plan host_profile `jsp_beanshell`, role staged_chain, attack T1059, stage_profile
+cross_language_handoff, steps profile_host,decode_configuration,dispatch_language, next_language a PRIOR language (jscript).
+Key insight: none needed -- the D19 unescape-and-rescan rule already in the carried solver read the nested host; the "edge that
+holds everything together" was never asked (17th narrative). Commands: race reuse of the carried `solve.py` -> `hctf submit
+--from-solver`. **Single CORRECT T+27 s, 0 wrong**; TT 06fc3e03 1898 first try (solve 0.74 s, total 2.89 s); Mastery 4d7b1061
+14 sets x 1898 = 26572 first try (solve 7.25 s, submit 5.9 s, total 14.0 s -- solve time doubled vs D28; watch it). 0 generalize.
 
 ## GM answer conventions learned
 - **Check `answer_format.kind` first.** `enum` lists values (scenario, role). `mitre_attack_id` takes `T####[.###]` or literal
@@ -162,16 +177,17 @@ total 4.35 s); Mastery c4556fc4 (12 sets, 21372) first try (solve 3.5 s, total 1
   cron_path, schedule_path, service_name -- "exact X indicator", X = plan key); batch `graph` (linear/single/diamond/fan_out/
   fallback_retry/cross_language/same_language); Python syntax/obfuscation/carrier/windows_chain; Bash feature/primitive; v=3
   host_profile (standalone, wsf_jscript, wsf_mixed, hta_jscript, php_webshell, sct_scriptlet, lua_openresty, perl_cgi,
-  ruby_rack, google_docs_sidebar, aspx_inline_csharp, jenkins_pipeline, classic_asp, jsp_webshell (D24), elixir_phoenix (D25);
-  polyglots `standalone`, incl. D26 erlang, D27 dockerfile, D28 terraform_hcl),
+  ruby_rack, google_docs_sidebar, aspx_inline_csharp, jenkins_pipeline, classic_asp, jsp_webshell (D24), elixir_phoenix (D25),
+  jsp_beanshell (D30, a host built from two seen languages);
+  polyglots `standalone`, incl. D26 erlang .. D29 makefile, D30 beanshell),
   obfuscation (single: base64/plain_hex/hex_base64/fragmented_hex; timed D23: LYR layer string), stage_profile (single:
   single_descriptor/two_stage_download_execute/three_stage_decode_write_launch/cross_language_handoff; timed D23 `<colour>_
   <shape>`), next_language. **Derived D23 fields**: campaign-token (after FIRST hyphen), url-host (hostname, underscores kept),
   path-leaf (last `/` or `\` segment, leading dot kept), indicator (first present in the stated order).
 - **v=3 role and attack too.** GM accepts the plan's PARENT ids `T1059` (launcher, staged_chain, hosts) and `T1053`
-  (persistence_descriptor) for every v=3 language through D28 Terraform. The attack question TEXT states the precedence ("parent
+  (persistence_descriptor) for every v=3 language through D30 BeanShell. The attack question TEXT states the precedence ("parent
   technique also accepted ...; for a staged chain or relay the earlier ingress-transfer technique is also accepted; none for a
-  relay") -- read it before probing. **v=3 role does NOT follow `steps`** (D14-D27) -- copy role=, steps=, stage_profile=.
+  relay") -- read it before probing. **v=3 role does NOT follow `steps`** (D14-D30) -- copy role=, steps=, stage_profile=.
 - **Role from `steps`** (v=1/v=2 only): decode_configuration,return_configuration = benign_utility; acquire_remote +
   dispatch_memory/pipe = stager; acquire_remote,write_file = downloader; decode_embedded,write_file = dropper; locate_local,
   dispatch_process = launcher; read_file/upload,transmit_remote = uploader; transform + recovery_note = impact;
@@ -214,15 +230,19 @@ total 4.35 s); Mastery c4556fc4 (12 sets, 21372) first try (solve 3.5 s, total 1
 - **Answer-id field parsing** (D8): family names contain hyphens/underscores; longest known `-<field>` suffix (`stage-count`/
   `stage-profile` before `stage`, `campaign-token` before `campaign`).
 - **GM error body saved as the artifact** (D7 TT): check size + sha256 first; tiny `{"error":..}` = re-download, exit non-zero.
-- **Stale notes travel with copied solvers** (D8-D28 `solver/NOTES.md` still opens with the D7 heading): date every VARIANT
+- **Stale notes travel with copied solvers** (D8-D30 `solver/NOTES.md` still opens with the D7 heading): date every VARIANT
   AXIS line by day + attempt id; diagnose EVERY failed attempt.
 - **cmd parsing**: `%item0%` is a variable, not `%0`+`item`; CRLF/LF mixes and `SeT` casing occur. **stage_count != len(steps)**.
 - **Timed modes are a transport race**: fork per set, submit all sets in one call (GM D26 guidance: one request may carry
   4 MiB of JSON, enough for the largest Mastery; split only above that); pair
   same-named Mastery deliveries by sha256; index nested AES zips once, never decrypt script leaves to sniff for PK.
-- **Reading the narrative prompt as the task** (D8, D15-D28): fifteen prompts promised comparison/reconciliation/outlier questions
+- **Reading the narrative prompt as the task** (D8, D15-D30): seventeen prompts promised comparison/reconciliation/outlier questions
   that never came. Diff `answer_ids` first; spend time only on ids the carried solver cannot answer.
 - **Forecasting by sibling instead of by the pool** (D28): the D27 "Makefile next" bet missed; Terraform came from the
-  pool. Read the timed `next_language` values (TODAY's auto cases only) before trusting a family-pair guess.
+  pool (Makefile then shipped D29, also from the pool). Read the timed `next_language` values (TODAY's auto cases only).
+- **Requiring quotes around the descriptor** (D29 Makefile `X := <data>` bare to EOL): the marker regex is the anchor; a
+  descriptor regex may only confirm. **Treating an imported runtime as a call** (D30 `bsh.Interpreter` imported, never used).
+- **Usage-limit outages are not solver failures** (D29: generalize workers + log writers died "weekly limit"): check the worker
+  log's `result` text before diagnosing a "failed" generalize; nothing in the bytes was wrong.
 - **Never execute fixtures.** Decode from the Codec const / descriptor plus a restricted interpreter; accept a plan only if it
   parses as `k=v|..` with `steps` (or `feature`).

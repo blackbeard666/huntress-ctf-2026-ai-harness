@@ -256,6 +256,15 @@ DAYS = [
     # TT 96c99781 and 138/138 Mastery cd6a5b33 line 28)
     (28, "hex-reversed", lambda s: _u(s).hex()[::-1],
      lambda t: _t(bytes.fromhex(re.sub(r"\s+", "", t)[::-1])), False),
+    # D29 "Rotten Base": std base64 (padded) of the UTF-8 bytes, then rot13 over its letters (digits/+/=/ kept)
+    # (byte-exact on the Single e92408a6 'jovial-comet-nugget-31' and 148/148 D30 Mastery 67adc0ee line 29)
+    (29, "rot13-b64", lambda s: rot(base64.b64encode(_u(s)).decode(), 13),
+     lambda t: _t(base64.b64decode(_b64pad(rot(t.strip(), 13)), validate=True)), False),
+    # D30 "Percent Percent" ("That address bar problem? It happened twice."): the D7 lowercase %xx of every UTF-8 byte,
+    # applied twice ('N' -> '%4e' -> '%25%34%65') (byte-exact on the Single 2b04f985 'calm-prairie-ridge-16' and
+    # 148/148 Mastery 67adc0ee line 30)
+    (30, "url%xx-twice", lambda s: "".join(f"%{b:02x}" for b in "".join(f"%{b:02x}" for b in _u(s)).encode()),
+     lambda t: _t(urllib.parse.unquote_to_bytes(urllib.parse.unquote_to_bytes(t.strip()).decode())), False),
 ]
 
 try:   # fair runs (HCTF_CODEC_MAX_DAY=<N-1>, as lib/codec.py): only codecs GM-confirmed before day N

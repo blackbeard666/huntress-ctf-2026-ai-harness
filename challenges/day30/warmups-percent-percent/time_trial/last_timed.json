@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "50013cc3-517f-4a98-8c15-358d519491e7",
+  "window": null,
+  "elapsed": 3.01,
+  "in_window": 3.01,
+  "phases": {
+    "start": 0.0,
+    "download": 0.0,
+    "solve": 0.79,
+    "submit": 2.22
+  },
+  "routed": "local (Homebase unavailable)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "zippy-rainbow-fern-51"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

@@ -1,0 +1,1776 @@
+mov eax, dword ptr [r15]
+mov dword ptr [rcx + 0x23], eax
+mov eax, dword ptr [r15 + 4]
+mov dword ptr [rcx + 0x17], eax
+mov eax, dword ptr [r15 + 8]
+mov dword ptr [rcx + 0x2f], eax
+mov eax, dword ptr [r15 + 0xc]
+mov dword ptr [rcx + 0x1f], eax
+mov eax, dword ptr [r15 + 0x10]
+mov dword ptr [rcx + 0x27], eax
+mov eax, dword ptr [r15 + 0x18]
+mov dword ptr [rcx - 0x11], eax
+mov eax, dword ptr [r15 + 0x1c]
+mov dword ptr [rcx - 0x25], eax
+mov eax, dword ptr [r15 + 0x20]
+mov dword ptr [rcx + 7], eax
+mov eax, dword ptr [r15 + 0x24]
+mov dword ptr [rcx - 0xd], eax
+mov eax, dword ptr [r15 + 0x28]
+mov dword ptr [rcx - 0x21], eax
+mov eax, dword ptr [r15 + 0x2c]
+mov dword ptr [rcx + 0xb], eax
+mov eax, dword ptr [r15 + 0x30]
+mov dword ptr [rcx - 9], eax
+mov eax, dword ptr [r15 + 0x34]
+mov dword ptr [rcx - 0x1d], eax
+mov eax, dword ptr [r15 + 0x38]
+mov dword ptr [rcx + 0xf], eax
+mov eax, dword ptr [r15 + 0x3c]
+mov dword ptr [rcx - 5], eax
+mov eax, dword ptr [r15 + 0x40]
+mov dword ptr [rcx - 0x19], eax
+mov eax, dword ptr [r15 + 0x44]
+mov dword ptr [rcx + 0x13], eax
+mov eax, dword ptr [r15 + 0x48]
+mov dword ptr [rcx - 1], eax
+mov eax, dword ptr [r15 + 0x4c]
+mov dword ptr [rcx - 0x15], eax
+mov eax, dword ptr [r15 + 0x50]
+mov dword ptr [rcx - 0x29], eax
+mov eax, dword ptr [r15 + 0x54]
+mov dword ptr [rcx + 3], eax
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x11]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x25]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx + 7]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0xd]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x21]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx + 0xb]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 9]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x1d]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx + 0xf]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 5]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x19]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx + 0x13]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 1]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x15]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x29]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx + 3]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 0x15]
+rol edx, 1
+mov dword ptr [rcx - 0x11], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x11]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x29]
+rol edx, 1
+mov dword ptr [rcx - 0x25], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0x25]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx + 3]
+rol edx, 1
+mov dword ptr [rcx + 7], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx + 7]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx - 0x11]
+rol edx, 1
+mov dword ptr [rcx - 0xd], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x5a827999
+add r9d, dword ptr [rcx - 0xd]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, r11d
+xor r8d, edx
+and r8d, eax
+xor r8d, edx
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x25]
+rol edx, 1
+mov dword ptr [rcx - 0x21], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x21]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx + 7]
+rol edx, 1
+mov dword ptr [rcx + 0xb], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx + 0xb]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx - 0xd]
+rol edx, 1
+mov dword ptr [rcx - 9], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 9]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0x21]
+rol edx, 1
+mov dword ptr [rcx - 0x1d], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x1d]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx + 0xb]
+rol edx, 1
+mov dword ptr [rcx + 0xf], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx + 0xf]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx - 9]
+rol edx, 1
+mov dword ptr [rcx - 5], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 5]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 0x1d]
+rol edx, 1
+mov dword ptr [rcx - 0x19], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x19]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx + 0xf]
+rol edx, 1
+mov dword ptr [rcx + 0x13], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx + 0x13]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx - 5]
+rol edx, 1
+mov dword ptr [rcx - 1], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 1]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 0x19]
+rol edx, 1
+mov dword ptr [rcx - 0x15], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x15]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx + 0x13]
+rol edx, 1
+mov dword ptr [rcx - 0x29], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x29]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx - 1]
+rol edx, 1
+mov dword ptr [rcx + 3], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx + 3]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 0x15]
+rol edx, 1
+mov dword ptr [rcx - 0x11], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x11]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x29]
+rol edx, 1
+mov dword ptr [rcx - 0x25], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x25]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx + 3]
+rol edx, 1
+mov dword ptr [rcx + 7], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx + 7]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx - 0x11]
+rol edx, 1
+mov dword ptr [rcx - 0xd], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0xd]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x25]
+rol edx, 1
+mov dword ptr [rcx - 0x21], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x21]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx + 7]
+rol edx, 1
+mov dword ptr [rcx + 0xb], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx + 0xb]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx - 0xd]
+rol edx, 1
+mov dword ptr [rcx - 9], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 9]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0x21]
+rol edx, 1
+mov dword ptr [rcx - 0x1d], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x6ed9eba1
+add r9d, dword ptr [rcx - 0x1d]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx + 0xb]
+rol edx, 1
+mov dword ptr [rcx + 0xf], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx + 0xf]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx - 9]
+rol edx, 1
+mov dword ptr [rcx - 5], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 5]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 0x1d]
+rol edx, 1
+mov dword ptr [rcx - 0x19], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0x19]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx + 0xf]
+rol edx, 1
+mov dword ptr [rcx + 0x13], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx + 0x13]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx - 5]
+rol edx, 1
+mov dword ptr [rcx - 1], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 1]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 0x19]
+rol edx, 1
+mov dword ptr [rcx - 0x15], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0x15]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx + 0x13]
+rol edx, 1
+mov dword ptr [rcx - 0x29], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0x29]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx - 1]
+rol edx, 1
+mov dword ptr [rcx + 3], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx + 3]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 0x15]
+rol edx, 1
+mov dword ptr [rcx - 0x11], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0x11]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x29]
+rol edx, 1
+mov dword ptr [rcx - 0x25], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0x25]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx + 3]
+rol edx, 1
+mov dword ptr [rcx + 7], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx + 7]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx - 0x11]
+rol edx, 1
+mov dword ptr [rcx - 0xd], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0xd]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x25]
+rol edx, 1
+mov dword ptr [rcx - 0x21], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0x21]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx + 7]
+rol edx, 1
+mov dword ptr [rcx + 0xb], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx + 0xb]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx - 0xd]
+rol edx, 1
+mov dword ptr [rcx - 9], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 9]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0x21]
+rol edx, 1
+mov dword ptr [rcx - 0x1d], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0x1d]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx + 0xb]
+rol edx, 1
+mov dword ptr [rcx + 0xf], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx + 0xf]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx - 9]
+rol edx, 1
+mov dword ptr [rcx - 5], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 5]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 0x1d]
+rol edx, 1
+mov dword ptr [rcx - 0x19], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx - 0x19]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx + 0xf]
+rol edx, 1
+mov dword ptr [rcx + 0x13], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0x8f1bbcdc
+add r9d, dword ptr [rcx + 0x13]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, eax
+or r8d, r11d
+and r8d, edx
+and r11d, eax
+or r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx - 5]
+rol edx, 1
+mov dword ptr [rcx - 1], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 1]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 0x19]
+rol edx, 1
+mov dword ptr [rcx - 0x15], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x15]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx + 0x13]
+rol edx, 1
+mov dword ptr [rcx - 0x29], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x29]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx - 1]
+rol edx, 1
+mov dword ptr [rcx + 3], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx + 3]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 0x15]
+rol edx, 1
+mov dword ptr [rcx - 0x11], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x11]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x29]
+rol edx, 1
+mov dword ptr [rcx - 0x25], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x25]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx + 3]
+rol edx, 1
+mov dword ptr [rcx + 7], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx + 7]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx - 0x11]
+rol edx, 1
+mov dword ptr [rcx - 0xd], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0xd]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x25]
+rol edx, 1
+mov dword ptr [rcx - 0x21], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x21]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx + 7]
+rol edx, 1
+mov dword ptr [rcx + 0xb], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx + 0xb]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx - 0xd]
+rol edx, 1
+mov dword ptr [rcx - 9], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 9]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 0x1d]
+xor edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0x21]
+rol edx, 1
+mov dword ptr [rcx - 0x1d], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x1d]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx + 0xf]
+xor edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx + 0xb]
+rol edx, 1
+mov dword ptr [rcx + 0xf], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx + 0xf]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 5]
+xor edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx - 9]
+rol edx, 1
+mov dword ptr [rcx - 5], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 5]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx - 0x19]
+xor edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 0x1d]
+rol edx, 1
+mov dword ptr [rcx - 0x19], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x19]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov edx, dword ptr [rcx + 0x13]
+xor edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx + 7]
+xor edx, dword ptr [rcx + 0xf]
+rol edx, 1
+mov dword ptr [rcx + 0x13], edx
+mov r9d, dword ptr [rcx + 0x27]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx + 0x13]
+mov eax, dword ptr [rcx + 0x17]
+mov r11d, dword ptr [rcx + 0x2f]
+mov edx, dword ptr [rcx + 0x1f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x23]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x17], eax
+mov dword ptr [rcx + 0x27], r9d
+mov edx, dword ptr [rcx - 1]
+xor edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0xd]
+xor edx, dword ptr [rcx - 5]
+rol edx, 1
+mov dword ptr [rcx - 1], edx
+mov r9d, dword ptr [rcx + 0x1f]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 1]
+mov eax, dword ptr [rcx + 0x23]
+mov r11d, dword ptr [rcx + 0x17]
+mov edx, dword ptr [rcx + 0x2f]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x27]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x23], eax
+mov dword ptr [rcx + 0x1f], r9d
+mov edx, dword ptr [rcx - 0x15]
+xor edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx - 0x21]
+xor edx, dword ptr [rcx - 0x19]
+rol edx, 1
+mov dword ptr [rcx - 0x15], edx
+mov r9d, dword ptr [rcx + 0x2f]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x15]
+mov eax, dword ptr [rcx + 0x27]
+mov r11d, dword ptr [rcx + 0x23]
+mov edx, dword ptr [rcx + 0x17]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x1f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x27], eax
+mov dword ptr [rcx + 0x2f], r9d
+mov edx, dword ptr [rcx - 0x29]
+xor edx, dword ptr [rcx - 0x11]
+xor edx, dword ptr [rcx + 0xb]
+xor edx, dword ptr [rcx + 0x13]
+rol edx, 1
+mov dword ptr [rcx - 0x29], edx
+mov r9d, dword ptr [rcx + 0x17]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx - 0x29]
+mov eax, dword ptr [rcx + 0x1f]
+mov r11d, dword ptr [rcx + 0x27]
+mov edx, dword ptr [rcx + 0x23]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x2f]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x1f], eax
+mov dword ptr [rcx + 0x17], r9d
+mov edx, dword ptr [rcx + 3]
+xor edx, dword ptr [rcx - 0x25]
+xor edx, dword ptr [rcx - 9]
+xor edx, dword ptr [rcx - 1]
+rol edx, 1
+mov dword ptr [rcx + 3], edx
+mov r9d, dword ptr [rcx + 0x23]
+add r9d, 0xca62c1d6
+add r9d, dword ptr [rcx + 3]
+mov eax, dword ptr [rcx + 0x2f]
+mov r11d, dword ptr [rcx + 0x1f]
+mov edx, dword ptr [rcx + 0x27]
+mov r8d, edx
+xor r8d, eax
+xor r8d, r11d
+add r9d, r8d
+mov r10d, dword ptr [rcx + 0x17]
+rol r10d, 5
+add r9d, r10d
+rol eax, 0x1e
+mov dword ptr [rcx + 0x2f], eax
+mov dword ptr [rcx + 0x23], r9d
+mov eax, dword ptr [rcx + 0x23]
+mov dword ptr [r15], eax
+mov eax, dword ptr [rcx + 0x17]
+mov dword ptr [r15 + 4], eax
+mov eax, dword ptr [rcx + 0x2f]
+mov dword ptr [r15 + 8], eax
+mov eax, dword ptr [rcx + 0x1f]
+mov dword ptr [r15 + 0xc], eax
+mov eax, dword ptr [rcx + 0x27]
+mov dword ptr [r15 + 0x10], eax

@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-26-trust-the-build",
+  "lane": "web",
+  "name": "🌐 Trust the Build",
+  "ids": {
+    "single_solve": "web-exploitation-day-26-trust-the-build",
+    "time_trial": "web-exploitation-day-26-trust-the-build/time_trial",
+    "mastery": "web-exploitation-day-26-trust-the-build/mastery"
+  }
+}

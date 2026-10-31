@@ -1,0 +1,10 @@
+no rdtsc hook Invalid argument (UC_ERR_ARG)
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+RIP_END 0x7fc000000 0 []
+STACK []
+REGS {'rcx': '0x7ff1ef5d8', 'rdx': '0x7ff1efb1a', 'r13': '0x0', 'rsp': '0x7ff1f0008'}
+OUT b'' NSMC [0] N2 [0]
+LOG ['resolve NtSetInformationThread', 'NtSetInformationThread', 'resolve IsDebuggerPresent', 'IsDebuggerPresent', 'resolve CheckRemoteDebuggerPresent', 'CheckRemoteDebuggerPresent', 'resolve NtQueryInformationProcess', 'NQIP 7', 'NtQueryInformationProcess', 'resolve NtQueryInformationProcess', 'NQIP 1e', 'NtQueryInformationProcess', 'resolve NtQueryInformationProcess', 'NQIP 1f', 'NtQueryInformationProcess', 'resolve NtQuerySystemInformation', 'NQSI 23', 'NtQuerySystemInformation', 'resolve NtGetContextThread', 'resolve GetSystemDirectoryW', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'resolve GetThreadContext', 'GetThreadContext']
+NBLK 0 last []
+HITS ['bail_cae4']
+CMPS 0 []

@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-30-sha1-hulud",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ SHA1-Hulud",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-30-sha1-hulud",
+    "time_trial": "binary-reverse-engineering-day-30-sha1-hulud/time_trial",
+    "mastery": "binary-reverse-engineering-day-30-sha1-hulud/mastery"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-30-beanshell-jsp-graph",
+  "lane": "script-analysis",
+  "name": "📜 Spill the Beans",
+  "ids": {
+    "single_solve": "script-analysis-day-30-beanshell-jsp-graph",
+    "time_trial": "script-analysis-day-30-beanshell-jsp-graph/time_trial",
+    "mastery": "script-analysis-day-30-beanshell-jsp-graph/mastery"
+  }
+}

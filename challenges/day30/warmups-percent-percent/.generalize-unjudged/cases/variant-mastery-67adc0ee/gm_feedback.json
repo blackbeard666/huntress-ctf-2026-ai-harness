@@ -1,0 +1,13 @@
+{
+ "attempt": "67adc0ee-84f6-41ff-a9f7-922983d2298e",
+ "rejected": {
+  "set2.message": [
+   "sunset-ct-ck-80"
+  ],
+  "set8.message": [
+   "harbor-pr-pr-13"
+  ]
+ },
+ "require_complete": true,
+ "verified": 0
+}

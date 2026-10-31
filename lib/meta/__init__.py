@@ -110,6 +110,9 @@ _BUILTIN = {
     # D28: raw disk image partition StartingLBAs in table order (GPT entry array, else MBR primaries + EBR chain),
     # compact JSON int list -- [34] single, [60,93,148] TT, 12/12 Mastery sets
     ("disk", "partition_start_lba_sequence"): _v("disk:partition_start_lba_sequence", 28),
+    # D30: cluster zip members (minus delivery-manifest.json) grouped by real-bytes SHA-256, groups >= 2, each the
+    # sorted manifest artifact ids, groups sorted -> compact JSON (single, TT, 14/14 Mastery sets)
+    ("relation", "identical_sha256_groups"): _v("relation:identical_sha256_groups", 30),
 }
 
 PREBUILT_DIR = Path(__file__).resolve().parent / "prebuilt"

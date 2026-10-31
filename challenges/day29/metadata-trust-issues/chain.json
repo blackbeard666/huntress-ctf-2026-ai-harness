@@ -1,0 +1,11 @@
+{
+  "stage": "done",
+  "name": "\ud83d\udd0e Trust Issues",
+  "lane": "metadata-forensics",
+  "worker": null,
+  "updated": "2026-10-29T21:03:08",
+  "launches": 1,
+  "attempt": 1,
+  "time_trial_result": "correct",
+  "mastery_result": "correct"
+}

@@ -1,0 +1,9 @@
+{
+  "stage": "single_solve:generalizing",
+  "name": "\u2699\ufe0f SHA1-Hulud",
+  "lane": "binary-reverse-engineering",
+  "worker": null,
+  "updated": "2026-10-31T11:57:41",
+  "launches": 1,
+  "help": "# HELP \u2014 binary-sha1-hulud single_solve (answer-first worker, attempt 9eb0070b)\n\nNo flag submitted (0/3 wrong-flag budget used). Blocked: the flag check runs in a custom bytecode VM; deriving it needs\na VM lift / emulation job, beyond an answer-first budget.\n\n## Facts from the bytes (sha1-hulud.exe, Rust PE32+)\n- embre `crypt::xor` = fcn.14005dc8a ({src,len,key,len}); .rdata pairs give \"What is the flag?\" (0x1400883c0^0x1400883d1, 17)\n  and \"correct, the flag is \" (0x1400883e6^0x1400883fb, 21).\n- Rust main = 0x14003c38a. stdin line -> trim \\n\\r -> rbp+0x1148/0x4d0; success branch 0x14005a02b prints prefix + input,\n  so the flag is the accepted input (not printed from a constant).\n- `.xsobf` (0x14009e000) = obfuscated strings; decoder fcn.14006397c (struct {ptr,len,tag}); reimplemented in\n  `xsobf_dec.py` (verified: 0x14009e008/0x21/tag 0xc250001c -> \"SYSTEM\\CurrentControlSet\\Services\", section+0/8/0xc260001c -> \"SOFTWARE\").\n  These are anti-sandbox strings (registry, process/driver names), not the flag.\n- Big anti-analysis gauntlet: PEB BeingDebugged, hashed API resolver fcn.140064480 (0x9394fb88 module hash), CPUID 0x40000000,\n  RDTSC, screen-size, registry enumeration with FNV-like/splitmix hash compares vs tables 0x140088320/0x140088200/0x140088350.\n- Inline SHA-1 at 0x14003de9a over a section found by fcn.14003bca2 (self-integrity).\n- Input check @0x14004a5bc: input is trimmed + ASCII-lowercased, then fed to a VM: bytecode 0x4000 B at 0x14007fa50\n  (LEB128 operands, `& 0x"
+}

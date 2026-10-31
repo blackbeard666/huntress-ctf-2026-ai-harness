@@ -1,0 +1,32 @@
+no rdtsc hook Invalid argument (UC_ERR_ARG)
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+UNIMPL UNK_97e5cf42 0x93940002 0x2002f8f70
+UNIMPL FindFirstFileW 0x7ff1ef5d8 0x7ff1efb18
+UNIMPL CreateToolhelp32Snapshot 0x2 0x0
+UNIMPL VirtualAlloc 0x0 0x1000
+UNIMPL VirtualFree 0x0 0x0
+UNIMPL IsProcessorFeaturePresent 0xd 0xb896b5e1
+UNIMPL GetEnabledXStateFeatures 0xba7c2f 0xa7faf918
+UNIMPL GetSystemFirmwareTable 0x52534d42 0x0
+UNIMPL EnumSystemFirmwareTables 0x41435049 0x0
+UNIMPL RtlGetVersion 0x7ff1ef5d8 0xb7cb6cdb
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+UNIMPL Sleep 0x32 0xdb6a8b5b
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+PAIR [5368831936, '0123456789abcdeffedcba9876543210f0e1d2c300000000e7791f260176da3583d7f12965a871f6b7f1e800492c75aa8e7bb59f04d5072c1f0f2e66000000842e66000000841f0f000000001f0f2e66000000842e660000', 'be838ec9fea510959e493e766afea6f5297c90ab00000000e7791f260176da3583d7f12965a871f6b7f1e800492c75aa8e7bb59f04d5072c1f0f2e66000000842e66000000841f0f000000001f0f2e66000000842e660000']
+PAIR [5368831936, 'bfa6d3308751de849c26f90ee052d905195e636f0000000000841f0f000000001f0f2e66000000842e66000000841f0f000000001f0f2e66000000842e66000000841f0f000000001f0f2e66000000840f6600000000441f', '16242c3c09ef09b4b4cd7981a4b9d982f5408b340000000000841f0f000000001f0f2e66000000842e66000000841f0f000000001f0f2e66000000842e66000000841f0f000000001f0f2e66000000840f6600000000441f']
+PAIR [5368831936, 'd5caff6c9040e83850f47290840cb3880e9feea30000000057565553554154415741564148d58949b8e604bd2ac71d93158d4c5fffffff6010428b4949c531484818428b481dc0c14865c5314825048b480000006f3e0533', '3aa895b12f78a423983b0d0ee7b0651e586e12aa0000000057565553554154415741564148d58949b8e604bd2ac71d93158d4c5fffffff6010428b4949c531484818428b481dc0c14865c5314825048b480000006f3e0533']
+PAIR [5368831936, '0f73951ebfb88c5ce82f809e6bbd18a7660d014e0000000031480009058d48c500000000f8314ccc48c53148415fabbbd96e27c8e7be48b3a52d6b93488c47f19f740bbf1ed835c2e4314d6a48cf89494860ec830c244c8d', '5eedec0a190465da889dab271a7e248235d220d50000000031480009058d48c500000000f8314ccc48c53148415fabbbd96e27c8e7be48b3a52d6b93488c47f19f740bbf1ed835c2e4314d6a48cf89494860ec830c244c8d']
+RIP_END 0x14001dfc0 0 []
+STACK ['0x1400480a9', '0x140001000', '0x140001000', '0x140001000', '0x140001000', '0x140001000', '0x14003c3a0']
+REGS {'rcx': '0x7ff1ef5d8', 'rdx': '0xffffffffffffffff', 'r13': '0x32a27dbe0b6bcf37', 'rsp': '0x7ff1eed80'}
+CNT {'0x140010840': 8191, '0x14002b840': 77, '0x14001dfc0': 5}
+OUT b'What is the flag?\n' NSMC [8068] N2 [8273]
+LOG ['cpuid 80000004', 'GetModuleHandleExW', 'VirtualAlloc', 'VirtualAlloc', 'resolve VirtualFree', 'VirtualFree', 'cpuid 80000000', 'cpuid 80000001', 'cpuid 0', 'cpuid 80000002', 'cpuid 80000003', 'cpuid 80000004', 'cpuid 1', 'cpuid 80000001', 'resolve IsProcessorFeaturePresent', 'IsProcessorFeaturePresent', 'IsProcessorFeaturePresent', 'IsProcessorFeaturePresent', 'resolve GetEnabledXStateFeatures', 'GetEnabledXStateFeatures', 'resolve GetSystemFirmwareTable', 'GetSystemFirmwareTable', 'resolve EnumSystemFirmwareTables', 'EnumSystemFirmwareTables', 'resolve RtlGetVersion', 'RtlGetVersion', 'GetSystemInfo', 'GlobalMemoryStatusEx', 'GetModuleHandleExW', 'resolve NtGetContextThread', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'resolve Sleep', 'Sleep', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'GetModuleHandleExW', 'resolve NtQueryInformationProcess', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'resolve NtQueryVirtualMemory', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'GetModuleHandleExW', 'SLOW 7e000 c22980c4e51c66ff', 'GetModuleHandleExW', 'GetModuleHandleExW', 'QueryPerformanceCounter', 'EXC 80000003 @14001e00c', 'EXC 80000003 @14001e00c', 'EXC 80000003 @14001e00c', 'EXC 80000003 @14001e00c']
+NBLK 0 last []
+HITS []
+CMPS 0 []

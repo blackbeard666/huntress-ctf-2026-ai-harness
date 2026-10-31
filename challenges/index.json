@@ -167,6 +167,24 @@
     "lane": "binary-reverse-engineering",
     "name": "⚙️ Family Resemblance"
   },
+  "binary-reverse-engineering-day-29-variant-diffing": {
+    "day": 29,
+    "dir": "day29/binary-fraternal-twins",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Fraternal Twins"
+  },
+  "binary-reverse-engineering-day-30-multi-binary-campaign": {
+    "day": 30,
+    "dir": "day30/binary-campaign-trail",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ Campaign Trail"
+  },
+  "binary-reverse-engineering-day-30-sha1-hulud": {
+    "day": 30,
+    "dir": "day30/binary-sha1-hulud",
+    "lane": "binary-reverse-engineering",
+    "name": "⚙️ SHA1-Hulud"
+  },
   "metadata-forensics-day-01-hash-to-ride": {
     "day": 1,
     "dir": "day01/metadata-you-must-be-this-hash-to-ride",
@@ -335,6 +353,18 @@
     "lane": "metadata-forensics",
     "name": "🔎 Where It All Began"
   },
+  "metadata-forensics-day-29-trust-issues": {
+    "day": 29,
+    "dir": "day29/metadata-trust-issues",
+    "lane": "metadata-forensics",
+    "name": "🔎 Trust Issues"
+  },
+  "metadata-forensics-day-30-seeing-double": {
+    "day": 30,
+    "dir": "day30/metadata-seeing-double",
+    "lane": "metadata-forensics",
+    "name": "🔎 Seeing Double"
+  },
   "mobile-android-day-01-exported-trust": {
     "day": 1,
     "dir": "day01/mobile-exported-trust",
@@ -502,6 +532,18 @@
     "dir": "day28/mobile-protocol-reconstruction",
     "lane": "mobile-android",
     "name": "📱 Protocol Reconstruction"
+  },
+  "mobile-android-day-29-white-box-key-recovery": {
+    "day": 29,
+    "dir": "day29/mobile-white-box-key-recovery",
+    "lane": "mobile-android",
+    "name": "📱 White Box Key Recovery"
+  },
+  "mobile-android-day-30-layered-protections": {
+    "day": 30,
+    "dir": "day30/mobile-layered-protections",
+    "lane": "mobile-android",
+    "name": "📱 Layered Protections"
   },
   "read-the-rules": {
     "day": 1,
@@ -677,6 +719,18 @@
     "lane": "script-analysis",
     "name": "📜 Out of Order"
   },
+  "script-analysis-day-29-makefile-variant-diff": {
+    "day": 29,
+    "dir": "day29/scripting-make-it-make-sense",
+    "lane": "script-analysis",
+    "name": "📜 Make It Make Sense"
+  },
+  "script-analysis-day-30-beanshell-jsp-graph": {
+    "day": 30,
+    "dir": "day30/scripting-spill-the-beans",
+    "lane": "script-analysis",
+    "name": "📜 Spill the Beans"
+  },
   "warmups-day-01": {
     "day": 1,
     "dir": "day01/warmups-a-little-based",
@@ -845,6 +899,18 @@
     "lane": "warmups",
     "name": "👶 Back in Sixteen"
   },
+  "warmups-day-29": {
+    "day": 29,
+    "dir": "day29/warmups-rotten-base",
+    "lane": "warmups",
+    "name": "👶 Rotten Base"
+  },
+  "warmups-day-30": {
+    "day": 30,
+    "dir": "day30/warmups-percent-percent",
+    "lane": "warmups",
+    "name": "👶 Percent Percent"
+  },
   "web-exploitation-day-01-backup-exposure": {
     "day": 19,
     "dir": "day01/web-back-up-a-minute",
@@ -994,6 +1060,30 @@
     "dir": "day28/web-if-a-breach-falls-in-a-log",
     "lane": "web",
     "name": "🌐 If a Breach Falls in a Log"
+  },
+  "web-exploitation-day-26-trust-the-build": {
+    "day": 29,
+    "dir": "day29/web-trust-the-build",
+    "lane": "web",
+    "name": "🌐 Trust the Build"
+  },
+  "web-exploitation-day-27-internal-affairs": {
+    "day": 29,
+    "dir": "day29/web-internal-affairs",
+    "lane": "web",
+    "name": "🌐 Internal Affairs"
+  },
+  "web-exploitation-day-28-pass-the-identity": {
+    "day": 30,
+    "dir": "day30/web-pass-the-identity",
+    "lane": "web",
+    "name": "🌐 Pass the Identity"
+  },
+  "web-exploitation-day-29-queue-the-confusion": {
+    "day": 30,
+    "dir": "day30/web-queue-the-confusion",
+    "lane": "web",
+    "name": "🌐 Queue the Confusion"
   },
   "welcome-robots": {
     "day": 1,

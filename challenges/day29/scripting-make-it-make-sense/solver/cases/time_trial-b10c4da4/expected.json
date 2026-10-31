@@ -1,0 +1,6 @@
+{
+  "batch-34c1d9-style": "single|if_guard|call_double",
+  "batch-1fc58f-style": "diamond|errorlevel_guard|call_double",
+  "batch-dfbb80-style": "linear|call_subroutine|call_double",
+  "batch-a66e24-style": "linear|goto_dispatch|call_double"
+}

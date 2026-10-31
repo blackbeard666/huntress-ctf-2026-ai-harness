@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-29-queue-the-confusion",
+  "lane": "web",
+  "name": "🌐 Queue the Confusion",
+  "ids": {
+    "single_solve": "web-exploitation-day-29-queue-the-confusion",
+    "time_trial": "web-exploitation-day-29-queue-the-confusion/time_trial",
+    "mastery": "web-exploitation-day-29-queue-the-confusion/mastery"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-30-layered-protections",
+  "lane": "mobile-android",
+  "name": "📱 Layered Protections",
+  "ids": {
+    "single_solve": "mobile-android-day-30-layered-protections",
+    "time_trial": "mobile-android-day-30-layered-protections/time_trial",
+    "mastery": "mobile-android-day-30-layered-protections/mastery"
+  }
+}

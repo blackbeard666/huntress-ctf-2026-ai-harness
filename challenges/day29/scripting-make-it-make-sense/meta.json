@@ -1,0 +1,10 @@
+{
+  "base": "script-analysis-day-29-makefile-variant-diff",
+  "lane": "script-analysis",
+  "name": "📜 Make It Make Sense",
+  "ids": {
+    "single_solve": "script-analysis-day-29-makefile-variant-diff",
+    "time_trial": "script-analysis-day-29-makefile-variant-diff/time_trial",
+    "mastery": "script-analysis-day-29-makefile-variant-diff/mastery"
+  }
+}

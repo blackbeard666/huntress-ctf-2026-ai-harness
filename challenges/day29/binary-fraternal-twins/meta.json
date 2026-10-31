@@ -1,0 +1,10 @@
+{
+  "base": "binary-reverse-engineering-day-29-variant-diffing",
+  "lane": "binary-reverse-engineering",
+  "name": "⚙️ Fraternal Twins",
+  "ids": {
+    "single_solve": "binary-reverse-engineering-day-29-variant-diffing",
+    "time_trial": "binary-reverse-engineering-day-29-variant-diffing/time_trial",
+    "mastery": "binary-reverse-engineering-day-29-variant-diffing/mastery"
+  }
+}

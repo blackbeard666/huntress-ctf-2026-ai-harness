@@ -1,0 +1,10 @@
+{
+  "base": "mobile-android-day-29-white-box-key-recovery",
+  "lane": "mobile-android",
+  "name": "📱 White Box Key Recovery",
+  "ids": {
+    "single_solve": "mobile-android-day-29-white-box-key-recovery",
+    "time_trial": "mobile-android-day-29-white-box-key-recovery/time_trial",
+    "mastery": "mobile-android-day-29-white-box-key-recovery/mastery"
+  }
+}

@@ -1458,3 +1458,44 @@ assert _cm28._container_names(_ct28) == ["evidence.zip", "x.zip"] == _cm28._cont
 _ct28["questions"].append({"artifact": "y.zip"})
 assert _cm28._container_names(_ct28) == ["evidence.zip", "x.zip", "y.zip"]
 print("ok  lib.meta/_fields_lines + lib.common._container_names (D28 lane-solver speed)")
+
+# Day 29 "Rotten Base": warmups line codec = std base64 (padded) of the UTF-8 bytes with its letters rot13'd (GM single
+# blob prefix "GzywMFO3o3We" -> "...jovial-comet-nugget-31"); decode_chunk branch; Mastery line 29 through DAYS
+_s29 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: jovial-comet-nugget-31"
+_b29 = _wc.day_codec(29)[1](_s29)
+assert _b29.startswith("GzywMFO3o3WeVTEyL29xnJ5a") and _b29.endswith("ZD=="), _b29
+assert _wc.day_codec(29)[2](_b29) == _s29 and _wc.day_codec(29)[3] is False and _dc(_b29) == _s29
+_c29 = [_s29[i * len(_s29) // 29:(i + 1) * len(_s29) // 29] for i in range(29)]
+_m29 = "\n".join("%02d\t%s" % (k, _wc.day_codec(k)[1](p)) for k, p in enumerate(_c29, 1))
+assert _dec25.decode_chunked(_m29) == _s29, _dec25.decode_chunked(_m29)
+print("ok  warmups_codecs: D29 rot13-of-base64 exact encoder + decode_chunk + Mastery line 29")
+
+# Day 30 "Percent Percent": warmups line codec = the D7 lowercase %xx applied twice ('N' -> '%4e' -> '%25%34%65'; GM
+# single -> "...calm-prairie-ridge-16"); decode_chunk branch; Mastery line 30 through DAYS
+_s30 = "Nice work decoding this warmup! To solve, submit this exact answer to the Game Master: calm-prairie-ridge-16"
+_b30 = _wc.day_codec(30)[1](_s30)
+assert _b30.startswith("%25%34%65%25%36%39%25%36%33") and _b30.endswith("%25%33%31%25%33%36"), _b30
+assert _wc.day_codec(30)[2](_b30) == _s30 and _wc.day_codec(30)[3] is False and _dc(_b30) == _s30
+_c30 = [_s30[i * len(_s30) // 30:(i + 1) * len(_s30) // 30] for i in range(30)]
+_m30 = "\n".join("%02d\t%s" % (k, _wc.day_codec(k)[1](p)) for k, p in enumerate(_c30, 1))
+assert _dec25.decode_chunked(_m30) == _s30, _dec25.decode_chunked(_m30)
+print("ok  warmups_codecs: D30 double-%xx exact encoder + decode_chunk + Mastery line 30")
+
+# Day 30 "Seeing Double": relation.identical_sha256_groups = cluster members (minus delivery-manifest.json) grouped by
+# real-bytes sha256, groups >= 2, named by manifest artifact id, sorted -> compact JSON (paths/basenames REJECTED)
+import io as _io30  # noqa: E402
+import json as _js30  # noqa: E402
+import zipfile as _zf30  # noqa: E402
+assert _meta14.lookup("relation", "identical_sha256_groups")[0].days == (30,)
+_z30b = _io30.BytesIO()
+with _zf30.ZipFile(_z30b, "w") as _z30:
+    _z30.writestr("delivery-manifest.json", _js30.dumps({"artifacts": [
+        {"id": i, "path": f"artifacts/{i}.{e}", "filename": f"{i}.{e}"}
+        for i, e in (("bravo-02", "ps1"), ("alpha-01", "txt"), ("bravo-01", "ps1"), ("alpha-02", "txt"), ("solo-01", "txt"))]}))
+    for _n30, _d30 in (("bravo-02.ps1", b"B"), ("alpha-01.txt", b"A"), ("bravo-01.ps1", b"B"), ("alpha-02.txt", b"A"),
+                       ("solo-01.txt", b"S")):
+        _z30.writestr("artifacts/" + _n30, _d30)
+_r30 = _meta14.answer("d30-cluster-001-relation-identical-sha256-groups",
+                      {"question": "Determine relation.identical_sha256_groups for cluster-001.zip."}, _z30b.getvalue())
+assert _r30 == ('[["alpha-01","alpha-02"],["bravo-01","bravo-02"]]', _meta14.VERIFIED), _r30
+print("ok  lib.meta: relation.identical_sha256_groups verified D30 (manifest ids, sha256 groups >= 2)")

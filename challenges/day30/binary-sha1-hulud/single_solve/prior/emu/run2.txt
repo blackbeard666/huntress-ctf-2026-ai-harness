@@ -1,0 +1,3 @@
+no rdtsc hook Invalid argument (UC_ERR_ARG)
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000

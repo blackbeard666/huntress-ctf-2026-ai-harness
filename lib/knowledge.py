@@ -252,6 +252,17 @@ SQLITE_PAGE_SIZE_BYTES = "u16be @16 of 'SQLite format 3\\0', 1 -> 65536, base-10
 # name -- the hives were renamed. lib.meta.registry.hive_root_name (verified entry in lib.meta._BUILTIN).
 REGISTRY_HIVE_ROOT_NAME = "root nk cell name (regf base block root cell offset @0x24), verbatim"
 
+# Day 30 "Seeing Double" (metadata-forensics), confirmed 2026-10-31 (single a800a6f9, TT, Mastery 14 sets): id
+# d30-cluster-NNN-relation-identical-sha256-groups ("Determine relation.identical_sha256_groups for cluster-NNN.zip.") =
+# the cluster zip's members minus delivery-manifest.json grouped by SHA-256 of the REAL bytes, groups of >= 2, each group
+# = the delivery manifest's artifact `id` ("alpha-01": no `artifacts/` path, no extension) sorted, groups sorted ->
+# compact JSON. The member paths and the basenames were REJECTED on the single. lib.meta.relation.identical_sha256_groups.
+RELATION_IDENTICAL_SHA256_GROUPS = "sorted(sorted(manifest id) for sha256(member bytes) groups of >= 2)"
+RELATION_IDENTICAL_SHA256_GROUPS_REJECTED = [
+    "[[\"artifacts/alpha-01.txt\",\"artifacts/alpha-02.txt\",\"artifacts/alpha-03.txt\",\"artifacts/alpha-04.txt\",\"artifacts/alpha-05.txt\",\"artifacts/alpha-06.txt\"],[\"artifacts/bravo-01.ps1\",\"artifacts/bravo-02.ps1\",\"artifacts/bravo-03.ps1\",\"artifacts/bravo-04.ps1\",\"artifacts/bravo-05.ps1\",\"artifacts/bravo-06.ps1\"],[\"artifacts/charlie-01.json\",\"artifacts/charlie-02.json\",\"artifacts/charlie-03.json\",\"artifacts/charlie-04.json\",\"artifacts/charlie-05.json\",\"artifacts/charlie-06.json\"],[\"artifacts/delta-01.png\",\"artifacts/delta-02.png\",\"artifacts/delta-03.png\",\"artifacts/delta-04.png\",\"artifacts/delta-05.png\",\"artifacts/delta-06.png\"],[\"artifacts/echo-01.zip\",\"artifacts/echo-02.zip\",\"artifacts/echo-03.zip\",\"artifacts/echo-04.zip\",\"artifacts/echo-05.zip\",\"artifacts/echo-06.zip\"]]",
+    "[[\"alpha-01.txt\",\"alpha-02.txt\",\"alpha-03.txt\",\"alpha-04.txt\",\"alpha-05.txt\",\"alpha-06.txt\"],[\"bravo-01.ps1\",\"bravo-02.ps1\",\"bravo-03.ps1\",\"bravo-04.ps1\",\"bravo-05.ps1\",\"bravo-06.ps1\"],[\"charlie-01.json\",\"charlie-02.json\",\"charlie-03.json\",\"charlie-04.json\",\"charlie-05.json\",\"charlie-06.json\"],[\"delta-01.png\",\"delta-02.png\",\"delta-03.png\",\"delta-04.png\",\"delta-05.png\",\"delta-06.png\"],[\"echo-01.zip\",\"echo-02.zip\",\"echo-03.zip\",\"echo-04.zip\",\"echo-05.zip\",\"echo-06.zip\"]]",
+]
+
 # MITRE ATT&CK technique the GM expects per scripting scenario (script-analysis), confirmed Day 1 "Power Play".
 SCENARIO_ATTACK = {
     "resource_hijacking": "T1496",     # crypto-mining / resource hijacking

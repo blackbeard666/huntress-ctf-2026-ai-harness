@@ -1,0 +1,10 @@
+{
+  "base": "warmups-day-30",
+  "lane": "warmups",
+  "name": "👶 Percent Percent",
+  "ids": {
+    "single_solve": "warmups-day-30",
+    "time_trial": "warmups-day-30/time_trial",
+    "mastery": "warmups-day-30/mastery"
+  }
+}

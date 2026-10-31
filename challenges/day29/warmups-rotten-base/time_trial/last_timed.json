@@ -1,0 +1,27 @@
+{
+  "result": "correct",
+  "full_result": "correct",
+  "attempt_id": "53005e0f-0800-4c82-9d0e-e12ae370f414",
+  "window": null,
+  "elapsed": 2.35,
+  "in_window": 2.34,
+  "phases": {
+    "start": 0.0,
+    "download": 0.0,
+    "solve": 0.33,
+    "submit": 2.02
+  },
+  "routed": "local (no clock)",
+  "novel_labels": {},
+  "deadline": null,
+  "verified": {
+    "message": "perky-squirrel-glade-93"
+  },
+  "attempts_remaining": 256,
+  "run_for_time": false,
+  "hall_of_fame_eligible": false,
+  "ranked_attempts_remaining": 256,
+  "variant_fresh": true,
+  "no_clock": true,
+  "gm_remaining": 1
+}

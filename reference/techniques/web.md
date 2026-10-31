@@ -1,219 +1,192 @@
-# web — technique log (lane-days D01-D25 released; D21 still unsolved; updated after every day)
+# web — technique log (lane-days D01-D29 released; D21 still unsolved; updated after every day)
 
 How the lane has looked so far (observations, not guarantees):
 - **Late release, catch-up pace.** No web on calendar days 1-18. Cal. 19 released D01-D03, 20 D04-D05, 21 D06-D08,
-  22 D09-D10, 23 D11-D13, 24 D14-D15, 25 D16-D18, 26 D19-D20, 27 D21-D23, 28 D24-D25. GM ids are
-  `web-exploitation-day-NN-<slug>` (slug = title, e.g. `...-day-24-fail-open-friday`). The folder is
-  `challenges/<cal-day>/web-<title>`, so lane-day != folder day. D26-D31 = 6 left for cal. 29-31 (~2 per day).
-  Each lane-day = ONE classic bug, named by a title pun: D01 backup "Back Up a Minute", D02 IDOR "Permission to
-  Slip", D03 SQLi "Query Me This", D04 traversal "Stay in Your Directory", D05 function-level authz "Administratively
-  Speaking", D06 reflected XSS "Reflect Upon This", D07 stored XSS "Stored for Later", D08 session fixation "Session
-  Impression", D09 CSRF "Forged With Care", D10 upload "Uploading Expectations", D11 SSTI "Template Temper", D12
-  2nd-order SQLi "Ask Again Later", D13 mass assignment "Posted Too Much", D14 field/action authz "The API Has
-  Opinions", D15 SSRF "Fetch Quest", D16 cmd injection "Shell Company", D17 unbound reset token "Reset
-  Expectations", D18 GraphQL authz "Resolver Revolt", D19 forged webhook "Trust the Webhook", D20 unsigned state
-  "Serialized Offender", D21 race "Double Spent", D22 WS stream authz "Socket to Me", D23 proxy client-IP header
-  "Forwarded Misgivings", **D24 fail-open on an undecodable policy "Fail Open Friday", D25 security event logged as
-  something benign "If a Breach Falls in a Log"**. Arc: info-disclosure -> access control -> injection -> file read
-  -> XSS -> session -> CSRF -> upload -> SSTI -> OWASP API run -> cmd injection -> auth flow -> GraphQL -> integrity
-  (A08: D19-D20) -> infrastructure trust (D21-D23) -> **OWASP Top 10:2025's new categories (D24 = A10 Mishandling of
-  Exceptional Conditions, D25 = A09 Logging & Alerting Failures)**. Still unseen 2025 categories: A02 Security
-  Misconfiguration, A03 Software Supply Chain Failures, A04 Cryptographic Failures (JWT / weak tokens never seen),
-  A07 Authentication Failures beyond D17. Expect D26-D31 to cover them.
+  22 D09-D10, 23 D11-D13, 24 D14-D15, 25 D16-D18, 26 D19-D20, 27 D21-D23, 28 D24-D25, **29 D26-D27, 30 D28-D29**.
+  GM ids are `web-exploitation-day-NN-<slug>` (slug = title). The folder is `challenges/<cal-day>/web-<title>`, so
+  lane-day != folder day (handlers are named by CAL day: `day30_web_queue_the_confusion` = lane D29). **D30-D31 =
+  the last 2 lane-days, expected cal. 31.**
+  Each lane-day = ONE classic bug, named by a title pun: D01 backup, D02 IDOR, D03 SQLi, D04 traversal, D05
+  function-level authz, D06 reflected XSS, D07 stored XSS, D08 session fixation, D09 CSRF, D10 upload, D11 SSTI,
+  D12 2nd-order SQLi, D13 mass assignment, D14 field/action authz, D15 SSRF, D16 cmd injection, D17 unbound reset
+  token, D18 GraphQL authz, D19 forged webhook, D20 unsigned state, D21 race, D22 WS stream authz, D23 proxy client-IP
+  header, D24 fail-open (A10:2025), D25 logging failure (A09:2025), **D26 unverified update artifact "Trust the
+  Build" (A03:2025 supply chain), D27 SSRF chained into IDOR "Internal Affairs", D28 trusted delegated-identity header
+  "Pass the Identity", D29 queued job owner binding "Queue the Confusion"**.
+  Arc: info-disclosure -> access control -> injection -> XSS -> session/CSRF -> upload/SSTI -> OWASP API run -> cmd
+  injection -> auth flow -> GraphQL -> integrity (D19-D20) -> infrastructure trust (D21-D23) -> OWASP 2025 newcomers
+  (D24 A10, D25 A09, D26 A03) -> **SERVICE BOUNDARIES (D27-D29: "two service boundaries", "delegated service
+  boundary", a job queue between services; trust passed between internal services, not between browser and app)**.
+  D27 was the first CHAINED day (two bugs, one proof). Still unseen: A02 misconfiguration, A04 crypto (JWT / weak
+  tokens never seen), service-to-service tokens, tenant isolation, gateway/backend parse differentials.
 - **No artifact: a live target.** `start` returns `result: preparing` until ready, then `targets: [{"id": "Target N",
-  "url": "https://<48hex>.2026.huntress.ctf.games/"}]`. Reachable directly from the host, behind Cloudflare. After
-  CORRECT every path returns `410 {"state":"completed"}`; an untimed target stops after 30 min idle.
+  "url": "https://<48hex>.2026.huntress.ctf.games/"}]`. Reachable directly, behind Cloudflare. After CORRECT every
+  path returns `410 {"state":"completed"}` (`/api/clues` = `{state}` only); an untimed target stops after 30 min idle.
 - **Contract is fixed:** `proof-N` "Recover the proof from Target N.", artifact `Target N`, `exact_text`, `trim`.
   Answer = token `proof_<32 lowercase hex>` printed by the app. The prompt (one or two sentences) names the bug.
-- **Since D05 every app is the same kit** ("A small, complete training app with one deliberately isolated security
-  boundary"; framework banner = costume). `GET /api/clues` names the routes (`feature_route: /<word>-<hex6>`, often
-  `secondary_route`), `current_role: analyst` (D18: `current_user`), plus usually ONE concept key (list under
-  Variant axes / Clue key set). D24 added `expected_behavior`, a VALUE stating the secure behaviour to violate. No
-  concept key (D11-D13, D15, D21, D25) -> the prompt and the bare-route errors route (D25's secondary self-documents
-  a `report: {method, fields[]}` schema). Bare routes answer JSON errors naming the missing piece
-  (`session_id_required`, `post_required` (405), `administrator_required`, `internal_only`, `absolute_url_required`,
-  `fetch_failed`, `field_action_forbidden`, `path_required`, `account_id_required`, `self_service_only`,
-  `webhook_rejected`, `state_required`, `role_not_permitted`, `credit_not_overspent` + `credits`, 409
-  `credit_unavailable`, 426 `websocket_upgrade_required`, `loopback_only` + `evaluated_client`, D24
-  `remote_policy_required` + `format_route`; a GraphQL route answers GET with 404 `not_found`).
-- **The runtime config is readable.** Any file read (D16 `cat /run/huntress/*`) shows `/run/huntress/config.json`
-  `{"schema":"huntress.web_exploitation.runtime_config.v1","profile_id":"framework_go_gin_command_injection",
-  "weakness":"os_command_injection",...}`. It NAMES the class.
-- **"Browser" checks are of two kinds.** D06/D09: no browser, judged by fetch-metadata + Referer. D07: a REAL
-  moderator bot visits stored content seconds (sometimes >12 s) later. D22 checked only that an `Origin` was present.
-- **Mastery = today's bug + earlier lane-days on extra targets** (2 targets D03-D07, 3 since D08, 4 since D15, **5
-  on cal. 27-28**; a D04 PHP traversal target sat at slot 4 in all four cal. 27-28 runs). The prompt describes only
-  today's bug, so an earlier-day solver must NOT read its parameters from the prompt. With a handler on disk, Mastery answers in 13-20 s solve.
-- **A new class beats the generic seed unless the handler ships before TT.** TT `solver_incomplete` on D09, D10,
-  D12, D13, D15-D18, D22, D24 (plugins landed 0-30 s after TT started). D19, D20, D23, D25 shipped in time and
-  passed TT first try. D24: the answer-first worker submitted a by-hand proof at 41 s, which unlocked TT before the
-  plugin existed.
+- **Since D05 every app is the same kit.** `GET /api/clues` names the routes (`feature_route: /<word>-<hex6>`, often
+  `secondary_route`), `current_role: analyst` (D18: `current_user`), plus usually ONE concept key (see Variant axes).
+  Since D26 the concept keys are fixed `/api/<noun>` GUIDES (`update_feed`/`update_policy`, `topology_route`/
+  `case_directory_route`, `identity_directory_route`, `owner_directory_route`) whose JSON hands you the victim /
+  internal URL / restricted value. Bare routes answer JSON errors naming the missing piece, now often WITH the field
+  name (`target_required` + `query_parameter: target`, `post_required` + `request_fields: [owner]`,
+  `job_id_required` + `query_parameter: id`) or a header in `Vary` (D28 `Vary: x-delegated-user`).
+- **The runtime config is readable.** Any file read shows `/run/huntress/config.json` (`weakness` names the class).
+- **Mastery = today's bug + earlier lane-days** (5 targets cal. 27-30, **6 on D29**). The prompt describes only
+  today's bug. With handlers on disk Mastery is 11-28 s total; all four cal. 29-30 Mastery runs were 5/5 or 6/6
+  first try (the D04 solver was made prompt-free in the cal. 28 post-mortem).
+- **Handler before TT = TT first try.** D26-D29 all promoted their plugin before (or right at) the single submit ->
+  TT 9-20 s, first try. Late plugins (D09-D10, D12-D13, D15-D18, D22, D24) cost the TT.
 
 ## Variant axes (what differs between single, Time Trial and Mastery -- parse every value listed)
-- **Target host / count**: random 48-hex host per attempt. 1 target (single, TT), 2-5 (Mastery; 5 on cal. 27-28). Rule:
-  map question `artifact` "Target N" to `targets[].id` (fallback: Nth entry). Never reuse a URL across attempts.
+- **Target host / count**: random 48-hex host per attempt. 1 target (single, TT), 2-6 (Mastery; 6 on D29). Rule: map
+  question `artifact` "Target N" to `targets[].id` (fallback: Nth entry). Never reuse a URL across attempts.
 - **Mastery composition / order**: earlier-day targets at any index; the prompt is today's only. Rule: cheap recon on
-  every target (home, robots, /api/clues, /openapi.json), hinted probes first, the rest staged, targets in threads.
-  Import earlier solvers' `answer()` ONLY (day-21 `fallback()`s recurse into each other).
-- **Earlier-day defaults must be prompt-free (cal. 27-28, 4 of 4 Mastery runs)**: every set carried a D04 traversal
-  target at slot 4 (PHP 8.3, `/` 302 -> entry page, no `/api/clues`, entry `handbook.php` | `notes.php` |
-  `reader.php` (new cal. 28) with `?doc=<x>.php`). The D04 solver's `lfi()` still takes its read path from the
-  prompt and falls back to `/flag.txt`, so it missed proof-4 every time (proposed fix NOT applied by cal. 28);
-  hand-solved with `<entry>?doc=../../../../../run/huntress/objective.txt`. Rule: the read path ALWAYS includes
-  `/run/huntress/objective.txt`. The doc param comes from any home link `?<k>=<x>.php`. Today's PHP Slim app (D25)
-  HAS `/api/clues`: PHP costume alone does not mean D04.
+  every target, hinted probes first, targets in threads; earlier solvers' `answer()` ONLY, never their `fallback()`.
+  Earlier-day defaults must be prompt-free: the D04 PHP target (`handbook.php` | `notes.php` | `reader.php`
+  `?doc=<x>.php`, no `/api/clues`) always gets `../`*5-10 + `run/huntress/objective.txt`.
 - **Clue route words** (`/<word>-<hex6>`): feature `dispatch` | `execute` | `process` | `action` | `submit` |
-  `inspect`. Secondary `callback` | `internal` | `status` | `result` | `audit` | `account` | `staff-<hex8>`. Fixed
-  paths `/preferences` (D09), `/api/inventory` (D14), `/api/recovery` (D17), `/api/state-format` (D20),
-  `/api/policy-format` (D24). Re-dealt within a day (D22 dispatch -> process; D24 inspect -> submit; D25
-  process/status -> execute/audit). Rule: pick routes by the clue KEY's role (or a guide's `*_route` /
-  `transport` value), never by the word in the value.
-- **Clue key set**: one concept key (D06 `callback_nonce`, D07 `moderator_data_route`+`receipt_route_template`, D08
-  `session_hint`, D09 `preferences_route`, D10 `render_route`/`preview_guide`/`upload_shape`, D14 `inventory_route`+
-  `protected_reference`, D16 `input_parameter`+`example_path`, D17 `recovery_guide_route`, D18 `protected_reference`+
-  `note`, D20 `state_format_route`, D24 `policy_format_route`) | VALUE keys to echo, not routes (D19 `event_type` +
-  `owner_scope`; D22 `stream_reference` int, re-dealt 13777 -> 14733; D23 `deployment: trusted_reverse_proxy`; D24
-  `expected_behavior` sentence) | only feature+secondary (D12, D13, D15, D21, D25) | only feature (D05, D11). Rule:
-  no concept key -> prompt + bare GET of each route. A key shared by two classes (`protected_reference`: D14 / D18) -> route on the companion key, or race both.
-- **Framework costume** (never changes the exploit): Django, Laravel, Node, FastAPI, Spring Boot, Sinatra, NestJS,
-  Jakarta Servlet, ASP.NET Core, Gin, Symfony, GraphQL.js, Starlette, Quarkus, Rails (D21), Koa (D22), Micronaut
-  (D23), ASP.NET Core Razor Pages (D24), Slim/PHP (D25); PHP+Apache for the D04 app. Rule: ignore it, except that
-  Go drops a raw `;` from a query (percent-encode).
-- **Request body encoding (D12, D13, D19, D20)**: POST routes accept form AND JSON but only JSON binds; D19 answers
-  `[]` with a bare 500. D20 nests `{"<request_field>": base64url(JSON)}` (no `=`), named by the guide's `encoding`.
-  Rule: JSON object first; when a guide names an `encoding`, build the inner blob with exactly that codec.
-- **Format guides (`*_format_route`, D20, D24)**: a fixed `/api/<x>-format` JSON describes the request. D20 `{transport,
-  request_field, encoding, sample_state, sample_encoded}` -> tamper the DATA. D24 `{query_parameter: policy, prefix:
-  "remote:<hex12>:" (re-dealt per attempt), encoding: "base64url UTF-8 JSON", sample_decision, sample_encoded}` ->
-  the valid sample returns `{"ok":true,"policy":"standard"}` (no proof); keep the prefix and make the payload
-  UNDECODABLE (`%%%invalid`, `!!!`) -> fail open. Rule: read every guide field each attempt; replay the sample once,
-  then mutate one thing at a time (data -> privilege ladder; format -> malformed body, wrong type, empty, truncated).
-- **Self-described report schema (D25)**: secondary GET = audit log `{events:[{export_id, event}], report: {method:
-  POST, fields: [export_id, missing_event, observed_event]}}`. Feature POST `{}` -> `{export_id: <24hex>, operation:
-  protected_export}`, logged as `event: page_view`. Same shape in TT and Mastery (ids re-dealt). Rule: fill fields
-  by name: `*_id` = id from the action response, `missing*|expected*` = the action's `operation`,
-  `observed*|logged*|recorded*` = what the log shows for that id; POST JSON to the secondary.
-- **Privilege value spelling**: D13 bound `role: admin`; D20 accepted ONLY `role: "administrator"` (`admin`/`staff`/
-  flags -> `role_not_permitted`). Rule: ladder `administrator, admin, superuser, root, owner, staff, manager`.
-- **Trusted client identity (D23)**: `loopback_only` names the rule and `evaluated_client` echoes what the app
-  believed (`10.x` = the proxy hop). `X-Forwarded-For: 127.0.0.1` flipped it in single, TT and Mastery. Rule: one
-  header at a time, ladder `X-Forwarded-For, X-Real-IP, Forwarded: for=, X-Client-IP, True-Client-IP, Client-IP,
-  X-Original-Forwarded-For, X-Cluster-Client-IP` x `127.0.0.1, ::1, localhost`. Any header the error names goes
-  first; private ranges only when it says internal/private. Watch `evaluated_client` change.
-- **Transport upgrade (D22)**: feature GET -> 426 `websocket_upgrade_required`; handshake WITHOUT `Origin` -> 403, with
-  any Origin -> 101; `?stream=<stream_reference>`; the FIRST text frame carries `unauthorized_event_stream` + evidence
-  (same in TT/Mastery). Rule: stdlib TLS socket, `Origin: <target>`; fall back to a `{"stream":ref}` frame.
-- **One-shot state (D21)**: secondary 403 `credit_not_overspent` + `credits: N`; one feature POST spends the credit
-  forever (409 `credit_unavailable`). Rule: GET-only recon, ONE barrier-synced burst of ~24 POST `{}`, GET secondary.
-- **Earlier classes (one line each)**: D01 robots `Disallow: /snapshots-<hex>/` | `/deploy-<hex5>/` -> `.json.bak`
-  (depth 2). D02 foreign ids in `/api/history`. D03 `('%..%')` wrapper -> tautology ladder over `'` `')` `'))` `"` +
-  `--`/`#`. D04 every param holding `.`/`/` x `../`*10 + objective path. D05 GET then POST every clue route. D07 board
-  noun `messages` | `postcards`. D09 outside mailbox `review-NNNN@outside.example.invalid`. D10 preview URL from the
-  upload response's `path`. D11 SSTI param `template`, `{{..}}` evaluated, var `objective`. D12 `x' OR '1'='1' -- ` as
-  JSON in every field, re-GET secondary after EACH plant. D13 `display_name` + privilege keys. D14 single field x
-  action pair. D15 `?url=http://127.0.0.1:8080<secondary>`. D16 `input_parameter` + `example_path%3Bcat
-  /run/huntress/objective.txt`. D17 token for the `self_service:true` id redeemed with another id. D18 introspect,
-  protected id as a STRING. D19 alias-union JSON body. D20 guide `transport`/`request_field`/`encoding`, role ladder.
-- **Proof carrier**: HTML text / `<pre>` / `<article>`, JSON `support_note` | `note` | `evidence` | `rows[]` |
-  `stdout`, GraphQL `data.<alias>.note`, a bot receipt, a WebSocket text frame. Rule: regex `proof_[0-9a-f]{32}` over
-  every body/frame; never key on field names or on `effect`.
+  `inspect`; secondary `callback` | `internal` | `status` | `result` | `audit` | `account` | `staff-<hex8>`. Re-dealt
+  within a day. Fixed guide paths `/api/<noun>` (`/api/updates`, `/api/update-policy`, `/api/topology`,
+  `/api/cases`, `/api/identities`, `/api/owners`, `/api/*-format`). Rule: pick routes by the clue KEY, never the word.
+- **Clue key set**: one concept key (D06 `callback_nonce`, D07 `moderator_data_route`, D08 `session_hint`, D09
+  `preferences_route`, D10 `upload_shape`, D14 `inventory_route`, D16 `input_parameter`+`example_path`, D17
+  `recovery_guide_route`, D18 `protected_reference`+`note`, D20 `state_format_route`, D24 `policy_format_route`, D26
+  `update_feed`+`update_policy`, D27 `topology_route`+`case_directory_route` (+ value `service_pattern: server-side
+  case fetch`), D28 `identity_directory_route`, D29 `owner_directory_route`) | VALUE keys (D19 `event_type`+
+  `owner_scope`, D22 `stream_reference`, D23 `deployment`, D24 `expected_behavior`) | none (D11-D13, D15, D21, D25).
+  Rule: no concept key -> prompt + bare GET of each route; a key shared by two classes -> race both.
+- **Directory guides -> who to become (D27-D29)**: `{"caller": "analyst", "records_owner": "executive"}` (D28),
+  `{"caller": ..., "restricted_owner": "executive"}` (D29), `{"cases": [{id, owner}]}` (D27). Same shape in single,
+  TT and Mastery (handlers unchanged). Rule: victim = every string value whose key is NOT `caller|current*|self|me`,
+  `restrict*|protect*|*_owner` keys first; for lists, the entries whose `owner` != your role first.
+- **Self-describing errors**: `query_parameter` / `request_fields[]` in a 4xx body name the exact param or body
+  field (D27, D29); `Vary: x-<header>` on a 403 names the trusted header (D28). Rule: read these BEFORE any ladder;
+  fall back to ladders (`target|url|uri`; `id|case|case_id`; `X-Delegated-User, X-Forwarded-User, X-Remote-User,
+  X-On-Behalf-Of, X-Impersonate-User, X-User`) only when absent.
+- **Signed manifest, unverified artifact (D26)**: feed = `{updates: [{package, version, artifact: {build, hook},
+  artifact_sha256, signature}]}`, policy = `{hooks: [{name, access: routine|restricted}]}`. Rule: replay the feed
+  entry verbatim, swap ONLY `artifact.hook` to a non-`routine` hook (keep sha256 + signature) -> `{}`/edited
+  package names give `update_not_found`.
+- **Internal topology (D15, D27)**: D15 port 8080 was guessed; D27's `topology_route` hands `case_service:
+  http://127.0.0.1:8080/status-<hex6>` (`network: loopback`). Rule: use the topology URL verbatim, append the object
+  id (`?id=<case>`), pass it through the fetch param the error names.
+- **Request body encoding (D12, D13, D19, D20, D29)**: only JSON binds; D20 nests `{"<field>": b64url(JSON)}`. Rule:
+  JSON object first; a guide's `encoding` names the inner codec.
+- **Format guides (D20, D24)**: read every guide field each attempt; replay the sample once, then mutate one thing at
+  a time (data -> privilege ladder; format -> malformed / undecodable, keep any `prefix`).
+- **Self-described report schema (D25)**: fill `report.fields` by name (`*_id`, `missing*` = the action's
+  `operation`, `observed*` = what the log shows).
+- **Privilege value spelling**: D13 `admin`; D20 ONLY `administrator`; D28/D29 victim `executive` (from the guide,
+  never guessed). Rule: guide value first, then `administrator, admin, superuser, root, owner, staff, manager`.
+- **Trusted client identity headers (D23 IP, D28 user)**: D23 `X-Forwarded-For: 127.0.0.1` past `loopback_only`
+  (`evaluated_client` echoes the belief); D28 `X-Delegated-User: <records_owner>` past `delegated_identity_rejected`.
+  Rule: header named by error/`Vary` first, then the IP or user ladder, one header at a time.
+- **Async job binding (D29)**: feature 405 `post_required` + `request_fields: [owner]`; POST `{"owner": <restricted>}`
+  -> `{id: "<n>", queued_owner}`; secondary 400 `job_id_required` + `query_parameter: id`; `?id=<n>` -> proof.
+- **Transport upgrade (D22)**: 426 -> stdlib WS with `Origin` (none = 403), `?stream=<ref>`, first text frame.
+- **One-shot state (D21)**: `credit_not_overspent` + `credits` -> GET-only recon, ONE barrier burst of ~24 POST `{}`.
+- **Earlier classes (one line each)**: D01 robots `Disallow` -> `.json.bak` (depth 2). D02 foreign ids in
+  `/api/history`. D03 `('%..%')` -> tautology ladder. D05 GET then POST every route. D07 board noun `messages` |
+  `postcards`. D09 outside mailbox. D10 preview URL from the upload `path`. D11 `{{objective}}`. D12 plant, re-GET
+  after EACH. D13 `display_name` + privilege keys. D14 single field x action. D15 `?url=http://127.0.0.1:8080<sec>`.
+  D16 `%3Bcat /run/huntress/objective.txt`. D17 self-service token redeemed for another id. D18 introspect, id as STRING.
+- **Proof carrier**: HTML / JSON `evidence` | `note` | `rows[]` | `stdout`, GraphQL `data`, bot receipt, WS frame.
+  Rule: regex `proof_[0-9a-f]{32}` over every body/frame; never key on field names or on `effect`.
 
 ## Recognition cues -> first move
-- `targets[]` -> `curl --max-time 20 -sS -A 'Mozilla/5.0' -i <url>` (the hook blocks curl without `--max-time`, and
-  Cloudflare 403'd urllib's default UA), then `/robots.txt`, `/api/clues`, `/openapi.json`, `/sitemap.xml`.
-- Read /api/clues FIRST and GET each route bare: the JSON error names the missing piece. No concept key -> the
-  prompt's verb names the bug. Any `*_guide_route` / `inventory_route` is a JSON map of the next requests.
-- **Before ANY POST: is the state one-shot?** "one credit", "twice", "race", "at the same time", a secondary that
-  reports `credits`/`balance`/`remaining` -> GET only, then burst (D21). A sequential ladder POST burns the target.
-- `Disallow:` -> D01 crawl. "Signed in as" + `/<things>/<id>` -> D02 IDOR. Search / "database" -> D03. `?doc=` +
-  "stay inside" / "runbooks ... proper directory" -> D04 traversal. "staff-only door, just a sign" -> D05 GET it.
-- "repeats everything", `callback_nonce` -> D06. "guestbook", `moderator_data_route` -> D07 bot; poll. `session_hint`
-  -> D08 `?sid=`. "even strangers", hidden `csrf_token` -> D09 cross-site submit. `upload_shape` -> D10 `.html` with
-  `{{objective}}`. "evaluates everything" -> D11 `?template={{objective}}`. "plant ... come back later" -> D12.
-  "binds whatever you hand it" -> D13. `inventory_route` -> D14. `absolute_url_required` + `internal_only` -> D15.
-  `input_parameter` + `example_path` -> D16. `recovery_guide_route` -> D17. `protected_reference` + `note`, GET 404
-  -> D18 GraphQL. `event_type` + `owner_scope`, `webhook_rejected` -> D19 alias-union body. `state_format_route` ->
-  D20 b64url state with `role: administrator`.
-- "One credit ... race it", secondary 403 `credit_not_overspent` -> D21 barrier burst of POST `{}` (UNSOLVED). "upgraded
-  to websockets", `stream_reference`, 426 -> D22 WS handshake + `Origin` + `?stream=<ref>`. "whatever the proxy
-  whispers", `deployment: trusted_reverse_proxy`, 403 `loopback_only` -> D23 `X-Forwarded-For: 127.0.0.1`.
-- "remote policy decoder ... cannot be decoded", clue `policy_format_route` + `expected_behavior`, feature 400
-  `remote_policy_required` -> D24: GET the format guide, `?<query_parameter>=<prefix>%%%invalid` (keep the prefix,
-  break the base64url) -> `exceptional_condition_fail_open`. A decodable sample only gives `policy: standard`.
-- "nobody wrote it down ... the decisive moment the logs missed", clues only feature+secondary, feature 405
-  `post_required`, secondary = `events[]` + `report{method, fields}` -> D25: POST `{}` to feature, GET the log, POST
-  `{export_id, missing_event: <operation>, observed_event: <logged event>}` to the secondary.
-- **Prompt words naming a SECURE behaviour** ("deny access when ... unavailable", "decisive moment ... missed") point
-  at the A09/A10-style days: do the action, then show the app what it failed to do or how it failed.
+- `targets[]` -> `curl --max-time 20 -sS -A 'Mozilla/5.0' -i <url>` (hook blocks curl without `--max-time`;
+  Cloudflare 403s urllib's default UA), then `/robots.txt`, `/api/clues`, `/openapi.json`. Use `-i`: headers matter
+  (D28's answer was in `Vary`).
+- Read /api/clues FIRST, GET every `*_route` / `/api/<noun>` value and each feature/secondary bare: the JSON error
+  (and `Vary`) names the missing piece. No concept key -> the prompt's verb names the bug.
+- **Before ANY POST: is the state one-shot?** "credit", "twice", "race", `credits`/`balance` -> GET only, burst (D21).
+- D01-D20 cues: `Disallow:` crawl; "Signed in as" IDOR; search box SQLi; `?doc=` traversal; "just a sign" GET it;
+  `callback_nonce` XSS; `moderator_data_route` bot; `session_hint` `?sid=`; hidden `csrf_token` cross-site;
+  `upload_shape` `.html` `{{objective}}`; "evaluates everything" SSTI; "come back later" 2nd-order; "binds whatever"
+  mass assignment; `inventory_route`; `absolute_url_required`+`internal_only` SSRF; `example_path` cmd;
+  `recovery_guide_route`; GraphQL 404; `event_type`+`owner_scope`; `state_format_route` (role `administrator`).
+- D21-D25: "race it" burst; 426 WS + `Origin`; `trusted_reverse_proxy` + `loopback_only` -> XFF; `policy_format_route`
+  -> undecodable payload; "logs missed" -> POST the log's own `report` schema.
+- **"updater trusts its packages", `update_feed` + `update_policy`** -> D26: POST the feed entry with
+  `artifact.hook` = the restricted hook, signature untouched -> `unverified_update_activated`.
+- **"public fetch ... internal door ... somebody else's records", `topology_route` + `case_directory_route`** -> D27:
+  `<feature>?target=<topology case_service>?id=<case owned by someone else>` -> `ssrf_then_object_authorization`.
+- **"hall pass ... photocopies ... delegated service boundary", `identity_directory_route`, 403
+  `delegated_identity_rejected` + `Vary: x-delegated-user`** -> D28: GET feature with `X-Delegated-User:
+  <records_owner>` -> `delegated_identity_trusted`.
+- **"job went into the queue with your name ... loosen the binding", `owner_directory_route`** -> D29: POST
+  `{"owner": <restricted_owner>}` to feature, then `<secondary>?id=<returned id>` -> `queue_owner_binding_bypassed`.
+- **Prompts naming a service boundary / hallway / delegation** (D27-D29): the trust is between internal services;
+  a guide route hands you the victim or the internal URL -- become THAT identity at the hop the prompt names.
+- Prompt words naming a SECURE behaviour (D24/D25): do the action, then show the app what it failed to do.
 - Proof regex hit = landed; an `effect` alone is NOT (D12 empty rows; D16 baseline already says completed).
 
 ## Day by day
-- **D01-D20 (cal. 19-26)**: one request each once routed (see Earlier classes). Singles 36-116 s. TT
-  `solver_incomplete` whenever the plugin was late (D09-D10, D12-D13, D15-D18). D19 lost ~60 s bisecting narrow
-  webhook bodies; D20 needed `administrator`. A live turn chaining `ls -la; cat /run/huntress/*` was stopped by a
-  safety classifier: keep injections to one plain read of the objective file.
-- **D21-D23 (cal. 27)**: D21 Double Spent (race, one credit): NOT SOLVED, the credit was 0 at the first GET
-  (race_bisect / dry-run POSTs spent it); draft plugin in `challenges/day27/web-double-spent/solver/`. D22 Socket to
-  Me: WS handshake + `Origin` + `?stream=<ref>`, first frame `unauthorized_event_stream`, ~71 s; TT
-  `solver_incomplete` (plugin 20 s late). D23 Forwarded Misgivings: `X-Forwarded-For: 127.0.0.1` past
-  `loopback_only`, ~64 s, TT 10.5 s first try. Both Mastery 4/5: proof-4 a D04 PHP target, hand-solved.
-- **D24 Fail Open Friday (cal. 28)**: fail-open access decision on an exceptional condition (OWASP 2025 A10).
-  Clues `{framework: ASP.NET Core Razor Pages, feature_route: /inspect-<hex6>, policy_format_route, current_role,
-  expected_behavior}`; bare feature -> `remote_policy_required`. Guide (see Variant axes) -> `curl -G <feature>
-  --data-urlencode 'policy=<prefix>%%%invalid'` -> `exceptional_condition_fail_open` + evidence (the valid sample only
-  gives `policy: standard`). Re-runnable. Single CORRECT 41 s from start (answer-first worker, by hand). Plugin
-  `day28_web_fail_open_friday` (KEY `^policy_format_route$`, bad-suffix ladder `!!!`, `%%%`, `@@@@`, `eyJ`, `e30`,
-  empty) landed AFTER TT began -> **TT `solver_incomplete`**; live worker CORRECT ~42 s after TT start. Mastery 4/5
-  (proof-4 = D04 `reader.php`, hand-solved; CORRECT ~2:40 after start).
-- **D25 If a Breach Falls in a Log (cal. 28)**: security logging failure (OWASP 2025 A09). Clues `{framework: Slim,
-  feature_route: /process-<hex6>, secondary_route: /status-<hex6>, current_role}`. Feature 405 `post_required`; POST
-  `{}` -> `export_id` + `operation: protected_export`; the secondary's audit log shows that id as `page_view` and
-  advertises `report.fields`. POST `{export_id, missing_event: "protected_export", observed_event: "page_view"}` to
-  the secondary -> `decisive_security_event_missing` + evidence. Re-runnable. Single CORRECT ~86 s from start, plugin
-  `day28_web_if_a_breach_falls_in_a_log` (KEY `^secondary_route$`, gated on a `missing*` report field) promoted
-  BEFORE submit -> TT first try (solve 5 s). Mastery 4/5 (proof-4 = D04 `notes.php`, hand-solved; CORRECT ~2:04).
+- **D01-D20 (cal. 19-26)**: one request each once routed. Singles 36-116 s. TT `solver_incomplete` whenever the plugin
+  was late. D19 lost ~60 s bisecting narrow webhook bodies; D20 needed `administrator`. A live turn chaining
+  `ls -la; cat /run/huntress/*` was stopped by a safety classifier: keep injections to one plain read.
+- **D21-D25 (cal. 27-28)**: D21 race NOT SOLVED (credit spent by a dry-run POST before the burst; draft plugin in
+  `challenges/day27/web-double-spent/solver/`). D22 WS ~71 s, TT lost (plugin 20 s late). D23 XFF ~64 s, TT 10.5 s.
+  D24 fail-open 41 s by hand, TT lost (plugin late). D25 logging ~86 s, TT first try. All four Mastery 4/5 (D04 slot,
+  solver keyed on the prompt; fixed in the cal. 28 post-mortem).
+- **D26 Trust the Build (cal. 29, Fiber)**: A03:2025 supply chain. Clues `{feature_route: /action-<hex6>,
+  update_feed: /api/updates, update_policy: /api/update-policy}`. Signed manifest replayed with `artifact.hook:
+  privileged_export` (policy `access: restricted`), sha256 + signature untouched -> `unverified_update_activated`.
+  Edited/empty bodies -> `update_not_found`. Single CORRECT ~63 s; plugin promoted first -> TT 10.7 s, Mastery 5/5
+  12.7 s, first try.
+- **D27 Internal Affairs (cal. 29, Ktor)**: first CHAINED day, SSRF -> IDOR. Clues `{feature_route: /process-<hex6>,
+  topology_route: /api/topology, case_directory_route: /api/cases, service_pattern: "server-side case fetch"}`.
+  Feature bare -> `target_required` + `query_parameter: target`; topology -> `case_service:
+  http://127.0.0.1:8080/status-<hex6>` (direct GET = `internal_only`). `?target=<case_service>?id=<foreign case>` ->
+  `ssrf_then_object_authorization`. Single ~77 s; TT 19.6 s, Mastery 5/5 27.5 s, first try.
+- **D28 Pass the Identity (cal. 30, Axum)**: trusted delegated-identity header (confused deputy / A07). Clues
+  `{feature_route: /execute-<hex6>, secondary_route: /result-<hex6>, identity_directory_route: /api/identities}`;
+  directory `{caller: analyst, records_owner: executive}`; feature 403 `delegated_identity_rejected` with `Vary:
+  x-delegated-user`. `curl -H 'X-Delegated-User: executive' <feature>` -> `delegated_identity_trusted` (the secondary
+  stayed rejected: the header works on the FEATURE route). GET-only, re-runnable. Single CORRECT ~49 s
+  (answer-first worker, by hand, 3 curl calls); TT 13.4 s, Mastery 5/5 11.1 s, first try.
+- **D29 Queue the Confusion (cal. 30, Pyramid)**: async job owner binding (client chooses the job's owner). Clues
+  `{feature_route: /process-<hex6>, secondary_route: /audit-<hex6>, owner_directory_route: /api/owners}`; directory
+  `{caller: analyst, restricted_owner: executive}`; feature 405 `post_required` + `request_fields: ["owner"]`; POST
+  JSON `{"owner":"executive"}` -> `{ok, id: "13", queued_owner: "executive"}`; secondary 400 `job_id_required` +
+  `query_parameter: id`; `<secondary>?id=13` -> `queue_owner_binding_bypassed`. Single ~53 s, plugin promoted before
+  submit; TT 9.2 s, Mastery **6/6** 11.0 s, first try.
 
 ## GM answer conventions learned
 - Answer = bare `proof_<32 lowercase hex>` (the CORRECT body's `flag` is a different value; never submit it). `trim`.
-  Ids `proof-1`..`proof-N` in target order. Batch all Mastery proofs in one submit; partial = `accepted`+`remaining`
-  (cal. 27-28: all four Mastery runs submitted 4, `remaining: 1`, then proof-4 alone -> CORRECT).
+  Ids `proof-1`..`proof-N` in target order. Batch all Mastery proofs in one submit; partial = `accepted`+`remaining`.
 - `effect` spellings confirmed: `framework_authorization_bypassed` (D05), `isolated_browser_callback` (D06),
   `fixed_session_privilege_transfer` (D08), `delayed_query_revealed_private_row` (D12), `bound_privileged_property`
   (D13), `api_field_action_authorization_bypassed` (D14), `internal_service_reached` (D15),
   `worker_command_completed` (D16, also on the harmless baseline), `synthetic_account_recovery` (D17),
   `forged_event_consumed` (D19), `serialized_role_trusted` (D20), `unauthorized_event_stream` (D22),
   `proxy_trust_admin_bypass` (D23), `exceptional_condition_fail_open` (D24), `decisive_security_event_missing`
-  (D25). Failure spelling `credit_unavailable` (D21). D18: none (plain GraphQL `data`).
+  (D25), `unverified_update_activated` (D26, + `package`), `ssrf_then_object_authorization` (D27),
+  `delegated_identity_trusted` (D28), `queue_owner_binding_bypassed` (D29). Failure spellings `credit_unavailable`
+  (D21), `update_not_found` (D26), `delegated_identity_rejected` (D28), `job_id_required` (D29).
 - `already_solved` after CORRECT is harmless; a 503 `temporarily_unavailable` on submit may still have landed.
-- TT/Mastery are "regular scored challenges by default"; `run_for_time:true` asks for a timed Hall-of-Fame attempt
-  (`last_timed.json`: `no_clock:true`). The transport line varies per contract; `hctf` owns it.
+- TT/Mastery are "regular scored challenges by default"; `run_for_time:true` asks for a timed Hall-of-Fame attempt.
 
 ## Pitfalls that cost time
-- **Burning a one-shot target (D21, unsolved).** A single sequential POST to the sink spends the only credit. Dry
-  runs, race_bisect, default ladders and earlier-day handlers that POST to `feature_route` must NOT run before the
-  race handler. Recon on a credit/balance kit is GET-only; the burst is the first POST.
-- **Earlier-day solvers keyed on the prompt** miss Mastery targets: the D04 solver missed proof-4 in ALL FOUR
-  cal. 27-28 Mastery runs (fallback `/flag.txt`). When you see a PHP `?doc=` entry page with no `/api/clues`, read
-  `/run/huntress/objective.txt` by hand at once (`../`*5-10); don't wait for the solver's ~60 s budget.
-- Shipping a new class without its handler: TT `solver_incomplete` on D09-D10, D12-D13, D15-D18, D22, D24. Write
-  `lib/web/handlers/dayNN_*.py` (KEY_MAP on a concept KEY + HANDLERS) BEFORE the single submit (D11, D19, D20, D23,
-  D25 did). A 20 s delay is enough to lose the TT, and a by-hand submit from a parallel worker (D24) unlocks TT
-  just as early.
-- Missing `Origin` on a WebSocket handshake = 403 (D22): send one. No websocket package in the venv; use stdlib.
+- **Burning a one-shot target (D21, unsolved).** Dry runs, race_bisect, default ladders and earlier-day handlers that
+  POST to `feature_route` must NOT run before the race handler. Recon on a credit/balance kit is GET-only.
+- **Verifying a plugin on a COMPLETED target (D28)**: after CORRECT `/api/clues` returns only `{state}`, so the
+  plugin verifier reported "KEY_MAP matches none of ['state']". Not a plugin bug: verify on a fresh TT target or a
+  recorded case; save target responses during the solve (410 afterwards).
+- Shipping a new class without its handler loses the TT. Write `lib/web/handlers/dayNN_*.py` (KEY_MAP on a concept
+  KEY + HANDLERS) BEFORE the single submit (D11, D19, D20, D23, D25-D29 did; D22, D24 did not).
+- Ignoring response headers: `curl` without `-i` would have hidden D28's `Vary: x-delegated-user`.
+- Guessing the victim / internal port: since D27 a guide hands them over (`records_owner`, `restricted_owner`,
+  `case_service` URL). Read the guide before any ladder.
+- Missing `Origin` on a WebSocket handshake = 403 (D22). No websocket package in the venv; use stdlib.
 - Bisecting a generic rejection one field at a time (D19 ~60 s lost): send ONE alias-union body first.
 - Stopping at `role: admin` (D20 wanted `administrator`): `role_not_permitted` = right field, keep laddering.
-- Treating `effect` as success (D12 empty rows; D16 baseline). Success = proof regex. A valid guide sample (D24
-  `policy: standard`) is the baseline, not the exploit.
-- Raw `;` in a Go query string is dropped -> `%3B`. GraphQL 404 on GET -> POST. Form bodies on JSON APIs are ignored
-  (D12); JSON arrays 500 (D19). JSON object first.
-- Trusting the echo (D13) or the stated policy ("txt only", "self-service only"). SSRF `fetch_failed` = wrong port
-  (D15: 8080). D14 lists/`*` forbidden. A 500 on `{{unknown}}` (D11) = undefined variable.
-- Choosing routes by the WORD in a clue value or by prompt keywords in Mastery. One-level crawls (D01). Solvers
-  importing each other's `fallback()`. Hammering one target with every probe in parallel.
-- Polling a bot receipt for a fixed 12 s (D07's bot sometimes comes later). Live cases can't be replayed after
-  CORRECT (410): save target responses during the solve; never hard-code proofs.
-- `curl` without `--max-time` is blocked by the hook (and `sleep` by no_block.py); urllib's default UA can draw a
-  Cloudflare 403.
+- Treating `effect` as success (D12, D16). A valid guide sample (D24 `policy: standard`) is the baseline.
+- Raw `;` in a Go query string is dropped -> `%3B`. GraphQL 404 on GET -> POST. Form bodies on JSON APIs are ignored.
+- Choosing routes by the WORD in a clue value or by prompt keywords in Mastery. Solvers importing each other's
+  `fallback()`. Hammering one target with every probe in parallel. Polling a bot receipt for a fixed 12 s (D07).
+- `curl` without `--max-time` is blocked by the hook (and `sleep` by no_block.py).
 
 ## reviewer cross-check (measured on a parallel agent; folded into the drivers)
 - D03 oracle trap: `q` sits in an EVEN number of `LIKE '%q%'` clauses, so `' OR '1'='1` and `'1'='2` BOTH return all

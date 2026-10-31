@@ -1,0 +1,18 @@
+{
+  "attempt": "d9159bed-9d6b-4c93-8c0f-530b0e44d7b1",
+  "pid": 266311,
+  "done": true,
+  "ended": 1793409547.3968089,
+  "wrong": [
+    "d30_analysis_config_campaign",
+    "d30_analysis_config_capsule_graph_config_campaign",
+    "d30_analysis_config_capsule_graph_config_domain",
+    "d30_analysis_config_capsule_graph_config_mutex",
+    "d30_analysis_config_capsule_graph_config_url",
+    "d30_analysis_config_domain",
+    "d30_analysis_config_mutex",
+    "d30_analysis_config_url"
+  ],
+  "resolved": {},
+  "complete": false
+}

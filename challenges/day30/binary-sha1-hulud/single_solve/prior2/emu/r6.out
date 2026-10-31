@@ -1,0 +1,32 @@
+no rdtsc hook Invalid argument (UC_ERR_ARG)
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+UNIMPL UNK_97e5cf42 0x93940002 0x2002f8f70
+UNIMPL FindFirstFileW 0x7ff1ef5d8 0x7ff1efb18
+UNIMPL CreateToolhelp32Snapshot 0x2 0x0
+UNIMPL VirtualAlloc 0x0 0x1000
+UNIMPL VirtualFree 0x0 0x0
+UNIMPL IsProcessorFeaturePresent 0xd 0xb896b5e1
+UNIMPL GetEnabledXStateFeatures 0xba7c2f 0xa7faf918
+UNIMPL GetSystemFirmwareTable 0x52534d42 0x0
+UNIMPL EnumSystemFirmwareTables 0x41435049 0x0
+UNIMPL RtlGetVersion 0x7ff1ef5d8 0xb7cb6cdb
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+UNIMPL Sleep 0x32 0xdb6a8b5b
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+NATIVE start 0x14001dfc0
+NATIVE before 0x14001dfc0 0x7ff1ef5d8 0123456789abcdeffedcba9876543210f0e1d2c300000000e7791f260176da3583d7f12965a871f6b7f1e800492c75aa8e7bb59f04d5072c1f0f2e66000000842e66000000841f0f000000001f0f2e66000000842e660000f03f000000000000001000400100000000e0070000000000cf4188cb7ed90cbbb228e6584ce297d939d2fbeaa622cde81df3556daacd1353ae6ca8b7fa590fbaaeb13d5ade9dd4ca0000000000000000000000000000000006000000000000003004000000000000f03f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+NATIVE after 0x14001dfc0 be838ec9fea510959e493e766afea6f5297c90ab00000000e7791f260176da3583d7f12965a871f6b7f1e800492c75aa8e7bb59f04d5072c1f0f2e66000000842e66000000841f0f000000001f0f2e66000000842e660000f03f000000000000001000400100000000e0070000000000cf4188cb7ed90cbbb228e6584ce297d939d2fbeaa622cde81df3556daacd1353ae6ca8b7fa590fbaaeb13d5ade9dd4ca0000000000000000000000000000000006000000000000003004000000000000f03f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+B840 native 0x14001dfc0 False ['0xc98e83be', '0x9510a5fe', '0x763e499e', '0xf5a6fe6a', '0xab907c29'] ['0x26da468', '0xe42cffab', '0x7649fd02', '0x781ef359', '0x94c26aa0']
+RIP_END 0x1400480a9 0 []
+STACK ['0x140001000', '0x140001000', '0x140001000', '0x140001000', '0x140001000', '0x14003c3a0']
+REGS {'rcx': '0x7ff1eed0d', 'rdx': '0x775b37ee', 'r13': '0x32a27dbe0b6bcf37', 'rsp': '0x7ff1eed88'}
+CNT {'0x140010840': 8191, '0x14002b840': 77, '0x14001dfc0': 1}
+OUT b'What is the flag?\n' NSMC [8068] N2 [8269]
+LOG ['VirtualAlloc', 'cpuid 80000002', 'cpuid 80000003', 'cpuid 80000004', 'GetModuleHandleExW', 'VirtualAlloc', 'VirtualAlloc', 'resolve VirtualFree', 'VirtualFree', 'cpuid 80000000', 'cpuid 80000001', 'cpuid 0', 'cpuid 80000002', 'cpuid 80000003', 'cpuid 80000004', 'cpuid 1', 'cpuid 80000001', 'resolve IsProcessorFeaturePresent', 'IsProcessorFeaturePresent', 'IsProcessorFeaturePresent', 'IsProcessorFeaturePresent', 'resolve GetEnabledXStateFeatures', 'GetEnabledXStateFeatures', 'resolve GetSystemFirmwareTable', 'GetSystemFirmwareTable', 'resolve EnumSystemFirmwareTables', 'EnumSystemFirmwareTables', 'resolve RtlGetVersion', 'RtlGetVersion', 'GetSystemInfo', 'GlobalMemoryStatusEx', 'GetModuleHandleExW', 'resolve NtGetContextThread', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'resolve Sleep', 'Sleep', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'GetModuleHandleExW', 'resolve NtQueryInformationProcess', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'resolve NtQueryVirtualMemory', 'GetSystemDirectoryW', 'CreateFileW C:\\Windows\\system32\\ntdll.dll', 'CreateFileW', 'GetLastError', 'GetModuleHandleExW', 'SLOW 7e000 c22980c4e51c66ff', 'GetModuleHandleExW', 'GetModuleHandleExW', 'QueryPerformanceCounter', 'EXC 80000003 @14001e00c']
+NBLK 0 last []
+HITS []
+CMPS 0 []

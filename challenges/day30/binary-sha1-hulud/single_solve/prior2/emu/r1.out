@@ -1,0 +1,19 @@
+no rdtsc hook Invalid argument (UC_ERR_ARG)
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+UNIMPL UNK_97e5cf42 0x93940002 0x2002f8f70
+UNIMPL FindFirstFileW 0x7ff1ef5d8 0x7ff1efb18
+UNIMPL CreateToolhelp32Snapshot 0x2 0x0
+UNIMPL VirtualAlloc 0x0 0x1000
+UNIMPL VirtualFree 0x0 0x0
+UNIMPL IsProcessorFeaturePresent 0xd 0xb896b5e1
+UNIMPL GetEnabledXStateFeatures 0xba7c2f 0xa7faf918
+UNIMPL GetSystemFirmwareTable 0x52534d42 0x0
+UNIMPL EnumSystemFirmwareTables 0x41435049 0x0
+UNIMPL RtlGetVersion 0x7ff1ef5d8 0xb7cb6cdb
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+UNIMPL Sleep 0x32 0xdb6a8b5b
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000
+CFW C:\Windows\system32\ntdll.dll 0x80000000

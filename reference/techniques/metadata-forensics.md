@@ -1,4 +1,4 @@
-# metadata-forensics — technique log (days 1-28; updated after every day)
+# metadata-forensics — technique log (days 1-30; updated after every day)
 
 ## Delivery layouts seen (resolve these before parsing)
 - Single / TT: one zip; members named in `artifact` after `->` (filename questions: artifact = the zip only). Mastery:
@@ -7,9 +7,8 @@
   (`lib.common.container_by_sha`). D6: two same-named downloads -> `delivery N: <zip>` refs.
 
 How this lane has looked so far (observations, not guarantees):
-- **Timed variants MUTATE** (organizer, D8: "new, dynamic variations/mutations"): solvers derive structure, degrade per field.
-  **D23 mutated the WHOLE carry-over kit** (values that sat constant D13-D22 re-rolled: PE/ELF arch, audio codec, video
-  dims, Mach-O became FAT, zip CD order shuffled) -- every carried extractor must parse the general case, not D-day's sample.
+- **Timed variants MUTATE** (D8 organizer: "dynamic variations/mutations"; D23 re-rolled the WHOLE carried kit): every
+  carried extractor must parse the general case, not D-day's sample (see "Member values").
 - Every day = ONE evidence zip (plain Deflate, no password). D1-7: one tiny member, one fact; D8-9: cumulative kit in
   every mode; D10-14: one field everywhere. **D15+ split the modes**: single = 1 field (the new member), TT = cumulative
   kit (D15 20 -> D28 33 fields, +1/day), Mastery = N kits x the TT set (N=5 to D21, then +1/day: 11 D27, 12 D28), incl. a
@@ -18,60 +17,71 @@ How this lane has looked so far (observations, not guarantees):
   jpg -> png -> pdf -> inner zip -> Go PE (D9-11) -> .NET (D12) -> MSI -> LNK -> OOXML -> `.eml` -> WAV -> MP4 -> ELF
   (D19) -> Mach-O -> APK -> JAR -> SQLite (D23) -> EVTX -> regf hive -> Prefetch (D24-26 Windows DFIR: structure walk,
   pointer follow, decompress-then-parse) -> PCAP (D27, network) -> raw GPT DISK image `disk-001.img` (D28: one layer
-  DOWN, the container of every earlier family). Member name `<family>-001.<ext>`.
+  DOWN, the container of every earlier family) -> X.509 PEM `certificate-001.pem` (D29) -> a CORPUS zip
+  `cluster-001.zip` (D30: `relation.*` = relationships BETWEEN ~30 members, not one member's struct). Member name
+  `<family>-001.<ext>`.
 - fmt word = the DOMAIN, read it from the question: `email` (not eml), `media` (audio D17 AND video D18, ffprobe
-  vocabulary), `registry` (not regf), `disk` (raw image, not vhd), else the plain format (`pe` `msi` `lnk` `elf` `macho`
-  `apk` `jar` `sqlite` `evtx` `prefetch` `pcap`). Question `Determine <fmt>.<field> for <member>`; id
+  vocabulary), `registry` (not regf), `disk` (raw image, not vhd), `relation` (D30, id family `cluster`), else the
+  plain format (`pe` `msi` `lnk` `elf` `macho` `apk` `jar` `sqlite` `evtx` `prefetch` `pcap` `x509`). Question `Determine <fmt>.<field> for <member>`; id
   `dNN-<family>-NNN-<fmt>-<field>` (`.`/`_` -> `-`), `dNN` = the family's first day; `<family>` != `<fmt>` only for
-  media (`d17-audio-001-media-`). Field = the spec struct's name (full list in "Day by day").
-- Flavor text promises extra findings that are NEVER asked (D19-D28 every day: fleets, clones, nested launchers,
-  "truncated, embedded, impossible claim", "selectively shortened timeline", "planted hive", "connect traces to hosts",
-  "reject malformed captures", D28 "locate evidence by offset, prove which image was rebuilt from an incomplete
-  source"). Graded = the STRUCTURAL truth; names/extensions/secondary metadata are the lie. Titles pun on the field
+  media (`d17-audio-001-media-`) and relation (`d30-cluster-001-relation-`). Field = the spec struct's name.
+- Flavor text promises extra findings that are NEVER asked (D19-D30 every day: clones, "impossible claim", "planted
+  hive", "reject malformed captures", "rebuilt from an incomplete source", "collapse duplicates", "expose the fabricated
+  cluster"). Graded = the STRUCTURAL truth; names/extensions/secondary metadata are the lie. Titles pun on the field
   (D19 "Little Endian" = EI_DATA; D20 "Universal Appeal" = fat; D22 "Main Character Energy" = Main-Class; D24 "Event
   Horizon" = record count; D25 "Hive Mind" = root key; D26 "Before You Go" = Prefetch; D27 "Packet Loss Prevention" =
-  packet COUNT; D28 "Where It All Began" = partition START LBA). Flavor depth shows up as TIMED mutations, not fields.
+  packet COUNT; D28 "Where It All Began" = partition START LBA; D29 "Trust Issues" = cert fingerprint; D30 "Seeing
+  Double" = identical-hash groups). Flavor depth shows up as TIMED mutations, not fields -- but D30's timed clusters
+  physically CONTAIN the unasked flavor (near-duplicate copies, bad-CRC inner zips): next fields may ask for them.
 - Singles: D1-9 ~27-60 s; one convention submit lost D10, D13, D15, D20; two D16. Prebuilt race HITS: D18 ~5 s, D19
-  ~13, D22 ~19, D23 ~29, D26 ~29, D27 ~22 s. MISSES -> live worker: D17 ~24, D21 ~32, D24 ~21, D25 ~17 (`registry` vs
-  `regf`), D28 ~22 s (`disk` vs `gpt`). TT/Mastery: CORRECT every day; D15-17 + D19 after a generalize (synthesis
-  dispatch); D23 after one wrong TT submit (list ORDER); since D24 first try in seconds (D28: TT 33 fields 3.2 s,
-  Mastery 396 = 12 sets 4.3 s).
+  ~13, D22 ~19, D23 ~29, D26 ~29, D27 ~22, D29 ~23 s. MISSES -> live worker: D17 ~24, D21 ~32, D24 ~21, D25 ~17
+  (`registry` vs `regf`), D28 ~22 (`disk` vs `gpt`), D30 ~88 s (no `relation` fmt + 3 wrong on the member LABEL).
+  TT/Mastery: CORRECT every day; D15-17 + D19 after a generalize (synthesis dispatch); D23 after one wrong TT submit
+  (list ORDER); since D24 first try in seconds (D30: TT 35 fields 4.3 s, Mastery 490 = 14 sets 4.7 s).
 
 ## Variant axes (what differs between the single, Time Trial and Mastery variants -- parse every value listed)
 - **Delivery layout** -- names drift: D1-14 `metadata-day-NN-evidence[-0N].zip`; D15+ TT `evidence.zip`, Mastery
   `evidence-01.zip` holding `evidence-01..NN.zip` (see "Question-text tags / nesting"). Route by the ref's text before
   `->` and by sha256, never a hard-coded name.
-- **Field-set / set count** -- D7 TT 11 / Mastery 22; D8-9 12-13 everywhere; D10-14 one; D15 1/20/100 ... D21 1/26/130
-  (+1 field/day); D22 1/27/162 (6 sets); D23 1/28/196 (7 sets); D24 1/29/232 (8 sets); D25 1/30/270 (9 sets); D26
-  1/31/310 (10 sets -- `set10.` sorts before `set2.` as a string: order sets numerically); D27 1/32/352 (11 sets);
-  D28 1/33/396 (12 sets).
-  Enumerate `setN.` prefixes from the live ids. Families: identity + `d04-jpeg` `d05-png` `d06-pdf` `d07-zip` (eocd,
+- **Field-set / set count** -- D7 TT 11 / Mastery 22; D8-9 12-13 everywhere; D10-14 one; D15 1/20/100, then +1
+  field/day and (from D22) +1 set/day: D22 1/27/162 (6 sets) ... D26 1/31/310 (10 -- `set10.` string-sorts before
+  `set2.`: order numerically) ... D30 1/35/490 (14 sets). Enumerate `setN.` prefixes from the live ids. Families: identity + `d04-jpeg` `d05-png` `d06-pdf` `d07-zip` (eocd,
   CD names) `d09-pe` (machine, entry RVA, OriginalFilename) `d12-dotnet` `d13-msi` `d14-lnk` `d15-ooxml` `d16-email` `d17-audio` `d18-video` `d19-elf`
-  `d20-macho` `d21-apk` `d22-jar` `d23-sqlite` `d24-evtx` `d25-registry` `d26-prefetch` `d27-pcap` `d28-disk` + synthesis.
-  Dispatch on the answer-id SUFFIX (reference solver answering all 33: `challenges/day28/metadata-where-it-all-began/solver/solve.py`; lane seed `local_answer` +
-  `synthesis_answer` + lib.meta).
-- **fmt word vs registry key vs id family** -- D16 `email` (lib `eml`), D17/18 `media` (ids `d17-audio-`/`d18-video-`),
-  D19 `elf.e_machine_u16_hex`, D20 `macho.cpu_type_set`, D21 `apk.package_name`, D22 `jar.main_class`, D23
-  `sqlite.page_size_bytes`, D24 `evtx.record_count`, D25 `registry.hive_root_name` (lib `regf.root_key_name` -> MISS),
-  D26 `prefetch.executable_name` (HIT), D27 `pcap.packet_count` (HIT), D28 `disk.partition_start_lba_sequence` (lib
-  `disk` = virtual-disk containers; GPT walk only under `gpt`/`mbr`/`partition_table`.`partition_start_lbas` -> MISS).
+  `d20-macho` `d21-apk` `d22-jar` `d23-sqlite` `d24-evtx` `d25-registry` `d26-prefetch` `d27-pcap` `d28-disk`
+  `d29-x509` `d30-cluster` + synthesis. Dispatch on the answer-id SUFFIX (reference solver answering all 35:
+  `challenges/day30/metadata-seeing-double/solver/solve.py`; lane seed `local_answer` + `synthesis_answer` + lib.meta).
+- **fmt word vs registry key vs id family** -- MISSES: D16 `email` (lib `eml`), D17/18 `media` (lib `wav`), D25
+  `registry.hive_root_name` (lib `regf.root_key_name`), D28 `disk.partition_start_lba_sequence` (lib `disk` = VHD/VMDK;
+  GPT walk under `gpt`.`partition_start_lbas`), D30 `relation.identical_sha256_groups` (no `relation` fmt). HITS: D26
+  `prefetch.executable_name`, D27 `pcap.packet_count`, D29 `x509.sha256_fingerprint`.
   Vocabulary = the home tool (ffprobe, capinfos, sfdisk) or the spec struct; header codes ALWAYS raw `0x` hex. Rule:
   take `<fmt>.<field>` from the question (or the slug after `-NNN-`), map fmt synonyms (`email`~`eml`/`mime`;
   `media`~`audio`/`video`/`av`; `jar`~`war`; `sqlite`~`db`; `evtx`~`evt`/`eventlog`; `registry`~`regf`/`hive`;
-  `prefetch`~`pf`/`scca`; `pcap`~`pcapng`/`capture`; `disk`~`gpt`/`mbr`/`partition_table`/`image`) and field synonyms
+  `prefetch`~`pf`/`scca`; `pcap`~`pcapng`/`capture`; `disk`~`gpt`/`mbr`/`partition_table`/`image`; `x509`~`cert`;
+  `relation`~`corpus`/`cluster`/`dedup`/`inventory`) and field synonyms
   (`_sequence`~`_list`/plural `s`), route the extractor by MAGIC + member names, fall back to the field under any fmt.
 - **Member values (D23+: EVERYTHING re-rolls every day)** -- never cache across sets/modes. Seen: identity sizes
-  72-378 B (CRLF/LF, BOM in some sets), PDF `1.0`-`2.0`, zip entries 2-13, PE Machine (`0x014c` `0x8664` `0xaa64`
-  `0x01c0/2/4` `0x01f0` `0x0ebc` `0x5064` `0x0266`), audio under `audio-001.wav` (`pcm_s16le` `mp3` `opus` `vorbis`
-  `aac` M4A, `flac`), ELF e_machine (`0x003e` `0x0003` `0x0028` `0x002b` `0x0102` `0x0016` `0x00b7` `0x00f3`), Mach-O
+  72-378 B (CRLF/LF, BOM in some sets), PDF `1.0`-`2.0`, zip entries 2-13, PE Machine (9 values incl. `0xaa64`
+  `0x01c4` `0x5064`), audio under `audio-001.wav` (`pcm_s16le` `mp3` `opus` `vorbis` `aac` `flac`), ELF e_machine (8
+  values incl. `0x0028` `0x00b7` `0x00f3`), Mach-O
   thin (LE-32/64) or FAT 2-3 slices, Main-Class 1-4 parts, SQLite page 512-65536, EVTX 3-119 records (one chunk),
   regf root `[A-Za-z0-9]{6,32}`, Prefetch WRAPPER flips (D26 single `MAM\x04` Xpress-Huffman, timed plain SCCA v30),
   PCAP classic v2.4 only (LE-us / LE-ns `4d 3c b2 a1` / BE-us `a1 b2 c3 d4`; linktype 1/101/105/147; 3-39 records,
   snapped ones count), DISK (D28, 14 images): protective MBR `ee` + GPT rev 1.0, 512-B sectors, entries @LBA2 128x128,
   valid CRCs, backup hdr at the last LBA, 61-582 KiB, 1-6 used entries contiguous from slot 0, starts 34-367, table
-  order == ascending, names `<word><digit>`, partitions ALL ZERO (no FS, no MBR-only/EBR/4Kn yet). Rule: decode the
+  order == ascending, partitions ALL ZERO (no FS/EBR/4Kn yet); X.509 (D29, 15 certs): one LF PEM block, Ed25519; corpus
+  clusters (D30): see "Corpus member LABELS". Rule: decode the
   general structure (byte order from the file, every slice/chunk/entry, follow every offset, decompress any wrapper
   by its magic), never the D-day sample's constant.
+- **Corpus member LABELS (D30 `relation.*`)** -- single: `delivery-manifest.json` (schema
+  `huntress.artifact_delivery_manifest.v1`, per artifact `id filename path content_type family producer_id size_bytes
+  sha256`; copies `producer_id: duplicate_ref`) + `artifacts/<id>.<ext>` (txt/ps1/json/png/zip, 30 members = 5 groups
+  x 6, claims all TRUE). Timed (15 clusters): NO manifest, members `artifacts/<word>-NN` WITHOUT extension, CD order
+  shuffled, 19-32 members, 2-5 groups of 2-6 + many singletons, each group shadowed by one NEAR-duplicate (1-2 bytes
+  edited, e.g. `$ErrorActionPrfference`) and some inner zips holding a BAD-CRC member. Rule: label = manifest `id`
+  (map by `path`, then `filename`), else basename minus extension; hash the REAL bytes (manifest `sha256` is a claim);
+  skip the manifest; keep groups len>=2; sort inside, sort groups; compact JSON. Hash inner zips as blobs -- opening
+  one with `zipfile` raises `BadZipFile` (Bad CRC) -> read raw if you must open it.
 - **List ORDER under mutation (D23)** -- D8-D22 zips stored CD entries already sorted; D23 shuffled the CD and the GM
   REJECTED CD order, accepted ascending sort; fat Mach-O slices ascending `0x%08x` (fat_arch order rejected). Rule:
   `_names`/`_set`/`_targets` = sorted ascending + deduped (string sort of the emitted spelling); EXCEPT synthesis
@@ -85,17 +95,15 @@ How this lane has looked so far (observations, not guarantees):
   `case_insensitive`, "Compute the full-file SHA-256 digest of each named file, then submit a compact JSON array of
   their filenames in ascending digest order. Files: [...]". Rule: regex `Files:\s*(\[.*?\])`, hash each under the
   ref's container, sort by hex digest -- `lib.meta.synthesis.digest_order(question, get_bytes, algo)`, get_bytes bound
-  INSIDE the per-set worker. Shape: note + re-picked kit members + TODAY's member; 4 names D15-20, FIVE D21-26, SIX
-  D27-28 (D28 TT note/png/msi/mp4/sqlite/img) -- never assume a length. The list differs between the 409 contract
-  and the live attempt AND between sets of one Mastery -- parse each set's own text. Only sha256 seen.
+  INSIDE the per-set worker. 4-6 names (note + kit members + TODAY's member), differing per set and vs the 409
+  contract -- parse each set's own text, never assume a length. Only sha256 seen.
 - **Decoys** -- renamed copies, misleading extensions, secondary metadata (EXIF, catalog /Version, regf FileName
   @0x30): answer from the structure the field names; `elf.*` of an `MZ` member = `none`.
 - **Answer kinds** -- `exact_text`, `integer`, `pattern` (hashes case-insensitive; `0x`-hex `trim` only -> lowercase),
   `enum` (`accepted_values`), `json` (compact array; `*_set`/`*_names`/`*_sequence` = a list even with ONE element).
 - **Question-text tags / nesting** -- D9 ` [assigned-artifact-sha256:<hex>]` suffix, D15+ ``Inspect `<member>`. ``
   prefix: strip, route by id + `artifact`. The asked file may sit 2-3 zips deep (D7): resolve by the name after `->`;
-  OOXML/APK/JAR members ARE zips -- parse them as the member. Mastery: ONE download of `-01..-NN.zip`, refs `<set zip>
-  -> <member>`, names reused per set; download vs ref names may differ (D9) -> `lib.common.container_by_sha`.
+  OOXML/APK/JAR members ARE zips -- parse them as the member (Mastery layout: see "Delivery layouts").
 
 ## Recognition cues -> first move
 | You see | First move |
@@ -130,6 +138,8 @@ How this lane has looked so far (observations, not guarantees):
 | `media.*` audio (`RIFF..WAVE`, `ID3`/`ff fb`, `OggS`, `fLaC`, `ftyp`, `1a 45 df a3`, `FORM..AIFF`) | route by MAGIC (D23 TT/Mastery: WAV, MP3, Ogg Opus, Ogg Vorbis all appeared under `audio-001.*`). WAV tag -> FFmpeg names (Conventions); Ogg: first packet `OpusHead` -> `opus`, `\x01vorbis` -> `vorbis`. Truth: bundled `ffmpeg -hide_banner -i f` |
 | `media.*video*` / MP4-MOV (`....ftyp`), MKV/WebM, AVI | box walk `moov` -> first `trak` whose `mdia/hdlr` = `vide` -> `stsd` entry: w,h u16 BE @entry+32; cross-check tkhd, SPS crop. `lib.meta` fmt `media` |
 | `*-synthesis-<algo>-order` / "Files: [...]" in the question | parse the list from the question text, hash each member of the same container, sort by digest, compact JSON of names |
+| `x509.*` / `.pem .crt .cer .der` (`-----BEGIN CERTIFICATE-----` or DER `30 82`) | fingerprint = hash of the DER (decode the PEM base64 body), lowercase hex, no colons: `openssl x509 -in f -noout -fingerprint -sha256`; fields via `openssl x509 -noout -text`; `lib/meta/prebuilt/x509.py` (D29 HIT) |
+| `relation.*` / a corpus zip (`cluster-NNN.zip`, `delivery-manifest.json`, many `artifacts/*`) | one pass over `infolist()`: sha256 of REAL bytes per member, label = manifest `id` (by path/filename) else extensionless basename; skip the manifest; groups len>=2 sorted inside + sorted; compact JSON. Manifest `sha256`/`size_bytes`/`producer_id` are CLAIMS to check, not answers (D30) |
 | GUID field (`*-guid`) | spelling follows the SOURCE: stored string (MSI) verbatim braces+uppercase; binary (.NET) -> lowercase, no braces |
 | exe-extension decoy (`MZ` without `PE\0\0` at e_lfanew) | literal `none` if the syntax offers it; never fall back to a later `PE\0\0` hit |
 | "impostor", "renamed", "mislabeled", "embedded" | trust magic bytes at offset 0 of the NAMED member; a matching string deeper in the file is a decoy |
@@ -143,41 +153,43 @@ How this lane has looked so far (observations, not guarantees):
 `0x%08x` (unpadded REJECTED), `version_original_filename` verbatim -> D12 `dotnet.mvid_guid` (`uuid.UUID(bytes_le)`
 lowercase, no braces) -> D13 `msi.product_code_guid` (stored WITH braces; brace-less REJECTED) -> D14 `lnk.target_path_windows`.
 
-**Days 15-27** (single = 1 new-family field; TT/Mastery = cumulative kit + synthesis): D15 `ooxml.external_relationship_
-targets` (rels `TargetMode="External"` Targets SORTED; rels order REJECTED). D16 `email.message_id` (VERBATIM with `<>`;
-2 lost: id regex -> `none`, stripped brackets). D17 `media.primary_audio_codec_name` (WAV PCM16 -> `pcm_s16le`). D18
-`media.primary_video_dimensions` (first `vide` trak stsd -> `320x180`). D19 "Little Endian" `elf.e_machine_u16_hex`
-(@18 in EI_DATA order -> `0x003e`). D20 "Universal Appeal" `macho.cpu_type_set` (THIN arm64 -> `["0x0100000c"]`;
-`["arm64"]` REJECTED). D21 "Package Deal" `apk.package_name` (binary-AXML `<manifest package=>` verbatim, NOT
-`android:label`). D22 "Main Character Energy" `jar.main_class` (MANIFEST.MF `Main-Class` verbatim, dotted, no
-`.class`). D23 "Page Me Maybe" `sqlite.page_size_bytes` (u16 BE @16, `1` = 65536; timed kit MUTATED for the first
-time -> 1 wrong TT submit on CD-order names). D24 "Event Horizon" `evtx.record_count` (walk `**\0\0` records of EVERY
-chunk to its free-space offset u32 @48; live struct walk ~21 s). D25 "Hive Mind" `registry.hive_root_name` (base block
-u32 @0x24 -> nk @0x1000+off+4 -> name len u16 @+0x48, name @+0x4c, ASCII if flag 0x20; base-block FileName @0x30 =
-"renamed" DECOY; race MISS on fmt word, live ~17 s). D26 "Before You Go" `prefetch.executable_name` (single `MAM\x04`
-Xpress-Huffman -> SCCA v30, exe UTF-16LE @16 to NUL, uppercase `CMD.EXE`; timed plain SCCA; race hit ~29 s). D27 "Packet
-Loss Prevention" `pcap.packet_count` (24-B global hdr, then 16-B rec hdrs by incl_len @+8 to EOF; byte order + us/ns
-from the magic; snapped records count; prebuilt race hit ~22 s). Timed D15-17 + D19: synthesis dispatch missing ->
-generalize; D18, D20-22, D24-27 first try.
+**Days 15-28** (single = 1 new-family field; TT/Mastery = cumulative kit + synthesis): D15 `ooxml.external_relationship_
+targets` (rels `TargetMode="External"` Targets SORTED). D16 `email.message_id` (VERBATIM with `<>`; 2 lost). D17
+`media.primary_audio_codec_name` (`pcm_s16le`). D18 `media.primary_video_dimensions` (`320x180`). D19 "Little Endian"
+`elf.e_machine_u16_hex` (`0x003e`). D20 "Universal Appeal" `macho.cpu_type_set` (`["0x0100000c"]`). D21 "Package Deal"
+`apk.package_name` (AXML `package`, not label). D22 `jar.main_class` (verbatim). D23 "Page Me Maybe"
+`sqlite.page_size_bytes` (u16 BE @16, `1` = 65536; timed kit MUTATED -> 1 wrong TT on CD-order names). D24 "Event
+Horizon" `evtx.record_count` (walk every chunk). D25 "Hive Mind" `registry.hive_root_name` (root nk name; FileName
+@0x30 = DECOY). D26 "Before You Go" `prefetch.executable_name` (`MAM\x04` -> SCCA, `CMD.EXE`). D27 "Packet Loss
+Prevention" `pcap.packet_count` (record walk). D28 "Where It All Began" `disk.partition_start_lba_sequence` (protective
+MBR `ee` -> `EFI PART` @LBA1 -> entries from the HEADER's lba/count/size, non-zero type GUID, first LBA u64 @+32 in
+TABLE order as JSON ints `[34]`; partitions all zero; race MISS: lib `disk` = VHD/VMDK detector). Live ~17-32 s, race
+hits ~13-29 s; timed first try since D24.
 
-**Day 28 — Where It All Began** (`disk.partition_start_lba_sequence`, kind `json` "compact valid JSON array with exact
-values and order", norm `trim`, id `d28-disk-001-disk-partition-start-lba-sequence`). Prompt: "Disk images hold every
-previous artifact family in context. Recover partition layouts, locate evidence by offset, and prove which image was
-rebuilt from an incomplete source." Title pun = where each partition BEGINS (start LBA) / LBA 0, where a disk begins.
-- Artifact: `metadata-day-28-evidence.zip` (606 B) -> `disk-001.img` (131 072 B = 256 sectors): protective MBR (one
-  `ee` entry), GPT header `EFI PART` @512 (rev 1.0, hdr 92 B, CRCs valid), entry array @LBA2 (128 x 128 B), backup
-  header at LBA 255; ONE used entry, Microsoft basic data, name `HUNTRESS EVIDENCE`, LBAs 34-222 -> answer `[34]`.
-  Partition bytes all zero: the flavor's "every previous artifact family", "locate evidence by offset" and "rebuilt
-  from an incomplete source" were NOT asked in any mode (as every day since D19).
-- Insight: GPT wins over the MBR when MBR slot 0 type is `ee` and `EFI PART` sits at LBA1; read the header's own entry
-  LBA/count/size (never hard-code 2/128/128), skip zero type-GUID entries, emit first_lba u64 @+32 per entry in TABLE
-  order as compact JSON integers (not strings, not byte offsets). MBR fallback incl. the EBR chain is in the solver.
-- Tools: `xxd -s 0x1be -l 66 f.img` (protective `ee`), `xxd -s 512 -l 92`, `xxd -s 1024 -l 128`; `sfdisk -d f.img` /
-  `fdisk -l` cross-check; ~25-line python `struct` walk (`disk_partition_starts` in the day's solver).
-- Time: GM CORRECT ~22 s after start, 0 wrong. Race MISS: lib had the GPT walk (`vbr.py`) but under fmts
-  `gpt`/`mbr`/`partition_table` with field `partition_start_lbas`, and lib's `disk` fmt = virtual-disk containers
-  (VHD/VMDK/QCOW2) -> live worker added `local_answer`. TT 33 fields 3.2 s (solve 0.9) + Mastery 396 = TWELVE sets
-  4.3 s (solve 2.1), first submit, no generalize. Timed images varied only in size / entry count (1-6) / start LBAs.
+**Day 29 — Trust Issues** (`x509.sha256_fingerprint` of `certificate-001.pem`, kind `pattern` 64 hex,
+`case_insensitive`). Artifact: 709-B PEM, ONE `BEGIN CERTIFICATE` block, LF, Ed25519 (`06 03 2b 65 70`) self-made
+cert; timed 15 certs all the same shape. Answer = sha256 of the DER (base64 body between the armor lines, decoded) --
+`openssl x509 -in f.pem -noout -fingerprint -sha256 | tr -d :` lowercase. Prebuilt `lib/meta/prebuilt/x509.py` HIT the
+race: CORRECT ~23 s, 0 wrong; TT 34 / Mastery 442 (13 sets) first try. Flavor (unasked): "Certificates appear in
+binaries, packages, mail, captures, and disk images. Fingerprint each one, collapse duplicates, and identify the trust
+claim unsupported by evidence."
+
+**Day 30 — Seeing Double** (`relation.identical_sha256_groups` for `cluster-001.zip`, id
+`d30-cluster-001-relation-identical-sha256-groups`, kind `json` "compact valid JSON array with exact values and
+order", `case_insensitive`). Prompt: "The corpus is too large for manual browsing. Build a relationship map from exact
+identity, semantic identity, containment, and claimed provenance -- then expose the fabricated cluster."
+- Artifact: `metadata-day-30-evidence.zip` (2 KB) -> `cluster-001.zip` (18 000 B, STORED) = `delivery-manifest.json`
+  + 30 `artifacts/{alpha,bravo,charlie,delta,echo}-0[1-6].{txt,ps1,json,png,zip}`; each family's 6 files byte-identical
+  (manifest: `-01` producer `text_template`/`structured_image`/`structured_zip`, `-02..06` `duplicate_ref`; every
+  claimed sha256/size matched the bytes). Answer = 5 groups of 6 manifest ids.
+- Insight: the corpus question is about RELATIONS between members; the label of a member is the manifest's `id`
+  (no `artifacts/` path, no extension). Group by sha256 of real bytes, drop singletons, sort.
+- Tools: python `zipfile` + `hashlib` over `infolist()` (one pass); `unzip -l`, `sha256sum artifacts/* | sort` to eyeball;
+  `jq -c '.artifacts[] | [.id,.sha256,.producer_id]' delivery-manifest.json`.
+- GM spelling: `[["alpha-01",...,"alpha-06"],...]` ACCEPTED; `"artifacts/alpha-01.txt"` paths REJECTED; `"alpha-01.txt"`
+  basenames REJECTED. Timed (no manifest) labels = the extensionless member basename `["copper-25","estuary-14",...]`.
+- Time: race had no `relation` fmt (complete=false) -> live worker CORRECT ~88 s with 3 wrong (path, basename, and an
+  EMPTY submit from a jq path typo). TT 35 / Mastery 490 (14 sets) first try, 4.3 / 4.7 s, no generalize.
 
 ## GM answer conventions learned
 - Filenames: exact base name incl. extension, no directory. Sizes/counts: base-10 integer, no units. Hashes: hex, any
@@ -186,23 +198,23 @@ rebuilt from an incomplete source." Title pun = where each partition BEGINS (sta
 - PDF header version: bare `x.y` (absent -> `none`, unconfirmed). `_bytes` sizes = decoded integer (`1` -> `65536`, D23).
   `evtx.record_count` = records actually present (chunk walk, D24); `pcap.packet_count` = complete libpcap records
   walked (D27; snapped incl_len < orig_len records count; pcapng = EPB+SPB+OPB, unverified).
-- Stored strings VERBATIM (no quotes, case kept, delimiters kept): PE StringFileInfo (D11), LNK LinkInfo path (D14),
-  OOXML Target URL (D15), Message-ID WITH `<>` (D16), manifest `package` (D21), `Main-Class` (D22), registry ROOT nk
-  name (D25: no leading `\`, no `HKEY_*`, not the base-block FileName), Prefetch SCCA header exe name (D26: UTF-16LE
-  @16 to the first NUL, uppercase as stored, `.EXE` kept, no path, not the `.pf` filename stem / `-HASH`).
-- JSON lists -- compact, double quotes, no spaces, values SORTED ascending: `zip.central_directory_member_names`
-  (D23 CD order REJECTED), `ooxml.external_relationship_targets` (D15 rels order REJECTED), `macho.cpu_type_set`
-  (`"0x%08x"`, deduped). ORDER fields: `*-synthesis-<algo>-order` = names by hex digest ascending; D28
-  `disk.partition_start_lba_sequence` = JSON INTEGERS (sectors, not bytes, not quoted: `[34]`, `[60,93,148]`) in
-  partition-TABLE order (== ascending in all 14 D28 images, so table-vs-sorted is untested; `_sequence` reads as table order).
+- Stored strings VERBATIM (no quotes, case kept, delimiters kept): PE StringFileInfo (D11), LNK path (D14), OOXML
+  Target (D15), Message-ID WITH `<>` (D16), `package` (D21), `Main-Class` (D22), root nk name (D25: no `\`/`HKEY_*`),
+  SCCA exe name (D26: uppercase as stored, `.EXE` kept, not the `.pf` stem).
+- JSON lists -- compact, double quotes, SORTED (CD names D23, rels targets D15, `cpu_type_set` `"0x%08x"`); ORDER
+  fields keep their order (synthesis = digest order; D28 `_sequence` = TABLE order, JSON INTEGER sectors `[34]`).
 - Header integers as hex (`*_hex`): `0x` + lowercase hex ZERO-PADDED to the struct field's width (u16 `0x014c`
   `0x003e`, u32 `0x00065bd0`, Mach-O `0x0100000c` even without `_hex`). Width from the STRUCT / `_uNN_`; value in the
   file's own byte order. (Magic-prefix hex has NO `0x`; the binary lane wants `i386` -- different generator.)
 - GUIDs follow the source: .NET MVID lowercase no braces (D12); MSI ProductCode stored string uppercase WITH braces (D13).
 - Media codec names: ffprobe `codec_name` (WAV tag 1 -> `pcm_u8`/`pcm_s16le`/`pcm_s24le`/`pcm_s32le` by bits, 3
   `pcm_f32le`, 6 `pcm_alaw`, 7 `pcm_mulaw`, 0x55 `mp3`; MP3 `mp3`; Ogg `opus`/`vorbis` -- all GM-accepted).
+- Corpus labels (D30): a member is named by its manifest `id` (`alpha-01`), never the zip path (`artifacts/alpha-01.txt`)
+  or the basename (`alpha-01.txt`) -- both REJECTED; no manifest -> the extensionless basename. Groups = JSON array of
+  arrays, each inner list sorted, outer list sorted (by first id). Cert fingerprints (D29): DER sha256, hex, no `:`.
 - Rejected: `0x65bd0` (D10 unpadded); brace-less MSI GUID (D13); rels-order targets (D15); bracket-less Message-ID
-  (D16); `["arm64"]` (D20); CD-order names (D23); Python repr `['a', 'b']` for any json (D23).
+  (D16); `["arm64"]` (D20); CD-order names (D23); Python repr `['a', 'b']` for any json (D23); zip paths and
+  basenames as corpus labels (D30).
 - Inference: the field id IS the spec name (`sof_`, `eocd_total_entries` = the EOCD's own claim, `e_machine`,
   `page_size`, libscca `executable_name`) -- read it literally to pick the structure; header CODES are raw `0x` hex.
 
@@ -211,31 +223,27 @@ rebuilt from an incomplete source." Title pun = where each partition BEGINS (sta
   value is untested. Before a timed run, ask of every carried field "what if this is the multi-element / other-endian
   / other-codec / compressed-or-not case?" -- fat Mach-O, shuffled CD, Ogg audio, non-x86 machines arrived the same day.
 - **json list output**: sort + compact `json.dumps` at ONE choke point (D23 Mastery: a local Python list got `str()`'d).
+- **Corpus LABEL guessing (D30, 2 wrong + 1 empty, ~60 s)**: when the answer names members of a set, look for a
+  manifest/index inside the container FIRST and use its `id` key; print the exact string you will submit and refuse to
+  submit an empty value (a jq path typo sent `""` -- it counts as a wrong attempt).
 - **Synthesis dispatch** (lost D15-17, D19): start the day's solver from the lane seed (`local_answer` +
   `synthesis_answer` -> `lib.meta.synthesis.digest_order`, artifacts root set INSIDE `_solve_pairs`; one process/set).
-- **Registry misses** (D14 suffix, D16 `eml`/`email`, D17 `wav`/`media`, D21 no `apk`, D25 `regf.root_key_name` vs
-  `registry.hive_root_name`, D28 fmt-word COLLISION: lib `disk` = VHD/VMDK/QCOW2 detector, GM `disk` = raw GPT image,
-  the GPT walk lived under `gpt`/`mbr` -- a fmt hit is not enough, its detector must accept today's MAGIC): grep the
-  lib for the field's last words (`start_lba`, `partition`) under EVERY fmt --
-  `python3 -c "import lib.meta as m; print([k for k in m.known_fields() if k[0]=='<fmt>'])"` + grep
+- **Registry misses** (6 days, see the fmt-word axis; D28 fmt COLLISION -- a fmt hit is not enough, its detector must
+  accept today's MAGIC; D30 a corpus-level field has no single-member magic at all): grep the field's last words under
+  EVERY fmt -- `python3 -c "import lib.meta as m; print([k for k in m.known_fields() if k[0]=='<fmt>'])"` + grep
   `lib/meta/prebuilt/*.py`. Shape trap (D20): `cpu_type_set` hit scalar `cpu_type` -- `_set`/`_list`/`_names` = a list.
 - Unwired template (D22) / id slugs (D16, 1 wrong): `--from-solver` before today's field is dispatched emits `none`;
   ids repeat the fmt word (`d16-email-001-email-message-id`) -> anchor `-\d+-<fmt>-(.+)$`. `none` = absent in the
   bytes, never "my parser returned None".
-- Format traps: byte order from the file (ELF EI_DATA @5, Mach-O / PCAP magic; fat headers + SQLite ALWAYS BE,
-  MBR/GPT ALWAYS LE); fat cputype = fat_arch; video geometry has 4 sources (trust SPS-cropped); EVTX count = WALK
-  each chunk to its free offset; regf cell offsets are relative to 0x1000 + an i32 size; SQLite `1` = 65536; Prefetch:
-  test `MAM` @0 BEFORE `SCCA` @4 (wrapper flips between modes); GPT: entry LBA/count/size come from the HEADER, sector
-  size 512 or 4096 (probe `EFI PART` at both), unused entries = zero type GUID, protective `ee` says nothing else.
+- Format traps (details in the cue table): byte order from the file (fat + SQLite always BE, MBR/GPT always LE); EVTX
+  = walk every chunk; regf offsets +0x1000; Prefetch `MAM` before `SCCA`; GPT geometry from the HEADER (512/4096).
 - A pre-fetched TT/Mastery `contract.json` is the 409 `start_required` body (questions, NO `answer_ids`; Files lists
   and member numbering differ from the live attempt); answer under the live ids. The flavor never widens the field.
 - Container-of-containers: a naive `rfind(PK\x05\x06)` reads the OUTER EOCD -- resolve the named member first.
   Decoys (`*-with-bom.txt`, `.exe` that is text, `.bin` that is PDF): bytes win; require the format's magic (else `none`).
-- Timed windows are seconds, mostly GM round-trips (D23 Mastery start 3.2 + download 2.2 + solve 1.3 + submit 2.4 s;
-  D26 Mastery download 6.8 MB / 9 s). Parse in memory, never shell out in-window; decompress each member once.
-- Tools: exiftool, poppler, qpdf, mutool, pdf-parser, pdfid, pngcheck, zsteg, steghide, binwalk, foremost, mediainfo,
-  sqlite3, ImageMagick, readelf/objdump, aapt + apktool/jadx (`source bin/env.sh`); .venv: olevba/oleid, olefile,
-  pefile, pyelftools, LnkParse3, dnfile, mutagen, androguard, python-evtx, regipy, dissect.util (lzxpress_huffman,
-  lznt1, lz4, lzo) -- all worker-only, not in the prebuild gate; disks: sfdisk/fdisk/sgdisk/gdisk/partx, TSK
-  `mmls`/`fsstat`/`fls`/`icat`, qemu-img (NOT parted, ewfinfo, pytsk3, dissect.volume); msitools under tools/msitools; ffmpeg 7.0.2 at
-  `tools/imageio_ffmpeg_pkg/imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v7.0.2` (not on PATH). NOT: ffprobe, sox.
+- Timed windows are seconds, mostly GM round-trips: parse in memory, never shell out in-window, decompress once.
+- Tools: exiftool, poppler, qpdf, mutool, pdf-parser, pdfid, pngcheck, zsteg, binwalk, foremost, mediainfo, sqlite3,
+  readelf/objdump, aapt/apktool/jadx, openssl, sfdisk/fdisk/sgdisk, TSK `mmls`/`fls`/`icat`, qemu-img (`source
+  bin/env.sh`); .venv (worker-only, not in the prebuild gate): olefile, oletools, pefile, pyelftools, LnkParse3, dnfile,
+  mutagen, androguard, python-evtx, regipy, dissect.util. ffmpeg 7.0.2 under `tools/imageio_ffmpeg_pkg/` (not on
+  PATH). NOT installed: ffprobe, sox, parted, ewfinfo, pytsk3, ssdeep/ppdeep/tlsh (fuzzy hashing -> write it).

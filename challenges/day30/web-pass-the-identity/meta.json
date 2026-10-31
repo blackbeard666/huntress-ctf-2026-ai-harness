@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-28-pass-the-identity",
+  "lane": "web",
+  "name": "🌐 Pass the Identity",
+  "ids": {
+    "single_solve": "web-exploitation-day-28-pass-the-identity",
+    "time_trial": "web-exploitation-day-28-pass-the-identity/time_trial",
+    "mastery": "web-exploitation-day-28-pass-the-identity/mastery"
+  }
+}

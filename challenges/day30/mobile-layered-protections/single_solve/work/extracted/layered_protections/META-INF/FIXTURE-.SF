@@ -1,0 +1,14 @@
+Signature-Version: 1.0
+Created-By: 1.0 (Android)
+SHA-256-Digest-Manifest: +3dqo9QtmBUPuUGSL47KtL8lj+xa5OjsxW7EJkwO2zA=
+X-Android-APK-Signed: 2
+
+Name: AndroidManifest.xml
+SHA-256-Digest: niqpVLLb7Eggb5Ar+7WZJWuL1/ta48PIQkV/YGLt8l0=
+
+Name: assets/huntress_puzzle.json
+SHA-256-Digest: zTwjc8RMTKYec1PdO0mwrAm/7eq3HsIrilv9iBHu648=
+
+Name: classes.dex
+SHA-256-Digest: SVY0qqEuNFT4vXX3B2TNNWeGb523AOXkhDhBcHacMSI=
+

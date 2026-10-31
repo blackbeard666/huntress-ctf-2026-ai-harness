@@ -232,6 +232,15 @@ PLAYBOOK = [
              "if the text says so) -> compact JSON list of the names (lib.meta.synthesis.digest_order).",
         examples=("evidence.zip Files [note, camera, agent, docx] by sha256 -> [camera, agent, note, docx] (D15 TT)",),
     ),
+    PlaybookEntry(
+        lanes=(METADATA,), families=("relation", "identity"),
+        rule="`relation.identical_sha256_groups` = the cluster zip's members (minus delivery-manifest.json) grouped by "
+             "SHA-256 of their REAL bytes, groups of >= 2 only; NAME each member by its delivery-manifest artifact `id` "
+             "(no `artifacts/` path, no extension), sort within and across groups -> compact JSON list of lists "
+             "(lib.meta.relation.identical_sha256_groups).",
+        rejected=tuple(K.RELATION_IDENTICAL_SHA256_GROUPS_REJECTED),   # `artifacts/x.txt` paths, `x.txt` basenames
+        examples=("cluster-001.zip 30 members -> [[alpha-01..alpha-06],...,[echo-01..echo-06]] (D30)",),
+    ),
     # ---- script-analysis -------------------------------------------------------------------------
     PlaybookEntry(
         lanes=(SCRIPT,), families=("control",),

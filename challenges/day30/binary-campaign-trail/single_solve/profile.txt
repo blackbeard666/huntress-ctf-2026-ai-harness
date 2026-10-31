@@ -1,0 +1,27 @@
+cProfile of `cases/single_solve` (980116 function calls (966579 primitive calls) in 0.740 seconds):
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    216/1    0.003    0.000    0.597    0.597 {built-in method builtins.exec}
+      2/1    0.004    0.002    0.597    0.597 solve.py:1(<module>)
+      2/1    0.001    0.000    0.597    0.597 solve.py:1487(main)
+      2/1    0.001    0.001    0.596    0.596 solve.py:1421(_solve_pairs)
+      420    0.002    0.000    0.566    0.001 solve.py:1282(answer)
+      420    0.003    0.000    0.373    0.001 solve.py:304(group_members)
+      420    0.001    0.000    0.357    0.001 solve.py:214(resolve)
+      630    0.001    0.000    0.356    0.001 _base.py:428(result)
+     85/9    0.003    0.000    0.327    0.036 threading.py:323(wait)
+     45/1    0.004    0.000    0.312    0.312 thread.py:54(run)
+      376    0.025    0.000    0.309    0.001 {method 'join' of 'bytes' objects}
+     45/1    0.001    0.000    0.309    0.309 solve.py:88(_aes_member)
+  536/490    0.000    0.000    0.268    0.001 solve.py:346(_memo)
+   233/21    0.001    0.000    0.267    0.013 <frozen importlib._bootstrap>:1349(_find_and_load)
+   232/21    0.001    0.000    0.266    0.013 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+   219/22    0.001    0.000    0.261    0.012 <frozen importlib._bootstrap>:911(_load_unlocked)
+   192/21    0.000    0.000    0.261    0.012 <frozen importlib._bootstrap_external>:993(exec_module)
+   498/41    0.000    0.000    0.230    0.006 <frozen importlib._bootstrap>:480(_call_with_frames_removed)
+       93    0.000    0.000    0.173    0.002 solve.py:809(facts)
+       38    0.000    0.000    0.173    0.005 solve.py:810(<lambda>)
+       38    0.000    0.000    0.173    0.005 solve.py:813(_facts)
+        1    0.000    0.000    0.144    0.144 solve.py:135(sha)
+    51/26    0.000    0.000    0.143    0.005 queue.py:154(get)
+      373    0.002    0.000    0.143    0.000 solve.py:1183(_narrow)
+    85/67    0.127    0.001    0.129    0.002 {method 'decompress' of 'zlib.Decompress' objects}

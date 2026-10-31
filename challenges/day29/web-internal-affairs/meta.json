@@ -1,0 +1,10 @@
+{
+  "base": "web-exploitation-day-27-internal-affairs",
+  "lane": "web",
+  "name": "🌐 Internal Affairs",
+  "ids": {
+    "single_solve": "web-exploitation-day-27-internal-affairs",
+    "time_trial": "web-exploitation-day-27-internal-affairs/time_trial",
+    "mastery": "web-exploitation-day-27-internal-affairs/mastery"
+  }
+}

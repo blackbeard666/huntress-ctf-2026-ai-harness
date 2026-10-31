@@ -239,6 +239,11 @@ def decode_chunk(p, _nested=False):
     if re.fullmatch(r"(?:%[0-9A-Fa-f]{2}|[^%\s])+", t) and len(re.findall(r"%[0-9A-Fa-f]{2}", t)) * 3 >= len(t) // 2:
         # URL percent-encoding (warmups Day 7 "Percent Chance": line 7 = '%2d%69%73...'), mostly %XX by length
         cands.append((_ascii(urllib.parse.unquote_to_bytes(t)), 0))
+        u1 = urllib.parse.unquote_to_bytes(t).decode("latin-1")
+        if _max_day() >= 30 and re.fullmatch(r"(?:%[0-9A-Fa-f]{2})+", u1):
+            # DOUBLE percent-encoding (warmups Day 30 "Percent Percent", "That address bar problem? It happened twice":
+            # '%25%34%65...' -> '%4e...' -> 'N...' = the D7 %xx encoding applied twice), whole fragment
+            cands.append((_ascii(urllib.parse.unquote_to_bytes(u1)), 0))
     if re.fullmatch(r"(?:&(?:#\d+|#[xX][0-9a-fA-F]+|[A-Za-z]+\d*);)+", t):
         # HTML character entities (warmups Day 8 "Entity Relations": line 8 = '&#109;&#109;&#105;...'), whole fragment
         import html
@@ -336,6 +341,13 @@ def decode_chunk(p, _nested=False):
     if _B64S.match(t) and len(t) % 4 == 0:
         try:
             cands.append((_ascii(base64.b64decode(t, validate=True)), 6))
+        except Exception:
+            pass
+    if _max_day() >= 29 and _B64S.match(t) and len(t) % 4 == 0:
+        # ROT13 OF BASE64 (warmups Day 29 "Rotten Base": 'GzywMFO3o3We...' = std base64 (padded) of the UTF-8 text with
+        # its letters rot13'd; digits, '+', '/', '=' unchanged), whole fragment
+        try:
+            cands.append((_ascii(base64.b64decode(_rot(t, 13), validate=True)), 7))
         except Exception:
             pass
     if _B64U.match(t) and len(t.rstrip("=")) % 4 != 1 and ("-" in t or "_" in t or len(t) % 4):
