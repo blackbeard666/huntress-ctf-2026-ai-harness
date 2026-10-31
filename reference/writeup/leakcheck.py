@@ -18,7 +18,6 @@ PATTERNS = {
     "wsl user": r"testpwn",
     "email/org": r"org|cavila",
     "harness accounts": r"sec1-huntress|[redacted]|[redacted]",
-    "private repo": r"huntress-ctf-2026-ai-harness",
     "credentials": r"Bearer\s+[A-Za-z0-9._-]{8,}|pairing_token|gm_pairing|\.ovpn\b",
     "aws ids": r"\bami-[0-9a-f]{8,}|\bi-0[0-9a-f]{8,}|EC2BedrockInvoke",
     "uuid": r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",

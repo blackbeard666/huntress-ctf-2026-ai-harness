@@ -508,6 +508,82 @@ def chain_states():
                   "<code>hctf why</code> all read it.", table(("stage", "meaning"), rows, summary="all stages"))
 
 
+REPO = "https://github.com/blackbeard666/huntress-ctf-2026-ai-harness/blob/HEAD/"
+
+
+def system_loop():
+    # The whole system as a daily loop. Top row: the drop, left -> right, from the operator session down to the GM.
+    # Bottom row: overnight, right -> left, from what the run recorded back to the next warm-up.
+    cx = [10 + 170 * i for i in range(5)]
+    bw, bh, ry = 156, 58, [30, 168]
+
+    def box(c, r, ti, sub, cls=""):
+        x, y = cx[c], ry[r]
+        return (f'<g class="hc-node {("hc-node-" + cls) if cls else ""}"><rect x="{x}" y="{y}" width="{bw}" '
+                f'height="{bh}"/><text class="hc-node-t" x="{x + 12}" y="{y + 24}">{E(ti)}</text>'
+                f'<text class="hc-node-s" x="{x + 12}" y="{y + 43}">{E(sub)}</text></g>')
+
+    def arrow(x1, y1, x2, y2):
+        return f'<line class="hc-edge" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" marker-end="url(#hc-arrow-s)"/>'
+
+    def lab(x, y, t, anchor):
+        return f'<text class="hc-rowlab" x="{x}" y="{y}" text-anchor="{anchor}">{E(t)}</text>'
+
+    mid = lambda r: ry[r] + bh / 2
+    bot0, top1 = ry[0] + bh, ry[1]
+    ym = (bot0 + top1) / 2 + 4
+    body = ['<defs><marker id="hc-arrow-s" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" '
+            'orient="auto-start-reverse"><path class="hc-arrowhead" d="M0,0L8,4L0,8z"/></marker></defs>']
+    for c in range(4):
+        body.append(arrow(cx[c] + bw, mid(0), cx[c + 1] - 2, mid(0)))          # the drop, left -> right
+        body.append(arrow(cx[c + 1], mid(1), cx[c] + bw + 2, mid(1)))          # overnight, right -> left
+    x4, x0 = cx[4] + bw / 2, cx[0] + bw / 2
+    body.append(arrow(x4, bot0, x4, top1 - 2))
+    body.append(lab(x4 - 8, ym, "every attempt recorded", "end"))
+    body.append(arrow(x0, top1, x0, bot0 + 2))
+    body.append(lab(x0 + 8, ym, "next warm-up", "start"))
+    body += [
+        box(0, 0, "operator session", "Claude Code + me", "ours"),
+        box(1, 0, "hctf run", "Python, no LLM"),
+        box(2, 0, "chains, one each", "3 modes, in order"),
+        box(3, 0, "workers", "claude -p in bwrap", "ours"),
+        box(4, 0, "Game Master", "judges every answer", "plat"),
+        box(4, 1, "the run's record", "logs, cases, cost"),
+        box(3, 1, "post-run", "library merge, tests"),
+        box(2, 1, "post-mortem + fixes", "operator + agents", "ours"),
+        box(1, 1, "prebuild", "breadth, off-peak"),
+        box(0, 1, "rehearsal", "replay + fault suite"),
+    ]
+    a = lambda path, text=None: f'<a href="{REPO}{path}"><code>{E(text or path)}</code></a>'
+    rows = [
+        ("operator session", "a long-running Claude Code session I direct: arms the day, watches the feed, intervenes, "
+         "writes post-mortems and code", a("bin/day.sh") + ", " + a("hctf/feed.py")),
+        ("hctf run", "detects the release, starts one chain per challenge, caps workers at five slots",
+         a("hctf/orchestrate.py")),
+        ("chains", "one thread per challenge: single → Time Trial → Mastery, state in chain.json",
+         a("hctf/orchestrate.py")),
+        ("workers", "headless Claude Code in a bubblewrap sandbox, steered by hooks", a("hctf/workers.py") + ", " +
+         a(".claude/hooks/nudge.py")),
+        ("Game Master", "the organizers' API; the only judge of right and wrong", a("hctf/gm.py")),
+        ("the run's record", "chain states, worker logs, regression cases, the cost ledger", a("hctf/solvers.py")),
+        ("post-run", "ratchet (library merge), speed-harden, train (replay every earlier day), behind tests",
+         a("hctf/postrun.py")),
+        ("post-mortem + fixes", "the operator reads the timeline and costs, writes a plan; parallel agents implement it",
+         a("reference/D28_POSTMORTEM.md")),
+        ("prebuild", "off-peak workers build decoders for variants not seen yet, kept behind fixtures",
+         a("hctf/prebuild.py")),
+        ("rehearsal", "replay a solved day on the fake GM; the fault suite and preflight gate the next launch",
+         a("hctf/replay_gm.py") + ", " + a("bin/preflight.sh")),
+    ]
+    return figure("system", "How the whole system runs, day after day",
+                  "Top row, during a drop: the operator session starts hctf run, which runs one chain per challenge, "
+                  "whose workers submit to the Game Master. Bottom row, overnight: the run's record feeds the post-run, "
+                  "then a post-mortem and fixes, then the prebuild, then a rehearsal, which leads back to the next "
+                  "day's warm-up.", 860, 240, "".join(body),
+                  "One loop per day. Red: where the thinking happens (the operator session, its agents and the workers). Green: "
+                  "the platform.", table(("stage", "what it does", "code"), rows, summary="stages and code"))
+
+
 # ---------------------------------------------------------------- tiles + tables
 W, T, HB, ENG, HOF, INV = (STATS[k] for k in ("workers", "transcripts", "homebase", "engineering", "hof", "inventory"))
 TOK_OUT = W["total"]["out_tok"] + T["total"]["out_tok"]
@@ -665,7 +741,7 @@ def main():
     a, b = cost_charts()
     parts = {
         "rank": chart_rank_month(), "finish": chart_daily_finish(), "lanes": chart_lane_heat(), "wins": dumbbells(),
-        "arch": architecture(), "chain": chain_states(), "tiles": headline_tiles(), "tokens": tokens_table(), "stages": stage_table(),
+        "arch": architecture(), "chain": chain_states(), "system": system_loop(), "tiles": headline_tiles(), "tokens": tokens_table(), "stages": stage_table(),
         "days": day_table(), "hof-tiles": hof_tiles(), "hof-table": hof_table(), "hb": hb_chart(), "cost-live": a,
         "cost-night": b, "commits": commits_chart(), "growth": growth_chart(), "dayrank": day_rank_chart(),
     }
