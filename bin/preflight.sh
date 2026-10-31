@@ -365,6 +365,19 @@ gaps=$(python3 -m hctf.toolchain report 2>/dev/null | grep -c -- '-> ' || true)
 if [ "${gaps:-0}" -gt 0 ]; then warn "$gaps unresolved toolchain gap(s) from earlier runs: hctf tool-gaps"; else ok "no unresolved toolchain gaps (hctf tool-gaps)."; fi
 if python3 -c "import chepy, lib.codec" >/dev/null 2>&1; then ok "triage decoders: chepy + lib.codec importable."
 else warn "triage decoders missing (chepy or lib.codec): run setup/install_tools.sh -- script triage won't decode literals"; fi
+# D30: the D29 ratchet died on the usage limit, lib.warmups_codecs.DAYS had no day 29, the today-probe built no
+# cases and the solver missed 146/148 Mastery fields (160 s). Every released day before today must have its codec.
+wc_miss="$(python3 -c "
+import datetime as d
+from lib import warmups_codecs as W
+today = (d.date.today() - d.date.fromisoformat('$CTF_DAY1')).days + 1
+print(' '.join(str(k) for k in range(1, min(today, $CTF_LASTDAY + 1)) if not W.day_codec(k)))" 2>&1)"
+if [ -z "$wc_miss" ]; then ok "warmups codecs: lib.warmups_codecs.DAYS covers every earlier day."
+else fail "warmups codecs MISSING for day(s): $wc_miss -- a post-run ratchet died; re-run it (hctf postrun --day N --from ratchet)"; fi
+# A solver dir without solve.py (D30 warmups: concurrent generalizes shared one snapshot) silently drops out of the race.
+nosolve="$(for s in challenges/day*/*/solver; do [ -f "$s/solve.py" ] || printf '%s ' "${s#challenges/}"; done)"
+if [ -z "$nosolve" ]; then ok "every day's solver dir has a solve.py."
+else warn "solver dir(s) without solve.py (out of the reuse race): $nosolve"; fi
 
 # 4) Homebase SSH + credits -----------------------------------------------------------------------
 hdr "Homebase (optional low-latency compute for tight timed windows)"
